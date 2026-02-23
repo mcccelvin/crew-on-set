@@ -12,7 +12,7 @@ EditorBuildSettings:
     path: Assets/Scenes/Main Menu.unity
     guid: e7db1412ccf16bb46a68af8023282106
   - enabled: 1
-    path: Assets/Scenes/Studio-copy.unity
+    path: Assets/Scenes/Studio.unity
     guid: bb06d26269eb8ec468809a6679404680
   - enabled: 1
     path: Assets/Scenes/Account.unity
