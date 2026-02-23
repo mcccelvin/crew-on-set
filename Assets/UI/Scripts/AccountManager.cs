@@ -12,6 +12,7 @@ public class AccountManager : MonoBehaviour
                  LAST_PASSWORD_KEY = "LastPassword";
 
     [SerializeField] TMP_Text messageText;
+    [SerializeField] TMP_Text username;
 
     #region Register
     [Header("Register")]
@@ -72,12 +73,18 @@ public class AccountManager : MonoBehaviour
         },
         successfulResult =>
         {
-            if (messageText != null) messageText.text = "Login successful! Welcome " + PlayerPrefs.GetString("Username");
+            var displayName = successfulResult?.InfoResultPayload?.PlayerProfile?.DisplayName;
+            if (string.IsNullOrEmpty(displayName))
+                displayName = "Guest";
             PlayerPrefs.SetString(LAST_EMAIL_KEY, email);
             PlayerPrefs.SetString(LAST_PASSWORD_KEY, password);
-            PlayerPrefs.SetString("Username", successfulResult.InfoResultPayload.PlayerProfile.DisplayName);
+            PlayerPrefs.SetString("Username", displayName);
+            if (messageText != null) messageText.text = "Login successful! Welcome " + displayName;
+            if (username != null) username.text = displayName;
+
             Debug.Log("Login successful! Welcome " + PlayerPrefs.GetString("Username"));
-            SceneManager.LoadScene(1);
+
+            SceneManager.LoadScene(3);
         },
         PlayfabFailure);
     }
