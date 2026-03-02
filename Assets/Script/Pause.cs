@@ -1,45 +1,80 @@
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class Pause : MonoBehaviour
 {
-    public GameObject pauseMenu;
-    public bool isPaused;
+    [Header("UI References")]
+    public GameObject interactUI;     // UI that toggles with E
+    public GameObject pauseMenuUI;    // Pause menu UI
+
+    [Header("Camera References")]
+    public Camera mainCamera;         // Default camera (tagged MainCamera)
+    public Camera secondaryCamera;    // Alternate camera
+
+    private bool isPaused = false;
 
     void Start()
     {
-        pauseMenu.SetActive(false);
+        // Ensure main camera is active at start
+        if (mainCamera != null) mainCamera.enabled = true;
+        if (secondaryCamera != null) secondaryCamera.enabled = false;
     }
 
-    // Update is called once per frame
     void Update()
     {
-        if(Input.GetKeyDown(KeyCode.Escape))
+        // Toggle interact UI + camera switch with E
+        if (Input.GetKeyDown(KeyCode.E))
         {
-            if (pauseMenu.activeSelf)
+            if (interactUI != null)
             {
-                ResumeGame();
+                bool isActive = interactUI.activeSelf;
+                interactUI.SetActive(!isActive);
+
+                if (!isActive)
+                {
+                    // UI just opened → disable main camera, enable secondary
+                    if (mainCamera != null) mainCamera.enabled = false;
+                    if (secondaryCamera != null) secondaryCamera.enabled = true;
+                }
+                else
+                {
+                    // UI just closed → re-enable main camera, disable secondary
+                    if (mainCamera != null) mainCamera.enabled = true;
+                    if (secondaryCamera != null) secondaryCamera.enabled = false;
+                }
+            }
+        }
+
+        // Toggle pause menu with Esc
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (isPaused)
+            {
+                Resume();
             }
             else
             {
-                PauseGame();
+                PauseM();
             }
-        }   
+        }
     }
 
-    public void PauseGame()
+    public void Resume()
     {
-        pauseMenu.SetActive(true);
-        //Time.timeScale = 0f; // Pause the game
+        if (pauseMenuUI != null)
+        {
+            pauseMenuUI.SetActive(false);
+        }
+        Time.timeScale = 1f; // Resume game time
+        isPaused = false;
+    }
+
+    private void PauseM()
+    {
+        if (pauseMenuUI != null)
+        {
+            pauseMenuUI.SetActive(true);
+        }
+        Time.timeScale = 0f; // Freeze game time
         isPaused = true;
     }
-
-    public void ResumeGame()
-    {
-        pauseMenu.SetActive(false);
-        //Time.timeScale = 1f; // Resume the game
-        isPaused = false    ;
-    }
-
 }
