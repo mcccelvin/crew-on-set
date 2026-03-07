@@ -21,28 +21,6 @@ public class Pause : MonoBehaviour
 
     void Update()
     {
-        // Toggle interact UI + camera switch with E
-        if (Input.GetKeyDown(KeyCode.E))
-        {
-            if (interactUI != null)
-            {
-                bool isActive = interactUI.activeSelf;
-                interactUI.SetActive(!isActive);
-
-                if (!isActive)
-                {
-                    // UI just opened → disable main camera, enable secondary
-                    if (mainCamera != null) mainCamera.enabled = false;
-                    if (secondaryCamera != null) secondaryCamera.enabled = true;
-                }
-                else
-                {
-                    // UI just closed → re-enable main camera, disable secondary
-                    if (mainCamera != null) mainCamera.enabled = true;
-                    if (secondaryCamera != null) secondaryCamera.enabled = false;
-                }
-            }
-        }
 
         // Toggle pause menu with Esc
         if (Input.GetKeyDown(KeyCode.Escape))

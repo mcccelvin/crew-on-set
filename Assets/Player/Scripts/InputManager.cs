@@ -16,20 +16,38 @@ namespace Player.Manager
         public bool Run { get; private set; }
         public bool Jump { get; private set; }
 
+        // One-frame input flags for interaction/equipment/camera actions
+        // These are set when the action is performed and automatically cleared in LateUpdate().
+        public bool Interact { get; private set; }
+        public bool Drop { get; private set; }
+        public bool Equip { get; private set; }
 
-        private InputActionMap currentMap;
+        private InputActionMap playerMap;
         private InputAction moveAction;
         private InputAction lookAction;
         private InputAction runAction;
         private InputAction jumpAction;
+        private InputAction interactAction;
+        private InputAction dropAction;
+        private InputAction equipAction;
 
         private void Awake()
         {   
-            currentMap = PlayerInput.currentActionMap;
-            moveAction = currentMap.FindAction("Move");
-            lookAction = currentMap.FindAction("Look");
-            runAction = currentMap.FindAction("Run");
-            jumpAction = currentMap.FindAction("Jump");
+            if (PlayerInput == null)
+            {
+                Debug.LogError("InputManager: PlayerInput reference is null on " + gameObject.name);
+                return;
+            }
+
+            playerMap = PlayerInput.currentActionMap;
+            moveAction = playerMap.FindAction("Move");
+            lookAction = playerMap.FindAction("Look");
+            runAction = playerMap.FindAction("Run");
+            jumpAction = playerMap.FindAction("Jump");
+            interactAction = playerMap.FindAction("Interact");
+            dropAction = playerMap.FindAction("Drop");
+            equipAction = PlayerInput.actions.FindAction("Equip");
+
 
             moveAction.performed += onMove;
             lookAction.performed += onLook;
@@ -40,6 +58,34 @@ namespace Player.Manager
             lookAction.canceled += onLook;
             runAction.canceled += onRun;
             jumpAction.canceled += onJump;
+
+            // Set one-frame flags on 'performed' only. They are cleared in LateUpdate().
+            if (interactAction != null)
+            {
+                interactAction.performed += ctx => Interact = true;
+            }
+            else
+            {
+                Interact = false;
+            }
+
+            if (dropAction != null)
+            {
+                dropAction.performed += ctx => Drop = true;
+            }
+            else
+            {
+                Drop = false;
+            }
+
+            if (equipAction != null)
+            {
+                equipAction.performed += ctx => Equip = true;
+            }
+            else
+            {
+                Equip = false;
+            }
         }
 
         private void onMove(InputAction.CallbackContext context)
@@ -62,20 +108,22 @@ namespace Player.Manager
             Jump = context.ReadValueAsButton();
         }
 
-
+        // Clear one-frame flags here so other scripts can read them during Update()
+        private void LateUpdate()
+        {
+            Interact = false;
+            Drop = false;
+            Equip = false;
+        }
 
         private void onEnable()
         {
-            currentMap.Enable();
+            if (playerMap != null) playerMap.Enable();
         }
 
         private void onDisable()
         {
-            currentMap.Disable();
+            if (playerMap != null) playerMap.Disable();
         }
-
-
     }
-
-    
 }
