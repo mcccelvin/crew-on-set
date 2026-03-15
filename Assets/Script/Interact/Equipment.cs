@@ -1,5 +1,5 @@
 using UnityEngine;
-using Player.Manager; // Added this!
+using Player.Manager;
 
 namespace Player.Equipment
 {
@@ -50,7 +50,6 @@ namespace Player.Equipment
 
         public abstract void OnUse(Camera playerCamera);
 
-        // NEW: Allows specific items to read inputs every frame while held!
         public virtual void OnHeldUpdate(InputManager input) { }
     }
 }

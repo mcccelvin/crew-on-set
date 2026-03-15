@@ -32,6 +32,11 @@ namespace Player.PlayerController
 
         private void Start()
         {
+            // --- NEW CODE: Hide and lock the cursor ---
+            Cursor.visible = false;
+            Cursor.lockState = CursorLockMode.Locked;
+            // ------------------------------------------
+
             hasAnimator = TryGetComponent<Animator>(out animator);
             playerRigidbody = GetComponent<Rigidbody>();
             inputManager = GetComponent<InputManager>();
