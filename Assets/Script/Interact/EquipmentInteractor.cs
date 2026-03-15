@@ -13,71 +13,91 @@ namespace Player.Interactor
         [Header("Settings")]
         [SerializeField] private float PickupRange = 3f;
 
+        // --- YOUR MIXED VARIABLES ---
         private InputManager inputManager;
-
-        // --- NEW: HOTBAR SYSTEM ---
-        private Equipment.Equipment[] hotbar = new Equipment.Equipment[9]; // Memory for 9 items
-        private int currentSlotIndex = 0; // Which slot number we are currently using
-        private Equipment.Equipment currentEquipment; // The physical item in our hands right now
+        private Equipment.Equipment[] hotbar = new Equipment.Equipment[9];
+        private int currentSlotIndex = 0;
+        private Equipment.Equipment currentEquipment;
 
         private DirectorTerminal activeTerminal;
+        private ComputerStation activeComputer; // NEW: Tracks if we are looking at the screen
 
+        // --- YOUR MIXED START METHOD ---
         private void Start()
         {
             inputManager = GetComponent<InputManager>();
-
-            if (PlayerCamera != null)
-            {
-                PlayerCamera.gameObject.SetActive(true);
-                PlayerCamera.enabled = true;
-            }
+            if (PlayerCamera != null) { PlayerCamera.gameObject.SetActive(true); PlayerCamera.enabled = true; }
         }
 
+        // --- YOUR MIXED UPDATE METHOD ---
         private void Update()
         {
             if (activeTerminal != null)
             {
+                if (inputManager.Interact) { activeTerminal.CloseTerminal(); activeTerminal = null; }
+                return;
+            }
+
+            // NEW: If we are on the computer, press 'E' to step away
+            if (activeComputer != null)
+            {
                 if (inputManager.Interact)
                 {
-                    activeTerminal.CloseTerminal();
-                    activeTerminal = null;
+                    activeComputer.CloseComputerUI();
+                    // Note: The computer clears activeComputer automatically using the helper below!
                 }
                 return;
             }
 
-            // NEW: Listen for the 1 through 9 keys every frame
             HandleHotbarInput();
 
-            if (inputManager.Interact)
+            // PRESS 'E' - Pick up items or insert SD cards
+            if (inputManager.Interact) { TryPickupOrInteract(); return; }
+
+            // PRESS 'G' - Drop items
+            if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
+
+            // PRESS 'F' - Look through Camera OR Use Computer Screen
+            if (inputManager.Equip)
             {
-                TryPickupOrInteract();
-                return;
+                if (currentEquipment != null)
+                {
+                    currentEquipment.OnUse(PlayerCamera);
+                }
+                else
+                {
+                    TryOpenComputer(); // Hands are empty? Try turning on the computer!
+                }
             }
 
-            if (inputManager.Drop && currentEquipment != null)
-            {
-                DropEquipment();
-                return;
-            }
+            if (currentEquipment != null) currentEquipment.OnHeldUpdate(inputManager);
+        }
 
-            if (inputManager.Equip && currentEquipment != null)
+        // --- YOUR MIXED COMPUTER HELPERS ---
+        private void TryOpenComputer()
+        {
+            Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
+            if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
-                currentEquipment.OnUse(PlayerCamera);
-            }
-
-            if (currentEquipment != null)
-            {
-                currentEquipment.OnHeldUpdate(inputManager);
+                ComputerStation computer = hit.collider.GetComponentInParent<ComputerStation>();
+                if (computer != null)
+                {
+                    activeComputer = computer;
+                    activeComputer.OpenComputerUI(this);
+                }
             }
         }
 
-        // NEW: Checks if the player presses numbers 1-9
+        public void ClearActiveComputer() { activeComputer = null; }
+
+        // =========================================================================
+        // EVERYTHING BELOW THIS LINE IS YOUR EXISTING HOTBAR & SD CARD LOGIC
+        // =========================================================================
+
         private void HandleHotbarInput()
         {
             for (int i = 0; i < 9; i++)
             {
-                // In Unity, KeyCode.Alpha1 is 49, Alpha2 is 50, etc. 
-                // So adding 'i' lets us check all 9 keys easily!
                 if (Input.GetKeyDown(KeyCode.Alpha1 + i))
                 {
                     SwitchSlot(i);
@@ -86,23 +106,18 @@ namespace Player.Interactor
             }
         }
 
-        // NEW: Puts the old item in your backpack and brings out the new one
         private void SwitchSlot(int newSlotIndex)
         {
-            // Don't do anything if they press the button for the slot they are already holding
             if (currentSlotIndex == newSlotIndex) return;
 
-            // 1. Hide the item we are currently holding
             if (currentEquipment != null)
             {
                 currentEquipment.gameObject.SetActive(false);
             }
 
-            // 2. Switch our memory to the new slot
             currentSlotIndex = newSlotIndex;
             currentEquipment = hotbar[currentSlotIndex];
 
-            // 3. Show the new item, if we actually have one in this slot!
             if (currentEquipment != null)
             {
                 currentEquipment.gameObject.SetActive(true);
@@ -120,26 +135,24 @@ namespace Player.Interactor
 
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
-                // 1. Try picking up equipment first
+                // A. Try picking up equipment first
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
-                    // NEW: Search our hotbar for the first empty slot to put this item in
                     for (int i = 0; i < 9; i++)
                     {
                         if (hotbar[i] == null)
                         {
-                            hotbar[i] = item; // Add it to the list
-                            item.OnPickedUp(HoldPoint); // Physically attach it to the player
+                            hotbar[i] = item;
+                            item.OnPickedUp(HoldPoint);
 
-                            // If this isn't our currently active slot, hide it immediately
                             if (i != currentSlotIndex)
                             {
                                 item.gameObject.SetActive(false);
                             }
                             else
                             {
-                                currentEquipment = item; // Put it directly in our hands!
+                                currentEquipment = item;
                             }
 
                             Debug.Log($"Picked up {item.gameObject.name} into Slot {i + 1}");
@@ -151,7 +164,7 @@ namespace Player.Interactor
                     return;
                 }
 
-                // 2. Check for ANY object that uses the IInteractable interface (like your SD Card)
+                // B. Check for ANY object that uses the IInteractable interface (Computer, SD Card)
                 IInteractable interactableItem = hit.collider.GetComponentInParent<IInteractable>();
                 if (interactableItem != null)
                 {
@@ -159,7 +172,7 @@ namespace Player.Interactor
                     return;
                 }
 
-                // 3. Try checking the director terminal
+                // C. Try checking the director terminal
                 DirectorTerminal terminal = hit.collider.GetComponentInParent<DirectorTerminal>();
                 if (terminal != null)
                 {
@@ -174,12 +187,28 @@ namespace Player.Interactor
             if (currentEquipment == null) return;
 
             currentEquipment.OnDropped(PlayerCamera);
-            hotbar[currentSlotIndex] = null; // NEW: Erase it from our hotbar memory so the slot is empty again
+            hotbar[currentSlotIndex] = null;
             currentEquipment = null;
         }
 
-        // --- SD CARD HELPER METHODS ---
+        // --- COMPUTER HAND-OFF HELPERS ---
+        public Equipment.Equipment GetHeldItem()
+        {
+            return currentEquipment;
+        }
 
+        public void DestroyHeldItem()
+        {
+            if (currentEquipment != null)
+            {
+                Equipment.Equipment itemToDestroy = currentEquipment;
+                hotbar[currentSlotIndex] = null;
+                currentEquipment = null;
+                Destroy(itemToDestroy.gameObject);
+            }
+        }
+
+        // --- SD CARD HELPER METHODS ---
         public bool HasBlankSDCard()
         {
             for (int i = 0; i < 9; i++)
@@ -202,20 +231,15 @@ namespace Player.Interactor
                     Equipment.SDCardItem card = hotbar[i].GetComponent<Equipment.SDCardItem>();
                     if (card != null && !card.isUsedCard)
                     {
-                        Equipment.Equipment itemToDestroy = hotbar[i]; // Remember what we are destroying
-
-                        // 1. Erase it from the Hotbar memory so the number key stops working!
+                        Equipment.Equipment itemToDestroy = hotbar[i];
                         hotbar[i] = null;
 
-                        // 2. Just in case they are somehow holding it, empty their hands
                         if (currentEquipment == itemToDestroy)
                         {
                             currentEquipment = null;
                         }
 
-                        // 3. Nuke the actual physical object from the game entirely
                         Destroy(itemToDestroy.gameObject);
-
                         Debug.Log($"Hotbar: Consumed SD Card from Slot {i + 1}");
                         return;
                     }

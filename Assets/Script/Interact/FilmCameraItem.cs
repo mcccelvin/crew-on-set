@@ -1,5 +1,5 @@
 using UnityEngine;
-using UnityEngine.InputSystem; // Needed to read 'C' and 'R' cleanly
+using UnityEngine.InputSystem;
 using Player.Manager;
 
 namespace Player.Equipment
@@ -30,7 +30,6 @@ namespace Player.Equipment
             if (filmUICanvas != null) filmUICanvas.SetActive(false);
         }
 
-        // Toggles looking through the lens
         public override void OnUse(Camera playerCamera)
         {
             isCameraActive = !isCameraActive;
@@ -42,25 +41,21 @@ namespace Player.Equipment
             if (!isCameraActive && isRecording) ToggleRecording();
         }
 
-        // NEW: This runs every frame while you are holding the camera
         public override void OnHeldUpdate(InputManager input)
         {
             if (!isCameraActive) return;
 
-            // PRESS 'C' - Insert SD Card
             if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame)
             {
                 InsertSDCard();
             }
 
-            // PRESS 'R' - Toggle Recording
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
-                // THE LOCK: If we aren't recording yet, and there is no SD card, BLOCK IT!
                 if (!isRecording && !isSDCardInserted)
                 {
                     Debug.LogWarning("Camera Blocked: You cannot record! Press 'C' to insert a blank SD Card first.");
-                    return; // The 'return' stops the code right here so it never hits ToggleRecording!
+                    return;
                 }
 
                 ToggleRecording();
@@ -92,54 +87,56 @@ namespace Player.Equipment
         private void ToggleRecording()
         {
             isRecording = !isRecording;
+            string generatedFileName = ""; // Prepare to catch the file name
 
-            if (replayManager != null) replayManager.SetRecordingState(isRecording);
+            if (replayManager != null)
+            {
+                // Catch the file name from the ReplayManager!
+                generatedFileName = replayManager.SetRecordingState(isRecording);
+            }
 
-            // If we just STOPPED recording, spit out the card
+            // If we just STOPPED recording, spit out the card and pass the file name to it
             if (!isRecording)
             {
-                EjectUsedSDCard();
+                EjectUsedSDCard(generatedFileName);
             }
+
+            Debug.Log($"Recording is now: {(isRecording ? "ON" : "OFF")}");
         }
 
-        private void EjectUsedSDCard()
+        private void EjectUsedSDCard(string savedFileName)
         {
-            isSDCardInserted = false; // Reset the camera so it's empty again
+            isSDCardInserted = false;
 
             if (sdCardPrefab != null)
             {
                 Transform spawnLoc = ejectPoint != null ? ejectPoint : transform;
                 GameObject ejectedCard = Instantiate(sdCardPrefab, spawnLoc.position, spawnLoc.rotation);
 
-                // 1. Mark it as used
+                // THE FIX: Mark it as used and WRITE THE FILE NAME ON IT!
                 SDCardItem cardScript = ejectedCard.GetComponent<SDCardItem>();
-                if (cardScript != null) cardScript.isUsedCard = true;
+                if (cardScript != null)
+                {
+                    cardScript.isUsedCard = true;
+                    cardScript.recordedFileName = savedFileName; // The card now officially holds the JSON!
+                }
 
-                // 2. Paint it red
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
                 if (renderer != null) renderer.material.color = Color.red;
 
-                // 3. SAFETY NET: Guarantee it has a collider to be picked up
                 Collider col = ejectedCard.GetComponent<Collider>();
-                if (col == null)
-                {
-                    col = ejectedCard.AddComponent<BoxCollider>();
-                }
+                if (col == null) col = ejectedCard.AddComponent<BoxCollider>();
 
-                // 4. SAFETY NET: Guarantee it has a Rigidbody to fall to the floor
                 Rigidbody rb = ejectedCard.GetComponent<Rigidbody>();
-                if (rb == null)
-                {
-                    rb = ejectedCard.AddComponent<Rigidbody>();
-                }
+                if (rb == null) rb = ejectedCard.AddComponent<Rigidbody>();
 
-                // Make sure physics are turned on, then pop it out!
                 rb.isKinematic = false;
                 rb.useGravity = true;
                 rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
             }
 
-            Debug.Log($"Camera: Take complete! USED SD Card physically ejected.");
+            // NEW DEBUG LOG to prove it worked
+            Debug.Log($"Camera: Take complete! Ejected card holding file: {savedFileName}");
         }
 
         public override void OnDropped(Camera playerCamera)

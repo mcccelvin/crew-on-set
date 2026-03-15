@@ -7,10 +7,20 @@ namespace Player.Equipment
         [Tooltip("Check this if this card already has a recording on it")]
         public bool isUsedCard = false;
 
-        // Optional: What happens if the player left-clicks while holding the SD card
+        [Tooltip("The exact name of the JSON file this card holds")]
+        public string recordedFileName = "";
+
+        // If the player left-clicks while holding the card, read the label!
         public override void OnUse(Camera playerCamera)
         {
-            Debug.Log($"You are inspecting the SD Card. Status: {(isUsedCard ? "USED" : "BLANK")}");
+            if (isUsedCard)
+            {
+                Debug.Log($"Inspecting SD Card. It holds the recording: {recordedFileName}");
+            }
+            else
+            {
+                Debug.Log("Inspecting SD Card. It is BLANK.");
+            }
         }
     }
 }

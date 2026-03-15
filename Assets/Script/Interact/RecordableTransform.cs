@@ -32,21 +32,29 @@ public class RecordableTransform : MonoBehaviour
 
     public void StartRecording() { pointsInTime.Clear(); isRecording = true; isReplaying = false; }
 
-    public void StopRecording()
+    // THE FIX: Changed from "void" to "string" so it can hand the name back!
+    public string StopRecording()
     {
         isRecording = false;
-        SaveToJSON();
+        return SaveToJSON();
     }
 
-    private void SaveToJSON()
+    // THE FIX: Changed from "void" to "string"
+    private string SaveToJSON()
     {
-        if (pointsInTime.Count == 0) return;
+        if (pointsInTime.Count == 0) return "";
+
         RecordingData data = new RecordingData { points = pointsInTime };
         string json = JsonUtility.ToJson(data);
         string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        string path = Path.Combine(Application.persistentDataPath, $"{name}_{timestamp}.json");
+
+        string fileName = $"{name}_{timestamp}.json"; // We save just the name
+        string path = Path.Combine(Application.persistentDataPath, fileName);
+
         File.WriteAllText(path, json);
         Debug.Log($"Auto-saved to: {path}");
+
+        return fileName; // Hands the name back up the chain
     }
 
     public void LoadFromSpecificFile(string fileName)
@@ -74,7 +82,6 @@ public class RecordableTransform : MonoBehaviour
     {
         isReplaying = false;
 
-        // FIX: Only turn physics back on if the item is NOT being held (has no parent)
         if (rb != null)
         {
             if (transform.parent == null)
@@ -83,7 +90,6 @@ public class RecordableTransform : MonoBehaviour
             }
             else
             {
-                // If it has a parent, it's being held, so keep it kinematic
                 rb.isKinematic = true;
             }
         }
