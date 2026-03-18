@@ -20,16 +20,12 @@ public class ComputerStation : MonoBehaviour, IInteractable
     private int selectedClipIndex = 0;
     private EquipmentInteractor currentInteractor;
 
-    private void Start()
-    {
-        if (computerUICanvas != null) computerUICanvas.SetActive(false);
-    }
+    private void Start() { if (computerUICanvas != null) computerUICanvas.SetActive(false); }
 
     public void OnInteract(GameObject player)
     {
         EquipmentInteractor hotbar = player.GetComponent<EquipmentInteractor>();
         if (hotbar == null) return;
-
         Equipment heldItem = hotbar.GetHeldItem();
 
         if (heldItem != null)
@@ -42,17 +38,12 @@ public class ComputerStation : MonoBehaviour, IInteractable
                 UpdateUI();
             }
         }
-        else if (insertedFiles.Count > 0)
-        {
-            CompileAndEject();
-        }
     }
 
     public void OpenComputerUI(EquipmentInteractor interactor)
     {
         currentInteractor = interactor;
         if (computerUICanvas != null) computerUICanvas.SetActive(true);
-
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         UpdateUI();
@@ -60,12 +51,9 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     public void CloseComputerUI()
     {
-        // SAFETY: Stop the video if we walk away while it's playing!
         ReplayManager replayManager = FindObjectOfType<ReplayManager>();
         if (replayManager != null) replayManager.TriggerStopPreview();
-
         if (computerUICanvas != null) computerUICanvas.SetActive(false);
-
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
         if (currentInteractor != null) currentInteractor.ClearActiveComputer();
@@ -92,73 +80,50 @@ public class ComputerStation : MonoBehaviour, IInteractable
         UpdateUI();
     }
 
-    // CHANGED: Now previews the video INSIDE the UI instead of closing the screen!
     public void PlaySelectedClip()
     {
         if (insertedFiles.Count == 0 || selectedClipIndex >= insertedFiles.Count) return;
-
         string fileNameToPlay = insertedFiles[selectedClipIndex];
-
         ReplayManager replayManager = FindObjectOfType<ReplayManager>();
         if (replayManager != null)
         {
-            replayManager.TriggerStopPreview(); // Stop any currently playing video first
-
-            RecordableTransform[] recordables = FindObjectsOfType<RecordableTransform>();
-            foreach (var rec in recordables) rec.LoadFromSpecificFile(fileNameToPlay);
-
-            replayManager.TriggerPreviewReplay(); // Start the preview!
+            replayManager.TriggerStopPreview();
+            replayManager.PlayMovieOnScreen(fileNameToPlay);
         }
     }
 
-    // --- NEW: TRIMMING LOGIC ---
-
-    public void TrimStartOfClip()
-    {
-        TrimClip(true);
-    }
-
-    public void TrimEndOfClip()
-    {
-        TrimClip(false);
-    }
+    public void TrimStartOfClip() { TrimClip(true); }
+    public void TrimEndOfClip() { TrimClip(false); }
 
     private void TrimClip(bool trimStart)
     {
         if (insertedFiles.Count == 0 || selectedClipIndex >= insertedFiles.Count) return;
-
         string fileName = insertedFiles[selectedClipIndex];
         string path = Path.Combine(Application.persistentDataPath, fileName);
 
         if (File.Exists(path))
         {
-            string json = File.ReadAllText(path);
-            RecordingData clip = JsonUtility.FromJson<RecordingData>(json);
+            MasterTape tape = JsonUtility.FromJson<MasterTape>(File.ReadAllText(path));
+            int framesToRemove = 25;
+            bool hasEnoughFrames = false;
 
-            int framesToRemove = 25; // 25 frames is about half a second of video
-
-            if (clip.points.Count > framesToRemove)
+            foreach (var track in tape.tracks)
             {
-                if (trimStart)
-                    clip.points.RemoveRange(0, framesToRemove); // Chop off the beginning
-                else
-                    clip.points.RemoveRange(clip.points.Count - framesToRemove, framesToRemove); // Chop off the end
-
-                // Save the trimmed file back to the hard drive!
-                File.WriteAllText(path, JsonUtility.ToJson(clip));
-                Debug.Log($"Computer: Trimmed 0.5 seconds from the {(trimStart ? "START" : "END")} of {fileName}");
-
-                // Automatically replay the clip so you can see your trim!
-                PlaySelectedClip();
+                if (track.points.Count > framesToRemove)
+                {
+                    hasEnoughFrames = true;
+                    if (trimStart) track.points.RemoveRange(0, framesToRemove);
+                    else track.points.RemoveRange(track.points.Count - framesToRemove, framesToRemove);
+                }
             }
-            else
+
+            if (hasEnoughFrames)
             {
-                Debug.LogWarning("Computer: Clip is too short to trim anymore!");
+                File.WriteAllText(path, JsonUtility.ToJson(tape));
+                PlaySelectedClip();
             }
         }
     }
-
-    // ---------------------------
 
     public void EjectAllCards()
     {
@@ -189,24 +154,33 @@ public class ComputerStation : MonoBehaviour, IInteractable
         rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
     }
 
-    private void CompileAndEject()
+    public void CompileMovie()
     {
-        RecordingData finalMovie = new RecordingData();
+        MasterTape finalMovie = new MasterTape();
         foreach (string fileName in insertedFiles)
         {
             string path = Path.Combine(Application.persistentDataPath, fileName);
             if (File.Exists(path))
             {
-                string json = File.ReadAllText(path);
-                RecordingData clip = JsonUtility.FromJson<RecordingData>(json);
-                finalMovie.points.AddRange(clip.points);
+                MasterTape clip = JsonUtility.FromJson<MasterTape>(File.ReadAllText(path));
+                foreach (var clipTrack in clip.tracks)
+                {
+                    ObjectTrack existingTrack = finalMovie.tracks.Find(t => t.id == clipTrack.id);
+                    if (existingTrack != null) existingTrack.points.AddRange(clipTrack.points);
+                    else
+                    {
+                        ObjectTrack newTrack = new ObjectTrack();
+                        newTrack.id = clipTrack.id;
+                        newTrack.points = new List<PointInTime>(clipTrack.points);
+                        finalMovie.tracks.Add(newTrack);
+                    }
+                }
             }
         }
 
         string finalFileName = $"CompiledMovie_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.json";
         File.WriteAllText(Path.Combine(Application.persistentDataPath, finalFileName), JsonUtility.ToJson(finalMovie));
-
-        EjectCard(finalFileName); // Spit out the gold card
+        EjectCard(finalFileName);
         insertedFiles.Clear();
         UpdateUI();
     }
