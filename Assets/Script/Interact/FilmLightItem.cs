@@ -1,70 +1,67 @@
 using UnityEngine;
-using UnityEngine.InputSystem; // Needed to read the 'Q' key directly
+using UnityEngine.InputSystem;
 using Player.Manager;
 
 namespace Player.Equipment
 {
     public class FilmLightItem : Equipment
     {
-        [Header("Film Light Settings")]
-        [SerializeField] private Light filmLight;
-        [SerializeField] private Transform lightPivot;
+        [Header("Light Beam Settings")]
+        [Tooltip("Drag the invisible Spot Light object here")]
+        public Light spotlight;
 
-        [Header("Tilt Settings")]
-        [SerializeField] private float tiltStep = 15f; // How many degrees it moves per click
-        [SerializeField] private float maxUpAngle = -45f;
-        [SerializeField] private float maxDownAngle = 45f;
+        [Tooltip("How many degrees it snaps per click")]
+        public float tiltStep = 5f; // THE FIX: Exactly 5 degrees per tap!
+
+        public float maxTiltUp = -45f;
+        public float maxTiltDown = 45f;
 
         private bool isLightOn = false;
         private float currentTilt = 0f;
+        private float startAngleX = 0f;
 
         protected override void Awake()
         {
             base.Awake();
-            if (filmLight != null) filmLight.enabled = false;
+
+            if (spotlight != null)
+            {
+                spotlight.enabled = isLightOn;
+                startAngleX = spotlight.transform.localEulerAngles.x;
+            }
         }
 
-        // F KEY: Toggles the light ON and OFF
+        // Toggle the light on and off
         public override void OnUse(Camera playerCamera)
         {
             isLightOn = !isLightOn;
-            if (filmLight != null) filmLight.enabled = isLightOn;
-            Debug.Log($"Film Light is now: {(isLightOn ? "ON" : "OFF")}");
+            if (spotlight != null) spotlight.enabled = isLightOn;
+            Debug.Log($"Stage Light is now {(isLightOn ? "ON" : "OFF")}");
         }
 
-        // Runs every frame while holding the light
         public override void OnHeldUpdate(InputManager input)
         {
-            // Q KEY -> Tilt Up
-            if (Keyboard.current != null && Keyboard.current.qKey.wasPressedThisFrame)
-            {
-                currentTilt -= tiltStep;
-                currentTilt = Mathf.Clamp(currentTilt, maxUpAngle, maxDownAngle);
-                ApplyTilt();
-            }
+            if (Keyboard.current == null) return;
 
-            // E KEY (Interact) -> Tilt Down
-            if (input.Interact)
+            // THE FIX: "wasPressedThisFrame" ensures it only moves exactly once per click!
+            if (Keyboard.current.upArrowKey.wasPressedThisFrame)
             {
-                currentTilt += tiltStep;
-                currentTilt = Mathf.Clamp(currentTilt, maxUpAngle, maxDownAngle);
-                ApplyTilt();
+                TiltLight(-tiltStep);
+            }
+            else if (Keyboard.current.downArrowKey.wasPressedThisFrame)
+            {
+                TiltLight(tiltStep);
             }
         }
 
-        private void ApplyTilt()
+        private void TiltLight(float amount)
         {
-            if (lightPivot != null)
-            {
-                lightPivot.localEulerAngles = new Vector3(currentTilt, 0, 0);
-            }
-        }
+            if (spotlight == null) return;
 
-        public override void OnDropped(Camera playerCamera)
-        {
-            // I removed the code that turns the light off.
-            // Now, it will stay on when dropped!
-            base.OnDropped(playerCamera);
+            currentTilt += amount;
+            currentTilt = Mathf.Clamp(currentTilt, maxTiltUp, maxTiltDown);
+
+            spotlight.transform.localEulerAngles = new Vector3(startAngleX + currentTilt, 0, 0);
         }
     }
 }

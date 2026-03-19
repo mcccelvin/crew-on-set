@@ -19,12 +19,15 @@ namespace Player.Equipment
         private bool isRecording = false;
         private bool isSDCardInserted = false;
 
-        private ReplayManager replayManager;
+        // THE FIX: We are using the new Pixel Recorder now!
+        private TruePixelRecorder pixelRecorder;
 
         protected override void Awake()
         {
             base.Awake();
-            replayManager = FindObjectOfType<ReplayManager>();
+
+            // Find the pixel recorder when the game starts
+            pixelRecorder = FindObjectOfType<TruePixelRecorder>();
 
             if (filmCamera != null) filmCamera.gameObject.SetActive(false);
             if (filmUICanvas != null) filmUICanvas.SetActive(false);
@@ -87,12 +90,22 @@ namespace Player.Equipment
         private void ToggleRecording()
         {
             isRecording = !isRecording;
-            string generatedFileName = ""; // Prepare to catch the file name
+            string generatedFileName = "";
 
-            if (replayManager != null)
+            // Safety check to make sure it finds the recorder
+            if (pixelRecorder == null) pixelRecorder = FindObjectOfType<TruePixelRecorder>();
+
+            // THE FIX: Tell the Pixel Recorder to start taking pictures or stop and save!
+            if (pixelRecorder != null)
             {
-                // Catch the file name from the ReplayManager!
-                generatedFileName = replayManager.SetRecordingState(isRecording);
+                if (isRecording)
+                {
+                    pixelRecorder.StartRecording();
+                }
+                else
+                {
+                    generatedFileName = pixelRecorder.StopRecording();
+                }
             }
 
             // If we just STOPPED recording, spit out the card and pass the file name to it
@@ -113,12 +126,12 @@ namespace Player.Equipment
                 Transform spawnLoc = ejectPoint != null ? ejectPoint : transform;
                 GameObject ejectedCard = Instantiate(sdCardPrefab, spawnLoc.position, spawnLoc.rotation);
 
-                // THE FIX: Mark it as used and WRITE THE FILE NAME ON IT!
                 SDCardItem cardScript = ejectedCard.GetComponent<SDCardItem>();
                 if (cardScript != null)
                 {
                     cardScript.isUsedCard = true;
-                    cardScript.recordedFileName = savedFileName; // The card now officially holds the JSON!
+                    // The card now officially holds the new .tape file!
+                    cardScript.recordedFileName = savedFileName;
                 }
 
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
@@ -135,7 +148,6 @@ namespace Player.Equipment
                 rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
             }
 
-            // NEW DEBUG LOG to prove it worked
             Debug.Log($"Camera: Take complete! Ejected card holding file: {savedFileName}");
         }
 

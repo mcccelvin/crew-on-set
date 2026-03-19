@@ -23,11 +23,11 @@ public class ReplayManager : MonoBehaviour
 
     private bool isRecording = false;
     private bool isReplayingPreview = false;
-    private int playbackIndex = 0;
-    private MasterTape loadedTape;
 
-    // --- NEW: Memory for your quick-test hotkey! ---
+    private MasterTape loadedTape;
     private string lastRecordedFileName = "";
+
+    private float currentReplayTime = 0f; // NEW: The Manager's built-in stopwatch!
 
     void Start()
     {
@@ -37,58 +37,64 @@ public class ReplayManager : MonoBehaviour
 
     void Update()
     {
-        // --- QUICK TEST HOTKEY ('P') ---
         if (Input.GetKeyDown(KeyCode.P))
         {
-            if (isReplayingPreview)
-            {
-                // Stop the video if it is currently playing
-                TriggerStopPreview();
-                Debug.Log("ReplayManager: Playback stopped.");
-            }
-            else if (!string.IsNullOrEmpty(lastRecordedFileName))
-            {
-                // Instantly play the last thing you recorded!
-                Debug.Log("ReplayManager: Instantly testing the last recording!");
-                PlayMovieOnScreen(lastRecordedFileName);
-            }
-            else
-            {
-                Debug.LogWarning("ReplayManager: You haven't recorded anything yet to test!");
-            }
+            if (isReplayingPreview) TriggerStopPreview();
+            else if (!string.IsNullOrEmpty(lastRecordedFileName)) PlayMovieOnScreen(lastRecordedFileName);
         }
-    }
 
-    void FixedUpdate()
-    {
+        // --- THE MAGIC: Ultra-Smooth Playback Blending ---
         if (isReplayingPreview && loadedTape != null)
         {
+            currentReplayTime += Time.deltaTime; // Move the stopwatch forward smoothly
             bool stillPlaying = false;
 
             foreach (var track in loadedTape.tracks)
             {
-                if (playbackIndex < track.points.Count)
+                if (track.points.Count < 2) continue; // Need at least 2 frames to blend!
+
+                int indexA = 0;
+                int indexB = 0;
+
+                // Find the two exact frames we are sitting between
+                for (int i = 0; i < track.points.Count - 1; i++)
+                {
+                    if (track.points[i].time <= currentReplayTime && track.points[i + 1].time > currentReplayTime)
+                    {
+                        indexA = i;
+                        indexB = i + 1;
+                        break;
+                    }
+                }
+
+                if (currentReplayTime <= track.points[track.points.Count - 1].time)
                 {
                     stillPlaying = true;
 
-                    if (track.id == "LowCam")
+                    // Math to calculate the buttery smooth glide between the two frames
+                    float timeA = track.points[indexA].time;
+                    float timeB = track.points[indexB].time;
+                    float lerpPercentage = (currentReplayTime - timeA) / (timeB - timeA);
+
+                    Vector3 smoothPos = Vector3.Lerp(track.points[indexA].position, track.points[indexB].position, lerpPercentage);
+                    Quaternion smoothRot = Quaternion.Slerp(track.points[indexA].rotation, track.points[indexB].rotation, lerpPercentage);
+
+                    // Apply the smooth glide to the Camera Rig
+                    if (track.id == "LowCam" && replayCamera != null)
                     {
-                        if (replayCamera != null)
-                        {
-                            Transform ghostRig = replayCamera.transform.parent != null ? replayCamera.transform.parent : replayCamera.transform;
-                            ghostRig.position = track.points[playbackIndex].position;
-                            ghostRig.rotation = track.points[playbackIndex].rotation;
-                        }
+                        Transform ghostRig = replayCamera.transform.parent != null ? replayCamera.transform.parent : replayCamera.transform;
+                        ghostRig.position = smoothPos;
+                        ghostRig.rotation = smoothRot;
                     }
+                    // Apply the smooth glide to the Props
                     else
                     {
                         foreach (var rec in allRecordables)
                         {
                             if (rec.uniqueObjectID == track.id)
                             {
-                                rec.transform.position = track.points[playbackIndex].position;
-                                rec.transform.rotation = track.points[playbackIndex].rotation;
-
+                                rec.transform.position = smoothPos;
+                                rec.transform.rotation = smoothRot;
                                 Rigidbody rb = rec.GetComponent<Rigidbody>();
                                 if (rb != null) rb.isKinematic = true;
                             }
@@ -97,8 +103,7 @@ public class ReplayManager : MonoBehaviour
                 }
             }
 
-            if (stillPlaying) playbackIndex++;
-            else TriggerStopPreview();
+            if (!stillPlaying) TriggerStopPreview();
         }
     }
 
@@ -127,13 +132,9 @@ public class ReplayManager : MonoBehaviour
 
             if (newTape.tracks.Count == 0) return "";
 
-            string json = JsonUtility.ToJson(newTape);
             string fileName = $"Take_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.json";
-            File.WriteAllText(Path.Combine(Application.persistentDataPath, fileName), json);
-
-            // --- NEW: Remember this specific file so we can quick-test it later! ---
+            File.WriteAllText(Path.Combine(Application.persistentDataPath, fileName), JsonUtility.ToJson(newTape));
             lastRecordedFileName = fileName;
-
             return fileName;
         }
     }
@@ -143,10 +144,15 @@ public class ReplayManager : MonoBehaviour
         string path = Path.Combine(Application.persistentDataPath, fileName);
         if (File.Exists(path))
         {
-            string json = File.ReadAllText(path);
-            loadedTape = JsonUtility.FromJson<MasterTape>(json);
+            loadedTape = JsonUtility.FromJson<MasterTape>(File.ReadAllText(path));
             isReplayingPreview = true;
-            playbackIndex = 0;
+
+            // Set the stopwatch to the exact start time of the tape
+            currentReplayTime = 0f;
+            if (loadedTape.tracks.Count > 0 && loadedTape.tracks[0].points.Count > 0)
+            {
+                currentReplayTime = loadedTape.tracks[0].points[0].time;
+            }
 
             if (replayCamera != null)
             {
@@ -168,7 +174,6 @@ public class ReplayManager : MonoBehaviour
         foreach (var rec in allRecordables)
         {
             if (rec.uniqueObjectID == "LowCam") continue;
-
             Rigidbody rb = rec.GetComponent<Rigidbody>();
             if (rb != null && rec.transform.parent == null) rb.isKinematic = false;
         }

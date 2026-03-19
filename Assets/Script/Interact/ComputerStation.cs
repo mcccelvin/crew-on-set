@@ -31,7 +31,8 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (heldItem != null)
         {
             SDCardItem card = heldItem.GetComponent<SDCardItem>();
-            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName))
+            // Make sure it only accepts our new .tape files!
+            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName) && card.recordedFileName.EndsWith(".tape"))
             {
                 insertedFiles.Add(card.recordedFileName);
                 hotbar.DestroyHeldItem();
@@ -51,8 +52,9 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     public void CloseComputerUI()
     {
-        ReplayManager replayManager = FindObjectOfType<ReplayManager>();
-        if (replayManager != null) replayManager.TriggerStopPreview();
+        TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
+        if (player != null) player.StopAllCoroutines(); // Stop the video when closing
+
         if (computerUICanvas != null) computerUICanvas.SetActive(false);
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -80,18 +82,17 @@ public class ComputerStation : MonoBehaviour, IInteractable
         UpdateUI();
     }
 
+    // THE FIX: Send the .tape file to your new Pixel Player!
     public void PlaySelectedClip()
     {
         if (insertedFiles.Count == 0 || selectedClipIndex >= insertedFiles.Count) return;
         string fileNameToPlay = insertedFiles[selectedClipIndex];
-        ReplayManager replayManager = FindObjectOfType<ReplayManager>();
-        if (replayManager != null)
-        {
-            replayManager.TriggerStopPreview();
-            replayManager.PlayMovieOnScreen(fileNameToPlay);
-        }
+
+        TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
+        if (player != null) player.PlayTape(fileNameToPlay);
     }
 
+    // --- UPGRADED BINARY TRIMMING ---
     public void TrimStartOfClip() { TrimClip(true); }
     public void TrimEndOfClip() { TrimClip(false); }
 
@@ -103,26 +104,42 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
         if (File.Exists(path))
         {
-            MasterTape tape = JsonUtility.FromJson<MasterTape>(File.ReadAllText(path));
-            int framesToRemove = 25;
-            bool hasEnoughFrames = false;
+            List<byte[]> frames = ReadTapeFile(path);
+            int framesToRemove = 8; // At 15fps, 8 frames is about half a second
 
-            foreach (var track in tape.tracks)
+            if (frames.Count > framesToRemove)
             {
-                if (track.points.Count > framesToRemove)
-                {
-                    hasEnoughFrames = true;
-                    if (trimStart) track.points.RemoveRange(0, framesToRemove);
-                    else track.points.RemoveRange(track.points.Count - framesToRemove, framesToRemove);
-                }
-            }
+                if (trimStart) frames.RemoveRange(0, framesToRemove);
+                else frames.RemoveRange(frames.Count - framesToRemove, framesToRemove);
 
-            if (hasEnoughFrames)
-            {
-                File.WriteAllText(path, JsonUtility.ToJson(tape));
+                WriteTapeFile(path, frames);
                 PlaySelectedClip();
             }
         }
+    }
+
+    // --- UPGRADED BINARY COMPILING ---
+    public void CompileMovie()
+    {
+        if (insertedFiles.Count == 0) return;
+
+        List<byte[]> finalMovieFrames = new List<byte[]>();
+
+        foreach (string fileName in insertedFiles)
+        {
+            string path = Path.Combine(Application.persistentDataPath, fileName);
+            if (File.Exists(path))
+            {
+                finalMovieFrames.AddRange(ReadTapeFile(path));
+            }
+        }
+
+        string finalFileName = $"CompiledMovie_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.tape";
+        WriteTapeFile(Path.Combine(Application.persistentDataPath, finalFileName), finalMovieFrames);
+
+        EjectCard(finalFileName);
+        insertedFiles.Clear();
+        UpdateUI();
     }
 
     public void EjectAllCards()
@@ -154,35 +171,25 @@ public class ComputerStation : MonoBehaviour, IInteractable
         rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
     }
 
-    public void CompileMovie()
+    // --- HELPER METHODS FOR BINARY FILES ---
+    private List<byte[]> ReadTapeFile(string path)
     {
-        MasterTape finalMovie = new MasterTape();
-        foreach (string fileName in insertedFiles)
+        List<byte[]> frames = new List<byte[]>();
+        using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
         {
-            string path = Path.Combine(Application.persistentDataPath, fileName);
-            if (File.Exists(path))
-            {
-                MasterTape clip = JsonUtility.FromJson<MasterTape>(File.ReadAllText(path));
-                foreach (var clipTrack in clip.tracks)
-                {
-                    ObjectTrack existingTrack = finalMovie.tracks.Find(t => t.id == clipTrack.id);
-                    if (existingTrack != null) existingTrack.points.AddRange(clipTrack.points);
-                    else
-                    {
-                        ObjectTrack newTrack = new ObjectTrack();
-                        newTrack.id = clipTrack.id;
-                        newTrack.points = new List<PointInTime>(clipTrack.points);
-                        finalMovie.tracks.Add(newTrack);
-                    }
-                }
-            }
+            int frameCount = reader.ReadInt32();
+            for (int i = 0; i < frameCount; i++) frames.Add(reader.ReadBytes(reader.ReadInt32()));
         }
+        return frames;
+    }
 
-        string finalFileName = $"CompiledMovie_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.json";
-        File.WriteAllText(Path.Combine(Application.persistentDataPath, finalFileName), JsonUtility.ToJson(finalMovie));
-        EjectCard(finalFileName);
-        insertedFiles.Clear();
-        UpdateUI();
+    private void WriteTapeFile(string path, List<byte[]> frames)
+    {
+        using (BinaryWriter writer = new BinaryWriter(File.Open(path, FileMode.Create)))
+        {
+            writer.Write(frames.Count);
+            foreach (byte[] frame in frames) { writer.Write(frame.Length); writer.Write(frame); }
+        }
     }
 
     public void OnDrop() { }
