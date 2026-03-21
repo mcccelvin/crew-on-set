@@ -35,6 +35,7 @@ public class StageSetupManager : MonoBehaviour
             if (colorButtonsContainer != null) colorButtonsContainer.SetActive(true);
 
             Debug.Log("Terminal: Spawned the single wall!");
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnStageWallBuilt();
         }
     }
 

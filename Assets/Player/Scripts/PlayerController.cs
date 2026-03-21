@@ -18,6 +18,9 @@ namespace Player.PlayerController
         [SerializeField] private float AirResistance = 0.8f;
         [SerializeField] private LayerMask GroundCheck;
 
+        // --- NEW SWITCH: Only stops the camera from spinning! ---
+        public bool canLook = true;
+
         private Rigidbody playerRigidbody;
         private InputManager inputManager;
         private Animator animator;
@@ -32,11 +35,6 @@ namespace Player.PlayerController
 
         private void Start()
         {
-            // --- NEW CODE: Hide and lock the cursor ---
-            Cursor.visible = false;
-            Cursor.lockState = CursorLockMode.Locked;
-            // ------------------------------------------
-
             hasAnimator = TryGetComponent<Animator>(out animator);
             playerRigidbody = GetComponent<Rigidbody>();
             inputManager = GetComponent<InputManager>();
@@ -91,7 +89,8 @@ namespace Player.PlayerController
 
         private void CamMovement()
         {
-            if (!hasAnimator) return;
+            // --- THE FIX: If we can't look, stop here! ---
+            if (!hasAnimator || !canLook) return;
 
             var MouseX = inputManager.Look.x;
             var MouseY = inputManager.Look.y;

@@ -48,6 +48,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         UpdateUI();
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
     }
 
     public void CloseComputerUI()

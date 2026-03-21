@@ -45,12 +45,7 @@ public class HelpDesk : MonoBehaviour, IInteractable
             Instantiate(objectToSpawnPrefab, stageSpawnPoint.position, stageSpawnPoint.rotation);
             Debug.Log("Help Desk: Game Started! Object spawned at stage.");
 
-            // CRUCIAL: Tell the ReplayManager to find the newly spawned object so it gets recorded!
-            ReplayManager replayManager = FindObjectOfType<ReplayManager>();
-            if (replayManager != null)
-            {
-                replayManager.allRecordables = FindObjectsOfType<RecordableTransform>(true);
-            }
+
         }
         else
         {

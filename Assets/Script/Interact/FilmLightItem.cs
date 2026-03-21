@@ -37,6 +37,7 @@ namespace Player.Equipment
             isLightOn = !isLightOn;
             if (spotlight != null) spotlight.enabled = isLightOn;
             Debug.Log($"Stage Light is now {(isLightOn ? "ON" : "OFF")}");
+            if (isLightOn) TutorialManager.Instance.OnLightTurnedOn();
         }
 
         public override void OnHeldUpdate(InputManager input)
