@@ -12,8 +12,8 @@ GameObject:
   - component: {fileID: 7173076409751745995}
   - component: {fileID: 4931183982515339521}
   - component: {fileID: 2624973818956775148}
-  - component: {fileID: 5627663653541300556}
   - component: {fileID: 8263386660132101061}
+  - component: {fileID: 7861008862556370585}
   m_Layer: 0
   m_Name: SDCard
   m_TagString: Untagged
@@ -30,8 +30,8 @@ Transform:
   m_GameObject: {fileID: 6876972186880696532}
   serializedVersion: 2
   m_LocalRotation: {x: -0.7071068, y: -0, z: -0, w: 0.7071068}
-  m_LocalPosition: {x: 0.96434, y: -0.1693, z: 0.071694}
-  m_LocalScale: {x: 135.42938, y: 135.42937, z: 135.42938}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 99.99999, y: 99.99999, z: 99.99999}
   m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
@@ -103,27 +103,6 @@ MonoBehaviour:
   HoldRotationOffset: {x: 0, y: 0, z: 0}
   isUsedCard: 0
   recordedFileName: 
---- !u!65 &5627663653541300556
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6876972186880696532}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 0.0016002434, y: 0.0018926475, z: 0.00009929623}
-  m_Center: {x: -0.012665336, y: 0.003843728, z: 0.00202889}
 --- !u!54 &8263386660132101061
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -150,4 +129,25 @@ Rigidbody:
   m_IsKinematic: 0
   m_Interpolate: 0
   m_Constraints: 0
-  m_CollisionDetection: 0
+  m_CollisionDetection: 2
+--- !u!65 &7861008862556370585
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6876972186880696532}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.001600243, y: 0.0018926475, z: 0.00009929624}
+  m_Center: {x: -0.012665337, y: 0.0038436982, z: 0.0020288883}

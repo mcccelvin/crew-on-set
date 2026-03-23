@@ -3,7 +3,7 @@ using UnityEngine;
 public class StageSetupManager : MonoBehaviour
 {
     [Header("Spawning Setup")]
-    public GameObject wallPrefab;
+    public GameObject wallPrefab; // Back to just one wall!
     public Transform spawnPoint;
 
     [Header("UI Elements")]
@@ -13,7 +13,7 @@ public class StageSetupManager : MonoBehaviour
     public GameObject colorButtonsContainer;
 
     [Header("Tracking")]
-    private GameObject currentWall; // We only track one wall now!
+    private GameObject currentWall;
 
     private void Start()
     {
@@ -27,7 +27,7 @@ public class StageSetupManager : MonoBehaviour
         // Only spawn if a wall does NOT exist right now
         if (currentWall == null && wallPrefab != null && spawnPoint != null)
         {
-            // Spawn the wall exactly at the spawn point (no more offset!)
+            // Spawn the wall exactly at the spawn point
             currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
 
             // UI MAGIC: Hide the Spawn button, and reveal the Color buttons
@@ -35,6 +35,7 @@ public class StageSetupManager : MonoBehaviour
             if (colorButtonsContainer != null) colorButtonsContainer.SetActive(true);
 
             Debug.Log("Terminal: Spawned the single wall!");
+
             if (TutorialManager.Instance != null) TutorialManager.Instance.OnStageWallBuilt();
         }
     }
@@ -49,12 +50,10 @@ public class StageSetupManager : MonoBehaviour
     {
         if (currentWall != null)
         {
-            // NEW: Notice the 's' in GetComponentsInChildren! This gets an array of ALL pieces.
             MeshRenderer[] renderers = currentWall.GetComponentsInChildren<MeshRenderer>();
 
             if (renderers.Length > 0)
             {
-                // Loop through every single piece of the wall and paint it
                 foreach (MeshRenderer renderer in renderers)
                 {
                     renderer.material.color = newColor;
@@ -67,8 +66,6 @@ public class StageSetupManager : MonoBehaviour
             }
         }
     }
-
-
 
     public void ClearStage()
     {
@@ -83,4 +80,4 @@ public class StageSetupManager : MonoBehaviour
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
         if (colorButtonsContainer != null) colorButtonsContainer.SetActive(false);
     }
-}   
+}

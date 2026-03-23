@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic; // --- NEW: Needed for Lists! ---
 using System.IO;
 using TMPro;
 
@@ -15,6 +16,18 @@ public class ComputerUIManager : MonoBehaviour
     [Header("Player Setup")]
     public TruePixelPlayer pixelPlayer;
     public TextMeshProUGUI playerTitleText;
+
+    private string currentlyPlayingFile = "";
+    public ContractGrader grader; // Link to our new grading script!
+
+    // --- NEW: A link to the physical computer tower! ---
+    private ComputerStation physicalComputer;
+
+    private void Awake()
+    {
+        // Automatically find the physical computer tower in the room
+        physicalComputer = FindObjectOfType<ComputerStation>();
+    }
 
     private void OnEnable()
     {
@@ -36,15 +49,11 @@ public class ComputerUIManager : MonoBehaviour
         recordingsGridPanel.SetActive(false);
         videoPlayerPanel.SetActive(true);
 
-        if (playerTitleText != null)
-        {
-            playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
-        }
+        currentlyPlayingFile = Path.GetFileName(filePath); // <-- NEW: Remember the file!
 
-        if (pixelPlayer != null)
-        {
-            pixelPlayer.PlayTape(filePath);
-        }
+        if (playerTitleText != null) playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
+        if (pixelPlayer != null) pixelPlayer.PlayTape(filePath);
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
     }
 
     public void DeleteClip(string filePath)
@@ -53,6 +62,10 @@ public class ComputerUIManager : MonoBehaviour
         {
             File.Delete(filePath);
             Debug.Log($"Deleted tape: {filePath}");
+
+            // --- NEW: Also remove it from the ComputerStation's memory so it doesn't try to play a deleted file! ---
+            if (physicalComputer != null) physicalComputer.RemoveDeletedFile(Path.GetFileName(filePath));
+
             RefreshGrid();
         }
     }
@@ -65,16 +78,35 @@ public class ComputerUIManager : MonoBehaviour
             Destroy(child.gameObject);
         }
 
-        // 2. Read the hard drive for ALL .tape files
-        string[] tapeFiles = Directory.GetFiles(Application.persistentDataPath, "*.tape");
-
-        // 3. Spawn a card for every single tape found
-        foreach (string filePath in tapeFiles)
+        // --- THE FIX: Only spawn cards for files currently plugged into the tower! ---
+        if (physicalComputer != null)
         {
-            GameObject newCard = Instantiate(clipCardPrefab, gridContentContainer);
-            ClipUIItem clipScript = newCard.GetComponent<ClipUIItem>();
+            // Get the list of inserted SD cards from the tower
+            List<string> insertedTapes = physicalComputer.GetInsertedFiles();
 
-            if (clipScript != null) clipScript.Setup(filePath, this);
+            // Spawn a card ONLY for the tapes currently inserted
+            foreach (string fileName in insertedTapes)
+            {
+                // We have to build the full path so the player can actually find the file
+                string fullPath = Path.Combine(Application.persistentDataPath, fileName);
+
+                if (File.Exists(fullPath))
+                {
+                    GameObject newCard = Instantiate(clipCardPrefab, gridContentContainer);
+                    ClipUIItem clipScript = newCard.GetComponent<ClipUIItem>();
+
+                    if (clipScript != null) clipScript.Setup(fullPath, this);
+                }
+            }
+
+            if (insertedTapes.Count == 0)
+            {
+                Debug.Log("Computer UI: No SD Cards inserted!");
+            }
+        }
+        else
+        {
+            Debug.LogError("Computer UI: Could not find the ComputerStation in the scene!");
         }
     }
 
@@ -86,8 +118,15 @@ public class ComputerUIManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Force the player's hands to unlock so they can pick things up again!
         Player.Interactor.EquipmentInteractor interactor = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
         if (interactor != null) interactor.ClearActiveComputer();
+    }
+
+    public void SubmitCurrentVideo()
+    {
+        if (grader != null && !string.IsNullOrEmpty(currentlyPlayingFile))
+        {
+            grader.GradeVideo(currentlyPlayingFile);
+        }
     }
 }

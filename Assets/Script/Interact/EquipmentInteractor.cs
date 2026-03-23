@@ -20,16 +20,15 @@ namespace Player.Interactor
         private Equipment.Equipment currentEquipment;
 
         private DirectorTerminal activeTerminal;
-        private ComputerStation activeComputer; // NEW: Tracks if we are looking at the screen
+        private ComputerStation activeComputer;
+        private ShopTerminal activeShop; // --- NEW: Tracks if we are looking at the shop screen ---
 
-        // --- YOUR MIXED START METHOD ---
         private void Start()
         {
             inputManager = GetComponent<InputManager>();
             if (PlayerCamera != null) { PlayerCamera.gameObject.SetActive(true); PlayerCamera.enabled = true; }
         }
 
-        // --- YOUR MIXED UPDATE METHOD ---
         private void Update()
         {
             if (activeTerminal != null)
@@ -38,20 +37,25 @@ namespace Player.Interactor
                 return;
             }
 
-            // NEW: If we are on the computer, press 'E' to step away
+            // --- NEW: If we are in the shop, press 'E' to step away ---
+            if (activeShop != null)
+            {
+                if (inputManager.Interact) { activeShop.CloseShop(); activeShop = null; }
+                return;
+            }
+
             if (activeComputer != null)
             {
                 if (inputManager.Interact)
                 {
                     activeComputer.CloseComputerUI();
-                    // Note: The computer clears activeComputer automatically using the helper below!
                 }
                 return;
             }
 
             HandleHotbarInput();
 
-            // PRESS 'E' - Pick up items or insert SD cards
+            // PRESS 'E' - Pick up items, insert SD cards, or open terminals
             if (inputManager.Interact) { TryPickupOrInteract(); return; }
 
             // PRESS 'G' - Drop items
@@ -66,14 +70,13 @@ namespace Player.Interactor
                 }
                 else
                 {
-                    TryOpenComputer(); // Hands are empty? Try turning on the computer!
+                    TryOpenComputer();
                 }
             }
 
             if (currentEquipment != null) currentEquipment.OnHeldUpdate(inputManager);
         }
 
-        // --- YOUR MIXED COMPUTER HELPERS ---
         private void TryOpenComputer()
         {
             Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
@@ -89,10 +92,6 @@ namespace Player.Interactor
         }
 
         public void ClearActiveComputer() { activeComputer = null; }
-
-        // =========================================================================
-        // EVERYTHING BELOW THIS LINE IS YOUR EXISTING HOTBAR & SD CARD LOGIC
-        // =========================================================================
 
         private void HandleHotbarInput()
         {
@@ -164,7 +163,7 @@ namespace Player.Interactor
                     return;
                 }
 
-                // B. Check for ANY object that uses the IInteractable interface (Computer, SD Card)
+                // B. Check for ANY object that uses the IInteractable interface
                 IInteractable interactableItem = hit.collider.GetComponentInParent<IInteractable>();
                 if (interactableItem != null)
                 {
@@ -178,6 +177,15 @@ namespace Player.Interactor
                 {
                     activeTerminal = terminal;
                     activeTerminal.OpenTerminal(PlayerCamera.gameObject, GetComponentInParent<Player.PlayerController.PlayerController>());
+                    return; // Added return to prevent it from checking the shop if it already found a terminal!
+                }
+
+                // D. --- NEW: Try checking the Shop Terminal ---
+                ShopTerminal shop = hit.collider.GetComponentInParent<ShopTerminal>();
+                if (shop != null)
+                {
+                    activeShop = shop;
+                    activeShop.OpenShop(GetComponentInParent<Player.PlayerController.PlayerController>());
                 }
             }
         }
@@ -191,7 +199,6 @@ namespace Player.Interactor
             currentEquipment = null;
         }
 
-        // --- COMPUTER HAND-OFF HELPERS ---
         public Equipment.Equipment GetHeldItem()
         {
             return currentEquipment;
@@ -208,7 +215,6 @@ namespace Player.Interactor
             }
         }
 
-        // --- SD CARD HELPER METHODS ---
         public bool HasBlankSDCard()
         {
             for (int i = 0; i < 9; i++)
@@ -245,6 +251,23 @@ namespace Player.Interactor
                     }
                 }
             }
+        }
+
+
+        public void DropAllEquipment()
+        {
+            for (int i = 0; i < 9; i++)
+            {
+                if (hotbar[i] != null)
+                {
+                    // Force the item to drop into the physical world
+                    hotbar[i].OnDropped(PlayerCamera);
+                    hotbar[i] = null;
+                }
+            }
+            currentEquipment = null;
+            currentSlotIndex = 0;
+            Debug.Log("Inventory safely dropped!");
         }
     }
 }

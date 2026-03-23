@@ -6,19 +6,35 @@ namespace Player.Equipment
 {
     public class FilmLightItem : Equipment
     {
-        [Header("Light Beam Settings")]
-        [Tooltip("Drag the invisible Spot Light object here")]
+        [Header("Light Component")]
         public Light spotlight;
 
-        [Tooltip("How many degrees it snaps per click")]
-        public float tiltStep = 5f; // THE FIX: Exactly 5 degrees per tap!
+        [Header("Main Features: Intensity & Meter")]
+        [Range(0, 100)]
+        [Tooltip("0 to 100% Intensity Slider")]
+        public float intensityPercent = 100f;
 
+        [Tooltip("The maximum Lux output at 100%")]
+        public float maxLux = 20f;
+
+        [Header("Stand Tilt")]
+        public float tiltStep = 5f;
         public float maxTiltUp = -45f;
         public float maxTiltDown = 45f;
 
+        [Header("Low-End Restrictions (160 LED Panel)")]
+        [Tooltip("Prevents matching the room's ambient light")]
+        public bool isFixedKelvin = true;
+        public float fixedColorTemperature = 5600f; // 5600K Daylight
+
+        [Tooltip("Forces hard shadows - Will trigger Academic Error on AI Client")]
+        public bool forcesHardLight = true;
+
         private bool isLightOn = false;
         private float currentTilt = 0f;
-        private float startAngleX = 0f;
+
+        // --- THE FIX: Store the ENTIRE starting rotation once! ---
+        private Vector3 startAngles;
 
         protected override void Awake()
         {
@@ -27,42 +43,78 @@ namespace Player.Equipment
             if (spotlight != null)
             {
                 spotlight.enabled = isLightOn;
-                startAngleX = spotlight.transform.localEulerAngles.x;
+
+                // Lock the initial X, Y, and Z angles in a vault so Unity can't flip them!
+                startAngles = spotlight.transform.localEulerAngles;
+
+                // --- ENFORCE RESTRICTIONS ---
+                if (forcesHardLight) spotlight.shadows = LightShadows.Hard;
+
+                spotlight.useColorTemperature = true;
+                if (isFixedKelvin) spotlight.colorTemperature = fixedColorTemperature;
+
+                UpdateLightOutput();
             }
         }
 
-        // Toggle the light on and off
         public override void OnUse(Camera playerCamera)
         {
             isLightOn = !isLightOn;
             if (spotlight != null) spotlight.enabled = isLightOn;
-            Debug.Log($"Stage Light is now {(isLightOn ? "ON" : "OFF")}");
-            if (isLightOn) TutorialManager.Instance.OnLightTurnedOn();
+
+            if (isLightOn)
+            {
+                Debug.Log($"[160 LED PANEL] ON | Temp: {fixedColorTemperature}K | WARNING: HARD LIGHT RESTRICTION ACTIVE");
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightTurnedOn();
+            }
+            else
+            {
+                Debug.Log("[160 LED PANEL] OFF");
+            }
         }
 
         public override void OnHeldUpdate(InputManager input)
         {
-            if (Keyboard.current == null) return;
+            if (Keyboard.current == null || Mouse.current == null) return;
 
-            // THE FIX: "wasPressedThisFrame" ensures it only moves exactly once per click!
-            if (Keyboard.current.upArrowKey.wasPressedThisFrame)
-            {
-                TiltLight(-tiltStep);
-            }
-            else if (Keyboard.current.downArrowKey.wasPressedThisFrame)
-            {
-                TiltLight(tiltStep);
-            }
+            // --- 1. STAND TILT ---
+            if (Keyboard.current.upArrowKey.wasPressedThisFrame) TiltLight(-tiltStep);
+            else if (Keyboard.current.downArrowKey.wasPressedThisFrame) TiltLight(tiltStep);
+
+            // --- 2. INTENSITY SLIDER (0-100%) ---
+            float scroll = Mouse.current.scroll.y.ReadValue();
+            if (scroll > 0) AdjustIntensity(5f);
+            else if (scroll < 0) AdjustIntensity(-5f);
         }
 
         private void TiltLight(float amount)
         {
             if (spotlight == null) return;
+            currentTilt = Mathf.Clamp(currentTilt + amount, maxTiltUp, maxTiltDown);
+            UpdateLightTransform();
+        }
 
-            currentTilt += amount;
-            currentTilt = Mathf.Clamp(currentTilt, maxTiltUp, maxTiltDown);
+        private void UpdateLightTransform()
+        {
+            // THE FIX: Use the locked startAngles.y and startAngles.z instead of asking Unity for them dynamically!
+            spotlight.transform.localEulerAngles = new Vector3(startAngles.x + currentTilt, startAngles.y, startAngles.z);
+        }
 
-            spotlight.transform.localEulerAngles = new Vector3(startAngleX + currentTilt, 0, 0);
+        private void AdjustIntensity(float amount)
+        {
+            intensityPercent = Mathf.Clamp(intensityPercent + amount, 0f, 100f);
+            UpdateLightOutput();
+
+            float currentLux = maxLux * (intensityPercent / 100f);
+            Debug.Log($"Meter: {intensityPercent}% | Output: {currentLux} Lux / {currentLux * 0.0929f:F1} Footcandles");
+        }
+
+        private void UpdateLightOutput()
+        {
+            if (spotlight != null)
+            {
+                spotlight.intensity = maxLux * (intensityPercent / 100f);
+            }
         }
     }
 }

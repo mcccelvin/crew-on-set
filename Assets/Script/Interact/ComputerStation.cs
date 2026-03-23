@@ -17,6 +17,10 @@ public class ComputerStation : MonoBehaviour, IInteractable
     public TextMeshProUGUI clipListText;
 
     private List<string> insertedFiles = new List<string>();
+
+    // --- NEW: The Gradebook! Maps the file name to its Duration (X) and Score (Y) ---
+    public Dictionary<string, Vector2> tapeGrades = new Dictionary<string, Vector2>();
+
     private int selectedClipIndex = 0;
     private EquipmentInteractor currentInteractor;
 
@@ -31,12 +35,19 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (heldItem != null)
         {
             SDCardItem card = heldItem.GetComponent<SDCardItem>();
-            // Make sure it only accepts our new .tape files!
             if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName) && card.recordedFileName.EndsWith(".tape"))
             {
                 insertedFiles.Add(card.recordedFileName);
+
+                // --- NEW: Save the duration and score BEFORE destroying the card! ---
+                if (!tapeGrades.ContainsKey(card.recordedFileName))
+                {
+                    tapeGrades.Add(card.recordedFileName, new Vector2(card.videoDuration, card.videoScore));
+                }
+
                 hotbar.DestroyHeldItem();
                 UpdateUI();
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToComputer();
             }
         }
     }
@@ -54,7 +65,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
     public void CloseComputerUI()
     {
         TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
-        if (player != null) player.StopAllCoroutines(); // Stop the video when closing
+        if (player != null) player.StopAllCoroutines();
 
         if (computerUICanvas != null) computerUICanvas.SetActive(false);
         Cursor.lockState = CursorLockMode.Locked;
@@ -83,7 +94,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
         UpdateUI();
     }
 
-    // THE FIX: Send the .tape file to your new Pixel Player!
     public void PlaySelectedClip()
     {
         if (insertedFiles.Count == 0 || selectedClipIndex >= insertedFiles.Count) return;
@@ -91,9 +101,9 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
         TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
         if (player != null) player.PlayTape(fileNameToPlay);
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
     }
 
-    // --- UPGRADED BINARY TRIMMING ---
     public void TrimStartOfClip() { TrimClip(true); }
     public void TrimEndOfClip() { TrimClip(false); }
 
@@ -106,7 +116,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (File.Exists(path))
         {
             List<byte[]> frames = ReadTapeFile(path);
-            int framesToRemove = 8; // At 15fps, 8 frames is about half a second
+            int framesToRemove = 8;
 
             if (frames.Count > framesToRemove)
             {
@@ -119,7 +129,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
         }
     }
 
-    // --- UPGRADED BINARY COMPILING ---
     public void CompileMovie()
     {
         if (insertedFiles.Count == 0) return;
@@ -129,10 +138,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
         foreach (string fileName in insertedFiles)
         {
             string path = Path.Combine(Application.persistentDataPath, fileName);
-            if (File.Exists(path))
-            {
-                finalMovieFrames.AddRange(ReadTapeFile(path));
-            }
+            if (File.Exists(path)) finalMovieFrames.AddRange(ReadTapeFile(path));
         }
 
         string finalFileName = $"CompiledMovie_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.tape";
@@ -158,7 +164,18 @@ public class ComputerStation : MonoBehaviour, IInteractable
         GameObject ejectedCard = Instantiate(sdCardPrefab, spawnLoc.position, spawnLoc.rotation);
 
         SDCardItem cardScript = ejectedCard.GetComponent<SDCardItem>();
-        if (cardScript != null) { cardScript.isUsedCard = true; cardScript.recordedFileName = fileName; }
+        if (cardScript != null)
+        {
+            cardScript.isUsedCard = true;
+            cardScript.recordedFileName = fileName;
+
+            // --- NEW: Give the ejected card its grades back! ---
+            if (tapeGrades.ContainsKey(fileName))
+            {
+                cardScript.videoDuration = tapeGrades[fileName].x;
+                cardScript.videoScore = tapeGrades[fileName].y;
+            }
+        }
 
         MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
         if (renderer != null) renderer.material.color = Color.red;
@@ -172,7 +189,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
         rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
     }
 
-    // --- HELPER METHODS FOR BINARY FILES ---
     private List<byte[]> ReadTapeFile(string path)
     {
         List<byte[]> frames = new List<byte[]>();
@@ -194,4 +210,19 @@ public class ComputerStation : MonoBehaviour, IInteractable
     }
 
     public void OnDrop() { }
+
+    // --- HELPER METHODS FOR UI & GRADING ---
+    public List<string> GetInsertedFiles() { return insertedFiles; }
+
+    public void RemoveDeletedFile(string fileName)
+    {
+        if (insertedFiles.Contains(fileName)) insertedFiles.Remove(fileName);
+        if (tapeGrades.ContainsKey(fileName)) tapeGrades.Remove(fileName);
+    }
+
+    public Vector2 GetTapeGrade(string fileName)
+    {
+        if (tapeGrades.ContainsKey(fileName)) return tapeGrades[fileName];
+        return Vector2.zero;
+    }
 }

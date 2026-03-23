@@ -4,18 +4,19 @@ namespace Player.Equipment
 {
     public class SDCardItem : Equipment
     {
-        [Tooltip("Check this if this card already has a recording on it")]
         public bool isUsedCard = false;
-
-        [Tooltip("The exact name of the JSON file this card holds")]
         public string recordedFileName = "";
+        public float videoDuration = 0f;
 
-        // If the player left-clicks while holding the card, read the label!
+        // --- NEW: A variable to hold the final grade (0 to 100) ---
+        public float videoScore = 0f;
+
         public override void OnUse(Camera playerCamera)
         {
             if (isUsedCard)
             {
-                Debug.Log($"Inspecting SD Card. It holds the recording: {recordedFileName}");
+                // --- NEW: Tell the player their score when they inspect it! ---
+                Debug.Log($"Card: {recordedFileName} | Length: {videoDuration:F1}s | Score: {videoScore:F0}/100");
             }
             else
             {
