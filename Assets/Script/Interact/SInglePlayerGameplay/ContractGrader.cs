@@ -18,15 +18,13 @@ public class ContractGrader : MonoBehaviour
     {
         if (computer == null) return;
 
-        // Grab the duration (X) and score (Y) from the computer memory
-        Vector2 gradeData = computer.GetTapeGrade(fileName);
+        Vector4 gradeData = computer.GetTapeGrade(fileName);
         float duration = gradeData.x;
         float score = gradeData.y;
+        float camScore = gradeData.z;
+        float lightScore = gradeData.w;
 
-        // --- LEVEL 1 RULES ---
-        // 1. Length: Must be between 18 and 22 seconds
-        // 2. Score: Must be greater than 70/100 (good framing and focus)
-
+        // --- 1. DURATION CHECKS ---
         if (duration < 18f)
         {
             UpdateFeedback("CLIENT REJECTED:\nVideo is too short! We need 20 seconds of footage.", Color.red);
@@ -39,16 +37,43 @@ public class ContractGrader : MonoBehaviour
             return;
         }
 
+        // --- 2. CAMERA & LIGHTING CHECKS ---
         if (score < 70f)
         {
-            UpdateFeedback($"CLIENT REJECTED:\nThe camera work is too sloppy (Score: {score:F0}/100). Make sure the vase is centered and in perfect focus!", Color.red);
+            UpdateFeedback($"CLIENT REJECTED:\nThe footage is too sloppy (Total: {score:F0}/100).\nCamera Work: {camScore:F0}/70\nLighting: {lightScore:F0}/30", Color.red);
             return;
         }
 
-        // --- PASS! ---
-        UpdateFeedback($"CLIENT APPROVED!\nScore: {score:F0}/100. Outstanding work! Payment transferred.", Color.green);
+        // --- 3. THE NEW STAGE SETUP CHECK! ---
+        StageSetupManager stage = FindObjectOfType<StageSetupManager>();
+        if (stage != null)
+        {
+            // Did they even spawn the wall?
+            if (!stage.HasWall())
+            {
+                UpdateFeedback("CLIENT REJECTED:\nLazy set design! The vase is just sitting in an empty room. Use the Stage Terminal to build a backdrop.", Color.red);
+                return;
+            }
 
-        // Call the custom method you already built to handle the payout and update the UI!
+            // Is the wall the correct color?
+            if (stage.currentWallColor != Color.red)
+            {
+                UpdateFeedback("CLIENT REJECTED:\nWrong brand colors! We explicitly asked for a RED background for the Crystal Blooms commercial.", Color.red);
+                return;
+            }
+        }
+
+        // --- PASS! ---
+        string passMessage = $"CLIENT APPROVED!\n\n" +
+                             $"Camera Work: {camScore:F0} / 70\n" +
+                             $"Lighting: {lightScore:F0} / 30\n" +
+                             $"Set Design: Perfect Red Backdrop\n" +
+                             $"------------------\n" +
+                             $"TOTAL SCORE: {score:F0} / 100\n\n" +
+                             $"Outstanding work! Payment transferred.";
+
+        UpdateFeedback(passMessage, Color.green);
+
         if (CareerManager.Instance != null)
         {
             CareerManager.Instance.CompleteActiveJob(30000);

@@ -18,8 +18,8 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     private List<string> insertedFiles = new List<string>();
 
-    // --- NEW: The Gradebook! Maps the file name to its Duration (X) and Score (Y) ---
-    public Dictionary<string, Vector2> tapeGrades = new Dictionary<string, Vector2>();
+    // --- THE FIX: Upgraded to Vector4 to hold Duration(X), TotalScore(Y), CamScore(Z), and LightScore(W)! ---
+    public Dictionary<string, Vector4> tapeGrades = new Dictionary<string, Vector4>();
 
     private int selectedClipIndex = 0;
     private EquipmentInteractor currentInteractor;
@@ -39,10 +39,10 @@ public class ComputerStation : MonoBehaviour, IInteractable
             {
                 insertedFiles.Add(card.recordedFileName);
 
-                // --- NEW: Save the duration and score BEFORE destroying the card! ---
+                // --- THE FIX: Save all 4 stats to the computer's memory! ---
                 if (!tapeGrades.ContainsKey(card.recordedFileName))
                 {
-                    tapeGrades.Add(card.recordedFileName, new Vector2(card.videoDuration, card.videoScore));
+                    tapeGrades.Add(card.recordedFileName, new Vector4(card.videoDuration, card.videoScore, card.cameraScore, card.lightScore));
                 }
 
                 hotbar.DestroyHeldItem();
@@ -169,11 +169,13 @@ public class ComputerStation : MonoBehaviour, IInteractable
             cardScript.isUsedCard = true;
             cardScript.recordedFileName = fileName;
 
-            // --- NEW: Give the ejected card its grades back! ---
+            // --- THE FIX: Give the ejected card ALL its grades back! ---
             if (tapeGrades.ContainsKey(fileName))
             {
                 cardScript.videoDuration = tapeGrades[fileName].x;
                 cardScript.videoScore = tapeGrades[fileName].y;
+                cardScript.cameraScore = tapeGrades[fileName].z;
+                cardScript.lightScore = tapeGrades[fileName].w;
             }
         }
 
@@ -211,7 +213,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     public void OnDrop() { }
 
-    // --- HELPER METHODS FOR UI & GRADING ---
     public List<string> GetInsertedFiles() { return insertedFiles; }
 
     public void RemoveDeletedFile(string fileName)
@@ -220,9 +221,10 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (tapeGrades.ContainsKey(fileName)) tapeGrades.Remove(fileName);
     }
 
-    public Vector2 GetTapeGrade(string fileName)
+    // --- THE FIX: Return the full Vector4! ---
+    public Vector4 GetTapeGrade(string fileName)
     {
         if (tapeGrades.ContainsKey(fileName)) return tapeGrades[fileName];
-        return Vector2.zero;
+        return Vector4.zero;
     }
 }

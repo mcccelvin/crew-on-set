@@ -24,7 +24,15 @@ namespace Player.Equipment
 
         public virtual void OnPickedUp(Transform holdPoint)
         {
-            if (itemRigidbody != null) itemRigidbody.isKinematic = true;
+            // --- THE FIX: Refresh the memory in case components were added dynamically! ---
+            itemRigidbody = GetComponent<Rigidbody>();
+            itemColliders = GetComponentsInChildren<Collider>();
+
+            if (itemRigidbody != null)
+            {
+                itemRigidbody.isKinematic = true;
+                itemRigidbody.useGravity = false; // Turn off gravity just to be safe
+            }
 
             foreach (Collider col in itemColliders)
             {
@@ -38,7 +46,15 @@ namespace Player.Equipment
 
         public virtual void OnDropped(Camera playerCamera)
         {
-            if (itemRigidbody != null) itemRigidbody.isKinematic = false;
+            // --- THE FIX: Refresh the memory here as well! ---
+            itemRigidbody = GetComponent<Rigidbody>();
+            itemColliders = GetComponentsInChildren<Collider>();
+
+            if (itemRigidbody != null)
+            {
+                itemRigidbody.isKinematic = false;
+                itemRigidbody.useGravity = true;
+            }
 
             foreach (Collider col in itemColliders)
             {

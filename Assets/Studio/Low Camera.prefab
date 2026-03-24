@@ -335,11 +335,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   EquipmentName: New Equipment
-  HoldPositionOffset: {x: 0, y: 0, z: 0}
+  HoldPositionOffset: {x: -0.1, y: 0.1, z: 0}
   HoldRotationOffset: {x: 0, y: 0, z: 0}
   filmCamera: {fileID: 6168680741594599856}
   filmUICanvas: {fileID: 0}
-  sdCardPrefab: {fileID: 6876972186880696532, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}
+  sdCardPrefab: {fileID: 5512013885041339088, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}
   ejectPoint: {fileID: 0}
   recTimerText: {fileID: 0}
   focusText: {fileID: 0}
@@ -348,8 +348,11 @@ MonoBehaviour:
   minFOV: 15
   maxFOV: 60
   zoomSpeed: 5
-  currentFocusDistance: 5
-  focusSpeed: 10
+  pedestalSpeed: 0.5
+  maxPedestalUp: 0.5
+  maxPedestalDown: -0.5
+  focusBoxRadius: 0.3
+  focusSmoothTime: 0.3
   swayIntensity: 0.5
   swaySpeed: 0.5
 --- !u!4 &5656890681305465228 stripped

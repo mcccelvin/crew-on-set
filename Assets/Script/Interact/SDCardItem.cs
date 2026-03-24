@@ -8,15 +8,16 @@ namespace Player.Equipment
         public string recordedFileName = "";
         public float videoDuration = 0f;
 
-        // --- NEW: A variable to hold the final grade (0 to 100) ---
-        public float videoScore = 0f;
+        public float videoScore = 0f; // The Total (out of 100)
+        public float cameraScore = 0f; // NEW: Camera only (out of 70)
+        public float lightScore = 0f;  // NEW: Light only (out of 30)
 
         public override void OnUse(Camera playerCamera)
         {
             if (isUsedCard)
             {
-                // --- NEW: Tell the player their score when they inspect it! ---
-                Debug.Log($"Card: {recordedFileName} | Length: {videoDuration:F1}s | Score: {videoScore:F0}/100");
+                // Tells you the split score when you click to inspect it!
+                Debug.Log($"Card: {recordedFileName} | Cam: {cameraScore:F0}/70 | Light: {lightScore:F0}/30 | Total: {videoScore:F0}/100");
             }
             else
             {

@@ -1,6 +1,6 @@
-using UnityEngine;
-using TMPro;
 using System.Collections;
+using TMPro;
+using UnityEngine;
 
 public class TutorialManager : MonoBehaviour
 {
@@ -329,15 +329,15 @@ public class TutorialManager : MonoBehaviour
         switch (currentStep)
         {
             case TutorialStep.Intro:
-                bossText.text = "BOSS: Welcome to the studio! Let's get you trained up before we take on real clients.";
+                bossText.text = "Welcome to the studio! Let's get you trained up before we take on real clients.";
                 if (okButton != null) okButton.SetActive(true);
                 if (skipButton != null) skipButton.SetActive(true);
                 break;
             case TutorialStep.LearnMovement:
-                bossText.text = "BOSS: Use [W, A, S, D] to move, [Space] to jump, and hold [Shift] to sprint. Try them all out!";
+                bossText.text = "Use [W, A, S, D] to move, [Space] to jump, and hold [Shift] to sprint. Try them all out!";
                 break;
             case TutorialStep.SetTrainingObjectAndMoney:
-                bossText.text = "BOSS: Great. I've set up a practice cube on the stage, and I just wired 60,000 B coins to your account to buy some starter gear.";
+                bossText.text = "Great. I've set up a practice cube on the stage, and I just wired 60,000 B coins to your account to buy some starter gear.";
                 if (okButton != null) okButton.SetActive(true);
 
                 Cursor.lockState = CursorLockMode.None;
@@ -346,35 +346,35 @@ public class TutorialManager : MonoBehaviour
                 if (p != null) p.canLook = false;
                 break;
             case TutorialStep.BuildStageWall:
-                bossText.text = "BOSS: Head over to the Editor Tablet. Press [E] to use it, and add a wall to the stage to give us a nice backdrop.";
+                bossText.text = "Head over to the Editor Tablet. Press [E] to use it, and add a wall to the stage to give us a nice backdrop.";
                 break;
             case TutorialStep.BuyLights:
-                bossText.text = "BOSS: Now, press [E] on the Shop Terminal and buy a Stage Light. It will drop into the delivery zone.";
+                bossText.text = "Now, press [E] on the Shop Terminal and buy a Stage Light. It will drop into the delivery zone.";
                 break;
             case TutorialStep.SetupLight:
-                bossText.text = "BOSS: Press [E] to pick up that Stage Light, aim it at the stage, and press [F] to turn it on.";
+                bossText.text = "Press [E] to pick up that Stage Light, aim it at the stage, and press [F] to turn it on.";
                 break;
             case TutorialStep.BuyCameraAndCard:
-                bossText.text = "BOSS: Looking good! Go back to the Shop Terminal and press [E] to buy a Film Camera and an SD Card.";
+                bossText.text = "Looking good! Go back to the Shop Terminal and press [E] to buy a Film Camera and an SD Card.";
                 break;
             case TutorialStep.InsertCardToCamera:
-                bossText.text = "BOSS: Press [E] to pick up your new camera and the SD card. Press [C] to load the memory card into the camera.";
+                bossText.text = "Press [E] to pick up your new camera and the SD card. Press [C] to load the memory card into the camera.";
                 break;
             case TutorialStep.RecordVideo:
-                bossText.text = "BOSS: Press [F] to look through the camera, then hit [R] to record a quick shot of the cube. Eject the card when you're happy with the take.";
+                bossText.text = "Press [F] to look through the camera, then hit [R] to record a quick shot of the cube. Eject the card when you're happy with the take.";
                 break;
             case TutorialStep.InsertToComputer:
-                bossText.text = "BOSS: Pick up the SD card with [E], bring it over to the Computer tower, and press [E] to insert it.";
+                bossText.text = "Pick up the SD card with [E], bring it over to the Computer tower, and press [E] to insert it.";
                 break;
             case TutorialStep.PlayRecording:
-                bossText.text = "BOSS: Finally, press [E] on the computer screen and hit Play to review the footage!";
+                bossText.text = "Finally, press [E] on the computer screen and hit Play to review the footage!";
                 break;
             case TutorialStep.Complete:
-                bossText.text = "BOSS: Fantastic work! You've got a really great eye for this. Tutorial Complete!";
+                bossText.text = "Fantastic work! You've got a really great eye for this. Tutorial Complete!";
                 if (okButton != null) okButton.SetActive(false);
                 break;
             case TutorialStep.OfferLevel1:
-                bossText.text = "BOSS: Alright, training is over. Flora & Form Home just offered us 60,000 B coins for a 20-second tabletop teaser of their new artisan vase. You want the job?";
+                bossText.text = "Alright, training is over. Flora & Form Home just offered us 60,000 B coins for a 20-second tabletop teaser of their new artisan vase. You want the job?";
                 if (okButton != null) okButton.SetActive(true);
                 if (skipButton != null) skipButton.SetActive(false);
 
@@ -384,7 +384,7 @@ public class TutorialManager : MonoBehaviour
                 if (playerOffer != null) playerOffer.canLook = false;
                 break;
             case TutorialStep.Level1Accepted:
-                bossText.text = "BOSS: Excellent! I've wired your 30,000 B coins upfront payment. I have spawned the vase on the stage for you. Time to get to work!";
+                bossText.text = "Excellent! I've wired your 30,000 B coins upfront payment. I have spawned the vase on the stage for you. Time to get to work!";
                 break;
         }
     }
