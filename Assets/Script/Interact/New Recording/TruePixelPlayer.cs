@@ -4,6 +4,15 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
+// --- NEW: A custom container to hold Trim Data! ---
+[System.Serializable]
+public class ClipSegment
+{
+    public string path;
+    public int startFrame;
+    public int endFrame;
+}
+
 public class TruePixelPlayer : MonoBehaviour
 {
     public RawImage computerScreen;
@@ -13,24 +22,29 @@ public class TruePixelPlayer : MonoBehaviour
     public GameObject playButtonUI;
     public GameObject pauseButtonUI;
 
+    [Header("Premiere Timeline")]
+    public RectTransform playheadLine;
+    public RectTransform timelineArea;
+
     private List<Texture2D> preloadedTextures = new List<Texture2D>();
     private bool isPaused = false;
-    private bool isFinished = false; // Tracks if the tape reached the end
-    private string currentTapePath;  // Remembers which video we are watching
+    private bool isFinished = false;
+    private List<ClipSegment> currentSequence = new List<ClipSegment>();
 
     public void PlayTape(string path)
     {
-        if (File.Exists(path))
-        {
-            currentTapePath = path;
-            StopTape();
+        // Default to playing the whole tape (max value)
+        PlaySequence(new List<ClipSegment> { new ClipSegment { path = path, startFrame = 0, endFrame = int.MaxValue } });
+    }
 
-            isPaused = false;
-            isFinished = false;
-            UpdatePlayPauseUI(); // Instantly show the Pause button
-
-            StartCoroutine(PlayVideoCoroutine(path));
-        }
+    public void PlaySequence(List<ClipSegment> sequence)
+    {
+        currentSequence = sequence;
+        StopTape();
+        isPaused = false;
+        isFinished = false;
+        UpdatePlayPauseUI();
+        StartCoroutine(PlayMultipleVideosCoroutine(sequence));
     }
 
     public void StopTape()
@@ -39,60 +53,67 @@ public class TruePixelPlayer : MonoBehaviour
         isPaused = true;
         isFinished = true;
         if (computerScreen != null) computerScreen.texture = null;
+        if (playheadLine != null) playheadLine.anchoredPosition = new Vector2(0, playheadLine.anchoredPosition.y);
 
-        foreach (Texture2D tex in preloadedTextures)
-        {
-            if (tex != null) Destroy(tex);
-        }
+        foreach (Texture2D tex in preloadedTextures) { if (tex != null) Destroy(tex); }
         preloadedTextures.Clear();
     }
 
-    // Link BOTH your Play and Pause buttons to this exact method!
     public void TogglePlayPause()
     {
-        // If the video ended, pressing Play restarts it from the beginning!
-        if (isFinished && !string.IsNullOrEmpty(currentTapePath))
-        {
-            PlayTape(currentTapePath);
-            return;
-        }
-
-        isPaused = !isPaused; // Flips between true and false
+        if (isFinished && currentSequence.Count > 0) { PlaySequence(currentSequence); return; }
+        isPaused = !isPaused;
         UpdatePlayPauseUI();
     }
 
     private void UpdatePlayPauseUI()
     {
-        // If paused (or finished), show Play. If playing, show Pause.
         if (playButtonUI != null) playButtonUI.SetActive(isPaused);
         if (pauseButtonUI != null) pauseButtonUI.SetActive(!isPaused);
     }
 
-    private IEnumerator PlayVideoCoroutine(string path)
+    private IEnumerator PlayMultipleVideosCoroutine(List<ClipSegment> sequence)
     {
-        List<byte[]> rawFrames = new List<byte[]>();
+        List<byte[]> allRawFrames = new List<byte[]>();
 
-        using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
+        foreach (ClipSegment clip in sequence)
         {
-            int frameCount = reader.ReadInt32();
-            for (int i = 0; i < frameCount; i++)
+            if (File.Exists(clip.path))
             {
-                rawFrames.Add(reader.ReadBytes(reader.ReadInt32()));
+                using (BinaryReader reader = new BinaryReader(File.Open(clip.path, FileMode.Open)))
+                {
+                    int frameCount = reader.ReadInt32();
+                    int safeEnd = Mathf.Min(clip.endFrame, frameCount); // Prevent reading past the end
+
+                    for (int i = 0; i < frameCount; i++)
+                    {
+                        int size = reader.ReadInt32();
+                        byte[] frameData = reader.ReadBytes(size);
+
+                        // --- THE MAGIC: Only save the frame if it is inside the Trim Zone! ---
+                        if (i >= clip.startFrame && i < safeEnd)
+                        {
+                            allRawFrames.Add(frameData);
+                        }
+                    }
+                }
             }
         }
 
-        if (rawFrames.Count == 0) yield break;
+        if (allRawFrames.Count == 0) yield break;
+
+        if (playheadLine != null) playheadLine.anchoredPosition = new Vector2(0, playheadLine.anchoredPosition.y);
 
         Texture2D thumbnail = new Texture2D(2, 2);
-        thumbnail.LoadImage(rawFrames[0]);
+        thumbnail.LoadImage(allRawFrames[0]);
         thumbnail.Apply();
         preloadedTextures.Add(thumbnail);
         if (computerScreen != null) computerScreen.texture = thumbnail;
 
-        for (int i = 1; i < rawFrames.Count; i++)
+        for (int i = 1; i < allRawFrames.Count; i++)
         {
             Texture2D tex = new Texture2D(2, 2);
-            tex.LoadImage(rawFrames[i]);
+            tex.LoadImage(allRawFrames[i]);
             tex.Apply();
             preloadedTextures.Add(tex);
             if (i % 5 == 0) yield return null;
@@ -100,28 +121,30 @@ public class TruePixelPlayer : MonoBehaviour
 
         for (int i = 0; i < preloadedTextures.Count; i++)
         {
-            // Wait right here if paused!
-            while (isPaused)
+            while (isPaused) yield return null;
+            if (computerScreen != null) computerScreen.texture = preloadedTextures[i];
+
+            if (playheadLine != null && timelineArea != null)
             {
-                yield return null;
+                float progress = (float)i / preloadedTextures.Count;
+                float totalWidth = 0f;
+                foreach (Transform child in timelineArea)
+                {
+                    if (child != playheadLine) totalWidth += child.GetComponent<RectTransform>().rect.width;
+                }
+
+                HorizontalLayoutGroup layout = timelineArea.GetComponent<HorizontalLayoutGroup>();
+                if (layout != null) totalWidth += layout.spacing * (timelineArea.childCount - 2);
+
+                playheadLine.anchoredPosition = new Vector2(progress * totalWidth, playheadLine.anchoredPosition.y);
             }
 
-            if (computerScreen != null) computerScreen.texture = preloadedTextures[i];
             yield return new WaitForSeconds(1f / framesPerSecond);
         }
 
-        // END OF TAPE
         if (computerScreen != null) computerScreen.texture = thumbnail;
-
         isFinished = true;
         isPaused = true;
-        UpdatePlayPauseUI(); // Switch back to the Play button!
-
-        for (int i = 1; i < preloadedTextures.Count; i++)
-        {
-            if (preloadedTextures[i] != null) Destroy(preloadedTextures[i]);
-        }
-        preloadedTextures.Clear();
-        preloadedTextures.Add(thumbnail);
+        UpdatePlayPauseUI();
     }
 }

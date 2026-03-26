@@ -47,7 +47,7 @@ public class CareerManager : MonoBehaviour
         if (moneyTextHUD != null)
         {
             // You can format this however you like! 
-            moneyTextHUD.text = $"{playerMoney} B";
+            moneyTextHUD.text = $"{playerMoney}";
         }
     }
 }

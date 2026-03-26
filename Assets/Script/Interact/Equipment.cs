@@ -8,6 +8,7 @@ namespace Player.Equipment
     {
         [Header("Equipment Info")]
         public string EquipmentName = "New Equipment";
+        public Sprite EquipmentIcon;
 
         [Header("Transform Adjustments")]
         public Vector3 HoldPositionOffset = Vector3.zero;
@@ -16,29 +17,39 @@ namespace Player.Equipment
         protected Rigidbody itemRigidbody;
         protected Collider[] itemColliders;
 
+        // --- THE FIX: An array to catch rogue rigidbodies! ---
+        protected Rigidbody[] allRigidbodies;
+
         protected virtual void Awake()
         {
             itemRigidbody = GetComponent<Rigidbody>();
-            itemColliders = GetComponentsInChildren<Collider>();
+            itemColliders = GetComponentsInChildren<Collider>(true);
         }
 
         public virtual void OnPickedUp(Transform holdPoint)
         {
-            // --- THE FIX: Refresh the memory in case components were added dynamically! ---
-            itemRigidbody = GetComponent<Rigidbody>();
-            itemColliders = GetComponentsInChildren<Collider>();
+            // 1. Scan for absolutely EVERY collider and rigidbody (even hidden ones!)
+            itemColliders = GetComponentsInChildren<Collider>(true);
+            allRigidbodies = GetComponentsInChildren<Rigidbody>(true);
 
-            if (itemRigidbody != null)
+            // 2. THE SILVER BULLET: Turn off all physics interactions completely
+            foreach (Rigidbody rb in allRigidbodies)
             {
-                itemRigidbody.isKinematic = true;
-                itemRigidbody.useGravity = false; // Turn off gravity just to be safe
+                if (rb != null)
+                {
+                    rb.isKinematic = true;
+                    rb.useGravity = false;
+                    rb.detectCollisions = false; // <--- This completely blinds the physics engine to the object!
+                }
             }
 
+            // 3. Force colliders off just to be safe
             foreach (Collider col in itemColliders)
             {
                 if (col != null) col.enabled = false;
             }
 
+            // 4. Snap to hand
             transform.SetParent(holdPoint);
             transform.localPosition = HoldPositionOffset;
             transform.localEulerAngles = HoldRotationOffset;
@@ -46,14 +57,18 @@ namespace Player.Equipment
 
         public virtual void OnDropped(Camera playerCamera)
         {
-            // --- THE FIX: Refresh the memory here as well! ---
-            itemRigidbody = GetComponent<Rigidbody>();
-            itemColliders = GetComponentsInChildren<Collider>();
-
-            if (itemRigidbody != null)
+            // Turn all the physics back on so it hits the floor!
+            if (allRigidbodies != null)
             {
-                itemRigidbody.isKinematic = false;
-                itemRigidbody.useGravity = true;
+                foreach (Rigidbody rb in allRigidbodies)
+                {
+                    if (rb != null)
+                    {
+                        rb.isKinematic = false;
+                        rb.useGravity = true;
+                        rb.detectCollisions = true;
+                    }
+                }
             }
 
             foreach (Collider col in itemColliders)

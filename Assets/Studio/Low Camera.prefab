@@ -334,7 +334,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 05d54b820c2dc4f4393fba0a5bcc84ed, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  EquipmentName: New Equipment
+  EquipmentName: Low Camera
+  EquipmentIcon: {fileID: 21300000, guid: c3d8b76343de6754a8a9e02680f2aa14, type: 3}
   HoldPositionOffset: {x: -0.1, y: 0.1, z: 0}
   HoldRotationOffset: {x: 0, y: 0, z: 0}
   filmCamera: {fileID: 6168680741594599856}

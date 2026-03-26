@@ -5,6 +5,7 @@ using System;
 using Player.Equipment;
 using Player.Interactor;
 using TMPro;
+using UnityEngine.SceneManagement;
 
 public class ComputerStation : MonoBehaviour, IInteractable
 {
@@ -17,9 +18,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
     public TextMeshProUGUI clipListText;
 
     private List<string> insertedFiles = new List<string>();
-
-    // --- THE FIX: Upgraded to Vector4 to hold Duration(X), TotalScore(Y), CamScore(Z), and LightScore(W)! ---
-    public Dictionary<string, Vector4> tapeGrades = new Dictionary<string, Vector4>();
 
     private int selectedClipIndex = 0;
     private EquipmentInteractor currentInteractor;
@@ -38,12 +36,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
             if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName) && card.recordedFileName.EndsWith(".tape"))
             {
                 insertedFiles.Add(card.recordedFileName);
-
-                // --- THE FIX: Save all 4 stats to the computer's memory! ---
-                if (!tapeGrades.ContainsKey(card.recordedFileName))
-                {
-                    tapeGrades.Add(card.recordedFileName, new Vector4(card.videoDuration, card.videoScore, card.cameraScore, card.lightScore));
-                }
 
                 hotbar.DestroyHeldItem();
                 UpdateUI();
@@ -129,24 +121,28 @@ public class ComputerStation : MonoBehaviour, IInteractable
         }
     }
 
-    public void CompileMovie()
+    // --- Pack up the file names and load the Editor Scene! ---
+    public void SendToEditorScene()
     {
         if (insertedFiles.Count == 0) return;
 
-        List<byte[]> finalMovieFrames = new List<byte[]>();
-
-        foreach (string fileName in insertedFiles)
+        if (ProjectDataManager.Instance != null)
         {
-            string path = Path.Combine(Application.persistentDataPath, fileName);
-            if (File.Exists(path)) finalMovieFrames.AddRange(ReadTapeFile(path));
+            ProjectDataManager.Instance.ClearProject();
+
+            foreach (string fileName in insertedFiles)
+            {
+                ProjectDataManager.Instance.rawFootagePaths.Add(fileName);
+            }
+        }
+        else
+        {
+            Debug.LogError("ProjectDataManager is missing! Please create an empty GameObject in this scene and attach the ProjectDataManager script to it.");
+            return;
         }
 
-        string finalFileName = $"CompiledMovie_{DateTime.Now.ToString("yyyyMMdd_HHmmss")}.tape";
-        WriteTapeFile(Path.Combine(Application.persistentDataPath, finalFileName), finalMovieFrames);
-
-        EjectCard(finalFileName);
-        insertedFiles.Clear();
-        UpdateUI();
+        CloseComputerUI();
+        SceneManager.LoadScene("Editor");
     }
 
     public void EjectAllCards()
@@ -168,15 +164,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
         {
             cardScript.isUsedCard = true;
             cardScript.recordedFileName = fileName;
-
-            // --- THE FIX: Give the ejected card ALL its grades back! ---
-            if (tapeGrades.ContainsKey(fileName))
-            {
-                cardScript.videoDuration = tapeGrades[fileName].x;
-                cardScript.videoScore = tapeGrades[fileName].y;
-                cardScript.cameraScore = tapeGrades[fileName].z;
-                cardScript.lightScore = tapeGrades[fileName].w;
-            }
         }
 
         MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
@@ -218,13 +205,5 @@ public class ComputerStation : MonoBehaviour, IInteractable
     public void RemoveDeletedFile(string fileName)
     {
         if (insertedFiles.Contains(fileName)) insertedFiles.Remove(fileName);
-        if (tapeGrades.ContainsKey(fileName)) tapeGrades.Remove(fileName);
-    }
-
-    // --- THE FIX: Return the full Vector4! ---
-    public Vector4 GetTapeGrade(string fileName)
-    {
-        if (tapeGrades.ContainsKey(fileName)) return tapeGrades[fileName];
-        return Vector4.zero;
     }
 }
