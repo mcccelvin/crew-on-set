@@ -15,6 +15,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     private Transform clipBank;
     private CanvasGroup canvasGroup;
 
+    public float cameraScore;
+    public float lightScore;
     private void Start()
     {
         GameObject bankObj = GameObject.Find("Clipbank");

@@ -188,3 +188,4 @@ MonoBehaviour:
   videoScore: 0
   cameraScore: 0
   lightScore: 0
+  usedCardIcon: {fileID: 21300000, guid: 22378470b620f3842b72de079d55975b, type: 3}

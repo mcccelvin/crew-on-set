@@ -24,23 +24,38 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     private void Start() { if (computerUICanvas != null) computerUICanvas.SetActive(false); }
 
+    // --- UPDATED: E Key now only handles opening the UI ---
     public void OnInteract(GameObject player)
     {
         EquipmentInteractor hotbar = player.GetComponent<EquipmentInteractor>();
         if (hotbar == null) return;
+
+        OpenComputerUI(hotbar);
+    }
+
+    // --- NEW: This is called by EquipmentInteractor when you press F (Equip) ---
+    public void TryInsertCard(EquipmentInteractor hotbar)
+    {
         Equipment heldItem = hotbar.GetHeldItem();
 
         if (heldItem != null)
         {
             SDCardItem card = heldItem.GetComponent<SDCardItem>();
-            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName) && card.recordedFileName.EndsWith(".tape"))
+            // Check if it's a used .tape file
+            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName))
             {
                 insertedFiles.Add(card.recordedFileName);
-
                 hotbar.DestroyHeldItem();
                 UpdateUI();
+
+                Debug.Log($"Inserted {card.recordedFileName} into computer via F key.");
                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToComputer();
             }
+        }
+        else
+        {
+            // If hand is empty and we press F, just open the UI as a shortcut
+            OpenComputerUI(hotbar);
         }
     }
 
@@ -121,7 +136,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
         }
     }
 
-    // --- Pack up the file names and load the Editor Scene! ---
     public void SendToEditorScene()
     {
         if (insertedFiles.Count == 0) return;
@@ -130,19 +144,20 @@ public class ComputerStation : MonoBehaviour, IInteractable
         {
             ProjectDataManager.Instance.ClearProject();
 
-            foreach (string fileName in insertedFiles)
+            foreach (string file in insertedFiles)
             {
-                ProjectDataManager.Instance.rawFootagePaths.Add(fileName);
+                FootageData data = new FootageData();
+                data.fileName = file;
+
+                data.camScore = 70f;
+                data.lightScore = 30f;
+
+                ProjectDataManager.Instance.compiledFootage.Add(data);
             }
-        }
-        else
-        {
-            Debug.LogError("ProjectDataManager is missing! Please create an empty GameObject in this scene and attach the ProjectDataManager script to it.");
-            return;
         }
 
         CloseComputerUI();
-        SceneManager.LoadScene("Editor");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Editor");
     }
 
     public void EjectAllCards()

@@ -336,6 +336,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   EquipmentName: Low Camera
   EquipmentIcon: {fileID: 21300000, guid: c3d8b76343de6754a8a9e02680f2aa14, type: 3}
+  EquipmentControls: '[LMB] Use  |  [G] Drop  | [F] Viewfinder | [C] Insert SD |
+    [R] Record | [Scroll] Zoom | [Q/E] Height'
   HoldPositionOffset: {x: -0.1, y: 0.1, z: 0}
   HoldRotationOffset: {x: 0, y: 0, z: 0}
   filmCamera: {fileID: 6168680741594599856}

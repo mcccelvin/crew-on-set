@@ -43,7 +43,6 @@ namespace Player.Equipment
         public float swayIntensity = 0.5f;
         public float swaySpeed = 0.5f;
 
-        // Internal tracking variables
         private bool isCameraActive = false;
         private bool isRecording = false;
         private bool isSDCardInserted = false;
@@ -57,38 +56,31 @@ namespace Player.Equipment
         private Vector3 originalLensRotation;
         private Vector3 originalLocalPos;
 
-        // Split score variables
         private float recordingStartTime = 0f;
         private float totalCameraScoreAccumulated = 0f;
         private float totalLightingScoreAccumulated = 0f;
         private int framesSampled = 0;
         private float nextSampleTime = 0f;
 
-        // --- NEW: A bucket to hold your standard crosshair/hotbar UI ---
         private GameObject mainPlayerUI;
 
         private void Start()
         {
-            // Find the master UI object in the scene
-            GameObject gameUIObj = GameObject.Find("GameUI");
+            Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
 
-            if (gameUIObj != null)
+            foreach (Canvas canvas in allCanvases)
             {
-                // --- THE FIX: Find your standard Player UI so we can hide it later ---
-                Transform standardUI = gameUIObj.transform.Find("Player UI");
-                if (standardUI != null) mainPlayerUI = standardUI.gameObject;
-
-                // Find the Camera POV UI
-                Transform hiddenCanvas = gameUIObj.transform.Find("Cam Pov");
-                if (hiddenCanvas != null)
+                Transform[] allChildren = canvas.GetComponentsInChildren<Transform>(true);
+                foreach (Transform child in allChildren)
                 {
-                    filmUICanvas = hiddenCanvas.gameObject;
-                    Transform timerObj = hiddenCanvas.Find("TimerText");
-                    if (timerObj != null) recTimerText = timerObj.GetComponent<TMP_Text>();
-                    Transform focusObj = hiddenCanvas.Find("FocusText");
-                    if (focusObj != null) focusText = focusObj.GetComponent<TMP_Text>();
-                    Transform targetObj = hiddenCanvas.Find("TargetStatusText");
-                    if (targetObj != null) targetStatusText = targetObj.GetComponent<TMP_Text>();
+                    if (child.name == "Cam Pov") filmUICanvas = child.gameObject;
+                    else if (child.name == "TimerText") recTimerText = child.GetComponent<TMP_Text>();
+                    else if (child.name == "FocusText") focusText = child.GetComponent<TMP_Text>();
+                    else if (child.name == "TargetStatusText") targetStatusText = child.GetComponent<TMP_Text>();
+                    else if (child.name == "Player UI" || child.name == "PlayerUI" || child.name == "Main UI")
+                    {
+                        mainPlayerUI = child.gameObject;
+                    }
                 }
             }
 
@@ -117,8 +109,39 @@ namespace Player.Equipment
             if (targetStatusText != null) targetStatusText.text = "NO SUBJECT";
         }
 
+        private void TogglePlayerUI(bool showUI)
+        {
+            if (mainPlayerUI != null)
+            {
+                mainPlayerUI.SetActive(showUI);
+            }
+            else
+            {
+                HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>();
+                if (hotbar != null) hotbar.gameObject.SetActive(showUI);
+
+                if (CareerManager.Instance != null && CareerManager.Instance.moneyTextHUD != null)
+                {
+                    CareerManager.Instance.moneyTextHUD.gameObject.SetActive(showUI);
+                }
+            }
+        }
+
         public override void OnUse(Camera playerCamera)
         {
+            // --- UPDATED: Show guide text if user tries to use camera without SD card ---
+            if (!isCameraActive && !isSDCardInserted)
+            {
+                HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>();
+                if (hotbar != null)
+                {
+                    // This will flash the warning where the equipment controls usually are
+                    hotbar.UpdateGuideText("<color=red>INSERT SD CARD FIRST (Press C)</color>");
+                }
+                Debug.LogWarning("Cannot look through camera. Insert an SD Card first!");
+                return;
+            }
+
             isCameraActive = !isCameraActive;
 
             if (filmCamera != null)
@@ -128,17 +151,17 @@ namespace Player.Equipment
             }
             if (filmUICanvas != null) filmUICanvas.SetActive(isCameraActive);
 
-            // --- THE FIX: Hide the player UI if the camera is up, show it if the camera is down! ---
-            if (mainPlayerUI != null) mainPlayerUI.SetActive(!isCameraActive);
+            TogglePlayerUI(!isCameraActive);
 
             if (!isCameraActive && isRecording) ToggleRecording();
         }
 
         public override void OnHeldUpdate(InputManager input)
         {
+            if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame) InsertSDCard();
+
             if (!isCameraActive) return;
 
-            if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame) InsertSDCard();
             if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
             {
                 if (!isRecording && !isSDCardInserted) { Debug.LogWarning("Insert SD Card first!"); return; }
@@ -261,21 +284,18 @@ namespace Player.Equipment
             {
                 if (hit.collider.gameObject != target.gameObject && hit.collider.GetComponentInParent<RecordableSubject>() == null)
                 {
-                    totalCameraScoreAccumulated += 30f; // Pity points if partially blocked
+                    totalCameraScoreAccumulated += 30f;
                     framesSampled++; return;
                 }
             }
 
-            // --- 1. FRAMING (40 Points) ---
             float distFromCenter = Vector2.Distance(new Vector2(0.5f, 0.5f), new Vector2(viewPos.x, viewPos.y));
             float framingScore = 40f;
             if (distFromCenter > 0.4f) framingScore -= (distFromCenter - 0.4f) * 40f;
             framingScore = Mathf.Clamp(framingScore, 0f, 40f);
 
-            // --- 2. FOCUS (30 Points) ---
             float focusScore = 30f;
 
-            // --- 3. THE LIVE LIGHTING CHECK (30 Points) ---
             float lightingScore = 0f;
             FilmLightItem[] activeLights = FindObjectsOfType<FilmLightItem>();
 
@@ -287,12 +307,11 @@ namespace Player.Equipment
                     Vector3 lightArrow = (light.transform.position - targetCenter).normalized;
                     float angle = Vector3.Dot(cameraArrow, lightArrow);
 
-                    if (angle < -0.2f) lightingScore = 30f; // Pass! Backlight.
-                    else if (angle > 0.2f) lightingScore = 0f;  // Fail! Front-light glare.
+                    if (angle < -0.2f) lightingScore = 30f;
+                    else if (angle > 0.2f) lightingScore = 0f;
                 }
             }
 
-            // ADD TO THE SPLIT BUCKETS
             totalCameraScoreAccumulated += (framingScore + focusScore);
             totalLightingScoreAccumulated += lightingScore;
             framesSampled++;
@@ -306,6 +325,10 @@ namespace Player.Equipment
             {
                 hotbar.ConsumeBlankSDCard();
                 isSDCardInserted = true;
+
+                // --- NEW: Clear the warning once card is in! ---
+                HotbarUIManager ui = FindObjectOfType<HotbarUIManager>();
+                if (ui != null) ui.UpdateGuideText(EquipmentControls);
             }
             if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera();
         }
@@ -327,8 +350,8 @@ namespace Player.Equipment
                 {
                     pixelRecorder.StartRecording();
                     recordingStartTime = Time.time;
-                    totalCameraScoreAccumulated = 0f; // RESET
-                    totalLightingScoreAccumulated = 0f; // RESET
+                    totalCameraScoreAccumulated = 0f;
+                    totalLightingScoreAccumulated = 0f;
                     framesSampled = 0;
                     nextSampleTime = Time.time + 0.5f;
                 }
@@ -337,7 +360,6 @@ namespace Player.Equipment
                     generatedFileName = pixelRecorder.StopRecording();
                     finalDuration = Time.time - recordingStartTime;
 
-                    // CALCULATE THE SPLIT AVERAGES
                     if (framesSampled > 0)
                     {
                         finalCamGrade = totalCameraScoreAccumulated / framesSampled;
@@ -364,10 +386,9 @@ namespace Player.Equipment
                     cardScript.recordedFileName = savedFileName;
                     cardScript.videoDuration = duration;
                     cardScript.videoScore = finalScore;
-
-                    // SAVE THE SPLIT SCORES TO THE CARD!
                     cardScript.cameraScore = camScore;
                     cardScript.lightScore = lightScore;
+                    cardScript.MarkAsUsed();
                 }
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
                 if (renderer != null) renderer.material.color = Color.red;
@@ -391,9 +412,7 @@ namespace Player.Equipment
                 isCameraActive = false;
                 if (filmCamera != null) filmCamera.gameObject.SetActive(false);
                 if (filmUICanvas != null) filmUICanvas.SetActive(false);
-
-                // --- THE FIX: Make sure the crosshair/hotbar comes back if you drop the camera while looking through it! ---
-                if (mainPlayerUI != null) mainPlayerUI.SetActive(true);
+                TogglePlayerUI(true);
             }
             base.OnDropped(playerCamera);
         }

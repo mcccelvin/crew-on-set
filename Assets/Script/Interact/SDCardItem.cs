@@ -12,6 +12,10 @@ namespace Player.Equipment
         public float cameraScore = 0f; // NEW: Camera only (out of 70)
         public float lightScore = 0f;  // NEW: Light only (out of 30)
 
+        [Header("Icons")]
+        [Tooltip("Drag the icon for a RECORDED SD card here")]
+        public Sprite usedCardIcon;
+
         public override void OnUse(Camera playerCamera)
         {
             if (isUsedCard)
@@ -22,6 +26,17 @@ namespace Player.Equipment
             else
             {
                 Debug.Log("Inspecting SD Card. It is BLANK.");
+            }
+        }
+
+        // --- NEW: The Camera calls this when ejecting the tape! ---
+        public void MarkAsUsed()
+        {
+            isUsedCard = true;
+
+            if (usedCardIcon != null)
+            {
+                EquipmentIcon = usedCardIcon; // Swaps the base icon so the hotbar reads the new one!
             }
         }
     }

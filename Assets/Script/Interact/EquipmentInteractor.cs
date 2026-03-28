@@ -34,36 +34,123 @@ namespace Player.Interactor
 
         private void Update()
         {
+            // --- CLEAR TEXT IF A MENU IS OPEN ---
             if (activeTerminal != null)
             {
+                if (hotbarUI != null) hotbarUI.UpdateGuideText("");
                 if (inputManager.Interact) { activeTerminal.CloseTerminal(); activeTerminal = null; }
                 return;
             }
 
             if (activeShop != null)
             {
+                if (hotbarUI != null) hotbarUI.UpdateGuideText("");
                 if (inputManager.Interact) { activeShop.CloseShop(); activeShop = null; }
                 return;
             }
 
             if (activeComputer != null)
             {
+                if (hotbarUI != null) hotbarUI.UpdateGuideText("");
                 if (inputManager.Interact) { activeComputer.CloseComputerUI(); }
                 return;
             }
 
             HandleHotbarInput();
+            HandleHotbarInput();
+            HandleHoverText();
 
             if (inputManager.Interact) { TryPickupOrInteract(); return; }
             if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
 
+            // --- CHANGED: F Key (Equip) now handles Computer Insertion ---
             if (inputManager.Equip)
             {
-                if (currentEquipment != null) currentEquipment.OnUse(PlayerCamera);
-                else TryOpenComputer();
+                if (currentEquipment != null)
+                {
+                    // If looking at computer, try to insert the item
+                    if (!TryInsertIntoComputer())
+                    {
+                        // If not looking at computer, use the item normally (like the Camera)
+                        currentEquipment.OnUse(PlayerCamera);
+                    }
+                }
+                else
+                {
+                    // Empty hand: try to open the computer UI
+                    TryInsertIntoComputer();
+                }
             }
 
             if (currentEquipment != null) currentEquipment.OnHeldUpdate(inputManager);
+        }
+
+        private bool TryInsertIntoComputer()
+        {
+            Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
+            if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
+            {
+                ComputerStation computer = hit.collider.GetComponentInParent<ComputerStation>();
+                if (computer != null)
+                {
+                    // Tell the computer to try and take the card
+                    computer.TryInsertCard(this);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- THE NEW HOVER SYSTEM ---
+        private void HandleHoverText()
+        {
+            Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
+            string targetText = "";
+
+            if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
+            {
+                // 1. Looking at an item on the ground?
+                Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
+                if (item != null)
+                {
+                    targetText = $"[E] Pick Up {item.EquipmentName}";
+                }
+                // 2. Looking at the Computer?
+                else if (hit.collider.GetComponentInParent<ComputerStation>() != null)
+                {
+                    if (currentEquipment != null && currentEquipment.GetComponent<Equipment.SDCardItem>() != null)
+                        targetText = "[F] Insert SD Card | [E] Open Menu"; // Show both options!
+                    else
+                        targetText = "[E] Open Computer Menu";
+                }
+                // 3. Looking at the Director Tablet?
+                else if (hit.collider.GetComponentInParent<DirectorTerminal>() != null)
+                {
+                    targetText = "[E] Stage Editor Tablet";
+                }
+                // 4. Looking at the Shop Terminal?
+                else if (hit.collider.GetComponentInParent<ShopTerminal>() != null)
+                {
+                    targetText = "[E] Shop Terminal";
+                }
+                // 5. Generic Interactable fallback
+                else if (hit.collider.GetComponentInParent<IInteractable>() != null)
+                {
+                    targetText = "[E] Interact";
+                }
+            }
+
+            // If we aren't looking at anything special, default to our held item's controls
+            if (targetText == "")
+            {
+                if (currentEquipment != null)
+                {
+                    targetText = currentEquipment.EquipmentControls;
+                }
+            }
+
+            // Push whatever the final text is to the UI
+            if (hotbarUI != null) hotbarUI.UpdateGuideText(targetText);
         }
 
         private void TryOpenComputer()
@@ -133,9 +220,7 @@ namespace Player.Interactor
                                 currentEquipment.gameObject.SetActive(true);
                             }
 
-                            // --- CHANGED: Passing the Name AND the Icon! ---
                             if (hotbarUI != null) hotbarUI.UpdateSlot(i, item.EquipmentName, item.EquipmentIcon);
-                            Debug.Log($"Picked up {item.gameObject.name} into Slot {i + 1}");
                             return;
                         }
                     }
@@ -170,7 +255,6 @@ namespace Player.Interactor
             hotbar[currentSlotIndex] = null;
             currentEquipment = null;
 
-            // --- CHANGED: Passing null to clear the box! ---
             if (hotbarUI != null) hotbarUI.UpdateSlot(currentSlotIndex, "", null);
         }
 
@@ -185,7 +269,6 @@ namespace Player.Interactor
                 currentEquipment = null;
                 Destroy(itemToDestroy.gameObject);
 
-                // --- CHANGED: Passing null to clear the box! ---
                 if (hotbarUI != null) hotbarUI.UpdateSlot(currentSlotIndex, "", null);
             }
         }
@@ -214,10 +297,12 @@ namespace Player.Interactor
                     {
                         Equipment.Equipment itemToDestroy = hotbar[i];
                         hotbar[i] = null;
-                        if (currentEquipment == itemToDestroy) currentEquipment = null;
+                        if (currentEquipment == itemToDestroy)
+                        {
+                            currentEquipment = null;
+                        }
                         Destroy(itemToDestroy.gameObject);
 
-                        // --- CHANGED: Passing null to clear the box! ---
                         if (hotbarUI != null) hotbarUI.UpdateSlot(i, "", null);
                         return;
                     }
@@ -234,7 +319,6 @@ namespace Player.Interactor
                     hotbar[i].OnDropped(PlayerCamera);
                     hotbar[i] = null;
 
-                    // --- CHANGED: Passing null to clear the box! ---
                     if (hotbarUI != null) hotbarUI.UpdateSlot(i, "", null);
                 }
             }

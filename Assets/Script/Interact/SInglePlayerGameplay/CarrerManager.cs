@@ -1,52 +1,75 @@
 using UnityEngine;
-using TMPro; // --- NEW: Needed to talk to the UI Text! ---
+using TMPro;
 
 public class CareerManager : MonoBehaviour
 {
     public static CareerManager Instance;
 
     [Header("Economy")]
-    public int playerMoney = 0; // In B coins
+    public int playerMoney = 0;
     public string currentActiveJob = "None";
 
     [Header("UI")]
     [Tooltip("Drag your Money Text UI element here")]
-    public TextMeshProUGUI moneyTextHUD; // --- NEW: The link to your screen ---
+    public TextMeshProUGUI moneyTextHUD;
+
 
     private void Awake()
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        if (Instance == null)
+        {
+            Instance = this;
+        }
+        else if (Instance != this)
+        {
+            // We just returned to the Studio! 
+            // 1. Give the surviving manager the fresh UI connection from this new scene
+            Instance.moneyTextHUD = this.moneyTextHUD;
+
+            // 2. Tell the surviving manager to pull the new money from the hard drive
+            Instance.playerMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
+
+            // 3. Force the screen to update!
+            Instance.UpdateMoneyUI();
+
+            // 4. Destroy this duplicate so we don't have clones
+            Destroy(gameObject);
+        }
     }
 
     private void Start()
     {
-        // Update the screen the moment the game starts so it doesn't say "New Text"
+        // --- FIX: ALWAYS LOAD MONEY FROM THE HARD DRIVE ON START ---
+        playerMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
         UpdateMoneyUI();
     }
 
     public void AcceptJob(string jobName, int upfrontPayment)
     {
         currentActiveJob = jobName;
-        playerMoney += upfrontPayment;
-        UpdateMoneyUI(); // --- NEW: Refresh the screen! ---
+
+        // Save upfront payment to hard drive!
+        playerMoney = PlayerPrefs.GetInt("PlayerMoney", 0) + upfrontPayment;
+        PlayerPrefs.SetInt("PlayerMoney", playerMoney);
+        PlayerPrefs.Save();
+
+        UpdateMoneyUI();
         Debug.Log($"Accepted {jobName}. Received {upfrontPayment} B coins upfront!");
     }
 
     public void CompleteActiveJob(int finalPayment)
     {
-        playerMoney += finalPayment;
+        // The ContractGrader already saved the money. We just need to sync up!
+        playerMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
         currentActiveJob = "None";
-        UpdateMoneyUI(); // --- NEW: Refresh the screen! ---
-        Debug.Log($"Job Complete! Received final {finalPayment} B coins.");
+
+        UpdateMoneyUI();
     }
 
-    // --- NEW: The method that actually changes the text on screen ---
     public void UpdateMoneyUI()
     {
         if (moneyTextHUD != null)
         {
-            // You can format this however you like! 
             moneyTextHUD.text = $"{playerMoney}";
         }
     }

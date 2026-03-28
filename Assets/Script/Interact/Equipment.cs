@@ -10,14 +10,16 @@ namespace Player.Equipment
         public string EquipmentName = "New Equipment";
         public Sprite EquipmentIcon;
 
+        // --- NEW: The instructions for this specific item! ---
+        [TextArea(2, 5)]
+        public string EquipmentControls = "[LMB] Use  |  [G] Drop";
+
         [Header("Transform Adjustments")]
         public Vector3 HoldPositionOffset = Vector3.zero;
         public Vector3 HoldRotationOffset = Vector3.zero;
 
         protected Rigidbody itemRigidbody;
         protected Collider[] itemColliders;
-
-        // --- THE FIX: An array to catch rogue rigidbodies! ---
         protected Rigidbody[] allRigidbodies;
 
         protected virtual void Awake()
@@ -28,28 +30,24 @@ namespace Player.Equipment
 
         public virtual void OnPickedUp(Transform holdPoint)
         {
-            // 1. Scan for absolutely EVERY collider and rigidbody (even hidden ones!)
             itemColliders = GetComponentsInChildren<Collider>(true);
             allRigidbodies = GetComponentsInChildren<Rigidbody>(true);
 
-            // 2. THE SILVER BULLET: Turn off all physics interactions completely
             foreach (Rigidbody rb in allRigidbodies)
             {
                 if (rb != null)
                 {
                     rb.isKinematic = true;
                     rb.useGravity = false;
-                    rb.detectCollisions = false; // <--- This completely blinds the physics engine to the object!
+                    rb.detectCollisions = false;
                 }
             }
 
-            // 3. Force colliders off just to be safe
             foreach (Collider col in itemColliders)
             {
                 if (col != null) col.enabled = false;
             }
 
-            // 4. Snap to hand
             transform.SetParent(holdPoint);
             transform.localPosition = HoldPositionOffset;
             transform.localEulerAngles = HoldRotationOffset;
@@ -57,7 +55,6 @@ namespace Player.Equipment
 
         public virtual void OnDropped(Camera playerCamera)
         {
-            // Turn all the physics back on so it hits the floor!
             if (allRigidbodies != null)
             {
                 foreach (Rigidbody rb in allRigidbodies)
@@ -80,7 +77,6 @@ namespace Player.Equipment
         }
 
         public abstract void OnUse(Camera playerCamera);
-
         public virtual void OnHeldUpdate(InputManager input) { }
     }
 }

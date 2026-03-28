@@ -4,7 +4,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
-// --- NEW: A custom container to hold Trim Data! ---
 [System.Serializable]
 public class ClipSegment
 {
@@ -28,12 +27,14 @@ public class TruePixelPlayer : MonoBehaviour
 
     private List<Texture2D> preloadedTextures = new List<Texture2D>();
     private bool isPaused = false;
-    private bool isFinished = false;
+
+    // --- FIX: Made this public so the Editor knows when the movie ends! ---
+    public bool isFinished = false;
+
     private List<ClipSegment> currentSequence = new List<ClipSegment>();
 
     public void PlayTape(string path)
     {
-        // Default to playing the whole tape (max value)
         PlaySequence(new List<ClipSegment> { new ClipSegment { path = path, startFrame = 0, endFrame = int.MaxValue } });
     }
 
@@ -54,6 +55,8 @@ public class TruePixelPlayer : MonoBehaviour
         isFinished = true;
         if (computerScreen != null) computerScreen.texture = null;
         if (playheadLine != null) playheadLine.anchoredPosition = new Vector2(0, playheadLine.anchoredPosition.y);
+
+        if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
 
         foreach (Texture2D tex in preloadedTextures) { if (tex != null) Destroy(tex); }
         preloadedTextures.Clear();
@@ -83,14 +86,13 @@ public class TruePixelPlayer : MonoBehaviour
                 using (BinaryReader reader = new BinaryReader(File.Open(clip.path, FileMode.Open)))
                 {
                     int frameCount = reader.ReadInt32();
-                    int safeEnd = Mathf.Min(clip.endFrame, frameCount); // Prevent reading past the end
+                    int safeEnd = Mathf.Min(clip.endFrame, frameCount);
 
                     for (int i = 0; i < frameCount; i++)
                     {
                         int size = reader.ReadInt32();
                         byte[] frameData = reader.ReadBytes(size);
 
-                        // --- THE MAGIC: Only save the frame if it is inside the Trim Zone! ---
                         if (i >= clip.startFrame && i < safeEnd)
                         {
                             allRawFrames.Add(frameData);
@@ -119,6 +121,11 @@ public class TruePixelPlayer : MonoBehaviour
             if (i % 5 == 0) yield return null;
         }
 
+        if (TimelinePlayhead.Instance != null)
+        {
+            TimelinePlayhead.Instance.StartPlayback();
+        }
+
         for (int i = 0; i < preloadedTextures.Count; i++)
         {
             while (isPaused) yield return null;
@@ -143,8 +150,10 @@ public class TruePixelPlayer : MonoBehaviour
         }
 
         if (computerScreen != null) computerScreen.texture = thumbnail;
-        isFinished = true;
+        isFinished = true; // The Editor will wait for this to become true!
         isPaused = true;
         UpdatePlayPauseUI();
+
+        if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.PausePlayback();
     }
 }

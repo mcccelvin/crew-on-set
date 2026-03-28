@@ -1,24 +1,27 @@
 using UnityEngine;
 using System.Collections.Generic;
 
+[System.Serializable]
+public class FootageData
+{
+    public string fileName;
+    public float camScore;
+    public float lightScore;
+}
+
 public class ProjectDataManager : MonoBehaviour
 {
     public static ProjectDataManager Instance;
 
-    [Header("Studio Data (Brought to Editor)")]
-    // Just the file paths! Grading will be handled later.
-    public List<string> rawFootagePaths = new List<string>();
-
-    [Header("Editor Data (The Final Commercial)")]
-    public List<string> timelineClips = new List<string>();
-    public string commercialOverlayText = "";
+    // This list now carries the scores AND the filenames across scenes
+    public List<FootageData> compiledFootage = new List<FootageData>();
 
     private void Awake()
     {
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // Survives the scene load!
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
@@ -28,8 +31,6 @@ public class ProjectDataManager : MonoBehaviour
 
     public void ClearProject()
     {
-        rawFootagePaths.Clear();
-        timelineClips.Clear();
-        commercialOverlayText = "";
+        compiledFootage.Clear();
     }
 }

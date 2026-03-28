@@ -122,11 +122,29 @@ public class ComputerUIManager : MonoBehaviour
         if (interactor != null) interactor.ClearActiveComputer();
     }
 
-    public void SubmitCurrentVideo()
+    public void SendToEditor()
     {
-        if (grader != null && !string.IsNullOrEmpty(currentlyPlayingFile))
+        // Find the actual computer station that holds the inserted SD cards
+        ComputerStation station = FindObjectOfType<ComputerStation>();
+
+        if (ProjectDataManager.Instance != null && station != null)
         {
-            grader.GradeVideo(currentlyPlayingFile);
+            ProjectDataManager.Instance.ClearProject();
+
+            // Access the list FROM the station script
+            List<string> files = station.GetInsertedFiles();
+
+            foreach (string file in files)
+            {
+                FootageData data = new FootageData();
+                data.fileName = file;
+                // Placeholder scores
+                data.camScore = 70f;
+                data.lightScore = 30f;
+
+                ProjectDataManager.Instance.compiledFootage.Add(data);
+            }
         }
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Editor");
     }
 }
