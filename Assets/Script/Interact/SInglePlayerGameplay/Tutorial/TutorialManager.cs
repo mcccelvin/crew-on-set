@@ -51,13 +51,16 @@ public class TutorialManager : MonoBehaviour
     public TutorialGlowTarget computerGlow;
     public TutorialArrowGuide navigationArrow;
 
-    // --- UPDATED: Added TabletPracticeFinished ---
     public enum TutorialStep
     {
         Intro, LearnMovement, SetTrainingObjectAndMoney,
-        BuildStageWall, ExplainDirectorTablet, PracticeDirectorTablet, TabletPracticeFinished,
-        BuyLights, SetupLight, BuyCameraAndCard, InsertCardToCamera,
-        RecordVideo, InsertToComputer, ExplainComputerEditor, PracticeComputerEditor,
+        BuildStageWall, ExplainDirectorTablet, PracticeDirectorTablet, TabletPracticeFinished, FreePlayDirectorTablet,
+        BuyLights, PickUpLight, TurnOnLight, AdjustLight, BuyCameraAndCard, InsertCardToCamera,
+
+        // --- NEW CAMERA STEPS ---
+        EquipCameraView, PracticeCameraZoom, PracticeCameraPedestal, FrameSubject, RecordVideo,
+
+        InsertToComputer, ExplainComputerEditor, PracticeComputerEditor,
         Complete, OfferLevel1, Level1Accepted
     }
 
@@ -65,15 +68,19 @@ public class TutorialManager : MonoBehaviour
 
     private bool isTransitioning = false;
     private bool isTaskPhaseActive = false;
-
     private int tutorialItemsBought = 0;
     private bool skippedTutorial = false;
-
     private bool isTaskUIExpanded = false;
+    private Coroutine warningCoroutine;
 
     // Task Tracking Variables
     private bool moved = false, jumped = false, sprinted = false;
-    private bool tabletOpened = false, wallBuilt = false, wallColorChanged = false, propSpawned = false, propMoved = false, tabletClosed = false;
+    private bool tabletOpened = false, wallBuilt = false, wallColorChanged = false, propSpawned = false, propMoved = false;
+    private bool lightTilted = false, lightIntensityChanged = false;
+
+    // --- NEW CAMERA TRACKERS ---
+    private bool cameraViewEntered = false, cameraZoomed = false, cameraPedestalMoved = false, subjectFramed = false;
+
     private bool computerAccessed = false, videoDragged = false, videoExported = false;
 
     private void Awake()
@@ -128,10 +135,32 @@ public class TutorialManager : MonoBehaviour
                 if (taskListTexts.Length > 2) taskListTexts[2].color = completedColor;
             }
 
-            if (moved && jumped && sprinted)
+            if (moved && jumped && sprinted && !isTransitioning)
             {
                 isTaskPhaseActive = false;
                 StartCoroutine(TransitionToNextStep(TutorialStep.SetTrainingObjectAndMoney, true));
+            }
+        }
+
+        // --- NEW: TRACK CAMERA ZOOM ---
+        if (currentStep == TutorialStep.PracticeCameraZoom && isTaskPhaseActive && !cameraZoomed)
+        {
+            if (Input.mouseScrollDelta.y != 0)
+            {
+                cameraZoomed = true;
+                if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+                StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraPedestal, true));
+            }
+        }
+
+        // --- NEW: TRACK CAMERA PEDESTAL (Q/E) ---
+        if (currentStep == TutorialStep.PracticeCameraPedestal && isTaskPhaseActive && !cameraPedestalMoved)
+        {
+            if (Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.E))
+            {
+                cameraPedestalMoved = true;
+                if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+                StartCoroutine(TransitionToNextStep(TutorialStep.FrameSubject, true));
             }
         }
     }
@@ -153,8 +182,67 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
+    public bool CanBuyItem(int itemIndex)
+    {
+        if (currentStep < TutorialStep.BuyLights)
+        {
+            if (warningCoroutine != null) StopCoroutine(warningCoroutine);
+            warningCoroutine = StartCoroutine(ShowBossWarning("Don't get ahead of yourself! We aren't ready to buy equipment yet. Follow your tasks!"));
+            return false;
+        }
+
+        if (currentStep == TutorialStep.BuyLights && itemIndex != 1)
+        {
+            if (warningCoroutine != null) StopCoroutine(warningCoroutine);
+            warningCoroutine = StartCoroutine(ShowBossWarning("Hold on! We only need to buy the Stage Light right now. Don't waste your B coins!"));
+            return false;
+        }
+
+        if (currentStep == TutorialStep.PickUpLight || currentStep == TutorialStep.TurnOnLight || currentStep == TutorialStep.AdjustLight)
+        {
+            if (warningCoroutine != null) StopCoroutine(warningCoroutine);
+            warningCoroutine = StartCoroutine(ShowBossWarning("You already bought the Light! Go pick it up and learn how to use it before buying anything else."));
+            return false;
+        }
+
+        if (currentStep == TutorialStep.BuyCameraAndCard && itemIndex == 1)
+        {
+            if (warningCoroutine != null) StopCoroutine(warningCoroutine);
+            warningCoroutine = StartCoroutine(ShowBossWarning("You already sorted the lighting! Focus on grabbing the Film Camera and the SD Card."));
+            return false;
+        }
+
+        if (currentStep > TutorialStep.BuyCameraAndCard && currentStep < TutorialStep.OfferLevel1)
+        {
+            if (warningCoroutine != null) StopCoroutine(warningCoroutine);
+            warningCoroutine = StartCoroutine(ShowBossWarning("You already have all the gear you need! Focus on finishing the recording tasks."));
+            return false;
+        }
+
+        return true;
+    }
+
+    private IEnumerator ShowBossWarning(string warningMessage)
+    {
+        if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
+        if (bossText != null) bossText.text = warningMessage;
+        SetBossPose(poseBoss);
+
+        if (okButton != null) okButton.SetActive(false);
+        if (skipButton != null) skipButton.SetActive(false);
+
+        yield return new WaitForSeconds(3.5f);
+
+        if (isTaskPhaseActive && bossHUDCanvas != null)
+        {
+            bossHUDCanvas.SetActive(false);
+        }
+    }
+
     public void SkipTutorial()
     {
+        if (isTransitioning) return;
+
         if (skipButton != null) skipButton.SetActive(false);
         skippedTutorial = true;
 
@@ -170,6 +258,8 @@ public class TutorialManager : MonoBehaviour
 
     public void OnOkButtonPressed()
     {
+        if (isTransitioning) return;
+
         if (currentStep == TutorialStep.OfferLevel1)
         {
             if (CareerManager.Instance != null) CareerManager.Instance.AcceptJob("Crystal Blooms", 30000);
@@ -221,10 +311,7 @@ public class TutorialManager : MonoBehaviour
             return;
         }
         if (currentStep == TutorialStep.ExplainDirectorTablet) { StartCoroutine(TransitionToNextStep(TutorialStep.PracticeDirectorTablet, false)); return; }
-
-        // --- NEW: Go to BuyLights when they finish clicking OK on the new dialogue ---
-        if (currentStep == TutorialStep.TabletPracticeFinished) { StartCoroutine(TransitionToNextStep(TutorialStep.BuyLights, false)); return; }
-
+        if (currentStep == TutorialStep.TabletPracticeFinished) { StartCoroutine(TransitionToNextStep(TutorialStep.FreePlayDirectorTablet, false)); return; }
         if (currentStep == TutorialStep.ExplainComputerEditor) { StartCoroutine(TransitionToNextStep(TutorialStep.PracticeComputerEditor, false)); return; }
         if (currentStep == TutorialStep.Complete) { StartCoroutine(TransitionToNextStep(TutorialStep.OfferLevel1, false)); return; }
 
@@ -245,7 +332,7 @@ public class TutorialManager : MonoBehaviour
 
         Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
 
-        if (currentStep == TutorialStep.PracticeDirectorTablet || currentStep == TutorialStep.PracticeComputerEditor)
+        if (currentStep == TutorialStep.PracticeDirectorTablet || currentStep == TutorialStep.PracticeComputerEditor || currentStep == TutorialStep.FreePlayDirectorTablet)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -278,18 +365,29 @@ public class TutorialManager : MonoBehaviour
                 SetupTaskText(1, "- Use sliders to paint the wall");
                 SetupTaskText(2, "- Click 'Cube' to spawn a prop");
                 SetupTaskText(3, "- Press [T] to pick it up and move it");
-                SetupTaskText(4, "- Close the Editor Tablet");
-                wallBuilt = wallColorChanged = propSpawned = propMoved = tabletClosed = false;
+                wallBuilt = wallColorChanged = propSpawned = propMoved = false;
+                break;
+            case TutorialStep.FreePlayDirectorTablet:
+                if (taskPanel != null) taskPanel.SetActive(false);
                 break;
             case TutorialStep.BuyLights:
                 SetupTaskText(0, "- Walk to Shop and press [E] to buy a Light");
                 if (shopTerminalGlow != null) { shopTerminalGlow.StartGlowing(); PointArrowAt(shopTerminalGlow.gameObject.name); }
                 break;
-            case TutorialStep.SetupLight:
-                SetupTaskText(0, "- Press [E] on the dropped Light to hold it");
-                SetupTaskText(1, "- Aim at the stage and press [F] to turn it on");
+            case TutorialStep.PickUpLight:
+                SetupTaskText(0, "- Walk up to the dropped Stage Light and press [E] to pick it up");
                 SetDynamicGlow("light", true); PointArrowAt("light");
                 break;
+            case TutorialStep.TurnOnLight:
+                SetupTaskText(0, "- Aim at the stage and press [F] to turn it on");
+                SetDynamicGlow("light", false); PointArrowAt("");
+                break;
+            case TutorialStep.AdjustLight:
+                SetupTaskText(0, "- Use [Up/Down Arrows] to tilt the light");
+                SetupTaskText(1, "- Use [Scroll Wheel] to adjust brightness");
+                lightTilted = false; lightIntensityChanged = false;
+                break;
+
             case TutorialStep.BuyCameraAndCard:
                 tutorialItemsBought = 0;
                 SetupTaskText(0, "- Buy a Film Camera and SD Card (0/2)");
@@ -300,11 +398,29 @@ public class TutorialManager : MonoBehaviour
                 SetupTaskText(1, "- Hold the Camera and press [C] to insert card");
                 SetDynamicGlow("camera", true); SetDynamicGlow("sd", true); PointArrowAt("camera");
                 break;
+
+            // --- NEW CAMERA TASKS ---
+            case TutorialStep.EquipCameraView:
+                SetupTaskText(0, "- Press [F] to look through the camera lens");
+                cameraViewEntered = false;
+                break;
+            case TutorialStep.PracticeCameraZoom:
+                SetupTaskText(0, "- Use [Scroll Wheel] to zoom the lens in and out");
+                cameraZoomed = false;
+                break;
+            case TutorialStep.PracticeCameraPedestal:
+                SetupTaskText(0, "- Hold [Q] or [E] to shift the camera height");
+                cameraPedestalMoved = false;
+                break;
+            case TutorialStep.FrameSubject:
+                SetupTaskText(0, "- Aim at the practice cube until the HUD says [SUBJECT DETECTED]");
+                subjectFramed = false;
+                break;
             case TutorialStep.RecordVideo:
-                SetupTaskText(0, "- Press [F] to look through the lens");
-                SetupTaskText(1, "- Press [R] to record the cube, then stop");
+                SetupTaskText(0, "- Press [R] to record for a few seconds, then press [R] to stop");
                 SetDynamicGlow("camera", true); PointArrowAt("camera");
                 break;
+
             case TutorialStep.InsertToComputer:
                 SetupTaskText(0, "- Press [E] on the card to pick it up");
                 SetupTaskText(1, "- Press [E] on the computer tower to insert it");
@@ -330,6 +446,8 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator TransitionToNextStep(TutorialStep nextStep, bool didTaskJustComplete)
     {
+        if (isTransitioning) yield break;
+
         isTransitioning = true;
         isTaskPhaseActive = false;
         PointArrowAt("");
@@ -354,7 +472,7 @@ public class TutorialManager : MonoBehaviour
 
     public void OnTabletOpened()
     {
-        if (currentStep == TutorialStep.BuildStageWall && isTaskPhaseActive && !tabletOpened)
+        if (currentStep == TutorialStep.BuildStageWall && isTaskPhaseActive && !tabletOpened && !isTransitioning)
         {
             tabletOpened = true;
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
@@ -364,34 +482,37 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnStageWallBuilt() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !wallBuilt) { wallBuilt = true; if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor; } }
-    public void OnWallColorChanged() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !wallColorChanged) { wallColorChanged = true; if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor; } }
-    public void OnPropSpawnedFromUI() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !propSpawned) { propSpawned = true; if (taskListTexts.Length > 2) taskListTexts[2].color = completedColor; } }
-    public void OnPropMovedWithT() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !propMoved) { propMoved = true; if (taskListTexts.Length > 3) taskListTexts[3].color = completedColor; } }
+    public void OnStageWallBuilt() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !wallBuilt) { wallBuilt = true; if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor; CheckTabletTasksComplete(); } }
+    public void OnWallColorChanged() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !wallColorChanged) { wallColorChanged = true; if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor; CheckTabletTasksComplete(); } }
+    public void OnPropSpawnedFromUI() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !propSpawned) { propSpawned = true; if (taskListTexts.Length > 2) taskListTexts[2].color = completedColor; CheckTabletTasksComplete(); } }
+    public void OnPropMovedWithT() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !propMoved) { propMoved = true; if (taskListTexts.Length > 3) taskListTexts[3].color = completedColor; CheckTabletTasksComplete(); } }
+
+    private void CheckTabletTasksComplete()
+    {
+        if (currentStep == TutorialStep.PracticeDirectorTablet && wallBuilt && wallColorChanged && propSpawned && propMoved && !isTransitioning)
+        {
+            StartCoroutine(TransitionToNextStep(TutorialStep.TabletPracticeFinished, true));
+        }
+    }
 
     public void OnTabletClosed()
     {
-        if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !tabletClosed)
+        if (currentStep == TutorialStep.FreePlayDirectorTablet && isTaskPhaseActive && !isTransitioning)
         {
-            if (wallBuilt && wallColorChanged && propSpawned && propMoved)
-            {
-                tabletClosed = true;
-                if (taskListTexts.Length > 4) taskListTexts[4].color = completedColor;
-                // --- UPDATED: Transition to the new dialogue instead of the next task! ---
-                StartCoroutine(TransitionToNextStep(TutorialStep.TabletPracticeFinished, true));
-            }
+            StartCoroutine(TransitionToNextStep(TutorialStep.BuyLights, false));
         }
     }
 
     public void OnEquipmentBought()
     {
-        if (currentStep == TutorialStep.BuyLights && isTaskPhaseActive)
+        if (currentStep == TutorialStep.BuyLights && isTaskPhaseActive && !isTransitioning)
         {
             if (shopTerminalGlow != null) shopTerminalGlow.StopGlowing();
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
-            StartCoroutine(TransitionToNextStep(TutorialStep.SetupLight, true));
+
+            StartCoroutine(TransitionToNextStep(TutorialStep.PickUpLight, true));
         }
-        else if (currentStep == TutorialStep.BuyCameraAndCard && isTaskPhaseActive)
+        else if (currentStep == TutorialStep.BuyCameraAndCard && isTaskPhaseActive && !isTransitioning)
         {
             tutorialItemsBought++;
             if (taskListTexts.Length > 0) taskListTexts[0].text = $"- Buy a Film Camera and SD Card ({tutorialItemsBought}/2)";
@@ -404,43 +525,100 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
+    public void OnLightPickedUp()
+    {
+        if (currentStep == TutorialStep.PickUpLight && isTaskPhaseActive && !isTransitioning)
+        {
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.TurnOnLight, true));
+        }
+    }
+
     public void OnLightTurnedOn()
     {
-        if (currentStep == TutorialStep.SetupLight && isTaskPhaseActive)
+        if (currentStep == TutorialStep.TurnOnLight && isTaskPhaseActive && !isTransitioning)
         {
-            SetDynamicGlow("light", false);
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.AdjustLight, true));
+        }
+    }
+
+    public void OnLightTilted()
+    {
+        if (currentStep == TutorialStep.AdjustLight && isTaskPhaseActive && !lightTilted)
+        {
+            lightTilted = true;
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            CheckLightTasksComplete();
+        }
+    }
+
+    public void OnLightIntensityChanged()
+    {
+        if (currentStep == TutorialStep.AdjustLight && isTaskPhaseActive && !lightIntensityChanged)
+        {
+            lightIntensityChanged = true;
             if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+            CheckLightTasksComplete();
+        }
+    }
+
+    private void CheckLightTasksComplete()
+    {
+        if (currentStep == TutorialStep.AdjustLight && lightTilted && lightIntensityChanged && !isTransitioning)
+        {
             StartCoroutine(TransitionToNextStep(TutorialStep.BuyCameraAndCard, true));
         }
     }
 
     public void OnCardInsertedToCamera()
     {
-        if (currentStep == TutorialStep.InsertCardToCamera && isTaskPhaseActive)
+        if (currentStep == TutorialStep.InsertCardToCamera && isTaskPhaseActive && !isTransitioning)
         {
             SetDynamicGlow("sd", false);
             SetDynamicGlow("camera", false);
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
             if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+
+            // Now transitions to EquipCameraView instead of Record!
+            StartCoroutine(TransitionToNextStep(TutorialStep.EquipCameraView, true));
+        }
+    }
+
+    // --- NEW CAMERA PINGS ---
+    public void OnCameraViewEntered()
+    {
+        if (currentStep == TutorialStep.EquipCameraView && isTaskPhaseActive && !cameraViewEntered && !isTransitioning)
+        {
+            cameraViewEntered = true;
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraZoom, true));
+        }
+    }
+
+    public void OnSubjectFramed()
+    {
+        if (currentStep == TutorialStep.FrameSubject && isTaskPhaseActive && !subjectFramed && !isTransitioning)
+        {
+            subjectFramed = true;
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
             StartCoroutine(TransitionToNextStep(TutorialStep.RecordVideo, true));
         }
     }
 
     public void OnRecordingFinished()
     {
-        if (currentStep == TutorialStep.RecordVideo && isTaskPhaseActive)
+        if (currentStep == TutorialStep.RecordVideo && isTaskPhaseActive && !isTransitioning)
         {
             SetDynamicGlow("camera", false);
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
-            if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
             StartCoroutine(TransitionToNextStep(TutorialStep.InsertToComputer, true));
         }
     }
 
     public void OnCardInsertedToComputer()
     {
-        if (currentStep == TutorialStep.InsertToComputer && isTaskPhaseActive)
+        if (currentStep == TutorialStep.InsertToComputer && isTaskPhaseActive && !isTransitioning)
         {
             SetDynamicGlow("sd", false);
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
@@ -451,7 +629,7 @@ public class TutorialManager : MonoBehaviour
 
     public void OnComputerAccessed()
     {
-        if (currentStep == TutorialStep.PracticeComputerEditor && isTaskPhaseActive && !computerAccessed)
+        if (currentStep == TutorialStep.PracticeComputerEditor && isTaskPhaseActive && !computerAccessed && !isTransitioning)
         {
             computerAccessed = true;
             if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
@@ -467,7 +645,7 @@ public class TutorialManager : MonoBehaviour
 
     private void CheckEditorTasksComplete()
     {
-        if (computerAccessed && videoDragged && videoExported) StartCoroutine(TransitionToNextStep(TutorialStep.Complete, true));
+        if (computerAccessed && videoDragged && videoExported && !isTransitioning) StartCoroutine(TransitionToNextStep(TutorialStep.Complete, true));
     }
 
     private void SetBossPose(Sprite newPose)
@@ -519,20 +697,25 @@ public class TutorialManager : MonoBehaviour
                 bossText.text = "Give it a try. Click the button to add a wall, paint it a new color, click to spawn a prop, and press [T] to move the prop somewhere else.";
                 SetBossPose(poseBoss);
                 break;
-
-            // --- NEW DIALOGUE ---
             case TutorialStep.TabletPracticeFinished:
-                bossText.text = "Great job! Take your time to play around and set up the stage however you like. When you are ready, we will move on to lighting.";
+                bossText.text = "Great job! Take your time to play around and set up the stage however you like. When you are ready to move on to lighting, just close the Editor Tablet.";
                 SetBossPose(poseChill);
                 break;
-
             case TutorialStep.BuyLights:
-                bossText.text = "Now we need lighting. Follow the arrow to the Shop Terminal, press [E], and buy a Stage Light. It will spawn on the table.";
+                bossText.text = "Now we need lighting. Follow the arrow to the Shop Terminal, press [E], and buy a Stage Light.";
                 SetBossPose(posePoint);
                 break;
-            case TutorialStep.SetupLight:
-                bossText.text = "Walk up to the Stage Light and press [E] to pick it up. Face the stage, and press [F] to turn the bulb on.";
+            case TutorialStep.PickUpLight:
+                bossText.text = "Great! The Stage Light just spawned on the delivery table. Walk over there and press [E] to pick it up.";
+                SetBossPose(posePoint);
+                break;
+            case TutorialStep.TurnOnLight:
+                bossText.text = "Nice! That is a portable Stage Light. It is perfect for highlighting your subject. Hold it in your hands, face the stage, and press [F] to turn the bulb on!";
                 SetBossPose(poseOpenHand);
+                break;
+            case TutorialStep.AdjustLight:
+                bossText.text = "You can also control the exact angle and brightness! Try using your Up and Down arrow keys to tilt the stand, and scroll your mouse wheel to dim or brighten the LEDs.";
+                SetBossPose(posePointUp);
                 break;
             case TutorialStep.BuyCameraAndCard:
                 bossText.text = "We can't film without a camera. Go back to the Shop Terminal and buy a Film Camera and an SD Card.";
@@ -542,10 +725,29 @@ public class TutorialManager : MonoBehaviour
                 bossText.text = "Press [E] to pick up the Camera, and [E] to pick up the SD card. With the camera in your hand, press [C] to insert the memory card.";
                 SetBossPose(poseBoss);
                 break;
-            case TutorialStep.RecordVideo:
-                bossText.text = "Press [F] to look through the camera lens. Aim at the practice cube and press [R] to record. Press [R] again to stop.";
+
+            // --- NEW CAMERA DIALOGUE ---
+            case TutorialStep.EquipCameraView:
+                bossText.text = "Time to learn the camera! Hold it in your hands and press [F] to look through the viewfinder.";
+                SetBossPose(poseHappy);
+                break;
+            case TutorialStep.PracticeCameraZoom:
+                bossText.text = "You can change your lens focal length dynamically. Try using your mouse's [Scroll Wheel] to zoom in and out.";
                 SetBossPose(posePointUp);
                 break;
+            case TutorialStep.PracticeCameraPedestal:
+                bossText.text = "You can also adjust the camera's height without moving your body. Hold [Q] to lower the pedestal, and [E] to raise it.";
+                SetBossPose(posePoint);
+                break;
+            case TutorialStep.FrameSubject:
+                bossText.text = "This camera has an automatic tracking focus, but you need to frame your subject correctly. Aim at the practice cube until your HUD detects it.";
+                SetBossPose(poseOpenHand);
+                break;
+            case TutorialStep.RecordVideo:
+                bossText.text = "Perfect! The subject is in focus. Press [R] to start recording. Wait a few seconds to get a good clip, then press [R] again to cut the tape.";
+                SetBossPose(poseSmile);
+                break;
+
             case TutorialStep.InsertToComputer:
                 bossText.text = "Great take! Press [E] on the card to take it out. Walk over to the Computer tower and press [E] to push the card in.";
                 SetBossPose(poseHappy);

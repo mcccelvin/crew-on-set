@@ -45,7 +45,7 @@ namespace Player.Interactor
             if (activeShop != null)
             {
                 if (hotbarUI != null) hotbarUI.UpdateGuideText("");
-                if (inputManager.Interact) { activeShop.CloseShop(); activeShop = null; }
+                if (inputManager.Interact) { activeShop.CloseTerminal(); activeShop = null; }
                 return;
             }
 
@@ -57,13 +57,12 @@ namespace Player.Interactor
             }
 
             HandleHotbarInput();
-            HandleHotbarInput();
             HandleHoverText();
 
             if (inputManager.Interact) { TryPickupOrInteract(); return; }
             if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
 
-            // --- CHANGED: F Key (Equip) now handles Computer Insertion ---
+            // --- F Key (Equip) now handles Computer Insertion ---
             if (inputManager.Equip)
             {
                 if (currentEquipment != null)
@@ -93,7 +92,6 @@ namespace Player.Interactor
                 ComputerStation computer = hit.collider.GetComponentInParent<ComputerStation>();
                 if (computer != null)
                 {
-                    // Tell the computer to try and take the card
                     computer.TryInsertCard(this);
                     return true;
                 }
@@ -109,38 +107,32 @@ namespace Player.Interactor
 
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
-                // 1. Looking at an item on the ground?
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
                     targetText = $"[E] Pick Up {item.EquipmentName}";
                 }
-                // 2. Looking at the Computer?
                 else if (hit.collider.GetComponentInParent<ComputerStation>() != null)
                 {
                     if (currentEquipment != null && currentEquipment.GetComponent<Equipment.SDCardItem>() != null)
-                        targetText = "[F] Insert SD Card | [E] Open Menu"; // Show both options!
+                        targetText = "[F] Insert SD Card | [E] Open Menu";
                     else
                         targetText = "[E] Open Computer Menu";
                 }
-                // 3. Looking at the Director Tablet?
                 else if (hit.collider.GetComponentInParent<DirectorTerminal>() != null)
                 {
                     targetText = "[E] Stage Editor Tablet";
                 }
-                // 4. Looking at the Shop Terminal?
                 else if (hit.collider.GetComponentInParent<ShopTerminal>() != null)
                 {
                     targetText = "[E] Shop Terminal";
                 }
-                // 5. Generic Interactable fallback
                 else if (hit.collider.GetComponentInParent<IInteractable>() != null)
                 {
                     targetText = "[E] Interact";
                 }
             }
 
-            // If we aren't looking at anything special, default to our held item's controls
             if (targetText == "")
             {
                 if (currentEquipment != null)
@@ -149,7 +141,6 @@ namespace Player.Interactor
                 }
             }
 
-            // Push whatever the final text is to the UI
             if (hotbarUI != null) hotbarUI.UpdateGuideText(targetText);
         }
 
@@ -221,6 +212,17 @@ namespace Player.Interactor
                             }
 
                             if (hotbarUI != null) hotbarUI.UpdateSlot(i, item.EquipmentName, item.EquipmentIcon);
+
+                            // --- NEW: TELL TUTORIAL WE PICKED UP A LIGHT! ---
+                            if (TutorialManager.Instance != null)
+                            {
+                                if (item.gameObject.name.ToLower().Contains("light") || item.EquipmentName.ToLower().Contains("light"))
+                                {
+                                    TutorialManager.Instance.OnLightPickedUp();
+                                }
+                            }
+                            // ------------------------------------------------
+
                             return;
                         }
                     }
@@ -243,7 +245,7 @@ namespace Player.Interactor
                 if (shop != null)
                 {
                     activeShop = shop;
-                    activeShop.OpenShop(GetComponentInParent<Player.PlayerController.PlayerController>());
+                    activeShop.OpenTerminal(PlayerCamera.gameObject, GetComponentInParent<Player.PlayerController.PlayerController>());
                 }
             }
         }

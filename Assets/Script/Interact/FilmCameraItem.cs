@@ -144,6 +144,13 @@ namespace Player.Equipment
 
             isCameraActive = !isCameraActive;
 
+            // --- THE NEW TUTORIAL PING ---
+            // Tells the Boss we successfully opened the camera view!
+            if (isCameraActive && TutorialManager.Instance != null)
+            {
+                TutorialManager.Instance.OnCameraViewEntered();
+            }
+
             if (filmCamera != null)
             {
                 filmCamera.gameObject.SetActive(isCameraActive);
@@ -261,8 +268,19 @@ namespace Player.Equipment
                         }
                     }
                 }
-                if (isLookingAtTarget) targetStatusText.text = "<color=green>[ SUBJECT DETECTED ]</color>";
-                else targetStatusText.text = "<color=white>[ NO SUBJECT ]</color>";
+
+                // --- THE NEW TUTORIAL PING ---
+                if (isLookingAtTarget)
+                {
+                    targetStatusText.text = "<color=green>[ SUBJECT DETECTED ]</color>";
+
+                    // Tells the Boss we successfully framed the subject
+                    if (TutorialManager.Instance != null) TutorialManager.Instance.OnSubjectFramed();
+                }
+                else
+                {
+                    targetStatusText.text = "<color=white>[ NO SUBJECT ]</color>";
+                }
             }
         }
 
@@ -326,7 +344,6 @@ namespace Player.Equipment
                 hotbar.ConsumeBlankSDCard();
                 isSDCardInserted = true;
 
-                // --- NEW: Clear the warning once card is in! ---
                 HotbarUIManager ui = FindObjectOfType<HotbarUIManager>();
                 if (ui != null) ui.UpdateGuideText(EquipmentControls);
             }
@@ -369,6 +386,8 @@ namespace Player.Equipment
                 }
             }
             if (!isRecording) EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
+
+            // --- THE ORIGINAL RECORDING PING ---
             if (TutorialManager.Instance != null && !isRecording) TutorialManager.Instance.OnRecordingFinished();
         }
 

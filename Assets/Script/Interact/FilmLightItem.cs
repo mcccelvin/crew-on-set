@@ -33,7 +33,6 @@ namespace Player.Equipment
         private bool isLightOn = false;
         private float currentTilt = 0f;
 
-        // --- THE FIX: Store the ENTIRE starting rotation once! ---
         private Vector3 startAngles;
 
         protected override void Awake()
@@ -44,10 +43,8 @@ namespace Player.Equipment
             {
                 spotlight.enabled = isLightOn;
 
-                // Lock the initial X, Y, and Z angles in a vault so Unity can't flip them!
                 startAngles = spotlight.transform.localEulerAngles;
 
-                // --- ENFORCE RESTRICTIONS ---
                 if (forcesHardLight) spotlight.shadows = LightShadows.Hard;
 
                 spotlight.useColorTemperature = true;
@@ -92,11 +89,13 @@ namespace Player.Equipment
             if (spotlight == null) return;
             currentTilt = Mathf.Clamp(currentTilt + amount, maxTiltUp, maxTiltDown);
             UpdateLightTransform();
+
+            // --- NEW: PING TUTORIAL ---
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightTilted();
         }
 
         private void UpdateLightTransform()
         {
-            // THE FIX: Use the locked startAngles.y and startAngles.z instead of asking Unity for them dynamically!
             spotlight.transform.localEulerAngles = new Vector3(startAngles.x + currentTilt, startAngles.y, startAngles.z);
         }
 
@@ -107,6 +106,9 @@ namespace Player.Equipment
 
             float currentLux = maxLux * (intensityPercent / 100f);
             Debug.Log($"Meter: {intensityPercent}% | Output: {currentLux} Lux / {currentLux * 0.0929f:F1} Footcandles");
+
+            // --- NEW: PING TUTORIAL ---
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightIntensityChanged();
         }
 
         private void UpdateLightOutput()
