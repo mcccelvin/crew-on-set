@@ -1,16 +1,38 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class TutorialManager : MonoBehaviour
 {
     public static TutorialManager Instance;
 
-    [Header("UI")]
+    [Header("UI: Boss Dialogue")]
     public GameObject bossHUDCanvas;
     public TextMeshProUGUI bossText;
     public GameObject okButton;
     public GameObject skipButton;
+
+    [Header("Boss 2D Poses")]
+    public Image bossPortraitDisplay;
+    public Sprite poseBoss;
+    public Sprite poseChill;
+    public Sprite poseEndWave;
+    public Sprite poseHappy;
+    public Sprite poseOpenHand;
+    public Sprite posePointUp;
+    public Sprite posePoint;
+    public Sprite poseSmile;
+
+    [Header("UI: Task Checklist")]
+    public GameObject taskPanel;
+    public GameObject taskOpenView;
+    public GameObject taskClosedView;
+    public GameObject newTaskNotification;
+
+    public TextMeshProUGUI[] taskListTexts;
+    public Color pendingColor = Color.white;
+    public Color completedColor = Color.green;
 
     [Header("Spawning Setup")]
     public GameObject practiceCubePrefab;
@@ -23,25 +45,36 @@ public class TutorialManager : MonoBehaviour
     public GameObject sdCardPrefab;
     public Transform deliveryZone;
 
+    [Header("Tutorial Guidance Systems")]
+    public TutorialGlowTarget directorTerminalGlow;
+    public TutorialGlowTarget shopTerminalGlow;
+    public TutorialGlowTarget computerGlow;
+    public TutorialArrowGuide navigationArrow;
+
+    // --- UPDATED: Added TabletPracticeFinished ---
     public enum TutorialStep
     {
-        Intro, LearnMovement, SetTrainingObjectAndMoney, BuildStageWall,
+        Intro, LearnMovement, SetTrainingObjectAndMoney,
+        BuildStageWall, ExplainDirectorTablet, PracticeDirectorTablet, TabletPracticeFinished,
         BuyLights, SetupLight, BuyCameraAndCard, InsertCardToCamera,
-        RecordVideo, InsertToComputer, PlayRecording, Complete,
-        OfferLevel1, Level1Accepted
+        RecordVideo, InsertToComputer, ExplainComputerEditor, PracticeComputerEditor,
+        Complete, OfferLevel1, Level1Accepted
     }
 
     public TutorialStep currentStep;
+
     private bool isTransitioning = false;
+    private bool isTaskPhaseActive = false;
+
     private int tutorialItemsBought = 0;
     private bool skippedTutorial = false;
 
-    private bool pressedW = false;
-    private bool pressedA = false;
-    private bool pressedS = false;
-    private bool pressedD = false;
-    private bool pressedSpace = false;
-    private bool pressedShift = false;
+    private bool isTaskUIExpanded = false;
+
+    // Task Tracking Variables
+    private bool moved = false, jumped = false, sprinted = false;
+    private bool tabletOpened = false, wallBuilt = false, wallColorChanged = false, propSpawned = false, propMoved = false, tabletClosed = false;
+    private bool computerAccessed = false, videoDragged = false, videoExported = false;
 
     private void Awake()
     {
@@ -52,14 +85,14 @@ public class TutorialManager : MonoBehaviour
     private void Start()
     {
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
+        if (taskPanel != null) taskPanel.SetActive(false);
         if (okButton != null) okButton.SetActive(false);
         if (skipButton != null) skipButton.SetActive(false);
+        if (newTaskNotification != null) newTaskNotification.SetActive(false);
 
-        // --- THE FIX: Hide and lock the cursor the exact second the scene loads! ---
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Ensure the player can actually look around the room during the 5-second wait
         Player.PlayerController.PlayerController player = FindObjectOfType<Player.PlayerController.PlayerController>();
         if (player != null) player.canLook = true;
 
@@ -68,44 +101,61 @@ public class TutorialManager : MonoBehaviour
 
     private void Update()
     {
-        if (currentStep == TutorialStep.LearnMovement && !isTransitioning)
+        if (Input.GetKeyDown(KeyCode.Tab) && taskPanel != null && taskPanel.activeSelf)
         {
-            if (Input.GetKeyDown(KeyCode.W)) pressedW = true;
-            if (Input.GetKeyDown(KeyCode.A)) pressedA = true;
-            if (Input.GetKeyDown(KeyCode.S)) pressedS = true;
-            if (Input.GetKeyDown(KeyCode.D)) pressedD = true;
-            if (Input.GetKeyDown(KeyCode.Space)) pressedSpace = true;
-            if (Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift)) pressedShift = true;
+            isTaskUIExpanded = !isTaskUIExpanded;
+            if (taskOpenView != null) taskOpenView.SetActive(isTaskUIExpanded);
+            if (taskClosedView != null) taskClosedView.SetActive(!isTaskUIExpanded);
 
-            if (pressedW && pressedA && pressedS && pressedD && pressedSpace && pressedShift)
+            if (isTaskUIExpanded && newTaskNotification != null) newTaskNotification.SetActive(false);
+        }
+
+        if (currentStep == TutorialStep.LearnMovement && isTaskPhaseActive)
+        {
+            if (!moved && (Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.S) || Input.GetKey(KeyCode.D)))
             {
-                OnMovementFinished();
+                moved = true;
+                if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            }
+            if (!jumped && Input.GetKeyDown(KeyCode.Space))
+            {
+                jumped = true;
+                if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+            }
+            if (!sprinted && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)))
+            {
+                sprinted = true;
+                if (taskListTexts.Length > 2) taskListTexts[2].color = completedColor;
+            }
+
+            if (moved && jumped && sprinted)
+            {
+                isTaskPhaseActive = false;
+                StartCoroutine(TransitionToNextStep(TutorialStep.SetTrainingObjectAndMoney, true));
             }
         }
     }
 
     private IEnumerator StartTutorialWithDelay()
     {
-        yield return new WaitForSeconds(5f);
-
-        if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
-        if (okButton != null) okButton.SetActive(true);
-        if (skipButton != null) skipButton.SetActive(true);
-
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-
-        Player.PlayerController.PlayerController player = FindObjectOfType<Player.PlayerController.PlayerController>();
-        if (player != null) player.canLook = false;
-
+        yield return new WaitForSeconds(3f);
         currentStep = TutorialStep.Intro;
         UpdateBossDialogue();
+    }
+
+    private IEnumerator ShowNewTaskNotification()
+    {
+        if (newTaskNotification != null)
+        {
+            newTaskNotification.SetActive(true);
+            yield return new WaitForSeconds(4f);
+            if (newTaskNotification != null) newTaskNotification.SetActive(false);
+        }
     }
 
     public void SkipTutorial()
     {
         if (skipButton != null) skipButton.SetActive(false);
-
         skippedTutorial = true;
 
         if (CareerManager.Instance != null)
@@ -123,7 +173,6 @@ public class TutorialManager : MonoBehaviour
         if (currentStep == TutorialStep.OfferLevel1)
         {
             if (CareerManager.Instance != null) CareerManager.Instance.AcceptJob("Crystal Blooms", 30000);
-
             currentStep = TutorialStep.Level1Accepted;
             UpdateBossDialogue();
             return;
@@ -132,260 +181,434 @@ public class TutorialManager : MonoBehaviour
         if (currentStep == TutorialStep.Level1Accepted)
         {
             if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
-
+            PointArrowAt("");
             CleanUpStudio();
 
-            if (level1FlowerPrefab != null && stageSpawnPoint != null)
+            if (taskPanel != null) taskPanel.SetActive(true);
+
+            isTaskUIExpanded = false;
+            if (taskOpenView != null) taskOpenView.SetActive(false);
+            if (taskClosedView != null) taskClosedView.SetActive(true);
+            StartCoroutine(ShowNewTaskNotification());
+
+            foreach (var t in taskListTexts) if (t != null) t.gameObject.SetActive(false);
+
+            SetupTaskText(0, "- Stage a nice backdrop");
+            SetupTaskText(1, "- Record a tabletop teaser of the vase");
+            SetupTaskText(2, "- Submit the video on the computer");
+
+            if (level1FlowerPrefab != null && stageSpawnPoint != null) Instantiate(level1FlowerPrefab, stageSpawnPoint.position, stageSpawnPoint.rotation);
+
+            if (skippedTutorial && deliveryZone != null)
             {
-                Instantiate(level1FlowerPrefab, stageSpawnPoint.position, stageSpawnPoint.rotation);
+                if (cameraPrefab != null) Instantiate(cameraPrefab, deliveryZone.position + new Vector3(0, 0.5f, 0), deliveryZone.rotation);
+                if (lightPrefab != null) Instantiate(lightPrefab, deliveryZone.position + new Vector3(0.5f, 0.5f, 0), deliveryZone.rotation);
+                if (sdCardPrefab != null) Instantiate(sdCardPrefab, deliveryZone.position + new Vector3(-0.5f, 0.5f, 0), deliveryZone.rotation);
             }
 
-            // ONLY spawn brand new gear if they skipped the tutorial!
-            if (skippedTutorial)
-            {
-                Transform dropSpot = deliveryZone != null ? deliveryZone : stageSpawnPoint;
-                if (dropSpot != null)
-                {
-                    if (cameraPrefab != null) Instantiate(cameraPrefab, dropSpot.position + new Vector3(0, 0.5f, 0), dropSpot.rotation);
-                    if (lightPrefab != null) Instantiate(lightPrefab, dropSpot.position + new Vector3(0.5f, 0.5f, 0), dropSpot.rotation);
-                    if (sdCardPrefab != null) Instantiate(sdCardPrefab, dropSpot.position + new Vector3(-0.5f, 0.5f, 0), dropSpot.rotation);
-                }
-            }
-
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
             Player.PlayerController.PlayerController playerAccept = FindObjectOfType<Player.PlayerController.PlayerController>();
             if (playerAccept != null) playerAccept.canLook = true;
             return;
         }
 
-        if (currentStep == TutorialStep.Intro)
-        {
-            if (okButton != null) okButton.SetActive(false);
-            if (skipButton != null) skipButton.SetActive(false);
-
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
-            Player.PlayerController.PlayerController player = FindObjectOfType<Player.PlayerController.PlayerController>();
-            if (player != null) player.canLook = true;
-
-            StartCoroutine(TransitionToNextStep(TutorialStep.LearnMovement));
-            return;
-        }
-
+        if (currentStep == TutorialStep.Intro) { StartCoroutine(TransitionToNextStep(TutorialStep.LearnMovement, false)); return; }
         if (currentStep == TutorialStep.SetTrainingObjectAndMoney)
         {
-            if (okButton != null) okButton.SetActive(false);
+            if (CareerManager.Instance != null) { CareerManager.Instance.playerMoney += 60000; CareerManager.Instance.UpdateMoneyUI(); }
+            if (practiceCubePrefab != null && stageSpawnPoint != null) Instantiate(practiceCubePrefab, stageSpawnPoint.position, stageSpawnPoint.rotation);
+            StartCoroutine(TransitionToNextStep(TutorialStep.BuildStageWall, false));
+            return;
+        }
+        if (currentStep == TutorialStep.ExplainDirectorTablet) { StartCoroutine(TransitionToNextStep(TutorialStep.PracticeDirectorTablet, false)); return; }
 
-            if (CareerManager.Instance != null)
-            {
-                CareerManager.Instance.playerMoney += 60000;
-                CareerManager.Instance.UpdateMoneyUI();
-            }
+        // --- NEW: Go to BuyLights when they finish clicking OK on the new dialogue ---
+        if (currentStep == TutorialStep.TabletPracticeFinished) { StartCoroutine(TransitionToNextStep(TutorialStep.BuyLights, false)); return; }
 
-            if (practiceCubePrefab != null && stageSpawnPoint != null)
-            {
-                Instantiate(practiceCubePrefab, stageSpawnPoint.position, stageSpawnPoint.rotation);
-            }
+        if (currentStep == TutorialStep.ExplainComputerEditor) { StartCoroutine(TransitionToNextStep(TutorialStep.PracticeComputerEditor, false)); return; }
+        if (currentStep == TutorialStep.Complete) { StartCoroutine(TransitionToNextStep(TutorialStep.OfferLevel1, false)); return; }
 
+        StartTaskPhase();
+    }
+
+    private void StartTaskPhase()
+    {
+        if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
+        if (taskPanel != null) taskPanel.SetActive(true);
+
+        isTaskUIExpanded = false;
+        if (taskOpenView != null) taskOpenView.SetActive(false);
+        if (taskClosedView != null) taskClosedView.SetActive(true);
+        StartCoroutine(ShowNewTaskNotification());
+
+        foreach (var t in taskListTexts) if (t != null) t.gameObject.SetActive(false);
+
+        Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
+
+        if (currentStep == TutorialStep.PracticeDirectorTablet || currentStep == TutorialStep.PracticeComputerEditor)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            if (p != null) p.canLook = false;
+        }
+        else
+        {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
-            Player.PlayerController.PlayerController player = FindObjectOfType<Player.PlayerController.PlayerController>();
-            if (player != null) player.canLook = true;
+            if (p != null) p.canLook = true;
+        }
 
-            StartCoroutine(TransitionToNextStep(TutorialStep.BuildStageWall));
+        isTaskPhaseActive = true;
+
+        switch (currentStep)
+        {
+            case TutorialStep.LearnMovement:
+                SetupTaskText(0, "- Use [W,A,S,D] to move");
+                SetupTaskText(1, "- Press [Space] to jump");
+                SetupTaskText(2, "- Hold [Shift] to sprint");
+                moved = false; jumped = false; sprinted = false;
+                break;
+            case TutorialStep.BuildStageWall:
+                SetupTaskText(0, "- Look at the Tablet and press [E]");
+                tabletOpened = false;
+                if (directorTerminalGlow != null) { directorTerminalGlow.StartGlowing(); PointArrowAt(directorTerminalGlow.gameObject.name); }
+                break;
+            case TutorialStep.PracticeDirectorTablet:
+                SetupTaskText(0, "- Click the 'Wall' button");
+                SetupTaskText(1, "- Use sliders to paint the wall");
+                SetupTaskText(2, "- Click 'Cube' to spawn a prop");
+                SetupTaskText(3, "- Press [T] to pick it up and move it");
+                SetupTaskText(4, "- Close the Editor Tablet");
+                wallBuilt = wallColorChanged = propSpawned = propMoved = tabletClosed = false;
+                break;
+            case TutorialStep.BuyLights:
+                SetupTaskText(0, "- Walk to Shop and press [E] to buy a Light");
+                if (shopTerminalGlow != null) { shopTerminalGlow.StartGlowing(); PointArrowAt(shopTerminalGlow.gameObject.name); }
+                break;
+            case TutorialStep.SetupLight:
+                SetupTaskText(0, "- Press [E] on the dropped Light to hold it");
+                SetupTaskText(1, "- Aim at the stage and press [F] to turn it on");
+                SetDynamicGlow("light", true); PointArrowAt("light");
+                break;
+            case TutorialStep.BuyCameraAndCard:
+                tutorialItemsBought = 0;
+                SetupTaskText(0, "- Buy a Film Camera and SD Card (0/2)");
+                if (shopTerminalGlow != null) { shopTerminalGlow.StartGlowing(); PointArrowAt(shopTerminalGlow.gameObject.name); }
+                break;
+            case TutorialStep.InsertCardToCamera:
+                SetupTaskText(0, "- Pick up both the Camera and SD Card");
+                SetupTaskText(1, "- Hold the Camera and press [C] to insert card");
+                SetDynamicGlow("camera", true); SetDynamicGlow("sd", true); PointArrowAt("camera");
+                break;
+            case TutorialStep.RecordVideo:
+                SetupTaskText(0, "- Press [F] to look through the lens");
+                SetupTaskText(1, "- Press [R] to record the cube, then stop");
+                SetDynamicGlow("camera", true); PointArrowAt("camera");
+                break;
+            case TutorialStep.InsertToComputer:
+                SetupTaskText(0, "- Press [E] on the card to pick it up");
+                SetupTaskText(1, "- Press [E] on the computer tower to insert it");
+                SetDynamicGlow("sd", true); if (computerGlow != null) computerGlow.StartGlowing(); PointArrowAt("computer");
+                break;
+            case TutorialStep.PracticeComputerEditor:
+                SetupTaskText(0, "- Press [E] on the Monitor to open Editor");
+                computerAccessed = videoDragged = videoExported = false;
+                if (computerGlow != null) computerGlow.StartGlowing(); PointArrowAt("computer");
+                break;
         }
     }
 
-    // --- UPDATED: The new Teleportation Janitor! ---
-    private void CleanUpStudio()
+    private void SetupTaskText(int index, string text)
     {
-        StageSetupManager stageManager = FindObjectOfType<StageSetupManager>();
-        if (stageManager != null) stageManager.ClearStage();
-
-        // 1. Force player to drop everything so we can teleport it safely
-        Player.Interactor.EquipmentInteractor inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
-        if (inventory != null) inventory.DropAllEquipment();
-
-        // 2. Destroy the Practice Cube (and any old flowers)
-        GameObject[] allObjects = FindObjectsOfType<GameObject>();
-        foreach (GameObject obj in allObjects)
+        if (index < taskListTexts.Length && taskListTexts[index] != null)
         {
-            if (obj.name.Contains("Cube") || obj.name.Contains("Flower"))
-            {
-                Destroy(obj);
-            }
-        }
-
-        // 3. Find all gear in the room and teleport the Camera/Light
-        Player.Equipment.Equipment[] allGear = FindObjectsOfType<Player.Equipment.Equipment>();
-        Transform dropSpot = deliveryZone != null ? deliveryZone : stageSpawnPoint;
-
-        foreach (Player.Equipment.Equipment gear in allGear)
-        {
-            // IGNORE THE SD CARD! (Leaves it safe inside the computer)
-            if (gear.GetComponent<Player.Equipment.SDCardItem>() != null) continue;
-
-            // Teleport Camera and Light back to the delivery table
-            if (dropSpot != null)
-            {
-                // Add a tiny random offset so they don't spawn perfectly inside each other
-                Vector3 randomOffset = new Vector3(Random.Range(-0.3f, 0.3f), 0.5f, Random.Range(-0.3f, 0.3f));
-                gear.transform.position = dropSpot.position + randomOffset;
-
-                // Reset physics so they don't bounce off the table
-                Rigidbody rb = gear.GetComponent<Rigidbody>();
-                if (rb != null)
-                {
-                    rb.velocity = Vector3.zero;
-                    rb.angularVelocity = Vector3.zero;
-                }
-            }
+            taskListTexts[index].text = text;
+            taskListTexts[index].color = pendingColor;
+            taskListTexts[index].gameObject.SetActive(true);
         }
     }
 
-    private IEnumerator TransitionToNextStep(TutorialStep nextStep)
+    private IEnumerator TransitionToNextStep(TutorialStep nextStep, bool didTaskJustComplete)
     {
         isTransitioning = true;
+        isTaskPhaseActive = false;
+        PointArrowAt("");
+
+        if (didTaskJustComplete) yield return new WaitForSeconds(1.5f);
 
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
-        yield return new WaitForSeconds(5f);
+        if (taskPanel != null) taskPanel.SetActive(false);
+
+        yield return new WaitForSeconds(1.0f);
 
         currentStep = nextStep;
-        if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
         UpdateBossDialogue();
-
         isTransitioning = false;
 
         if (currentStep == TutorialStep.Complete)
         {
-            yield return new WaitForSeconds(5f);
-            currentStep = TutorialStep.OfferLevel1;
-            UpdateBossDialogue();
+            yield return new WaitForSeconds(3f);
+            StartCoroutine(TransitionToNextStep(TutorialStep.OfferLevel1, false));
         }
     }
 
-    public void OnMovementFinished()
+    public void OnTabletOpened()
     {
-        if (currentStep == TutorialStep.LearnMovement && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.SetTrainingObjectAndMoney));
+        if (currentStep == TutorialStep.BuildStageWall && isTaskPhaseActive && !tabletOpened)
+        {
+            tabletOpened = true;
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            if (directorTerminalGlow != null) directorTerminalGlow.StopGlowing();
+            PointArrowAt("");
+            StartCoroutine(TransitionToNextStep(TutorialStep.ExplainDirectorTablet, true));
+        }
+    }
+
+    public void OnStageWallBuilt() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !wallBuilt) { wallBuilt = true; if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor; } }
+    public void OnWallColorChanged() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !wallColorChanged) { wallColorChanged = true; if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor; } }
+    public void OnPropSpawnedFromUI() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !propSpawned) { propSpawned = true; if (taskListTexts.Length > 2) taskListTexts[2].color = completedColor; } }
+    public void OnPropMovedWithT() { if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !propMoved) { propMoved = true; if (taskListTexts.Length > 3) taskListTexts[3].color = completedColor; } }
+
+    public void OnTabletClosed()
+    {
+        if (currentStep == TutorialStep.PracticeDirectorTablet && isTaskPhaseActive && !tabletClosed)
+        {
+            if (wallBuilt && wallColorChanged && propSpawned && propMoved)
+            {
+                tabletClosed = true;
+                if (taskListTexts.Length > 4) taskListTexts[4].color = completedColor;
+                // --- UPDATED: Transition to the new dialogue instead of the next task! ---
+                StartCoroutine(TransitionToNextStep(TutorialStep.TabletPracticeFinished, true));
+            }
+        }
     }
 
     public void OnEquipmentBought()
     {
-        if (currentStep == TutorialStep.BuyLights && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.SetupLight));
-        else if (currentStep == TutorialStep.BuyCameraAndCard && !isTransitioning)
+        if (currentStep == TutorialStep.BuyLights && isTaskPhaseActive)
+        {
+            if (shopTerminalGlow != null) shopTerminalGlow.StopGlowing();
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.SetupLight, true));
+        }
+        else if (currentStep == TutorialStep.BuyCameraAndCard && isTaskPhaseActive)
         {
             tutorialItemsBought++;
+            if (taskListTexts.Length > 0) taskListTexts[0].text = $"- Buy a Film Camera and SD Card ({tutorialItemsBought}/2)";
             if (tutorialItemsBought >= 2)
-                StartCoroutine(TransitionToNextStep(TutorialStep.InsertCardToCamera));
+            {
+                if (shopTerminalGlow != null) shopTerminalGlow.StopGlowing();
+                if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+                StartCoroutine(TransitionToNextStep(TutorialStep.InsertCardToCamera, true));
+            }
         }
-    }
-
-    public void OnStageWallBuilt()
-    {
-        if (currentStep == TutorialStep.BuildStageWall && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.BuyLights));
     }
 
     public void OnLightTurnedOn()
     {
-        if (currentStep == TutorialStep.SetupLight && !isTransitioning)
+        if (currentStep == TutorialStep.SetupLight && isTaskPhaseActive)
         {
-            tutorialItemsBought = 0;
-            StartCoroutine(TransitionToNextStep(TutorialStep.BuyCameraAndCard));
+            SetDynamicGlow("light", false);
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.BuyCameraAndCard, true));
         }
     }
 
     public void OnCardInsertedToCamera()
     {
-        if (currentStep == TutorialStep.InsertCardToCamera && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.RecordVideo));
+        if (currentStep == TutorialStep.InsertCardToCamera && isTaskPhaseActive)
+        {
+            SetDynamicGlow("sd", false);
+            SetDynamicGlow("camera", false);
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.RecordVideo, true));
+        }
     }
 
     public void OnRecordingFinished()
     {
-        if (currentStep == TutorialStep.RecordVideo && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.InsertToComputer));
+        if (currentStep == TutorialStep.RecordVideo && isTaskPhaseActive)
+        {
+            SetDynamicGlow("camera", false);
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.InsertToComputer, true));
+        }
     }
 
     public void OnCardInsertedToComputer()
     {
-        if (currentStep == TutorialStep.InsertToComputer && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.PlayRecording));
+        if (currentStep == TutorialStep.InsertToComputer && isTaskPhaseActive)
+        {
+            SetDynamicGlow("sd", false);
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor;
+            StartCoroutine(TransitionToNextStep(TutorialStep.ExplainComputerEditor, true));
+        }
     }
 
-    public void OnVideoPlayed()
+    public void OnComputerAccessed()
     {
-        if (currentStep == TutorialStep.PlayRecording && !isTransitioning)
-            StartCoroutine(TransitionToNextStep(TutorialStep.Complete));
+        if (currentStep == TutorialStep.PracticeComputerEditor && isTaskPhaseActive && !computerAccessed)
+        {
+            computerAccessed = true;
+            if (taskListTexts.Length > 0) taskListTexts[0].color = completedColor;
+            if (computerGlow != null) computerGlow.StopGlowing();
+            PointArrowAt("");
+            SetupTaskText(1, "- Drag your video clip to the Timeline");
+            SetupTaskText(2, "- Click the 'Export' button");
+        }
+    }
+
+    public void OnVideoDraggedToTimeline() { if (currentStep == TutorialStep.PracticeComputerEditor && isTaskPhaseActive && !videoDragged) { videoDragged = true; if (taskListTexts.Length > 1) taskListTexts[1].color = completedColor; CheckEditorTasksComplete(); } }
+    public void OnVideoExported() { if (currentStep == TutorialStep.PracticeComputerEditor && isTaskPhaseActive && !videoExported) { videoExported = true; if (taskListTexts.Length > 2) taskListTexts[2].color = completedColor; CheckEditorTasksComplete(); } }
+
+    private void CheckEditorTasksComplete()
+    {
+        if (computerAccessed && videoDragged && videoExported) StartCoroutine(TransitionToNextStep(TutorialStep.Complete, true));
+    }
+
+    private void SetBossPose(Sprite newPose)
+    {
+        if (bossPortraitDisplay != null && newPose != null)
+        {
+            bossPortraitDisplay.sprite = newPose;
+        }
     }
 
     private void UpdateBossDialogue()
     {
         if (bossText == null) return;
 
+        if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
+        if (taskPanel != null) taskPanel.SetActive(false);
+        if (okButton != null) okButton.SetActive(currentStep != TutorialStep.Complete);
+        if (skipButton != null) skipButton.SetActive(currentStep == TutorialStep.Intro);
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+        Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
+        if (p != null) p.canLook = false;
+
         switch (currentStep)
         {
             case TutorialStep.Intro:
-                bossText.text = "Welcome to the studio! Let's get you trained up before we take on real clients.";
-                if (okButton != null) okButton.SetActive(true);
-                if (skipButton != null) skipButton.SetActive(true);
+                bossText.text = "Welcome to the studio! I am going to teach you exactly how everything works from scratch. First, let's make sure you can walk.";
+                SetBossPose(poseHappy);
                 break;
             case TutorialStep.LearnMovement:
-                bossText.text = "Use [W, A, S, D] to move, [Space] to jump, and hold [Shift] to sprint. Try them all out!";
+                bossText.text = "Use the [W, A, S, D] keys on your keyboard to walk around. You can jump with [Space] and hold [Shift] to run.";
+                SetBossPose(posePoint);
                 break;
             case TutorialStep.SetTrainingObjectAndMoney:
-                bossText.text = "Great. I've set up a practice cube on the stage, and I just wired 60,000 B coins to your account to buy some starter gear.";
-                if (okButton != null) okButton.SetActive(true);
-
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
-                if (p != null) p.canLook = false;
+                bossText.text = "Perfect. I've placed a practice cube on the empty stage, and wired 60,000 B coins to your account to buy tools.";
+                SetBossPose(poseSmile);
                 break;
             case TutorialStep.BuildStageWall:
-                bossText.text = "Head over to the Editor Tablet. Press [E] to use it, and add a wall to the stage to give us a nice backdrop.";
+                bossText.text = "Follow the arrow to the Editor Tablet. I've added your objectives to your Task List. You can press [Tab] anytime to view them! Press [E] on the tablet to turn it on.";
+                SetBossPose(poseOpenHand);
+                if (directorTerminalGlow != null) { directorTerminalGlow.StartGlowing(); PointArrowAt(directorTerminalGlow.gameObject.name); }
                 break;
+            case TutorialStep.ExplainDirectorTablet:
+                bossText.text = "This tablet controls the physical stage. You click the white UI buttons to spawn walls and props. You can click any object to paint it using the sliders, or press [T] to pick it up.";
+                SetBossPose(posePointUp);
+                break;
+            case TutorialStep.PracticeDirectorTablet:
+                bossText.text = "Give it a try. Click the button to add a wall, paint it a new color, click to spawn a prop, and press [T] to move the prop somewhere else.";
+                SetBossPose(poseBoss);
+                break;
+
+            // --- NEW DIALOGUE ---
+            case TutorialStep.TabletPracticeFinished:
+                bossText.text = "Great job! Take your time to play around and set up the stage however you like. When you are ready, we will move on to lighting.";
+                SetBossPose(poseChill);
+                break;
+
             case TutorialStep.BuyLights:
-                bossText.text = "Now, press [E] on the Shop Terminal and buy a Stage Light. It will drop into the delivery zone.";
+                bossText.text = "Now we need lighting. Follow the arrow to the Shop Terminal, press [E], and buy a Stage Light. It will spawn on the table.";
+                SetBossPose(posePoint);
                 break;
             case TutorialStep.SetupLight:
-                bossText.text = "Press [E] to pick up that Stage Light, aim it at the stage, and press [F] to turn it on.";
+                bossText.text = "Walk up to the Stage Light and press [E] to pick it up. Face the stage, and press [F] to turn the bulb on.";
+                SetBossPose(poseOpenHand);
                 break;
             case TutorialStep.BuyCameraAndCard:
-                bossText.text = "Looking good! Go back to the Shop Terminal and press [E] to buy a Film Camera and an SD Card.";
+                bossText.text = "We can't film without a camera. Go back to the Shop Terminal and buy a Film Camera and an SD Card.";
+                SetBossPose(poseChill);
                 break;
             case TutorialStep.InsertCardToCamera:
-                bossText.text = "Press [E] to pick up your new camera and the SD card. Press [C] to load the memory card into the camera.";
+                bossText.text = "Press [E] to pick up the Camera, and [E] to pick up the SD card. With the camera in your hand, press [C] to insert the memory card.";
+                SetBossPose(poseBoss);
                 break;
             case TutorialStep.RecordVideo:
-                bossText.text = "Press [F] to look through the camera, then hit [R] to record a quick shot of the cube. Eject the card when you're happy with the take.";
+                bossText.text = "Press [F] to look through the camera lens. Aim at the practice cube and press [R] to record. Press [R] again to stop.";
+                SetBossPose(posePointUp);
                 break;
             case TutorialStep.InsertToComputer:
-                bossText.text = "Pick up the SD card with [E], bring it over to the Computer tower, and press [E] to insert it.";
+                bossText.text = "Great take! Press [E] on the card to take it out. Walk over to the Computer tower and press [E] to push the card in.";
+                SetBossPose(poseHappy);
                 break;
-            case TutorialStep.PlayRecording:
-                bossText.text = "Finally, press [E] on the computer screen and hit Play to review the footage!";
+            case TutorialStep.ExplainComputerEditor:
+                bossText.text = "Now for post-production. The computer screen is your editing bay. Your raw video clips will appear at the top, and your final timeline is at the bottom.";
+                SetBossPose(poseOpenHand);
+                break;
+            case TutorialStep.PracticeComputerEditor:
+                bossText.text = "Press [E] on the monitor. Click and drag your video clip down into the timeline strip. When it's in place, click 'Export' to finalize the video!";
+                SetBossPose(posePoint);
                 break;
             case TutorialStep.Complete:
-                bossText.text = "Fantastic work! You've got a really great eye for this. Tutorial Complete!";
+                bossText.text = "Video successfully rendered! You just completed the entire studio pipeline. Great job!";
+                SetBossPose(poseEndWave);
                 if (okButton != null) okButton.SetActive(false);
                 break;
             case TutorialStep.OfferLevel1:
-                bossText.text = "Alright, training is over. Flora & Form Home just offered us 60,000 B coins for a 20-second tabletop teaser of their new artisan vase. You want the job?";
-                if (okButton != null) okButton.SetActive(true);
-                if (skipButton != null) skipButton.SetActive(false);
-
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-                Player.PlayerController.PlayerController playerOffer = FindObjectOfType<Player.PlayerController.PlayerController>();
-                if (playerOffer != null) playerOffer.canLook = false;
+                bossText.text = "Flora & Form Home just offered us 60,000 B coins for a 20-second tabletop teaser of their new artisan vase. Do you want the job?";
+                SetBossPose(posePointUp);
                 break;
             case TutorialStep.Level1Accepted:
-                bossText.text = "Excellent! I've wired your 30,000 B coins upfront payment. I have spawned the vase on the stage for you. Time to get to work!";
+                bossText.text = "I've wired your 30,000 B coins upfront payment. The vase is on the stage. Use the Tablet, Setup your Lights, Record, Edit, and Export to finish the job!";
+                SetBossPose(poseHappy);
                 break;
+        }
+    }
+
+    private void SetDynamicGlow(string keyword, bool state)
+    {
+        TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>();
+        foreach (var g in glows) if (g.gameObject.name.ToLower().Contains(keyword.ToLower())) { if (state) g.StartGlowing(); else g.StopGlowing(); }
+    }
+
+    private void PointArrowAt(string keyword)
+    {
+        if (navigationArrow == null) return;
+        if (string.IsNullOrEmpty(keyword)) { navigationArrow.PointAt(null); return; }
+
+        TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>();
+        foreach (var g in glows) if (g.gameObject.name.ToLower().Contains(keyword.ToLower())) { navigationArrow.PointAt(g.transform); return; }
+    }
+
+    private void CleanUpStudio()
+    {
+        StageSetupManager stageManager = FindObjectOfType<StageSetupManager>();
+        if (stageManager != null) stageManager.ClearStage();
+
+        Player.Interactor.EquipmentInteractor inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
+        if (inventory != null) inventory.DropAllEquipment();
+
+        foreach (GameObject obj in FindObjectsOfType<GameObject>()) if (obj.name.Contains("Cube") || obj.name.Contains("Flower")) Destroy(obj);
+
+        Transform dropSpot = deliveryZone != null ? deliveryZone : stageSpawnPoint;
+        foreach (Player.Equipment.Equipment gear in FindObjectsOfType<Player.Equipment.Equipment>())
+        {
+            if (gear.GetComponent<Player.Equipment.SDCardItem>() != null) continue;
+            if (dropSpot != null)
+            {
+                gear.transform.position = dropSpot.position + new Vector3(Random.Range(-0.3f, 0.3f), 0.5f, Random.Range(-0.3f, 0.3f));
+                Rigidbody rb = gear.GetComponent<Rigidbody>();
+                if (rb != null) { rb.velocity = Vector3.zero; rb.angularVelocity = Vector3.zero; }
+            }
         }
     }
 }

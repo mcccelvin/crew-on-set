@@ -116,6 +116,7 @@ GameObject:
   - component: {fileID: 1723706501273757322}
   - component: {fileID: 977006273252880841}
   - component: {fileID: 6504999577682417127}
+  - component: {fileID: 3064558125056773549}
   m_Layer: 0
   m_Name: SDCard
   m_TagString: Untagged
@@ -180,6 +181,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   EquipmentName: SD Card
   EquipmentIcon: {fileID: 21300000, guid: 5a8dfbeb2aca02b43a11297f561975aa, type: 3}
+  EquipmentControls: '[LMB] Use  |  [G] Drop'
   HoldPositionOffset: {x: -0.12, y: 0.2, z: 0.2}
   HoldRotationOffset: {x: 0, y: 180, z: 90}
   isUsedCard: 0
@@ -189,3 +191,18 @@ MonoBehaviour:
   cameraScore: 0
   lightScore: 0
   usedCardIcon: {fileID: 21300000, guid: 22378470b620f3842b72de079d55975b, type: 3}
+--- !u!114 &3064558125056773549
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5512013885041339088}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  glowColor: {r: 0, g: 1, b: 0, a: 1}
+  pulseSpeed: 2
+  maxIntensity: 1.5

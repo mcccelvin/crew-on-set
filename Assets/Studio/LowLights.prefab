@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 559313240126724631}
   - component: {fileID: 9206397063113424765}
   - component: {fileID: 8028859779231956790}
+  - component: {fileID: 3474539663986352980}
   m_Layer: 0
   m_Name: LowLights
   m_TagString: Untagged
@@ -87,6 +88,23 @@ MonoBehaviour:
   isFixedKelvin: 1
   fixedColorTemperature: 5600
   forcesHardLight: 1
+--- !u!114 &3474539663986352980
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2422303196290211474}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  glowColor: {r: 0, g: 1, b: 0, a: 1}
+  pulseSpeed: 2
+  maxIntensity: 1.5
+  extraPartsToGlow:
+  - {fileID: 5987594894065343943}
 --- !u!1 &2889279943163930913
 GameObject:
   m_ObjectHideFlags: 0

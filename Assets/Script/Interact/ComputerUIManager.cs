@@ -53,7 +53,6 @@ public class ComputerUIManager : MonoBehaviour
 
         if (playerTitleText != null) playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
         if (pixelPlayer != null) pixelPlayer.PlayTape(filePath);
-        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
     }
 
     public void DeleteClip(string filePath)

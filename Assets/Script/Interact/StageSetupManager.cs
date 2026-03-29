@@ -8,19 +8,18 @@ public class StageSetupManager : MonoBehaviour
 
     [Header("UI Elements")]
     public GameObject spawnWallButton;
-    public GameObject colorButtonsContainer;
+    public GameObject colorControlPanel; // Rename your container to this
 
     [Header("Tracking")]
     private GameObject currentWall;
 
-    // --- NEW: Variables for the Grader to read! ---
-    public Color currentWallColor = Color.clear;
+    public Color currentWallColor = Color.white;
     public bool HasWall() { return currentWall != null; }
 
     private void Start()
     {
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
-        if (colorButtonsContainer != null) colorButtonsContainer.SetActive(false);
+        if (colorControlPanel != null) colorControlPanel.SetActive(false);
     }
 
     public void SpawnWall()
@@ -30,41 +29,28 @@ public class StageSetupManager : MonoBehaviour
             currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
 
             if (spawnWallButton != null) spawnWallButton.SetActive(false);
-            if (colorButtonsContainer != null) colorButtonsContainer.SetActive(true);
+            if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
-            // Default wall color is usually white when spawned
             currentWallColor = Color.white;
-
-            Debug.Log("Terminal: Spawned the single wall!");
             if (TutorialManager.Instance != null) TutorialManager.Instance.OnStageWallBuilt();
         }
     }
 
-    public void ColorWallRed() { SetWallColor(Color.red); }
-    public void ColorWallBlue() { SetWallColor(Color.blue); }
-    public void ColorWallWhite() { SetWallColor(Color.white); }
-    public void ColorWallBlack() { SetWallColor(Color.black); }
+    // --- NEW: Function for the Sliders to call ---
+    public void SetCustomColor(float r, float g, float b)
+    {
+        currentWallColor = new Color(r, g, b, 1f);
+        ApplyColorToWall(currentWallColor);
+    }
 
-    private void SetWallColor(Color newColor)
+    private void ApplyColorToWall(Color newColor)
     {
         if (currentWall != null)
         {
             MeshRenderer[] renderers = currentWall.GetComponentsInChildren<MeshRenderer>();
-
-            if (renderers.Length > 0)
+            foreach (MeshRenderer renderer in renderers)
             {
-                foreach (MeshRenderer renderer in renderers)
-                {
-                    renderer.material.color = newColor;
-                }
-
-                // --- NEW: Save the color to memory! ---
-                currentWallColor = newColor;
-                Debug.Log("Terminal: Successfully changed ALL wall pieces to " + newColor.ToString());
-            }
-            else
-            {
-                Debug.LogWarning("Terminal Error: No MeshRenderers found on the Wall Prefab!");
+                renderer.material.color = newColor;
             }
         }
     }
@@ -77,10 +63,8 @@ public class StageSetupManager : MonoBehaviour
             currentWall = null;
         }
 
-        // --- NEW: Wipe the memory so they fail if the wall is gone! ---
         currentWallColor = Color.clear;
-
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
-        if (colorButtonsContainer != null) colorButtonsContainer.SetActive(false);
+        if (colorControlPanel != null) colorControlPanel.SetActive(false);
     }
 }

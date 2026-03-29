@@ -268,6 +268,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 276cda4d73583f94282d96ffafa0343f, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1093651466460798103}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 276cda4d73583f94282d96ffafa0343f, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 8086991710334899266}
   m_SourcePrefab: {fileID: 100100000, guid: 276cda4d73583f94282d96ffafa0343f, type: 3}
 --- !u!1 &5028973457159641910 stripped
 GameObject:
@@ -358,6 +361,21 @@ MonoBehaviour:
   focusSmoothTime: 0.3
   swayIntensity: 0.5
   swaySpeed: 0.5
+--- !u!114 &8086991710334899266
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5028973457159641910}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  glowColor: {r: 0, g: 1, b: 0, a: 1}
+  pulseSpeed: 2
+  maxIntensity: 1.5
 --- !u!4 &5656890681305465228 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 276cda4d73583f94282d96ffafa0343f, type: 3}
