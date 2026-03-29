@@ -24,7 +24,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     private void Start() { if (computerUICanvas != null) computerUICanvas.SetActive(false); }
 
-    // --- UPDATED: E Key now only handles opening the UI ---
     public void OnInteract(GameObject player)
     {
         EquipmentInteractor hotbar = player.GetComponent<EquipmentInteractor>();
@@ -33,7 +32,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
         OpenComputerUI(hotbar);
     }
 
-    // --- NEW: This is called by EquipmentInteractor when you press F (Equip) ---
     public void TryInsertCard(EquipmentInteractor hotbar)
     {
         Equipment heldItem = hotbar.GetHeldItem();
@@ -41,20 +39,23 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (heldItem != null)
         {
             SDCardItem card = heldItem.GetComponent<SDCardItem>();
-            // Check if it's a used .tape file
-            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName))
+            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName) && card.recordedFileName.EndsWith(".tape"))
             {
                 insertedFiles.Add(card.recordedFileName);
+
                 hotbar.DestroyHeldItem();
                 UpdateUI();
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToComputer();
 
                 Debug.Log($"Inserted {card.recordedFileName} into computer via F key.");
-                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToComputer();
+            }
+            else
+            {
+                Debug.LogWarning("This SD card is either empty or not a valid tape!");
             }
         }
         else
         {
-            // If hand is empty and we press F, just open the UI as a shortcut
             OpenComputerUI(hotbar);
         }
     }
@@ -66,6 +67,9 @@ public class ComputerStation : MonoBehaviour, IInteractable
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         UpdateUI();
+
+        // --- NEW TUTORIAL PING ---
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnComputerAccessed();
     }
 
     public void CloseComputerUI()
@@ -132,30 +136,6 @@ public class ComputerStation : MonoBehaviour, IInteractable
                 PlaySelectedClip();
             }
         }
-    }
-
-    public void SendToEditorScene()
-    {
-        if (insertedFiles.Count == 0) return;
-
-        if (ProjectDataManager.Instance != null)
-        {
-            ProjectDataManager.Instance.ClearProject();
-
-            foreach (string file in insertedFiles)
-            {
-                FootageData data = new FootageData();
-                data.fileName = file;
-
-                data.camScore = 70f;
-                data.lightScore = 30f;
-
-                ProjectDataManager.Instance.compiledFootage.Add(data);
-            }
-        }
-
-        CloseComputerUI();
-        UnityEngine.SceneManagement.SceneManager.LoadScene("Editor");
     }
 
     public void EjectAllCards()
