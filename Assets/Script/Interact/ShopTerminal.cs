@@ -20,14 +20,15 @@ public class ShopTerminal : MonoBehaviour
 
     [Header("UI Elements & Focus")]
     public Canvas shopCanvas;
-    public GameObject firstButtonToFocus;
     public TextMeshProUGUI totalCostText;
+
+    [Header("Camera Sold Out UI")]
+    public UnityEngine.UI.Button cameraCartButton;
+    public TextMeshProUGUI cameraCartText;
+    private bool cameraSoldOut = false;
 
     [Header("Spawning")]
     public Transform deliveryZone;
-
-    private PlayerController playerController;
-    private bool isTerminalActive = false;
 
     // Cart Tracking
     private List<ShopItem> shoppingCart = new List<ShopItem>();
@@ -38,38 +39,44 @@ public class ShopTerminal : MonoBehaviour
         UpdateTotalUI();
     }
 
-    private void Update()
+    public void MarkCameraSoldOut()
     {
-        if (isTerminalActive && Input.GetKeyDown(KeyCode.Escape)) CancelPurchase();
+        cameraSoldOut = true;
+        if (cameraCartButton != null) cameraCartButton.interactable = false;
+        if (cameraCartText != null) cameraCartText.text = "SOLD OUT";
     }
-
-    // --- BUTTON LINKS ---
 
     public void AddItemToCartByIndex(int itemIndex)
     {
+        if (itemIndex == 0 && cameraSoldOut) return;
+
         if (itemIndex >= 0 && itemIndex < availableItems.Count)
         {
-            // Ask the Tutorial Boss for permission before adding!
-            if (TutorialManager.Instance != null && !TutorialManager.Instance.CanBuyItem(itemIndex))
+            if (TutorialManager.Instance != null && !TutorialManager.Instance.CanBuyItem(itemIndex)) return;
+
+            // --- Restrict cart to exactly 1 item during the "Buy Light" tutorial task! ---
+            if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyLights)
             {
-                return;
+                if (shoppingCart.Count >= 1)
+                {
+                    TutorialManager.Instance.ShowWarning("You only need one light! Click Confirm.");
+                    return;
+                }
             }
+            // -----------------------------------------------------------------------------
 
             ShopItem itemToAdd = availableItems[itemIndex];
 
-            // --- THE NEW FIX: Check if the cart ALREADY has this exact item! ---
-            if (shoppingCart.Contains(itemToAdd))
+            if (itemIndex == 0 && shoppingCart.Contains(itemToAdd))
             {
-                Debug.LogWarning("You already added " + itemToAdd.itemName + " to your cart!");
-                return; // Stop the code here so it doesn't add a duplicate!
+                Debug.LogWarning("You can only buy ONE camera!");
+                return;
             }
 
-            // If it's not in the cart yet, add it safely
             shoppingCart.Add(itemToAdd);
             currentTotalCost += itemToAdd.price;
 
             UpdateTotalUI();
-            Debug.Log($"Added {itemToAdd.itemName}. Total: {currentTotalCost}");
         }
     }
 
@@ -87,7 +94,7 @@ public class ShopTerminal : MonoBehaviour
             }
             else
             {
-                Debug.LogWarning("Not enough money!");
+                if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough B coins!");
             }
         }
         else
@@ -101,27 +108,34 @@ public class ShopTerminal : MonoBehaviour
         shoppingCart.Clear();
         currentTotalCost = 0;
         UpdateTotalUI();
-        CloseTerminal();
     }
 
-    // --- HELPER METHODS ---
     private void SpawnItemsAndFinish()
     {
+        bool boughtCameraThisTrip = false;
+
         foreach (ShopItem item in shoppingCart)
         {
+            if (item == availableItems[0]) boughtCameraThisTrip = true;
+
             if (item.prefabToSpawn != null && deliveryZone != null)
             {
                 Vector3 randomOffset = new Vector3(Random.Range(-0.2f, 0.2f), 0.5f, Random.Range(-0.2f, 0.2f));
                 Instantiate(item.prefabToSpawn, deliveryZone.position + randomOffset, deliveryZone.rotation);
-
-                if (TutorialManager.Instance != null) TutorialManager.Instance.OnEquipmentBought();
             }
+        }
+
+        if (boughtCameraThisTrip) MarkCameraSoldOut();
+
+        if (shoppingCart.Count > 0 && TutorialManager.Instance != null)
+        {
+            // --- Send the EXACT number of items in the cart to the Boss! ---
+            TutorialManager.Instance.OnEquipmentBought(shoppingCart.Count);
         }
 
         shoppingCart.Clear();
         currentTotalCost = 0;
         UpdateTotalUI();
-        CloseTerminal();
     }
 
     private void UpdateTotalUI()
@@ -132,39 +146,7 @@ public class ShopTerminal : MonoBehaviour
         }
     }
 
-    // --- TERMINAL CONTROLS ---
-    public void OpenTerminal(GameObject pCam, PlayerController pController)
-    {
-        isTerminalActive = true;
-        playerController = pController;
-        if (playerController != null) playerController.enabled = false;
-
-        shoppingCart.Clear();
-        currentTotalCost = 0;
-        UpdateTotalUI();
-
-        if (shopCanvas != null && pCam != null)
-        {
-            shopCanvas.worldCamera = pCam.GetComponent<Camera>();
-        }
-
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
-
-        if (firstButtonToFocus != null)
-        {
-            EventSystem.current.SetSelectedGameObject(null);
-            EventSystem.current.SetSelectedGameObject(firstButtonToFocus);
-        }
-    }
-
-    public void CloseTerminal()
-    {
-        isTerminalActive = false;
-        if (playerController != null) playerController.enabled = true;
-
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
-        EventSystem.current.SetSelectedGameObject(null);
-    }
+    // --- LEFT BLANK TO PREVENT ERRORS FOR CROSSHAIR CLICKER ---
+    public void OpenTerminal(GameObject pCam, PlayerController pController) { }
+    public void CloseTerminal() { }
 }

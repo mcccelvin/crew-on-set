@@ -129,13 +129,11 @@ namespace Player.Equipment
 
         public override void OnUse(Camera playerCamera)
         {
-            // --- UPDATED: Show guide text if user tries to use camera without SD card ---
             if (!isCameraActive && !isSDCardInserted)
             {
                 HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>();
                 if (hotbar != null)
                 {
-                    // This will flash the warning where the equipment controls usually are
                     hotbar.UpdateGuideText("<color=red>INSERT SD CARD FIRST (Press C)</color>");
                 }
                 Debug.LogWarning("Cannot look through camera. Insert an SD Card first!");
@@ -144,8 +142,6 @@ namespace Player.Equipment
 
             isCameraActive = !isCameraActive;
 
-            // --- THE NEW TUTORIAL PING ---
-            // Tells the Boss we successfully opened the camera view!
             if (isCameraActive && TutorialManager.Instance != null)
             {
                 TutorialManager.Instance.OnCameraViewEntered();
@@ -269,12 +265,10 @@ namespace Player.Equipment
                     }
                 }
 
-                // --- THE NEW TUTORIAL PING ---
                 if (isLookingAtTarget)
                 {
                     targetStatusText.text = "<color=green>[ SUBJECT DETECTED ]</color>";
 
-                    // Tells the Boss we successfully framed the subject
                     if (TutorialManager.Instance != null) TutorialManager.Instance.OnSubjectFramed();
                 }
                 else
@@ -352,6 +346,19 @@ namespace Player.Equipment
 
         private void ToggleRecording()
         {
+            // --- TUTORIAL 10-SECOND LOCK ---
+            // Blocks the player from stopping the recording early during the tutorial step.
+            if (isRecording && TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo)
+            {
+                float currentDuration = Time.time - recordingStartTime;
+                if (currentDuration < 10f)
+                {
+                    TutorialManager.Instance.ShowWarning($"Keep recording! We need at least 10 seconds. You only have {currentDuration:F1}s.");
+                    return; // Stop the function here so the camera keeps rolling!
+                }
+            }
+            // -------------------------------
+
             isRecording = !isRecording;
             string generatedFileName = "";
             float finalDuration = 0f;
@@ -387,7 +394,6 @@ namespace Player.Equipment
             }
             if (!isRecording) EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
 
-            // --- THE ORIGINAL RECORDING PING ---
             if (TutorialManager.Instance != null && !isRecording) TutorialManager.Instance.OnRecordingFinished();
         }
 

@@ -127,6 +127,9 @@ public class EditorManager : MonoBehaviour
     {
         if (currentPhase < 2) currentPhase++;
         UpdatePhaseUI();
+
+        // --- NEW TUTORIAL PING ---
+        if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnPhaseChanged(currentPhase);
     }
 
     public void GoToPreviousPhase()
@@ -151,6 +154,9 @@ public class EditorManager : MonoBehaviour
 
     public void ExportCommercial()
     {
+        // --- NEW TUTORIAL PING ---
+        if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnExportClicked();
+
         float totalCam = 0, totalLight = 0, totalSeconds = 0;
         DraggableClip[] clips = timelineContainer.GetComponentsInChildren<DraggableClip>();
 
@@ -161,7 +167,6 @@ public class EditorManager : MonoBehaviour
             totalSeconds += (clip.endFrame - clip.startFrame) / 24f;
         }
 
-        // --- NEW FIX: Average the scores instead of adding them up! ---
         if (clips.Length > 0)
         {
             totalCam /= clips.Length;
@@ -242,9 +247,19 @@ public class EditorManager : MonoBehaviour
             grader.GenerateFinalReport(cam, light, sec);
         }
     }
-
     public void ReturnToStudio()
     {
-        SceneManager.LoadScene("Studio");
+        // --- FOOLPROOF SAVE ---
+        // If the player's progress is 0, they MUST have just finished the Editor Tutorial.
+        // We force it to 1 so the Studio Boss is guaranteed to wake up!
+        if (PlayerPrefs.GetInt("TutorialProgress", 0) == 0)
+        {
+            PlayerPrefs.SetInt("TutorialProgress", 1);
+            PlayerPrefs.Save();
+            Debug.Log("Saved Tutorial Progress as 1! Studio Boss will now load.");
+        }
+
+        // Load the Studio
+        UnityEngine.SceneManagement.SceneManager.LoadScene("Studio");
     }
 }

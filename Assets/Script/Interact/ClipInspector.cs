@@ -26,7 +26,7 @@ public class ClipInspector : MonoBehaviour
     private void Awake()
     {
         Instance = this;
-        gameObject.SetActive(false); // Hide the window when the scene starts!
+        gameObject.SetActive(false);
     }
 
     public void OpenInspector(DraggableClip clip)
@@ -70,7 +70,6 @@ public class ClipInspector : MonoBehaviour
         float leftPct = (float)currentClip.startFrame / (totalRawFrames - 1);
         float rightPct = (float)currentClip.endFrame / (totalRawFrames - 1);
 
-        // BULLETPROOF ANCHORS: Force them to the left side so they never fly away!
         leftHandle.anchorMin = new Vector2(0, 0.5f);
         leftHandle.anchorMax = new Vector2(0, 0.5f);
         rightHandle.anchorMin = new Vector2(0, 0.5f);
@@ -87,7 +86,6 @@ public class ClipInspector : MonoBehaviour
         Vector2 localPos;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(trimTrack, eventData.position, eventData.pressEventCamera, out localPos);
 
-        // BULLETPROOF PIVOT MATH: This works perfectly no matter what your Pivot is set to!
         float adjustedX = localPos.x + (trimTrack.pivot.x * trimTrack.rect.width);
         float pct = Mathf.Clamp01(adjustedX / trimTrack.rect.width);
         int frame = Mathf.RoundToInt(pct * (totalRawFrames - 1));
@@ -106,6 +104,13 @@ public class ClipInspector : MonoBehaviour
         UpdateHandlePositions();
         ShowFrame(frame);
         UpdateClipUI();
+
+        // --- UPDATED HYPER-SPECIFIC PING ---
+        if (EditorTutorialManager.Instance != null)
+        {
+            if (isLeft) EditorTutorialManager.Instance.OnLeftHandleTrimmed();
+            else EditorTutorialManager.Instance.OnRightHandleTrimmed();
+        }
     }
 
     private void ShowFrame(int frameIndex)
@@ -114,13 +119,18 @@ public class ClipInspector : MonoBehaviour
         {
             int safeIndex = Mathf.Clamp(frameIndex, 0, preloadedFrames.Count - 1);
             previewScreen.texture = preloadedFrames[safeIndex];
-            if (frameDataText != null) frameDataText.text = $"Frame: {safeIndex} / {totalRawFrames - 1}";
+
+            // --- NEW: Calculate and display the exact Trimmed Duration in seconds! ---
+            if (currentClip != null && frameDataText != null)
+            {
+                float duration = (currentClip.endFrame - currentClip.startFrame) / 24f; // Assuming 24 FPS
+                frameDataText.text = $"Trimmed Duration: {duration:F1} Sec";
+            }
         }
     }
 
     private void UpdateClipUI()
     {
-        // Actually shrink the clip down in the main timeline!
         float duration = (currentClip.endFrame - currentClip.startFrame) / 24f;
         LayoutElement layout = currentClip.GetComponent<LayoutElement>();
         if (layout != null) layout.preferredWidth = Mathf.Max(duration * pixelsPerSecond, 60f);

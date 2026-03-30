@@ -14,5 +14,8 @@ public class TimelineDropZone : MonoBehaviour, IDropHandler
                 droppedClip.originalParent = this.transform;
             }
         }
+
+        // --- NEW TUTORIAL PING ---
+        if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnVideoDropped();
     }
 }

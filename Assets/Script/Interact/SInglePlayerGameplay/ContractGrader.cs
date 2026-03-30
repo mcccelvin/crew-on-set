@@ -3,115 +3,109 @@ using TMPro;
 
 public class ContractGrader : MonoBehaviour
 {
-    [Header("Client Feedback UI")]
-    public TextMeshProUGUI clientFeedbackText;
-    public ColorGradingManager gradingManager;
-    public ContractGrader grader;
+    [Header("UI References")]
+    public TextMeshProUGUI gradeText;
+    public TextMeshProUGUI feedbackText;
+    public TextMeshProUGUI payoutText;
 
-    public void FinalizeUltimateContract(int basePayment, float camScore, float lightScore, float seconds, bool hasBackground, Color wallColor, float b, float c, float s)
+    [Header("Level 1 Requirements")]
+    public float targetDuration = 10f;
+    public int requiredBrandingCount = 1; // --- UPDATED: Only 1 for Level 1 ---
+
+    public void GenerateFinalReport(float avgCam, float avgLight, float totalSeconds)
     {
-        float colorScore = CalculateColorScore(b, c, s);
+        int score = 100;
+        string feedback = "Client Feedback:\n\n";
 
-        float secondsScore = 100f - (Mathf.Abs(seconds - 20f) * 5f);
-        secondsScore = Mathf.Clamp(secondsScore, 0, 100);
-
-        float bgScore = 0f;
-        if (hasBackground)
+        // 1. Check Duration (10 Seconds)
+        if (Mathf.Abs(totalSeconds - targetDuration) <= 1.5f)
         {
-            bgScore = 70f;
-            if (wallColor != Color.white && wallColor != Color.clear) bgScore += 30f;
-        }
-
-        // --- FIX: Ensure production scores never exceed 100 ---
-        float prodScore = Mathf.Clamp(camScore + lightScore, 0, 100);
-
-        float totalRawScore = prodScore + secondsScore + bgScore + colorScore;
-        float finalPercentage = totalRawScore / 400f; // 4 categories out of 100
-        float finalScore100 = finalPercentage * 100f;
-
-        string letterGrade = GetLetterGrade(finalScore100);
-
-        // --- NEW: Check if the score is 70 or higher to give rewards ---
-        int finalPayment = 0;
-        string contractStatus = "";
-
-        if (finalScore100 >= 70f)
-        {
-            // Passed! Calculate their payout based on the score.
-            finalPayment = Mathf.RoundToInt(basePayment * finalPercentage);
-            contractStatus = "CONTRACT PASSED";
+            feedback += "<color=green>+ Perfect Timing (10s)</color>\n";
         }
         else
         {
-            // Failed! Score below 70 means 0 B-coins.
-            finalPayment = 0;
-            contractStatus = "CONTRACT FAILED - SCORE TOO LOW";
+            score -= 20;
+            feedback += $"<color=red>- Timing off. We asked for 10s, you gave us {totalSeconds:F1}s.</color>\n";
         }
 
-        // Display the total overall score out of 100 with the Pass/Fail status
-        string summary = $"FINAL GRADE: {letterGrade} ({finalScore100:F1}/100)\n" +
-                         $"{contractStatus}\n\n" +
-                         $"Production Qual: {prodScore:F0}/100\n" +
-                         $"Timing: {secondsScore:F0}/100\n" +
-                         $"Art Direction: {bgScore:F0}/100\n" +
-                         $"Color Grade: {colorScore:F0}/100\n\n" +
-                         $"Total Payout: {finalPayment}B";
-
-        UpdateFeedback(summary, GetGradeColor(letterGrade));
-
-        // --- FIX: SAVE MONEY DIRECTLY TO THE HARD DRIVE! ---
-        int currentBank = PlayerPrefs.GetInt("PlayerMoney", 0);
-        PlayerPrefs.SetInt("PlayerMoney", currentBank + finalPayment);
-        PlayerPrefs.Save();
-
-        Debug.Log($"<color=green>MONEY SAVED:</color> Added {finalPayment} B-Coins. You now have {PlayerPrefs.GetInt("PlayerMoney")}!");
-    }
-
-    private float CalculateColorScore(float b, float c, float s)
-    {
-        float score = 100f;
-        score -= Mathf.Abs(b - 1.0f) * 50f;
-        score -= Mathf.Abs(c - 1.2f) * 30f;
-        score -= Mathf.Abs(s - 1.1f) * 20f;
-        return Mathf.Clamp(score, 0, 100);
-    }
-
-    private string GetLetterGrade(float score)
-    {
-        if (score > 90) return "S";
-        if (score > 80) return "A";
-        if (score > 70) return "B";
-        if (score > 50) return "C";
-        return "F";
-    }
-
-    private Color GetGradeColor(string grade)
-    {
-        if (grade == "S" || grade == "A") return Color.green;
-        if (grade == "B") return Color.yellow;
-        return Color.red;
-    }
-
-    private void UpdateFeedback(string message, Color color)
-    {
-        if (clientFeedbackText != null)
+        // 2. Check Branding (EXACTLY 1 Logo)
+        int brandingCount = FindObjectsOfType<BrandingClip>().Length;
+        if (brandingCount == requiredBrandingCount)
         {
-            clientFeedbackText.text = message;
-            clientFeedbackText.color = color;
+            feedback += "<color=green>+ Clean Branding (Only the Logo used)</color>\n";
         }
-    }
+        else if (brandingCount > requiredBrandingCount)
+        {
+            score -= 20;
+            feedback += $"<color=red>- Too cluttered! We only asked for {requiredBrandingCount} Logo, but you added {brandingCount}.</color>\n";
+        }
+        else
+        {
+            score -= 20;
+            feedback += $"<color=red>- Missing graphics! You forgot to add our Logo.</color>\n";
+        }
 
-    public void GenerateFinalReport(float cam, float light, float sec)
-    {
-        float b = gradingManager != null ? gradingManager.brightnessSlider.value : 1f;
-        float c = gradingManager != null ? gradingManager.contrastSlider.value : 1f;
-        float s = gradingManager != null ? gradingManager.saturationSlider.value : 1f;
-
+        // 3. Check Background Color & Lighting
         StageSetupManager stage = FindObjectOfType<StageSetupManager>();
-        bool hasBg = stage != null && stage.HasWall();
-        Color bgCol = stage != null ? stage.currentWallColor : Color.clear;
+        if (stage != null)
+        {
+            Color bg = stage.currentWallColor;
+            // Check if the wall is very red and has low green/blue!
+            if (bg.r > 0.5f && bg.g < 0.4f && bg.b < 0.4f)
+            {
+                feedback += "<color=green>+ Great Set Design (Perfect Red Backdrop)</color>\n";
+            }
+            else
+            {
+                score -= 15;
+                feedback += "<color=yellow>- Wrong set color. We requested a RED backdrop.</color>\n";
+            }
+        }
 
-        if (grader != null) grader.FinalizeUltimateContract(60000, cam, light, sec, hasBg, bgCol, b, c, s);
-        else FinalizeUltimateContract(60000, cam, light, sec, hasBg, bgCol, b, c, s);
+        // 4. Check for Soft Light (No reflective hard light)
+        if (avgLight >= 15f) // High score means they avoided bad reflective angles!
+        {
+            feedback += "<color=green>+ Excellent Lighting (No harsh reflections)</color>\n";
+        }
+        else
+        {
+            score -= 10;
+            feedback += "<color=yellow>- Lighting was a bit harsh/reflective. Try tilting the light higher next time.</color>\n";
+        }
+
+        // 5. Check Color Grading (Vibrant Pop)
+        ColorGradingManager grading = FindObjectOfType<ColorGradingManager>();
+        if (grading != null)
+        {
+            if (grading.saturationSlider.value > 1.2f && grading.contrastSlider.value > 1.1f)
+            {
+                feedback += "<color=green>+ Excellent Color Grade! The Goke Cola bottle looks incredibly refreshing.</color>\n";
+            }
+            else
+            {
+                score -= 15;
+                feedback += "<color=yellow>- Color is a bit flat. Try boosting Saturation > 1.2 and Contrast > 1.1 next time.</color>\n";
+            }
+        }
+
+        // Calculate Final Letter Grade and Payout
+        string letterGrade = "F";
+        int payout = 0;
+
+        if (score >= 90) { letterGrade = "S"; payout = 30000; }
+        else if (score >= 80) { letterGrade = "A"; payout = 25000; }
+        else if (score >= 70) { letterGrade = "B"; payout = 15000; }
+        else if (score >= 60) { letterGrade = "C"; payout = 5000; }
+        else { letterGrade = "F"; payout = 0; }
+
+        if (gradeText != null) gradeText.text = letterGrade;
+        if (feedbackText != null) feedbackText.text = feedback;
+        if (payoutText != null) payoutText.text = $"Payout: B {payout}";
+
+        if (CareerManager.Instance != null)
+        {
+            CareerManager.Instance.playerMoney += payout;
+            CareerManager.Instance.UpdateMoneyUI();
+        }
     }
 }

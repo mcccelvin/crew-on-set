@@ -73,4 +73,28 @@ public class CareerManager : MonoBehaviour
             moneyTextHUD.text = $"{playerMoney}";
         }
     }
+
+    private void Update()
+    {
+        // --- SECRET DEVELOPER CHEAT CODE ---
+        // Press F12 to wipe all save data and reset money to 0!
+        if (Input.GetKeyDown(KeyCode.F12))
+        {
+            Debug.Log("<color=red>DEV COMMAND: WIPING ALL SAVE DATA!</color>");
+
+            // 1. Erase all PlayerPrefs (Tutorial progress, saved money, etc.)
+            PlayerPrefs.DeleteAll();
+            PlayerPrefs.Save();
+
+            // 2. Reset the live money variable
+            if (CareerManager.Instance != null)
+            {
+                CareerManager.Instance.playerMoney = 0;
+                CareerManager.Instance.UpdateMoneyUI();
+            }
+
+            // 3. (Optional) Reload the scene to start fresh instantly
+            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+        }
+    }
 }

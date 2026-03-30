@@ -7,7 +7,6 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     public string clipFilePath;
     [HideInInspector] public Transform originalParent;
 
-    // --- TRIM DATA ---
     [HideInInspector] public int totalFrames;
     [HideInInspector] public int startFrame;
     [HideInInspector] public int endFrame;
@@ -17,6 +16,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
     public float cameraScore;
     public float lightScore;
+
     private void Start()
     {
         GameObject bankObj = GameObject.Find("Clipbank");
@@ -48,27 +48,22 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     {
         if (eventData.button == PointerEventData.InputButton.Right)
         {
-            // Right click sends it back to the Clipbank
             if (clipBank != null && transform.parent != clipBank) transform.SetParent(clipBank);
         }
         else if (eventData.button == PointerEventData.InputButton.Left)
         {
-            Debug.Log("CLIP: You left-clicked me!");
-
-            // FAILSAFE: If the window is turned off, hunt it down and wake it up!
             if (ClipInspector.Instance == null)
             {
-                ClipInspector fallback = FindObjectOfType<ClipInspector>(true); // 'true' searches hidden objects!
-                if (fallback != null)
-                {
-                    ClipInspector.Instance = fallback;
-                }
+                ClipInspector fallback = FindObjectOfType<ClipInspector>(true);
+                if (fallback != null) ClipInspector.Instance = fallback;
             }
 
-            // Open the window!
             if (ClipInspector.Instance != null)
             {
                 ClipInspector.Instance.OpenInspector(this);
+
+                // --- NEW TUTORIAL PING ---
+                if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnVideoTrimWindowOpened();
             }
             else
             {

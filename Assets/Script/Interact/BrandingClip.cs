@@ -1,8 +1,8 @@
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// Added IPointerClickHandler here to detect Right Clicks!
-public class BrandingClip : MonoBehaviour, IDragHandler, IPointerClickHandler
+// --- ADDED: IBeginDragHandler and IEndDragHandler ---
+public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
 {
     public DraggableOverlay linkedOverlay;
     private float pixelsPerFrame = 40f / 24f;
@@ -12,10 +12,22 @@ public class BrandingClip : MonoBehaviour, IDragHandler, IPointerClickHandler
     public RectTransform rightHandle;
 
     private RectTransform myRect;
+    private CanvasGroup canvasGroup;
+
+    // Tracking drag data
+    private Transform originalParent;
+    private Vector2 originalLocalPos;
+    private Canvas parentCanvas;
 
     void Awake()
     {
         myRect = GetComponent<RectTransform>();
+
+        // Automatically add a CanvasGroup so we can block/unblock raycasts during drag
+        canvasGroup = GetComponent<CanvasGroup>();
+        if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
+
+        parentCanvas = GetComponentInParent<Canvas>();
 
         // FORCE BOTTOM-LEFT ANCHORS
         myRect.anchorMin = new Vector2(0, 0);
@@ -25,9 +37,10 @@ public class BrandingClip : MonoBehaviour, IDragHandler, IPointerClickHandler
 
     void Start()
     {
-        // THE FIX: We removed the line that forced X to 0.
-        // Now it will stay exactly where your mouse drops it!
-        myRect.sizeDelta = new Vector2(80f, myRect.sizeDelta.y);
+        if (myRect.sizeDelta.x < 30f)
+        {
+            myRect.sizeDelta = new Vector2(80f, myRect.sizeDelta.y);
+        }
     }
 
     void LateUpdate()
@@ -46,17 +59,123 @@ public class BrandingClip : MonoBehaviour, IDragHandler, IPointerClickHandler
         }
     }
 
+    // ==========================================
+    // 1. START DRAGGING
+    // ==========================================
+    public void OnBeginDrag(PointerEventData eventData)
+    {
+        originalParent = transform.parent;
+        originalLocalPos = myRect.anchoredPosition;
+
+        if (parentCanvas == null) parentCanvas = GetComponentInParent<Canvas>();
+
+        // Move the clip to the absolute top UI layer so it renders over everything while dragging
+        transform.SetParent(parentCanvas.transform);
+
+        // Turn off raycasts so the mouse can "see" the tracks underneath the clip
+        canvasGroup.blocksRaycasts = false;
+    }
+
+    // ==========================================
+    // 2. WHILE DRAGGING
+    // ==========================================
     public void OnDrag(PointerEventData eventData)
     {
-        myRect.anchoredPosition += new Vector2(eventData.delta.x, 0);
-        if (myRect.anchoredPosition.x < 0) myRect.anchoredPosition = new Vector2(0, myRect.anchoredPosition.y);
+        if (parentCanvas == null) return;
+
+        // Allow the clip to move completely freely in X and Y
+        myRect.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
+    }
+
+    // ==========================================
+    // 3. DROP THE CLIP
+    // ==========================================
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        canvasGroup.blocksRaycasts = true; // Turn collision back on
+
+        // Find out what UI element our mouse was hovering over when we let go
+        GameObject droppedOn = eventData.pointerCurrentRaycast.gameObject;
+        Transform targetTrack = null;
+
+        // A. Verify if we dropped it onto a valid Branding Track
+        if (droppedOn != null && EditorManager.Instance != null)
+        {
+            foreach (Transform track in EditorManager.Instance.brandingTracks)
+            {
+                if (droppedOn.transform == track || droppedOn.transform.IsChildOf(track))
+                {
+                    targetTrack = track;
+                    break;
+                }
+            }
+        }
+
+        // B. Snap it into the new track (If valid)
+        if (targetTrack != null)
+        {
+            // Convert our mouse position into the new Track's local timeline space
+            Vector2 localPoint;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                targetTrack.GetComponent<RectTransform>(),
+                Input.mousePosition,
+                eventData.pressEventCamera,
+                out localPoint
+            );
+
+            float newStartX = Mathf.Max(0, localPoint.x); // Don't let it go past 0 seconds
+            float newEndX = newStartX + myRect.rect.width;
+            bool overlapFound = false;
+
+            // Check if the space on this new track is already occupied!
+            foreach (Transform childClip in targetTrack)
+            {
+                if (childClip == this.transform) continue;
+
+                RectTransform existingRect = childClip.GetComponent<RectTransform>();
+                if (existingRect != null)
+                {
+                    float existStart = existingRect.anchoredPosition.x;
+                    float existEnd = existStart + existingRect.rect.width;
+
+                    if (newStartX < existEnd && newEndX > existStart)
+                    {
+                        overlapFound = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!overlapFound)
+            {
+                // SUCCESS! Lock it into the target track
+                transform.SetParent(targetTrack);
+                myRect.anchoredPosition = new Vector2(newStartX, 0); // Force Y back to 0 (centered in track)
+            }
+            else
+            {
+                // FAIL: There is a clip in the way! Bounce it back to where it was.
+                Debug.LogWarning("TRACK BLOCKED: That space is already taken!");
+                transform.SetParent(originalParent);
+                myRect.anchoredPosition = originalLocalPos;
+            }
+        }
+        else
+        {
+            // FAIL: You dropped it outside the timeline. Bounce it back.
+            transform.SetParent(originalParent);
+            myRect.anchoredPosition = originalLocalPos;
+        }
+
         UpdateFrameMath();
     }
 
     public void Trim(bool isLeft, PointerEventData eventData)
     {
         if (myRect == null) return;
-        float dragAmount = eventData.delta.x;
+        if (parentCanvas == null) parentCanvas = GetComponentInParent<Canvas>();
+
+        float dragAmount = eventData.delta.x / parentCanvas.scaleFactor;
         float currentWidth = myRect.sizeDelta.x;
 
         if (isLeft)
@@ -73,7 +192,14 @@ public class BrandingClip : MonoBehaviour, IDragHandler, IPointerClickHandler
             float newWidth = currentWidth + dragAmount;
             if (newWidth > 30f) myRect.sizeDelta = new Vector2(newWidth, myRect.sizeDelta.y);
         }
+
         UpdateFrameMath();
+
+        // --- NEW TUTORIAL PING ---
+        if (EditorTutorialManager.Instance != null)
+        {
+            EditorTutorialManager.Instance.OnBrandTrimmed();
+        }
     }
 
     private void UpdateFrameMath()
@@ -88,20 +214,12 @@ public class BrandingClip : MonoBehaviour, IDragHandler, IPointerClickHandler
         }
     }
 
-    // --- THE NEW RIGHT-CLICK LOGIC ---
     public void OnPointerClick(PointerEventData eventData)
     {
         if (eventData.button == PointerEventData.InputButton.Right)
         {
             Debug.Log("BRANDING: Right-clicked! Deleting logo...");
-
-            // 1. Destroy the actual logo overlay on the video screen
-            if (linkedOverlay != null)
-            {
-                Destroy(linkedOverlay.gameObject);
-            }
-
-            // 2. Destroy this pink clip from the timeline
+            if (linkedOverlay != null) Destroy(linkedOverlay.gameObject);
             Destroy(gameObject);
         }
     }

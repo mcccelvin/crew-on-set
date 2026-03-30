@@ -16,27 +16,20 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
     }
 
-    // --- NEW: THE INVISIBILITY CLOAK ---
     public void EvaluateVisibility(int currentPlaybackFrame, bool isVideoPlaying)
     {
         if (canvasGroup == null) return;
 
-        // If the video is STOPPED, always show the logo so you can edit it!
         if (!isVideoPlaying)
         {
             canvasGroup.alpha = 1f;
             return;
         }
 
-        // If PLAYING, only show the logo if the playhead is inside its zone!
         if (currentPlaybackFrame >= startFrame && currentPlaybackFrame <= endFrame)
-        {
-            canvasGroup.alpha = 1f; // Visible!
-        }
+            canvasGroup.alpha = 1f;
         else
-        {
-            canvasGroup.alpha = 0f; // Invisible!
-        }
+            canvasGroup.alpha = 0f;
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -62,7 +55,6 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
             if (!isOnTimeline && EditorManager.Instance != null)
             {
-                // Grab the list of manual tracks you set up in the Inspector!
                 Transform[] availableTracks = EditorManager.Instance.brandingTracks;
 
                 if (availableTracks == null || availableTracks.Length == 0)
@@ -71,18 +63,15 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                     return;
                 }
 
-                // Snap perfectly to the left edge (0 seconds)
                 float newStartX = 0f;
                 float newEndX = 80f;
 
                 Transform targetTrack = null;
 
-                // --- 1. SEARCH THE MANUAL TRACKS ---
                 foreach (Transform track in availableTracks)
                 {
                     bool overlapFound = false;
 
-                    // Check every clip currently sitting inside this specific track
                     foreach (Transform childClip in track)
                     {
                         RectTransform existingRect = childClip.GetComponent<RectTransform>();
@@ -94,7 +83,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                             if (newStartX < existEnd && newEndX > existStart)
                             {
                                 overlapFound = true;
-                                break; // Stop checking, this track is blocked!
+                                break;
                             }
                         }
                     }
@@ -102,32 +91,29 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                     if (!overlapFound)
                     {
                         targetTrack = track;
-                        break; // We found an empty track, stop looking!
+                        break;
                     }
                 }
 
-                // --- 2. SPAWN THE CLIP ---
                 if (targetTrack != null)
                 {
-                    // Spawn it directly inside the winning track folder!
                     GameObject newClip = Instantiate(EditorManager.Instance.brandClipPrefab, targetTrack);
                     RectTransform newRect = newClip.GetComponent<RectTransform>();
 
-                    if (newRect != null)
-                    {
-                        // Because you already positioned the manual tracks, we just snap this to 0,0!
-                        newRect.anchoredPosition = new Vector2(0, 0);
-                    }
+                    if (newRect != null) newRect.anchoredPosition = new Vector2(0, 0);
 
                     BrandingClip clipScript = newClip.GetComponent<BrandingClip>();
                     if (clipScript != null) clipScript.linkedOverlay = this;
 
                     isOnTimeline = true;
+
+                    // --- NEW TUTORIAL PING ---
+                    if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnBrandDropped();
                 }
                 else
                 {
                     Debug.LogWarning("TIMELINE FULL: No empty branding tracks available at the 0 second mark!");
-                    transform.SetParent(originalParent); // Bounce it back to the assets bin
+                    transform.SetParent(originalParent);
                 }
             }
         }
