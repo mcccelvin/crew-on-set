@@ -8,15 +8,31 @@ public class PauseManager : MonoBehaviour
     [Header("UI References")]
     public GameObject pauseMenuCanvas; // The main Panel holding your design
 
+    // --- FIX: Reset the static variable when the scene loads ---
+    void Start()
+    {
+        isPaused = false;
+        Time.timeScale = 1f;
+    }
+
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.P))
+        if (Input.GetKeyDown(KeyCode.Escape))
         {
+            Debug.Log("Escape Pressed!");
             if (isPaused) Resume();
             else Pause();
         }
     }
 
+    // ... (Keep your existing Resume and Pause methods exactly the same) ...
+
+    public void ExitToMain()
+    {
+        Time.timeScale = 1f;
+        isPaused = false; // --- FIX: Reset the static variable before leaving ---
+        SceneManager.LoadScene(0);
+    }
     public void Resume()
     {
         pauseMenuCanvas.SetActive(false);
@@ -34,21 +50,17 @@ public class PauseManager : MonoBehaviour
     void Pause()
     {
         pauseMenuCanvas.SetActive(true);
-        Time.timeScale = 0f; // Freezes everything in the game
+        Time.timeScale = 0f; 
         isPaused = true;
 
-        // Free the mouse so you can click the buttons
+
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
         EnablePlayerControls(false);
     }
 
-    public void ExitToMain()
-    {
-        Time.timeScale = 1f;
-        SceneManager.LoadScene("MainMenu"); // Make sure your main menu scene name matches!
-    }
+
 
     void EnablePlayerControls(bool state)
     {

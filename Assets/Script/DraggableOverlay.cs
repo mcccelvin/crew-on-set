@@ -52,6 +52,14 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 rect.anchoredPosition = Vector2.zero;
             }
         }
+
+        // --- THE FIX: Revert the highlight back to the bin if dropped in the wrong spot! ---
+        try
+        {
+            if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+                EditorTutorialManager.Instance.OnClipDragCancelled();
+        }
+        catch { }
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -76,6 +84,14 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             {
                 transform.SetParent(parentCanvas.transform, true);
             }
+
+            // --- THE FIX: Tell the Tutorial Manager we started dragging so it highlights the TV Screen! ---
+            try
+            {
+                if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+                    EditorTutorialManager.Instance.OnClipDragStarted();
+            }
+            catch { }
         }
 
         if (canvasGroup != null)
@@ -93,7 +109,6 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             RectTransform rect = GetComponent<RectTransform>();
             rect.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
 
-            // --- THE FIX: Lock the logo inside the TV screen bounds while dragging! ---
             if (isOnTimeline)
             {
                 ClampToParent();
@@ -101,7 +116,6 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         }
     }
 
-    // --- NEW HELPER: Mathematically lock the logo inside its parent container ---
     public void ClampToParent()
     {
         RectTransform rect = GetComponent<RectTransform>();
@@ -138,10 +152,9 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             canvasGroup.blocksRaycasts = true;
         }
 
-        // --- EXPORT DRAG SUPPORT: Because isOnTimeline is true, it lets you edit position after export ---
         if (isOnTimeline)
         {
-            ClampToParent(); // Double check it didn't slip out!
+            ClampToParent();
             return;
         }
 
@@ -220,7 +233,6 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                     RectTransformUtility.ScreenPointToLocalPointInRectangle(tvPlayer.computerScreen.GetComponent<RectTransform>(), Input.mousePosition, eventData.pressEventCamera, out Vector2 tvLocal);
                     GetComponent<RectTransform>().anchoredPosition = tvLocal;
 
-                    // --- SNAP IT IN BOUNDS ON THE INITIAL DROP! ---
                     ClampToParent();
                 }
                 else
@@ -228,11 +240,14 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                     GetComponent<RectTransform>().anchoredPosition = Vector2.zero;
                 }
 
-                if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnBrandDropped();
+                EditorTutorialManager.Instance.OnBrandDroppedToScreen();
+
+                // --- THE FIX: Stop the script here so it doesn't accidentally run "ReturnToBin()" below! ---
                 return;
             }
         }
 
+        // If you dropped it anywhere else, send it back!
         ReturnToBin();
     }
 
@@ -263,7 +278,6 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             }
             canvasGroup.alpha = targetAlpha;
 
-            // --- BONUS FIX: Disables mouse-clicking on invisible logos so they don't block the screen! ---
             canvasGroup.blocksRaycasts = (targetAlpha > 0f);
         }
         else

@@ -59,9 +59,14 @@ public class CommercialCompiler : MonoBehaviour
 
         editorPlayer.PlaySequence(sequence, useFadeIn);
 
+
         Debug.Log("Compiler: Sequence sent to Player. Clips: " + sortedClips.Count);
 
+        // --- REMOVE OR COMMENT OUT THIS BLOCK ---
+        /*
         // --- NEW TUTORIAL PING ---
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnTimelinePlayed();
+        */
     }
 }
+    

@@ -30,13 +30,10 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     private float leftTrimPixels = 0f;
     private float rightTrimPixels = 0f;
 
-    // --- Collision Walls ---
     private float dragMinX;
     private float dragMaxX;
-
-    // --- THE FIX: Custom Double Click Timer ---
     private float lastLeftClickTime = 0f;
-    private const float doubleClickThreshold = 0.3f; // 0.3 seconds is the industry standard
+    private const float doubleClickThreshold = 0.3f;
 
     private void Awake()
     {
@@ -58,36 +55,22 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     {
         if (eventData.button == PointerEventData.InputButton.Right)
         {
-            if (isOnTimeline)
-            {
-                ReturnToBin();
-            }
+            if (isOnTimeline) ReturnToBin();
         }
         else if (eventData.button == PointerEventData.InputButton.Left)
         {
-            // ======================================================================
-            // --- THE FIX: BULLETPROOF DOUBLE CLICK ---
-            // Measures raw time, immune to Unity's mouse-twitch drag bug!
-            // ======================================================================
             if (Time.time - lastLeftClickTime < doubleClickThreshold)
             {
                 ClipInspector inspector = ClipInspector.Instance;
-
-                if (inspector == null)
-                {
-                    inspector = FindObjectOfType<ClipInspector>(true);
-                }
+                if (inspector == null) inspector = FindObjectOfType<ClipInspector>(true);
 
                 if (inspector != null)
                 {
                     if (ClipInspector.Instance == null) ClipInspector.Instance = inspector;
-
                     inspector.OpenInspector(this);
-                    if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnVideoTrimWindowOpened();
+                    try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnVideoDoubleClicked(); } catch { }
                 }
             }
-
-            // Record the exact time you clicked!
             lastLeftClickTime = Time.time;
         }
     }
@@ -117,6 +100,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
             if (TimelineManager.Instance != null) TimelineManager.Instance.RefreshTimeline();
         }
+
+        try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnClipDragCancelled(); } catch { }
     }
 
     public void AdjustToNewZoom(float zoomRatio)
@@ -132,10 +117,34 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         rightTrimPixels *= zoomRatio;
     }
 
+    public void ApplyTrimFromInspector()
+    {
+        if (totalFrames <= 0 || originalWidth <= 0) return;
+
+        float pixelsPerFrame = originalWidth / totalFrames;
+
+        float currentLeftEdge = rectTransform.anchoredPosition.x - (rectTransform.rect.width * rectTransform.pivot.x);
+        float trueZeroX = currentLeftEdge - leftTrimPixels;
+
+        leftTrimPixels = startFrame * pixelsPerFrame;
+        rightTrimPixels = (totalFrames - endFrame) * pixelsPerFrame;
+
+        float newWidth = originalWidth - leftTrimPixels - rightTrimPixels;
+        if (newWidth < 20f) newWidth = 20f;
+        float newLeftEdge = trueZeroX + leftTrimPixels;
+
+        rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, newWidth);
+        float newPivotXPos = newLeftEdge + (newWidth * rectTransform.pivot.x);
+        rectTransform.anchoredPosition = new Vector2(newPivotXPos, rectTransform.anchoredPosition.y);
+    }
+
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (eventData.button == PointerEventData.InputButton.Right) return;
         if (originalWidth <= 0) originalWidth = rectTransform.rect.width;
+
+        canvasGroup.blocksRaycasts = false;
+        canvasGroup.alpha = 0.6f;
 
         if (isOnTimeline)
         {
@@ -155,14 +164,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                     float otherStart = otherRT.anchoredPosition.x - (otherRT.rect.width * otherRT.pivot.x);
                     float otherEnd = otherStart + otherRT.rect.width;
 
-                    if (otherEnd <= myStart + 0.1f)
-                    {
-                        if (otherEnd > dragMinX) dragMinX = otherEnd;
-                    }
-                    if (otherStart >= myEnd - 0.1f)
-                    {
-                        if (otherStart < dragMaxX) dragMaxX = otherStart;
-                    }
+                    if (otherEnd <= myStart + 0.1f) if (otherEnd > dragMinX) dragMinX = otherEnd;
+                    if (otherStart >= myEnd - 0.1f) if (otherStart < dragMaxX) dragMaxX = otherStart;
                 }
             }
 
@@ -176,6 +179,21 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             if (localPoint.x < leftEdge + grabArea) currentDragMode = DragMode.TrimLeft;
             else if (localPoint.x > rightEdge - grabArea) currentDragMode = DragMode.TrimRight;
             else currentDragMode = DragMode.SlideTimeline;
+
+            // =======================================================================
+            // --- THE FIX: Block Trimming completely when they are trying to drag ---
+            // =======================================================================
+            try
+            {
+                if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+                {
+                    if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.PositionVideoAtStart)
+                    {
+                        currentDragMode = DragMode.SlideTimeline; // Force slide mode!
+                    }
+                }
+            }
+            catch { }
         }
         else
         {
@@ -188,10 +206,9 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         {
             transform.SetParent(parentCanvas.transform, true);
             transform.SetAsLastSibling();
-        }
 
-        canvasGroup.blocksRaycasts = false;
-        canvasGroup.alpha = 0.6f;
+            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && !isOnTimeline) EditorTutorialManager.Instance.OnClipDragStarted(); } catch { }
+        }
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -215,33 +232,23 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             if (newX < minAllowedX) newX = minAllowedX;
             if (newX > maxAllowedX) newX = maxAllowedX;
 
+            // --- THE FIX: Magnetic Snap! If they get close to 0, it snaps perfectly in place ---
+            if (newX - minAllowedX < 20f) newX = minAllowedX;
+
             rectTransform.anchoredPosition = new Vector2(newX, rectTransform.anchoredPosition.y);
         }
         else if (currentDragMode == DragMode.TrimLeft)
         {
             float oldWidth = rectTransform.rect.width;
             float newWidth = oldWidth - deltaX;
-
             float maxWidth = originalWidth - rightTrimPixels;
-            if (newWidth > maxWidth)
-            {
-                newWidth = maxWidth;
-                deltaX = oldWidth - newWidth;
-            }
+            if (newWidth > maxWidth) { newWidth = maxWidth; deltaX = oldWidth - newWidth; }
 
             float rightEdge = rectTransform.anchoredPosition.x + (oldWidth * (1f - rectTransform.pivot.x));
             float proposedLeftEdge = rightEdge - newWidth;
 
-            if (proposedLeftEdge < dragMinX)
-            {
-                newWidth = rightEdge - dragMinX;
-                deltaX = oldWidth - newWidth;
-            }
-            if (proposedLeftEdge < 0)
-            {
-                newWidth = rightEdge;
-                deltaX = oldWidth - newWidth;
-            }
+            if (proposedLeftEdge < dragMinX) { newWidth = rightEdge - dragMinX; deltaX = oldWidth - newWidth; }
+            if (proposedLeftEdge < 0) { newWidth = rightEdge; deltaX = oldWidth - newWidth; }
 
             if (newWidth < 20f) { newWidth = 20f; deltaX = oldWidth - newWidth; }
 
@@ -256,23 +263,13 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         {
             float oldWidth = rectTransform.rect.width;
             float newWidth = oldWidth + deltaX;
-
             float maxWidth = originalWidth - leftTrimPixels;
-            if (newWidth > maxWidth)
-            {
-                newWidth = maxWidth;
-                deltaX = newWidth - oldWidth;
-            }
+            if (newWidth > maxWidth) { newWidth = maxWidth; deltaX = newWidth - oldWidth; }
 
             float leftEdge = rectTransform.anchoredPosition.x - (oldWidth * rectTransform.pivot.x);
             float proposedRightEdge = leftEdge + newWidth;
 
-            if (proposedRightEdge > dragMaxX)
-            {
-                newWidth = dragMaxX - leftEdge;
-                deltaX = newWidth - oldWidth;
-            }
-
+            if (proposedRightEdge > dragMaxX) { newWidth = dragMaxX - leftEdge; deltaX = newWidth - oldWidth; }
             if (newWidth < 20f) { newWidth = 20f; deltaX = newWidth - oldWidth; }
 
             rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, newWidth);
@@ -296,6 +293,25 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         {
             TruePixelPlayer tvPlayer = FindObjectOfType<TruePixelPlayer>();
             if (tvPlayer != null) tvPlayer.ShowPreviewFrame(clipFilePath);
+
+            if (currentDragMode == DragMode.SlideTimeline)
+            {
+                float myWidth = rectTransform.rect.width;
+                float leftEdge = rectTransform.anchoredPosition.x - (myWidth * rectTransform.pivot.x);
+
+                try
+                {
+                    if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+                    {
+                        // More generous distance check in case the user's mouse stopped early
+                        if (leftEdge <= 25f && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.PositionVideoAtStart)
+                        {
+                            EditorTutorialManager.Instance.OnVideoRepositioned();
+                        }
+                    }
+                }
+                catch { }
+            }
         }
 
         if (TimelineManager.Instance != null) TimelineManager.Instance.RefreshTimeline();
@@ -310,13 +326,15 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
         if (isNewDrop)
         {
+            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) { EditorTutorialManager.Instance.OnVideoDropped(); EditorTutorialManager.Instance.OnBrandDroppedToScreen(); } } catch { }
+
             rectTransform.localPosition = new Vector3(rectTransform.localPosition.x, 0f, 0f);
             rectTransform.localRotation = Quaternion.identity;
             rectTransform.localScale = Vector3.one;
 
             if (TimelineManager.Instance != null && totalFrames > 0)
             {
-                if (TimelineManager.Instance.pixelsPerSecond == 0) TimelineManager.Instance.RefreshTimeline();
+                if (TimelineManager.Instance.pixelsPerSecond <= 0) TimelineManager.Instance.RefreshTimeline();
 
                 float fps = (tvPlayer != null && tvPlayer.framesPerSecond > 0) ? tvPlayer.framesPerSecond : 24f;
                 float durationInSeconds = (float)totalFrames / fps;
@@ -359,7 +377,15 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 }
 
                 float minAllowedX = trueTimelineWidth * rectTransform.pivot.x;
-                if (rectTransform.anchoredPosition.x < minAllowedX)
+
+                bool isTutorialFirstDrop = false;
+                try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.DragVideoToTimeline) isTutorialFirstDrop = true; } catch { }
+
+                if (isTutorialFirstDrop)
+                {
+                    rectTransform.anchoredPosition = new Vector2(minAllowedX, rectTransform.anchoredPosition.y);
+                }
+                else if (rectTransform.anchoredPosition.x < minAllowedX)
                 {
                     rectTransform.anchoredPosition = new Vector2(minAllowedX, rectTransform.anchoredPosition.y);
                 }

@@ -34,7 +34,6 @@ namespace Player.Interactor
 
         private void Update()
         {
-            // --- CLEAR TEXT IF A MENU IS OPEN ---
             if (activeTerminal != null)
             {
                 if (hotbarUI != null) hotbarUI.UpdateGuideText("");
@@ -62,23 +61,17 @@ namespace Player.Interactor
             if (inputManager.Interact) { TryPickupOrInteract(); return; }
             if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
 
-            // --- F Key (Equip) now handles Computer Insertion ---
-            if (inputManager.Equip)
+            if (UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame)
             {
                 if (currentEquipment != null)
                 {
-                    // If looking at computer, try to insert the item
-                    if (!TryInsertIntoComputer())
-                    {
-                        // If not looking at computer, use the item normally (like the Camera)
-                        currentEquipment.OnUse(PlayerCamera);
-                    }
+                    currentEquipment.OnUse(PlayerCamera);
                 }
-                else
-                {
-                    // Empty hand: try to open the computer UI
-                    TryInsertIntoComputer();
-                }
+            }
+
+            if (inputManager.Equip)
+            {
+                TryInsertIntoComputer();
             }
 
             if (currentEquipment != null) currentEquipment.OnHeldUpdate(inputManager);
@@ -99,7 +92,6 @@ namespace Player.Interactor
             return false;
         }
 
-        // --- THE NEW HOVER SYSTEM ---
         private void HandleHoverText()
         {
             Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
@@ -144,20 +136,6 @@ namespace Player.Interactor
             if (hotbarUI != null) hotbarUI.UpdateGuideText(targetText);
         }
 
-        private void TryOpenComputer()
-        {
-            Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
-            if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
-            {
-                ComputerStation computer = hit.collider.GetComponentInParent<ComputerStation>();
-                if (computer != null)
-                {
-                    activeComputer = computer;
-                    activeComputer.OpenComputerUI(this);
-                }
-            }
-        }
-
         public void ClearActiveComputer() { activeComputer = null; }
 
         private void HandleHotbarInput()
@@ -191,6 +169,25 @@ namespace Player.Interactor
 
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
+                // --- THE FIX: Computer Station Security Block! ---
+                ComputerStation computer = hit.collider.GetComponentInParent<ComputerStation>();
+                if (computer != null)
+                {
+                    if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.InsertToComputer)
+                    {
+                        TutorialManager.Instance.ShowWarning("Insert the SD card first! Hold it and press [F].");
+                        return;
+                    }
+
+                    activeComputer = computer;
+                    activeComputer.OpenComputerUI(this);
+
+                    // Tells the tutorial that they successfully opened it!
+                    if (TutorialManager.Instance != null) TutorialManager.Instance.OnComputerOpened();
+                    return;
+                }
+
+
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
@@ -213,15 +210,33 @@ namespace Player.Interactor
 
                             if (hotbarUI != null) hotbarUI.UpdateSlot(i, item.EquipmentName, item.EquipmentIcon);
 
-                            // --- NEW: TELL TUTORIAL WE PICKED UP A LIGHT! ---
                             if (TutorialManager.Instance != null)
                             {
-                                if (item.gameObject.name.ToLower().Contains("light") || item.EquipmentName.ToLower().Contains("light"))
+                                string lowerObjName = item.gameObject.name.ToLower();
+                                string lowerItemName = item.EquipmentName.ToLower();
+
+                                if (lowerObjName.Contains("light") || lowerItemName.Contains("light"))
                                 {
                                     TutorialManager.Instance.OnLightPickedUp();
                                 }
+                                else if (lowerObjName.Contains("camera") || lowerItemName.Contains("camera"))
+                                {
+                                    TutorialManager.Instance.OnCameraPickedUp();
+                                }
+                                else if (lowerObjName.Contains("sd") || lowerItemName.Contains("card"))
+                                {
+                                    // --- THE FIX: Check if it is the USED SD Card! ---
+                                    Equipment.SDCardItem sdCard = item.GetComponent<Equipment.SDCardItem>();
+                                    if (sdCard != null && sdCard.isUsedCard)
+                                    {
+                                        TutorialManager.Instance.OnUsedSDCardPickedUp();
+                                    }
+                                    else
+                                    {
+                                        TutorialManager.Instance.OnSDCardPickedUp();
+                                    }
+                                }
                             }
-                            // ------------------------------------------------
 
                             return;
                         }
@@ -253,6 +268,15 @@ namespace Player.Interactor
         private void DropEquipment()
         {
             if (currentEquipment == null) return;
+
+            if (TutorialManager.Instance != null)
+            {
+                if (currentEquipment.gameObject.name.ToLower().Contains("light") || currentEquipment.EquipmentName.ToLower().Contains("light"))
+                {
+                    TutorialManager.Instance.OnLightDropped();
+                }
+            }
+
             currentEquipment.OnDropped(PlayerCamera);
             hotbar[currentSlotIndex] = null;
             currentEquipment = null;

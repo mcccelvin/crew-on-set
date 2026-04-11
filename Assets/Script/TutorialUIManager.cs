@@ -3,6 +3,15 @@ using TMPro;
 using UnityEngine.UI;
 using System.Collections;
 
+[System.Serializable]
+public class TaskUIRow
+{
+    public GameObject rowContainer; // The main empty object holding the task
+    public Image taskIcon;          // The Diamond Icon
+    public TextMeshProUGUI taskText;// The actual text
+    public Image underline;         // The gold line below the text
+}
+
 public class TutorialUIManager : MonoBehaviour
 {
     public static TutorialUIManager Instance;
@@ -29,15 +38,22 @@ public class TutorialUIManager : MonoBehaviour
     public GameObject taskOpenView;
     public GameObject taskClosedView;
     public GameObject newTaskNotification;
-    public TextMeshProUGUI[] taskListTexts;
-    public Color pendingColor = Color.white;
-    public Color completedColor = Color.green;
+
+    [Header("--- NEW: Genshin Style Task Rows ---")]
+    public TaskUIRow[] taskRows;
+    public Sprite defaultDiamondIcon;
+    public Sprite completedCheckIcon; // Optional: A checkmark for when it's done!
+    public Color activeTextColor = Color.white;
+    public Color completedTextColor = new Color(0.6f, 0.6f, 0.6f, 1f); // Greyed out
 
     [Header("Tutorial Guidance Systems")]
     public TutorialGlowTarget directorTerminalGlow;
     public TutorialGlowTarget shopTerminalGlow;
     public TutorialGlowTarget computerGlow;
-    public TutorialArrowGuide navigationArrow;
+    public TutorialGlowTarget stageGlow;
+    public TutorialGlowTarget pointAGlow;
+    public TutorialGlowTarget pointBGlow;
+    public TutorialGlowTarget pointCGlow;
 
     private bool isTaskUIExpanded = false;
     private Coroutine notificationCoroutine;
@@ -74,7 +90,12 @@ public class TutorialUIManager : MonoBehaviour
     public void SetupTasks(string[] tasks)
     {
         if (taskPanel != null) taskPanel.SetActive(true);
-        foreach (var t in taskListTexts) if (t != null) t.gameObject.SetActive(false);
+
+        // Hide all rows initially
+        foreach (var row in taskRows)
+        {
+            if (row.rowContainer != null) row.rowContainer.SetActive(false);
+        }
 
         if (taskRevealCoroutine != null) StopCoroutine(taskRevealCoroutine);
         taskRevealCoroutine = StartCoroutine(RevealTasksSequentially(tasks));
@@ -89,11 +110,23 @@ public class TutorialUIManager : MonoBehaviour
     {
         for (int i = 0; i < tasks.Length; i++)
         {
-            if (i < taskListTexts.Length && taskListTexts[i] != null)
+            if (i < taskRows.Length && taskRows[i] != null && taskRows[i].rowContainer != null)
             {
-                taskListTexts[i].text = tasks[i];
-                taskListTexts[i].color = pendingColor;
-                taskListTexts[i].gameObject.SetActive(true);
+                // Clean up the text (remove the dash if it exists so it looks cleaner next to the icon)
+                string cleanText = tasks[i].StartsWith("- ") ? tasks[i].Substring(2) : tasks[i];
+
+                taskRows[i].taskText.text = cleanText;
+                taskRows[i].taskText.color = activeTextColor;
+
+                // Reset the icon to the diamond
+                if (taskRows[i].taskIcon != null && defaultDiamondIcon != null)
+                    taskRows[i].taskIcon.sprite = defaultDiamondIcon;
+
+                // Show the gold line
+                if (taskRows[i].underline != null)
+                    taskRows[i].underline.gameObject.SetActive(true);
+
+                taskRows[i].rowContainer.SetActive(true);
                 yield return new WaitForSeconds(0.4f);
             }
         }
@@ -101,9 +134,22 @@ public class TutorialUIManager : MonoBehaviour
 
     public void MarkTaskComplete(int index)
     {
-        if (index < taskListTexts.Length && taskListTexts[index] != null)
+        if (index < taskRows.Length && taskRows[index] != null && taskRows[index].rowContainer != null)
         {
-            taskListTexts[index].color = completedColor;
+            if (!taskRows[index].taskText.text.StartsWith("<s>"))
+            {
+                // Strikethrough and dim the text
+                taskRows[index].taskText.text = "<s>" + taskRows[index].taskText.text + "</s>";
+                taskRows[index].taskText.color = completedTextColor;
+
+                // Optional: Change the diamond icon to a checkmark!
+                if (taskRows[index].taskIcon != null && completedCheckIcon != null)
+                    taskRows[index].taskIcon.sprite = completedCheckIcon;
+
+                // Optional: Hide the underline when complete for a cleaner look
+                if (taskRows[index].underline != null)
+                    taskRows[index].underline.gameObject.SetActive(false);
+            }
         }
     }
 
@@ -122,13 +168,4 @@ public class TutorialUIManager : MonoBehaviour
         TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>();
         foreach (var g in glows) if (g.gameObject.name.ToLower().Contains(keyword.ToLower())) { if (state) g.StartGlowing(); else g.StopGlowing(); }
     }
-
-    public void PointArrowAt(string keyword)
-    {
-        if (navigationArrow == null) return;
-        if (string.IsNullOrEmpty(keyword)) { navigationArrow.PointAt(null); return; }
-
-        TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>();
-        foreach (var g in glows) if (g.gameObject.name.ToLower().Contains(keyword.ToLower())) { navigationArrow.PointAt(g.transform); return; }
-    }
-}
+}   

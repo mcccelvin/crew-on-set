@@ -38,7 +38,7 @@ public class ShopTerminal : MonoBehaviour
     // Player & Component Tracking
     private PlayerController playerController;
     private GameObject mainPlayerUI;
-    private CrosshairUIClicker crosshairClicker; // THE FIX: Track your custom clicker!
+    private CrosshairUIClicker crosshairClicker;
 
     private void Start()
     {
@@ -57,9 +57,7 @@ public class ShopTerminal : MonoBehaviour
             }
         }
 
-        // THE FIX: Find your crosshair clicker script in the scene
         crosshairClicker = FindObjectOfType<CrosshairUIClicker>();
-
         UpdateTotalUI();
     }
 
@@ -80,14 +78,32 @@ public class ShopTerminal : MonoBehaviour
 
         if (itemIndex >= 0 && itemIndex < availableItems.Count)
         {
+            // Ask the Tutorial Bouncer if we are allowed to buy this item yet
             if (TutorialManager.Instance != null && !TutorialManager.Instance.CanBuyItem(itemIndex)) return;
 
-            if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyLights)
+            // Talk to the TutorialManager to complete the step!
+            if (TutorialManager.Instance != null)
             {
-                if (shoppingCart.Count >= 1)
+                // During the Light Step
+                if (TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyLight_AddToCart ||
+                    TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyLight_Checkout)
                 {
-                    TutorialManager.Instance.ShowWarning("You only need one light! Click Confirm.");
-                    return;
+                    if (shoppingCart.Count >= 1)
+                    {
+                        TutorialManager.Instance.ShowWarning("You only need one light! Click Checkout.");
+                        return;
+                    }
+                    TutorialManager.Instance.OnLightAddedToCart();
+                }
+                // --- NEW: During the Camera Step ---
+                else if (TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyCamera_AddToCart)
+                {
+                    TutorialManager.Instance.OnCameraAddedToCart();
+                }
+                // --- NEW: During the SD Card Step ---
+                else if (TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuySDCard_AddToCart)
+                {
+                    TutorialManager.Instance.OnSDCardAddedToCart();
                 }
             }
 
@@ -131,6 +147,16 @@ public class ShopTerminal : MonoBehaviour
 
     public void CancelPurchase()
     {
+        // Prevents emptying the cart while mid-tutorial!
+        if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep < TutorialManager.TutorialStep.OfferLevel1)
+        {
+            if (shoppingCart.Count > 0)
+            {
+                TutorialManager.Instance.ShowWarning("Don't cancel! Complete your purchase to continue.");
+                return;
+            }
+        }
+
         shoppingCart.Clear();
         currentTotalCost = 0;
         UpdateTotalUI();
@@ -153,6 +179,7 @@ public class ShopTerminal : MonoBehaviour
 
         if (boughtCameraThisTrip) MarkCameraSoldOut();
 
+        // Tell the Tutorial Manager that we successfully checked out!
         if (shoppingCart.Count > 0 && TutorialManager.Instance != null)
         {
             TutorialManager.Instance.OnEquipmentBought(shoppingCart.Count);
@@ -171,9 +198,6 @@ public class ShopTerminal : MonoBehaviour
         }
     }
 
-    // ==========================================
-    // TERMINAL INTERACTION (SCREEN SPACE UI)
-    // ==========================================
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
         playerController = pController;
@@ -181,13 +205,13 @@ public class ShopTerminal : MonoBehaviour
 
         if (mainPlayerUI != null) mainPlayerUI.SetActive(false);
 
-        // THE FIX: Turn off the crosshair clicker so it doesn't steal your mouse clicks!
         if (crosshairClicker != null) crosshairClicker.enabled = false;
 
         if (screenSpaceCanvas != null) screenSpaceCanvas.gameObject.SetActive(true);
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnShopOpened();
     }
 
     public void CloseTerminal()
@@ -196,7 +220,6 @@ public class ShopTerminal : MonoBehaviour
 
         if (mainPlayerUI != null) mainPlayerUI.SetActive(true);
 
-        // THE FIX: Turn the crosshair clicker back on when you leave the shop!
         if (crosshairClicker != null) crosshairClicker.enabled = true;
 
         if (screenSpaceCanvas != null) screenSpaceCanvas.gameObject.SetActive(false);
@@ -204,6 +227,11 @@ public class ShopTerminal : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        CancelPurchase();
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnShopClosed();
+
+        // Force the cart to clear when you completely exit the terminal UI
+        shoppingCart.Clear();
+        currentTotalCost = 0;
+        UpdateTotalUI();
     }
 }

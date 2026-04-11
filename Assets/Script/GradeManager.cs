@@ -43,16 +43,19 @@ public class GradeManager : MonoBehaviour
         }
     }
 
-    // Link your "Return to Studio" button to THIS function
+
     public void ReturnToStudio()
     {
-        // Save tutorial progress if this was the tutorial
-        if (PlayerPrefs.GetInt("TutorialProgress", 0) == 0)
+        int currentProgress = PlayerPrefs.GetInt("TutorialProgress", 0);
+
+        // --- THE FIX: Instantly push progress to 2 to start Level 1 ---
+        // If they just passed the tutorial (1) or it's a fallback (0), skip to Level 1 (2)
+        if (currentProgress == 0 || currentProgress == 1)
         {
-            PlayerPrefs.SetInt("TutorialProgress", 1);
+            PlayerPrefs.SetInt("TutorialProgress", 2);
             PlayerPrefs.Save();
         }
 
-        UnityEngine.SceneManagement.SceneManager.LoadScene("Studio");
+        UnityEngine.SceneManagement.SceneManager.LoadScene(5);
     }
 }

@@ -22,7 +22,13 @@ public class ComputerUIManager : MonoBehaviour
 
     private void Awake() { physicalComputer = FindObjectOfType<ComputerStation>(); }
 
-    private void OnEnable() { OpenGridView(); }
+    // --- THE FIX: Make sure the panels are turned OFF when you boot up the computer! ---
+    private void OnEnable()
+    {
+        if (recordingsGridPanel != null) recordingsGridPanel.SetActive(false);
+        if (videoPlayerPanel != null) videoPlayerPanel.SetActive(false);
+        if (pixelPlayer != null) pixelPlayer.StopTape();
+    }
 
     public void OpenGridView()
     {
@@ -72,6 +78,8 @@ public class ComputerUIManager : MonoBehaviour
 
     public void CloseComputerUI()
     {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ComputerStation")) return;
+
         if (pixelPlayer != null) pixelPlayer.StopTape();
         gameObject.SetActive(false);
         Cursor.lockState = CursorLockMode.Locked;
@@ -80,17 +88,56 @@ public class ComputerUIManager : MonoBehaviour
         if (interactor != null) interactor.ClearActiveComputer();
     }
 
-    // --- BULLETPROOF EXPORT LOGIC ---
+    // --- TUTORIAL UI BUTTON HOOKS ---
+
+    public void OnRecordingsFolderClicked()
+    {
+        // 1. Ask the bouncer if we are allowed to click this
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("RecordingsFolder")) return;
+
+        // 2. Tell the Tutorial Manager the task is complete FIRST!
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnRecordingsFolderOpened();
+
+        // 3. Then open the grid view
+        OpenGridView();
+    }
+
+    public void OnVideoPlayButtonClicked()
+    {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("PlayVideo")) return;
+
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
+    }
+
+    public void OnBackButtonClicked()
+    {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("BackButton")) return;
+
+        // --- THE FIX: Hide the panels to return to the Desktop view! ---
+        if (recordingsGridPanel != null) recordingsGridPanel.SetActive(false);
+        if (videoPlayerPanel != null) videoPlayerPanel.SetActive(false);
+        if (pixelPlayer != null) pixelPlayer.StopTape();
+
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnComputerBackClicked();
+    }
+
+    public void OnEditorAppClicked()
+    {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("EditorApp")) return;
+
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnEditorAppClicked();
+    }
+
     public void SendToEditor()
     {
-        // 1. Safety Check: Does the backpack exist?
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("ConfirmEditor")) return;
+
         if (ProjectDataManager.Instance == null)
         {
             Debug.LogError("CRASH PREVENTED: ProjectDataManager is missing from the Studio scene! Please create an empty GameObject and attach ProjectDataManager.cs to it.");
             return;
         }
 
-        // 2. Safety Check: Did the array somehow get wiped?
         if (ProjectDataManager.Instance.compiledFootage == null)
         {
             ProjectDataManager.Instance.compiledFootage = new List<FootageData>();
@@ -98,7 +145,6 @@ public class ComputerUIManager : MonoBehaviour
 
         if (physicalComputer == null) physicalComputer = FindObjectOfType<ComputerStation>();
 
-        // 3. Safely transfer the files
         ProjectDataManager.Instance.ClearProject();
         if (physicalComputer != null)
         {
@@ -109,10 +155,9 @@ public class ComputerUIManager : MonoBehaviour
             }
         }
 
-        // 4. Grade the Stage before we leave
         EvaluateStagePreProduction();
 
-        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoSubmitted();
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnEditorConfirmed();
         UnityEngine.SceneManagement.SceneManager.LoadScene("Editor");
     }
 
@@ -122,7 +167,7 @@ public class ComputerUIManager : MonoBehaviour
         string feedback = "<color=white><b>--- PRE-PRODUCTION ---</b></color>\n";
 
         int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
-        StageSetupManager stage = FindObjectOfType<StageSetupManager>(true);
+        DirectorTerminal stage = FindObjectOfType<DirectorTerminal>(true);
         RecordableSubject product = FindObjectOfType<RecordableSubject>(true);
 
         if (progress < 2)

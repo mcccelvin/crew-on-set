@@ -19,7 +19,6 @@ namespace Player.Equipment
         [Header("--- HUD UI REFERENCES ---")]
         public TMP_Text recTimerText;
         public TMP_Text focusText;
-        // TARGET STATUS TEXT REMOVED!
 
         [Header("--- NEW UI FEATURES ---")]
         public TMP_Text recordStateText;
@@ -180,25 +179,29 @@ namespace Player.Equipment
                 ToggleRecording();
             }
 
-            if (Mouse.current != null)
+            // --- THE FIX: Only allow camera adjustments if NOT recording ---
+            if (!isRecording)
             {
-                float scroll = Mouse.current.scroll.y.ReadValue();
-                if (scroll > 0) filmCamera.fieldOfView -= zoomSpeed;
-                else if (scroll < 0) filmCamera.fieldOfView += zoomSpeed;
-                filmCamera.fieldOfView = Mathf.Clamp(filmCamera.fieldOfView, minFOV, maxFOV);
-            }
-
-            if (Keyboard.current != null)
-            {
-                float pedestalShift = 0f;
-                if (Keyboard.current.qKey.isPressed) pedestalShift -= pedestalSpeed * Time.deltaTime;
-                if (Keyboard.current.eKey.isPressed) pedestalShift += pedestalSpeed * Time.deltaTime;
-
-                if (pedestalShift != 0)
+                if (Mouse.current != null)
                 {
-                    Vector3 newPos = filmCamera.transform.localPosition;
-                    newPos.y = Mathf.Clamp(newPos.y + pedestalShift, originalLocalPos.y + maxPedestalDown, originalLocalPos.y + maxPedestalUp);
-                    filmCamera.transform.localPosition = newPos;
+                    float scroll = Mouse.current.scroll.y.ReadValue();
+                    if (scroll > 0) filmCamera.fieldOfView -= zoomSpeed;
+                    else if (scroll < 0) filmCamera.fieldOfView += zoomSpeed;
+                    filmCamera.fieldOfView = Mathf.Clamp(filmCamera.fieldOfView, minFOV, maxFOV);
+                }
+
+                if (Keyboard.current != null)
+                {
+                    float pedestalShift = 0f;
+                    if (Keyboard.current.qKey.isPressed) pedestalShift -= pedestalSpeed * Time.deltaTime;
+                    if (Keyboard.current.eKey.isPressed) pedestalShift += pedestalSpeed * Time.deltaTime;
+
+                    if (pedestalShift != 0)
+                    {
+                        Vector3 newPos = filmCamera.transform.localPosition;
+                        newPos.y = Mathf.Clamp(newPos.y + pedestalShift, originalLocalPos.y + maxPedestalDown, originalLocalPos.y + maxPedestalUp);
+                        filmCamera.transform.localPosition = newPos;
+                    }
                 }
             }
 
@@ -207,10 +210,31 @@ namespace Player.Equipment
             UpdateCameraHUD();
             UpdateTrackingSquare();
 
-            if (isRecording && Time.time >= nextSampleTime)
+            if (isRecording)
             {
-                SampleVideoFrame();
-                nextSampleTime = Time.time + 0.5f;
+                if (Time.time >= nextSampleTime)
+                {
+                    SampleVideoFrame();
+                    nextSampleTime = Time.time + 0.5f;
+                }
+
+                if (targetSubject != null && filmCamera != null)
+                {
+                    Vector3 targetCenter = GetSubjectCenter(targetSubject);
+                    Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
+
+                    bool isCenteredX = viewPos.x >= 0.35f && viewPos.x <= 0.65f;
+                    bool isCenteredY = viewPos.y >= 0.35f && viewPos.y <= 0.65f;
+                    bool isInFrontOfCamera = viewPos.z > 0;
+
+                    if (!isCenteredX || !isCenteredY || !isInFrontOfCamera)
+                    {
+                        if (TutorialManager.Instance != null)
+                            TutorialManager.Instance.ShowWarning("You moved the camera! Keep the subject in the center! Recording stopped.");
+
+                        ToggleRecording(true);
+                    }
+                }
             }
         }
 
@@ -289,12 +313,8 @@ namespace Player.Equipment
                     recordStateText.color = Color.white;
                 }
             }
-            // Target Status Text logic has been completely removed!
         }
 
-        // ==========================================
-        // SMART TRACKING SQUARE (Size + Color Detection)
-        // ==========================================
         private void UpdateTrackingSquare()
         {
             if (targetSubject == null)
@@ -311,13 +331,11 @@ namespace Player.Equipment
                     Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
                     Vector3 screenPos = filmCamera.WorldToScreenPoint(targetCenter);
 
-                    // Check if the subject is actually on your screen
                     if (viewPos.z > 0 && viewPos.x >= 0 && viewPos.x <= 1 && viewPos.y >= 0 && viewPos.y <= 1)
                     {
                         trackingSquare.gameObject.SetActive(true);
                         trackingSquare.position = screenPos;
 
-                        // Scale the box
                         Bounds bounds = rends[0].bounds;
                         foreach (Renderer r in rends) bounds.Encapsulate(r.bounds);
 
@@ -352,7 +370,6 @@ namespace Player.Equipment
 
                         trackingSquare.sizeDelta = new Vector2(width, height);
 
-                        // --- NEW: Change color based on if it is blocked! ---
                         Vector3 directionToTarget = targetCenter - filmCamera.transform.position;
                         float distToSub = Vector3.Distance(filmCamera.transform.position, targetCenter);
 
@@ -377,11 +394,11 @@ namespace Player.Equipment
                         {
                             if (isBlocked)
                             {
-                                squareImage.color = Color.red; // Red = Blocked!
+                                squareImage.color = Color.red;
                             }
                             else
                             {
-                                squareImage.color = Color.green; // Green = Perfect shot!
+                                squareImage.color = Color.green;
                                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnSubjectFramed();
                             }
                         }
@@ -531,27 +548,48 @@ namespace Player.Equipment
 
                 HotbarUIManager ui = FindObjectOfType<HotbarUIManager>();
                 if (ui != null) ui.UpdateGuideText(EquipmentControls);
+
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera();
             }
-            if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera();
         }
 
-        private void ToggleRecording()
+        private void ToggleRecording(bool forceCancel = false)
         {
+            Player.PlayerController.PlayerController pCtrl = FindObjectOfType<Player.PlayerController.PlayerController>();
+
             if (!isRecording)
             {
-                if (TutorialManager.Instance != null && !TutorialManager.Instance.CanRecord())
+                if (TutorialManager.Instance != null && !TutorialManager.Instance.CanRecord()) return;
+
+                if (targetSubject == null) targetSubject = FindObjectOfType<RecordableSubject>();
+                if (targetSubject != null && filmCamera != null)
                 {
-                    return;
+                    Vector3 targetCenter = GetSubjectCenter(targetSubject);
+                    Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
+
+                    bool isCenteredX = viewPos.x >= 0.4f && viewPos.x <= 0.6f;
+                    bool isCenteredY = viewPos.y >= 0.4f && viewPos.y <= 0.6f;
+                    bool isInFrontOfCamera = viewPos.z > 0;
+
+                    if (!isCenteredX || !isCenteredY || !isInFrontOfCamera)
+                    {
+                        if (TutorialManager.Instance != null)
+                            TutorialManager.Instance.ShowWarning("The subject is not centered! Move your camera to frame it perfectly in the middle.");
+                        return;
+                    }
                 }
             }
 
-            if (isRecording && TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo)
+            if (isRecording && !forceCancel)
             {
-                float currentDuration = Time.time - recordingStartTime;
-                if (currentDuration < 10f)
+                if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo)
                 {
-                    TutorialManager.Instance.ShowWarning($"Keep recording! We need at least 10 seconds. You only have {currentDuration:F1}s.");
-                    return;
+                    float currentDuration = Time.time - recordingStartTime;
+                    if (currentDuration < 10f)
+                    {
+                        TutorialManager.Instance.ShowWarning($"Keep recording! We need at least 10 seconds. You only have {currentDuration:F1}s.");
+                        return;
+                    }
                 }
             }
 
@@ -568,6 +606,9 @@ namespace Player.Equipment
             {
                 if (isRecording)
                 {
+                    // --- THE FIX: Lock the player's look so they can't move the camera! ---
+                    if (pCtrl != null) pCtrl.canLook = false;
+
                     pixelRecorder.StartRecording();
                     recordingStartTime = Time.time;
                     totalCameraScoreAccumulated = 0f;
@@ -577,6 +618,9 @@ namespace Player.Equipment
                 }
                 else
                 {
+                    // --- THE FIX: Unlock the player's look when finished recording! ---
+                    if (pCtrl != null) pCtrl.canLook = true;
+
                     generatedFileName = pixelRecorder.StopRecording();
                     finalDuration = Time.time - recordingStartTime;
 
@@ -588,11 +632,30 @@ namespace Player.Equipment
                     }
                 }
             }
+
+            if (!isRecording && forceCancel)
+            {
+                UpdateCameraHUD();
+                return;
+            }
+
             if (!isRecording) EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
 
-            if (TutorialManager.Instance != null && !isRecording) TutorialManager.Instance.OnRecordingFinished();
+            if (TutorialManager.Instance != null && !isRecording && !forceCancel) TutorialManager.Instance.OnRecordingFinished();
         }
 
+        public override void OnDropped(Camera playerCamera)
+        {
+            if (isRecording) ToggleRecording();
+            if (isCameraActive)
+            {
+                isCameraActive = false;
+                if (filmCamera != null) filmCamera.gameObject.SetActive(false);
+                if (filmUICanvas != null) filmUICanvas.SetActive(false);
+                TogglePlayerUI(true);
+            }
+            base.OnDropped(playerCamera);
+        }
         private void EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
         {
             isSDCardInserted = false;
@@ -624,18 +687,6 @@ namespace Player.Equipment
                 rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
             }
         }
-
-        public override void OnDropped(Camera playerCamera)
-        {
-            if (isRecording) ToggleRecording();
-            if (isCameraActive)
-            {
-                isCameraActive = false;
-                if (filmCamera != null) filmCamera.gameObject.SetActive(false);
-                if (filmUICanvas != null) filmUICanvas.SetActive(false);
-                TogglePlayerUI(true);
-            }
-            base.OnDropped(playerCamera);
-        }
     }
+
 }

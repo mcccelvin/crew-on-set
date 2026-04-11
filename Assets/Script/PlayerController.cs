@@ -18,8 +18,11 @@ namespace Player.PlayerController
         [SerializeField] private float AirResistance = 0.8f;
         [SerializeField] private LayerMask GroundCheck;
 
-        // --- NEW SWITCH: Only stops the camera from spinning! ---
+        // --- NEW SWITCH: Stops the camera from spinning! ---
         public bool canLook = true;
+
+        // --- THE FIX: NEW SWITCH: Stops the player from walking! ---
+        public bool canMove = true;
 
         private Rigidbody playerRigidbody;
         private InputManager inputManager;
@@ -65,13 +68,16 @@ namespace Player.PlayerController
         {
             if (!hasAnimator) return;
 
+            // --- THE FIX: If we can't move, force input to zero so we smoothly stop ---
+            Vector2 currentInput = canMove ? inputManager.Move : Vector2.zero;
+
             float targetSpeed = inputManager.Run ? runSpeed : walkSpeed;
-            if (inputManager.Move == Vector2.zero) targetSpeed = 0f;
+            if (currentInput == Vector2.zero) targetSpeed = 0f;
 
             if (grounded)
             {
-                currentVelocity.x = Mathf.Lerp(currentVelocity.x, inputManager.Move.x * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
-                currentVelocity.y = Mathf.Lerp(currentVelocity.y, inputManager.Move.y * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
+                currentVelocity.x = Mathf.Lerp(currentVelocity.x, currentInput.x * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
+                currentVelocity.y = Mathf.Lerp(currentVelocity.y, currentInput.y * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
 
                 var xVelDifference = currentVelocity.x - playerRigidbody.velocity.x;
                 var zVelDifference = currentVelocity.y - playerRigidbody.velocity.z;
@@ -89,7 +95,6 @@ namespace Player.PlayerController
 
         private void CamMovement()
         {
-            // --- THE FIX: If we can't look, stop here! ---
             if (!hasAnimator || !canLook) return;
 
             var MouseX = inputManager.Look.x;
@@ -106,6 +111,7 @@ namespace Player.PlayerController
         private void HandleJump()
         {
             if (!hasAnimator) return;
+            if (!canMove) return; // --- THE FIX: Prevent jumping when frozen! ---
             if (!inputManager.Jump) return;
             if (!grounded) return;
             animator.SetTrigger(jumpHash);

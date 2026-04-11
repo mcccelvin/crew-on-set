@@ -1,6 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro; // Needed to talk to TextMeshPro!
+using TMPro;
 
 public class ColorGradingManager : MonoBehaviour
 {
@@ -25,7 +25,6 @@ public class ColorGradingManager : MonoBehaviour
     private float lastB = 1f;
     private float lastC = 1f;
     private float lastS = 1f;
-    private bool lastFade = false; // --- NEW STATE TRACKER ---
 
     void Start()
     {
@@ -47,52 +46,78 @@ public class ColorGradingManager : MonoBehaviour
     {
         if (gradingMat == null) return;
 
+        // ======================================================================
+        // --- THE FIX: Snaps and LOCKS the sliders to exact values! ---
+        // ======================================================================
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && EditorTutorialManager.Instance.isTaskPhaseActive)
+        {
+            if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness)
+            {
+                if (Mathf.Abs(brightnessSlider.value - 0.95f) <= 0.05f)
+                {
+                    brightnessSlider.value = 0.95f;
+                    brightnessSlider.interactable = false; // Locks the slider!
+                }
+            }
+            else if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustContrast)
+            {
+                if (Mathf.Abs(contrastSlider.value - 1.35f) <= 0.05f)
+                {
+                    contrastSlider.value = 1.15f;
+                    contrastSlider.interactable = false;
+                }
+            }
+            else if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustSaturation)
+            {
+                if (Mathf.Abs(saturationSlider.value - 1.45f) <= 0.05f)
+                {
+                    saturationSlider.value = 1.10f;
+                    saturationSlider.interactable = false;
+                }
+            }
+        }
+
         gradingMat.SetFloat("_Brightness", brightnessSlider.value);
         gradingMat.SetFloat("_Contrast", contrastSlider.value);
         gradingMat.SetFloat("_Saturation", saturationSlider.value);
 
-        // --- THE FIX: Constantly refresh the text to match the sliders ---
         UpdateReadouts();
 
-        // --- NEW HYPER-SPECIFIC TUTORIAL PINGS ---
         if (EditorTutorialManager.Instance != null)
         {
             if (brightnessSlider.value != lastB)
-            { EditorTutorialManager.Instance.OnBrightnessAdjusted(); lastB = brightnessSlider.value; }
+            {
+                if (brightnessSlider.value == 0.95f) EditorTutorialManager.Instance.OnBrightnessAdjusted();
+                lastB = brightnessSlider.value;
+            }
 
             if (contrastSlider.value != lastC)
-            { EditorTutorialManager.Instance.OnContrastAdjusted(); lastC = contrastSlider.value; }
+            {
+                if (contrastSlider.value == 1.15f) EditorTutorialManager.Instance.OnContrastAdjusted();
+                lastC = contrastSlider.value;
+            }
 
             if (saturationSlider.value != lastS)
-            { EditorTutorialManager.Instance.OnSaturationAdjusted(); lastS = saturationSlider.value; }
-
-            // --- NEW PING FOR FADE IN TOGGLE ---
-            if (fadeInToggle != null && fadeInToggle.isOn != lastFade)
             {
-                if (fadeInToggle.isOn) EditorTutorialManager.Instance.OnFadeInToggled();
-                lastFade = fadeInToggle.isOn;
+                if (saturationSlider.value == 1.10f) EditorTutorialManager.Instance.OnSaturationAdjusted();
+                lastS = saturationSlider.value;
             }
         }
     }
 
     private void UpdateReadouts()
     {
-        // "F2" formats the number so it always shows two decimal places (e.g., 1.05 instead of 1.05321684)
-        if (brightnessText != null && brightnessSlider != null)
-            brightnessText.text = brightnessSlider.value.ToString("F2");
-
-        if (contrastText != null && contrastSlider != null)
-            contrastText.text = contrastSlider.value.ToString("F2");
-
-        if (saturationText != null && saturationSlider != null)
-            saturationText.text = saturationSlider.value.ToString("F2");
+        if (brightnessText != null && brightnessSlider != null) brightnessText.text = brightnessSlider.value.ToString("F2");
+        if (contrastText != null && contrastSlider != null) contrastText.text = contrastSlider.value.ToString("F2");
+        if (saturationText != null && saturationSlider != null) saturationText.text = saturationSlider.value.ToString("F2");
     }
 
     public void ResetGrading()
     {
-        if (brightnessSlider) brightnessSlider.value = 1f;
-        if (contrastSlider) contrastSlider.value = 1f;
-        if (saturationSlider) saturationSlider.value = 1f;
+        // Unlock them for the actual game!
+        if (brightnessSlider) { brightnessSlider.interactable = true; brightnessSlider.value = 1f; }
+        if (contrastSlider) { contrastSlider.interactable = true; contrastSlider.value = 1f; }
+        if (saturationSlider) { saturationSlider.interactable = true; saturationSlider.value = 1f; }
         if (fadeInToggle) fadeInToggle.isOn = false;
 
         UpdateReadouts();

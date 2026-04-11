@@ -49,7 +49,27 @@ public class TruePixelPlayer : MonoBehaviour
     private float playbackTimer = 0f;
 
     private void Update()
-    {
+    {   if (currentFrameIndex >= preloadedTextures.Count)
+            {
+                isFinished = true;
+                isPaused = true;
+                if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
+
+                // Instantly rewind the playhead to 0.00 when finished
+                currentFrameIndex = 0;
+                RenderCurrentFrame();
+                UpdatePlayPauseUI();
+
+                if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+                {
+                    // Keep this one (your original fix)
+                    EditorTutorialManager.Instance.OnPlaybackFinished();
+                    
+                    // --- ADD THIS LINE --- 
+                    // This finally tells the tutorial: "The playback task is fully complete!"
+                    EditorTutorialManager.Instance.OnTimelinePlayed(); 
+                }
+            }
         if (isPaused || isFinished || preloadedTextures.Count == 0) return;
 
         playbackTimer += Time.deltaTime;
@@ -63,7 +83,21 @@ public class TruePixelPlayer : MonoBehaviour
                 isFinished = true;
                 isPaused = true;
                 if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
+
+                // Instantly rewind the playhead to 0.00 when finished
+                currentFrameIndex = 0;
+                RenderCurrentFrame();
                 UpdatePlayPauseUI();
+
+                if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+                {
+                    // Keep this one (your original fix)
+                    EditorTutorialManager.Instance.OnPlaybackFinished();
+
+                    // --- ADD THIS LINE --- 
+                    // This finally tells the tutorial: "The playback task is fully complete!"
+                    EditorTutorialManager.Instance.OnTimelinePlayed();
+                }
             }
             else
             {
@@ -87,10 +121,7 @@ public class TruePixelPlayer : MonoBehaviour
     public void PlayTape(string tapeFilePath)
     {
         StopTape();
-
-        // --- THE FIX: We MUST clear the sequence list so the player knows this is a single Raw Tape! ---
         currentSequence.Clear();
-
         StartCoroutine(LoadSingleTapeCoroutine(tapeFilePath));
     }
 
@@ -143,7 +174,6 @@ public class TruePixelPlayer : MonoBehaviour
         StopTape();
         currentSequence = sequence;
         isFadingIn = false;
-
         StartCoroutine(LoadSequenceCoroutine());
     }
 
@@ -208,6 +238,12 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void TogglePlayPause()
     {
+        // --- THE FIX: Tell the Tutorial Manager that we clicked Play! ---
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            EditorTutorialManager.Instance.OnTimelinePlayed();
+        }
+
         if (isFinished)
         {
             isFinished = false;
@@ -266,7 +302,6 @@ public class TruePixelPlayer : MonoBehaviour
             {
                 int framesInClip = activeClip.globalEndFrame - activeClip.globalStartFrame;
 
-                // --- MATH FIX: Ensure the very last frame reaches exactly 100% of the clip's width ---
                 if (framesInClip > 1)
                 {
                     float clipProgress = (float)(currentFrameIndex - activeClip.globalStartFrame) / (framesInClip - 1);
@@ -277,9 +312,6 @@ public class TruePixelPlayer : MonoBehaviour
         }
         else
         {
-            // --- THE MAIN FIX: Raw Tape Fallback ---
-            // If playing a raw tape, DO NOT use the timelineArea width!
-            // Calculate exactly how many pixels long this tape WOULD be as a Clip Prefab.
             float pps = 40f;
             if (TimelineManager.Instance != null && TimelineManager.Instance.pixelsPerSecond > 0)
             {

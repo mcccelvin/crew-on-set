@@ -42,7 +42,6 @@ public class EditorManager : MonoBehaviour
     private int currentPhase = 0;
     private int cheatClipCounter = 0;
 
-    // --- NEW: Stored variables for the Submit Button ---
     private List<GameObject> clonedLogos = new List<GameObject>();
     private float pendingCam = 0f;
     private float pendingLight = 0f;
@@ -63,12 +62,12 @@ public class EditorManager : MonoBehaviour
     private void Update()
     {
         if (Input.GetKeyDown(KeyCode.F11)) GenerateCheatClip();
-        if (Input.GetKeyDown(KeyCode.F10)) ExportCommercial();
     }
 
     private void GenerateCheatClip()
     {
-        Debug.Log("<color=red>DEV COMMAND: Generating 5-second fake clip for testing!</color>");
+        // --- MODIFIED: Generates 12 seconds! ---
+        Debug.Log("<color=red>DEV COMMAND: Generating 12-second fake clip for testing!</color>");
         cheatClipCounter++;
         string fileName = $"DEV_CheatClip_{cheatClipCounter}.tape";
         string fullPath = Path.Combine(Application.persistentDataPath, fileName);
@@ -83,7 +82,8 @@ public class EditorManager : MonoBehaviour
         dummyTex.Apply();
         byte[] jpgData = dummyTex.EncodeToJPG(50);
 
-        int totalFrames = 120;
+        // --- 12 seconds * 24 frames per second = 288 frames ---
+        int totalFrames = 288;
 
         using (BinaryWriter writer = new BinaryWriter(File.Open(fullPath, FileMode.Create)))
         {
@@ -238,7 +238,6 @@ public class EditorManager : MonoBehaviour
         bool hasFadeIn = false;
         if (gradingManager != null && gradingManager.fadeInToggle != null) hasFadeIn = gradingManager.fadeInToggle.isOn;
 
-        // Store the grades so we can submit them later!
         pendingCam = totalCam;
         pendingLight = totalLight;
         pendingSec = totalSeconds;
@@ -270,16 +269,12 @@ public class EditorManager : MonoBehaviour
                     RectTransform cloneRT = clone.GetComponent<RectTransform>();
                     RectTransform origRT = overlay.GetComponent<RectTransform>();
 
-                    // ==========================================================
-                    // THE FIX: Calculate the ratio between the small and big TVs
-                    // ==========================================================
                     RectTransform smallTV = overlay.transform.parent.GetComponent<RectTransform>();
                     RectTransform bigTV = exportPlayer.computerScreen.GetComponent<RectTransform>();
 
                     float ratioX = bigTV.rect.width / smallTV.rect.width;
                     float ratioY = bigTV.rect.height / smallTV.rect.height;
 
-                    // Multiply position and size by that ratio to perfectly scale it!
                     cloneRT.anchoredPosition = new Vector2(origRT.anchoredPosition.x * ratioX, origRT.anchoredPosition.y * ratioY);
                     cloneRT.sizeDelta = new Vector2(origRT.sizeDelta.x * ratioX, origRT.sizeDelta.y * ratioY);
                     cloneRT.localScale = origRT.localScale;

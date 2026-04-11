@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Player.Manager;
+using TMPro;
+using UnityEngine.UI;
 
 namespace Player.Equipment
 {
@@ -30,10 +32,26 @@ namespace Player.Equipment
         [Tooltip("Forces hard shadows - Will trigger Academic Error on AI Client")]
         public bool forcesHardLight = true;
 
+        // --- HUD UI REFERENCES ---
+        [Header("--- HUD UI REFERENCES ---")]
+        public GameObject lightUICanvas;
+
+        [Header("Text & Sliders")]
+        public TMP_Text intensityText;
+        public TMP_Text tiltText;
+        public Slider tiltSlider;
+        public Slider intensitySlider;
+
+        [Header("Status Icons")]
+        public GameObject lightOnIcon;
+        public GameObject lightOffIcon;
+
         private bool isLightOn = false;
         private float currentTilt = 0f;
-
         private Vector3 startAngles;
+
+        // Safety lock for Shop Prefabs!
+        private bool isHeld = false;
 
         protected override void Awake()
         {
@@ -41,17 +59,46 @@ namespace Player.Equipment
 
             if (spotlight != null)
             {
-                spotlight.enabled = isLightOn;
-
                 startAngles = spotlight.transform.localEulerAngles;
-
-                if (forcesHardLight) spotlight.shadows = LightShadows.Hard;
-
-                spotlight.useColorTemperature = true;
-                if (isFixedKelvin) spotlight.colorTemperature = fixedColorTemperature;
-
+                spotlight.enabled = isLightOn;
                 UpdateLightOutput();
             }
+
+            // Hide the UI instantly when spawned by the shop
+            if (lightUICanvas != null) lightUICanvas.SetActive(false);
+        }
+
+        // Triggered when swapping TO this item in your Hotbar
+        private void OnEnable()
+        {
+            if (isHeld && lightUICanvas != null)
+            {
+                lightUICanvas.SetActive(true);
+                UpdateLightUI();
+            }
+        }
+
+        // Triggered when swapping AWAY from this item in your Hotbar
+        private void OnDisable()
+        {
+            if (lightUICanvas != null) lightUICanvas.SetActive(false);
+        }
+
+        // Triggered when you press E to pick it up off the shop table
+        public override void OnPickedUp(Transform holdPoint)
+        {
+            base.OnPickedUp(holdPoint);
+            isHeld = true;
+            if (lightUICanvas != null) lightUICanvas.SetActive(true);
+            UpdateLightUI();
+        }
+
+        // Triggered when you press G to drop it
+        public override void OnDropped(Camera playerCamera)
+        {
+            base.OnDropped(playerCamera);
+            isHeld = false;
+            if (lightUICanvas != null) lightUICanvas.SetActive(false);
         }
 
         public override void OnUse(Camera playerCamera)
@@ -59,29 +106,32 @@ namespace Player.Equipment
             isLightOn = !isLightOn;
             if (spotlight != null) spotlight.enabled = isLightOn;
 
-            if (isLightOn)
+            if (isLightOn && TutorialManager.Instance != null)
             {
-                Debug.Log($"[160 LED PANEL] ON | Temp: {fixedColorTemperature}K | WARNING: HARD LIGHT RESTRICTION ACTIVE");
-                if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightTurnedOn();
+                TutorialManager.Instance.OnLightTurnedOn();
             }
-            else
-            {
-                Debug.Log("[160 LED PANEL] OFF");
-            }
+
+            UpdateLightUI();
         }
 
         public override void OnHeldUpdate(InputManager input)
         {
-            if (Keyboard.current == null || Mouse.current == null) return;
+            if (!isLightOn) return;
 
-            // --- 1. STAND TILT ---
-            if (Keyboard.current.upArrowKey.wasPressedThisFrame) TiltLight(-tiltStep);
-            else if (Keyboard.current.downArrowKey.wasPressedThisFrame) TiltLight(tiltStep);
+            // Scroll wheel for intensity
+            if (Mouse.current != null)
+            {
+                float scroll = Mouse.current.scroll.y.ReadValue();
+                if (scroll > 0) AdjustIntensity(5f);
+                else if (scroll < 0) AdjustIntensity(-5f);
+            }
 
-            // --- 2. INTENSITY SLIDER (0-100%) ---
-            float scroll = Mouse.current.scroll.y.ReadValue();
-            if (scroll > 0) AdjustIntensity(5f);
-            else if (scroll < 0) AdjustIntensity(-5f);
+            // Up/Down arrows for tilt
+            if (Keyboard.current != null)
+            {
+                if (Keyboard.current.upArrowKey.wasPressedThisFrame) TiltLight(-tiltStep);
+                if (Keyboard.current.downArrowKey.wasPressedThisFrame) TiltLight(tiltStep);
+            }
         }
 
         private void TiltLight(float amount)
@@ -90,8 +140,10 @@ namespace Player.Equipment
             currentTilt = Mathf.Clamp(currentTilt + amount, maxTiltUp, maxTiltDown);
             UpdateLightTransform();
 
-            // --- NEW: PING TUTORIAL ---
-            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightTilted();
+            UpdateLightUI(); // Update the UI bar and text!
+
+            // --- THE FIX: Send the current tilt number! ---
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightTilted(currentTilt);
         }
 
         private void UpdateLightTransform()
@@ -104,11 +156,10 @@ namespace Player.Equipment
             intensityPercent = Mathf.Clamp(intensityPercent + amount, 0f, 100f);
             UpdateLightOutput();
 
-            float currentLux = maxLux * (intensityPercent / 100f);
-            Debug.Log($"Meter: {intensityPercent}% | Output: {currentLux} Lux / {currentLux * 0.0929f:F1} Footcandles");
+            UpdateLightUI(); // Update the UI text & slider!
 
-            // --- NEW: PING TUTORIAL ---
-            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightIntensityChanged();
+            // --- THE FIX: Send the intensity percentage! ---
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightIntensityChanged(intensityPercent);
         }
 
         private void UpdateLightOutput()
@@ -117,6 +168,48 @@ namespace Player.Equipment
             {
                 spotlight.intensity = maxLux * (intensityPercent / 100f);
             }
+        }
+
+        // Syncs the numbers and images to your visual HUD
+        private void UpdateLightUI()
+        {
+            // 1. Intensity Text Update
+            if (intensityText != null)
+            {
+                intensityText.text = $"{Mathf.RoundToInt(intensityPercent)}%";
+                intensityText.color = isLightOn ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
+            }
+
+            // 2. Tilt Text Update
+            if (tiltText != null)
+            {
+                tiltText.text = $"{Mathf.RoundToInt(currentTilt)}°";
+                tiltText.color = isLightOn ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
+            }
+
+            // 3. Tilt Slider Update
+            if (tiltSlider != null)
+            {
+                // The lowest numerical value (-45) must be the minValue
+                tiltSlider.minValue = maxTiltUp;
+
+                // The highest numerical value (45) must be the maxValue
+                tiltSlider.maxValue = maxTiltDown;
+
+                tiltSlider.value = currentTilt;
+            }
+
+            // 4. Intensity Slider Update
+            if (intensitySlider != null)
+            {
+                intensitySlider.minValue = 0f;
+                intensitySlider.maxValue = 100f;
+                intensitySlider.value = intensityPercent;
+            }
+
+            // 5. Swap the Icons!
+            if (lightOnIcon != null) lightOnIcon.SetActive(isLightOn);
+            if (lightOffIcon != null) lightOffIcon.SetActive(!isLightOn);
         }
     }
 }

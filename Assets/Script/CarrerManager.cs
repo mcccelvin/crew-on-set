@@ -76,7 +76,22 @@ public class CareerManager : MonoBehaviour
 
     private void Update()
     {
-        // --- SECRET DEVELOPER CHEAT CODE ---
+        // --- SECRET DEVELOPER CHEAT CODES ---
+
+        // Press F10 to instantly add 1000 B-Coins
+        if (Input.GetKeyDown(KeyCode.F10))
+        {
+            playerMoney += 1000;
+
+            // Save the new money to the hard drive so it persists
+            PlayerPrefs.SetInt("PlayerMoney", playerMoney);
+            PlayerPrefs.Save();
+
+            UpdateMoneyUI();
+
+            Debug.Log("[Cheat] Added 1000 B-Coins! Don't tell the boss.");
+        }
+
         // Press F12 to wipe all save data and reset money to 0!
         if (Input.GetKeyDown(KeyCode.F12))
         {

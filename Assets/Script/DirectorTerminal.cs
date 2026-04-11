@@ -43,6 +43,14 @@ public class DirectorTerminal : MonoBehaviour
     public LayerMask moveableLayer;
     public float dragHeight = 0.1f;
 
+    [Header("Stage Setup Integration (NEW)")]
+    public GameObject wallPrefab;
+    public Transform spawnPoint;
+    public GameObject spawnWallButton;
+    public GameObject colorControlPanel;
+    private GameObject currentWall;
+    public Color currentWallColor = Color.white;
+
     private GameObject playerCameraObj;
     private PlayerController playerController;
     private GameObject mainPlayerUI;
@@ -54,10 +62,15 @@ public class DirectorTerminal : MonoBehaviour
 
     private LineRenderer selectionOutline;
 
+    public bool HasWall() { return currentWall != null; }
+
     private void Start()
     {
         if (tabletUI != null) tabletUI.SetActive(false);
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
+
+        if (spawnWallButton != null) spawnWallButton.SetActive(true);
+        if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
         Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
         foreach (Canvas canvas in allCanvases)
@@ -74,6 +87,8 @@ public class DirectorTerminal : MonoBehaviour
     private void Update()
     {
         if (!isTerminalActive) return;
+
+        TutorialClampSliders();
 
         UpdateUIText();
 
@@ -105,30 +120,123 @@ public class DirectorTerminal : MonoBehaviour
         {
             draggedObject = selectedObject;
             justGrabbed = true;
-            if (TutorialManager.Instance != null) TutorialManager.Instance.OnPropMovedWithT();
         }
 
         UpdateSelectionOutline();
     }
 
-    // ==========================================
-    // LIVE UI READOUT LOGIC
-    // ==========================================
+    private void TutorialClampSliders()
+    {
+        if (TutorialManager.Instance == null) return;
+
+        var step = TutorialManager.Instance.currentStep;
+
+        if (step == TutorialManager.TutorialStep.Tablet_PaintWall || step == TutorialManager.TutorialStep.Tablet_PaintCube)
+        {
+            float bTarget = bSlider.maxValue > 1f ? 150f : 150f / 255f;
+            if (bSlider != null)
+            {
+                if (bSlider.value < bTarget)
+                {
+                    bSlider.value = bTarget;
+                }
+            }
+
+            if (rSlider != null && rSlider.value < rSlider.maxValue)
+            {
+                rSlider.value = rSlider.maxValue;
+            }
+        }
+    }
+
+    private Color NormalizeColor(float r, float g, float b)
+    {
+        float normR = r > 1f ? r / 255f : r;
+        float normG = g > 1f ? g / 255f : g;
+        float normB = b > 1f ? b / 255f : b;
+        return new Color(normR, normG, normB, 1f);
+    }
+
+    public void SpawnWall()
+    {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
+
+        if (currentWall == null && wallPrefab != null && spawnPoint != null)
+        {
+            if (CareerManager.Instance != null)
+            {
+                if (CareerManager.Instance.playerMoney >= 50)
+                {
+                    CareerManager.Instance.playerMoney -= 50;
+                    CareerManager.Instance.UpdateMoneyUI();
+                }
+                else
+                {
+                    if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("The wall costs 50 B-Coins!");
+                    return;
+                }
+            }
+
+            currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
+            if (spawnWallButton != null) spawnWallButton.SetActive(false);
+
+            currentWallColor = Color.white;
+            ApplyColorToWall(currentWallColor);
+
+            if (rSlider != null) rSlider.value = rSlider.maxValue;
+            if (gSlider != null) gSlider.value = gSlider.maxValue;
+            if (bSlider != null) bSlider.value = bSlider.maxValue;
+
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnWallAdded();
+        }
+    }
+
+    public void SetCustomColor(float r, float g, float b)
+    {
+        currentWallColor = NormalizeColor(r, g, b);
+        if (currentWall != null) ApplyColorToWall(currentWallColor);
+
+        if (TutorialManager.Instance != null)
+        {
+            float rCheck = r > 1f ? r : r * 255f;
+            float gCheck = g > 1f ? g : g * 255f;
+            float bCheck = b > 1f ? b : b * 255f;
+            TutorialManager.Instance.CheckWallColor(rCheck, gCheck, bCheck);
+        }
+    }
+
+    private void ApplyColorToWall(Color newColor)
+    {
+        if (currentWall != null)
+        {
+            MeshRenderer[] renderers = currentWall.GetComponentsInChildren<MeshRenderer>();
+            foreach (MeshRenderer renderer in renderers) renderer.material.color = newColor;
+        }
+    }
+
+    public void ClearStage()
+    {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("ClearStage")) return;
+
+        if (currentWall != null) { Destroy(currentWall); currentWall = null; }
+
+        currentWallColor = Color.white;
+
+        if (rSlider != null) rSlider.value = rSlider.maxValue;
+        if (gSlider != null) gSlider.value = gSlider.maxValue;
+        if (bSlider != null) bSlider.value = bSlider.maxValue;
+
+        if (spawnWallButton != null) spawnWallButton.SetActive(true);
+        if (colorControlPanel != null) colorControlPanel.SetActive(true);
+        ClearAllProps();
+    }
+
     private void UpdateUIText()
     {
-        if (rSlider != null && rValueText != null)
-            rValueText.text = Mathf.RoundToInt(rSlider.maxValue > 1f ? rSlider.value : rSlider.value * 255f).ToString();
-
-        if (gSlider != null && gValueText != null)
-            gValueText.text = Mathf.RoundToInt(gSlider.maxValue > 1f ? gSlider.value : gSlider.value * 255f).ToString();
-
-        if (bSlider != null && bValueText != null)
-            bValueText.text = Mathf.RoundToInt(bSlider.maxValue > 1f ? bSlider.value : bSlider.value * 255f).ToString();
-
-        if (bCoinsText != null && CareerManager.Instance != null)
-        {
-            bCoinsText.text = CareerManager.Instance.playerMoney.ToString() + " B-Coins";
-        }
+        if (rSlider != null && rValueText != null) rValueText.text = Mathf.RoundToInt(rSlider.maxValue > 1f ? rSlider.value : rSlider.value * 255f).ToString();
+        if (gSlider != null && gValueText != null) gValueText.text = Mathf.RoundToInt(gSlider.maxValue > 1f ? gSlider.value : gSlider.value * 255f).ToString();
+        if (bSlider != null && bValueText != null) bValueText.text = Mathf.RoundToInt(bSlider.maxValue > 1f ? bSlider.value : bSlider.value * 255f).ToString();
+        if (bCoinsText != null && CareerManager.Instance != null) bCoinsText.text = CareerManager.Instance.playerMoney.ToString() + " B-Coins";
     }
 
     private void SyncSlidersToColor(Color color)
@@ -136,11 +244,10 @@ public class DirectorTerminal : MonoBehaviour
         if (rSlider != null) rSlider.SetValueWithoutNotify(rSlider.maxValue > 1f ? color.r * 255f : color.r);
         if (gSlider != null) gSlider.SetValueWithoutNotify(gSlider.maxValue > 1f ? color.g * 255f : color.g);
         if (bSlider != null) bSlider.SetValueWithoutNotify(bSlider.maxValue > 1f ? color.b * 255f : color.b);
+
+        UpdateUIText();
     }
 
-    // ==========================================
-    // VISUALS & OUTLINES
-    // ==========================================
     private void UpdateSelectionOutline()
     {
         if (selectedObject != null)
@@ -149,17 +256,11 @@ public class DirectorTerminal : MonoBehaviour
             {
                 GameObject outlineObj = new GameObject("SelectionOutline");
                 selectionOutline = outlineObj.AddComponent<LineRenderer>();
-
-                selectionOutline.startWidth = 0.05f;
-                selectionOutline.endWidth = 0.05f;
-                selectionOutline.positionCount = 5;
-                selectionOutline.useWorldSpace = true;
+                selectionOutline.startWidth = 0.05f; selectionOutline.endWidth = 0.05f;
+                selectionOutline.positionCount = 5; selectionOutline.useWorldSpace = true;
                 selectionOutline.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-
-                Material unlitMat = new Material(Shader.Find("Sprites/Default"));
-                selectionOutline.material = unlitMat;
-                selectionOutline.startColor = Color.green;
-                selectionOutline.endColor = Color.green;
+                selectionOutline.material = new Material(Shader.Find("Sprites/Default"));
+                selectionOutline.startColor = Color.green; selectionOutline.endColor = Color.green;
             }
 
             bool isBlinkOn = (Time.time % 0.6f) > 0.3f;
@@ -169,7 +270,6 @@ public class DirectorTerminal : MonoBehaviour
             {
                 Bounds bounds = new Bounds(selectedObject.transform.position, Vector3.zero);
                 Renderer[] rends = selectedObject.GetComponentsInChildren<Renderer>();
-
                 if (rends.Length > 0)
                 {
                     bounds = rends[0].bounds;
@@ -177,11 +277,8 @@ public class DirectorTerminal : MonoBehaviour
                 }
 
                 float pad = 0.1f;
-                float minX = bounds.min.x - pad;
-                float maxX = bounds.max.x + pad;
-                float minZ = bounds.min.z - pad;
-                float maxZ = bounds.max.z + pad;
-
+                float minX = bounds.min.x - pad; float maxX = bounds.max.x + pad;
+                float minZ = bounds.min.z - pad; float maxZ = bounds.max.z + pad;
                 float yHeight = dragHeight + 0.02f;
 
                 selectionOutline.SetPosition(0, new Vector3(minX, yHeight, minZ));
@@ -215,9 +312,6 @@ public class DirectorTerminal : MonoBehaviour
         return topDownCamera != null ? topDownCamera.ScreenPointToRay(Input.mousePosition) : new Ray();
     }
 
-    // ==========================================
-    // SELECTION & INTERACTION
-    // ==========================================
     private void TrySelect3DObject()
     {
         Ray ray = GetMouseRay();
@@ -232,8 +326,14 @@ public class DirectorTerminal : MonoBehaviour
                 selectedObject = rb.gameObject;
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
 
-                Renderer ren = selectedObject.GetComponentInChildren<Renderer>();
-                if (ren != null) SyncSlidersToColor(ren.material.color);
+                Renderer[] rens = selectedObject.GetComponentsInChildren<Renderer>();
+                if (rens.Length > 0)
+                {
+                    SyncSlidersToColor(rens[0].material.color);
+                }
+
+                // --- NEW: Tell Tutorial we clicked a prop! ---
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnObjectSelected(selectedObject.name);
 
                 return;
             }
@@ -242,11 +342,11 @@ public class DirectorTerminal : MonoBehaviour
             if (objName.Contains("wall") || objName.Contains("stage") || objName.Contains("studio") || objName.Contains("backdrop"))
             {
                 selectedObject = hit.collider.gameObject;
-
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "";
+                SyncSlidersToColor(currentWallColor);
 
-                StageSetupManager stageManager = FindObjectOfType<StageSetupManager>();
-                if (stageManager != null) SyncSlidersToColor(stageManager.currentWallColor);
+                // --- NEW: Tell Tutorial we clicked the wall! ---
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnObjectSelected(selectedObject.name);
 
                 return;
             }
@@ -280,14 +380,26 @@ public class DirectorTerminal : MonoBehaviour
 
     public void StartDraggingNewProp(GameObject prefab3D)
     {
+        if (TutorialManager.Instance != null)
+        {
+            string propName = prefab3D.name.ToLower();
+            if (propName.Contains("cube") && !TutorialManager.Instance.CanUseTabletFeature("SpawnCube")) return;
+            if ((propName.Contains("flower") || propName.Contains("floral")) && !TutorialManager.Instance.CanUseTabletFeature("SpawnFlower")) return;
+        }
+
         if (CareerManager.Instance != null && CareerManager.Instance.playerMoney >= 50)
         {
             CareerManager.Instance.playerMoney -= 50;
             CareerManager.Instance.UpdateMoneyUI();
+
+            if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep >= TutorialManager.TutorialStep.FreePlayDirectorTablet)
+            {
+                TutorialManager.Instance.ShowWarning("Spawned Prop! (-50 B-Coins)");
+            }
         }
         else if (CareerManager.Instance != null)
         {
-            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Props cost 50 B-Coins!");
+            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 50 B-Coins.");
             return;
         }
 
@@ -303,6 +415,12 @@ public class DirectorTerminal : MonoBehaviour
         GameObject visualProp = Instantiate(prefab3D, wrapper.transform);
         visualProp.transform.localPosition = Vector3.zero;
 
+        Renderer[] rends = visualProp.GetComponentsInChildren<Renderer>();
+        foreach (Renderer r in rends)
+        {
+            r.material.color = Color.white;
+        }
+
         BoxCollider box = visualProp.GetComponent<BoxCollider>();
         if (box != null && box.size.x < 0.1f)
         {
@@ -310,8 +428,6 @@ public class DirectorTerminal : MonoBehaviour
             box.center = Vector3.zero;
         }
 
-        // MORE ROBUST BOUNDS CHECK FOR COMPLEX PREFABS
-        Renderer[] rends = visualProp.GetComponentsInChildren<Renderer>();
         if (rends.Length > 0)
         {
             Bounds b = rends[0].bounds;
@@ -325,8 +441,8 @@ public class DirectorTerminal : MonoBehaviour
             t.gameObject.layer = LayerMask.NameToLayer("Props");
         }
 
-        Rigidbody rb = wrapper.AddComponent<Rigidbody>();
-        rb.isKinematic = true;
+        Rigidbody newRb = wrapper.AddComponent<Rigidbody>();
+        newRb.isKinematic = true;
 
         draggedObject = wrapper;
         selectedObject = wrapper;
@@ -334,20 +450,20 @@ public class DirectorTerminal : MonoBehaviour
 
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
 
-        Renderer visualRen = visualProp.GetComponentInChildren<Renderer>();
-        if (visualRen != null) SyncSlidersToColor(visualRen.material.color);
-
-        if (TutorialManager.Instance != null) TutorialManager.Instance.OnPropSpawnedFromUI();
+        if (rSlider != null) rSlider.value = rSlider.maxValue;
+        if (gSlider != null) gSlider.value = gSlider.maxValue;
+        if (bSlider != null) bSlider.value = bSlider.maxValue;
     }
 
     public void DropDraggedProp()
     {
-        if (draggedObject != null) draggedObject = null;
+        if (draggedObject != null)
+        {
+            string propName = draggedObject.name.ToLower();
+            draggedObject = null;
+        }
     }
 
-    // ==========================================
-    // THE FIX: BULLETPROOF DRAG MATH
-    // ==========================================
     private void MoveObjectWithMouse()
     {
         Ray ray = GetMouseRay();
@@ -360,11 +476,8 @@ public class DirectorTerminal : MonoBehaviour
 
         if (Physics.Raycast(ray, out RaycastHit hit, 100f, layerMask))
         {
-            // NEW: Instead of checking names, check if the surface is FLAT!
-            // If hit.normal.y is near 1, it's a floor or table. If it's near 0, it's a vertical wall!
             if (hit.normal.y > 0.5f)
             {
-                // Find the absolute lowest pixel of the visual mesh
                 Renderer[] rends = draggedObject.GetComponentsInChildren<Renderer>();
                 float bottomOffset = 0f;
                 if (rends.Length > 0)
@@ -374,7 +487,6 @@ public class DirectorTerminal : MonoBehaviour
                     bottomOffset = draggedObject.transform.position.y - b.min.y;
                 }
 
-                // Push the object UP by its bottom offset so it sits perfectly on the floor
                 draggedObject.transform.position = hit.point + new Vector3(0, bottomOffset + dragHeight, 0);
                 stacked = true;
             }
@@ -384,7 +496,6 @@ public class DirectorTerminal : MonoBehaviour
 
         if (!stacked)
         {
-            // Math plane fallback if you are dragging your mouse over the void or a vertical wall
             Plane groundPlane = new Plane(Vector3.up, new Vector3(0, dragHeight, 0));
             if (groundPlane.Raycast(ray, out float enter))
             {
@@ -421,7 +532,7 @@ public class DirectorTerminal : MonoBehaviour
 
     public void SetSelectedPropColor(float r, float g, float b)
     {
-        Color newCol = new Color(r, g, b, 1f);
+        Color newCol = NormalizeColor(r, g, b);
 
         bool isWall = selectedObject != null && (selectedObject.name.ToLower().Contains("wall") || selectedObject.name.ToLower().Contains("stage") || selectedObject.name.ToLower().Contains("studio") || selectedObject.name.ToLower().Contains("backdrop"));
 
@@ -431,14 +542,19 @@ public class DirectorTerminal : MonoBehaviour
             {
                 ren.material.color = newCol;
             }
+
+            if (TutorialManager.Instance != null)
+            {
+                float rCheck = r > 1f ? r : r * 255f;
+                float gCheck = g > 1f ? g : g * 255f;
+                float bCheck = b > 1f ? b : b * 255f;
+                TutorialManager.Instance.CheckCubeColor(rCheck, gCheck, bCheck);
+            }
         }
         else
         {
-            StageSetupManager stageManager = FindObjectOfType<StageSetupManager>();
-            if (stageManager != null) stageManager.SetCustomColor(r, g, b);
+            SetCustomColor(r, g, b);
         }
-
-        if (TutorialManager.Instance != null) TutorialManager.Instance.OnWallColorChanged();
     }
 
     private void GeneratePropBankUI()
@@ -484,6 +600,11 @@ public class DirectorTerminal : MonoBehaviour
 
     public void CloseTerminal()
     {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("DirectorTerminal"))
+        {
+            return;
+        }
+
         isTerminalActive = false;
         if (playerController != null) playerController.enabled = true;
 

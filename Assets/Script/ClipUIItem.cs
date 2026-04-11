@@ -23,6 +23,16 @@ public class ClipUIItem : MonoBehaviour
             clipTitleText.text = Path.GetFileNameWithoutExtension(filePath);
         }
 
+        // --- THE FIX: Automatically link the Button so it never misses! ---
+        Button btn = GetComponent<Button>();
+        if (btn == null) btn = GetComponentInChildren<Button>();
+
+        if (btn != null)
+        {
+            btn.onClick.RemoveAllListeners();
+            btn.onClick.AddListener(OnPlayButtonClicked);
+        }
+
         LoadThumbnail();
     }
 
@@ -32,7 +42,6 @@ public class ClipUIItem : MonoBehaviour
 
         try
         {
-            // THE FIX: Shared Read Access so it doesn't fight the player!
             using (BinaryReader reader = new BinaryReader(new FileStream(fullFilePath, FileMode.Open, FileAccess.Read, FileShare.Read)))
             {
                 int frameCount = reader.ReadInt32();
@@ -58,6 +67,10 @@ public class ClipUIItem : MonoBehaviour
 
     public void OnPlayButtonClicked()
     {
+        // --- NEW: Tutorial Bouncer and Event Trigger ---
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("VideoClip")) return;
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoClipClicked();
+
         uiManager.OpenPlayerView(fullFilePath);
     }
 

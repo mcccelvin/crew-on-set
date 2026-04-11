@@ -21,12 +21,22 @@ public class ProjectDataManager : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance == null)
+        // 1. Check if a different instance already exists
+        if (Instance != null && Instance != this)
         {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
+            Debug.LogWarning("Found a duplicate ProjectDataManager! Destroying the clone.");
+            Destroy(gameObject);
+            return; // Stop running code for this duplicate
         }
-        else Destroy(gameObject);
+        Debug.Log("ProjectDataManager instance is set up and ready to go!");
+        // 2. Claim the instance
+        Instance = this;
+
+        // 3. FORCE this object to be a root object so DontDestroyOnLoad doesn't break
+        transform.SetParent(null);
+
+        // 4. Protect it from scene loads
+        DontDestroyOnLoad(gameObject);
     }
 
     public void ClearProject()

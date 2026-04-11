@@ -69,7 +69,6 @@ public class ClipInspector : MonoBehaviour
 
             if (File.Exists(path))
             {
-                // THE FIX: Shared Read Access
                 using (BinaryReader reader = new BinaryReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)))
                 {
                     totalRawFrames = reader.ReadInt32();
@@ -164,11 +163,39 @@ public class ClipInspector : MonoBehaviour
     {
         float duration = (currentClip.endFrame - currentClip.startFrame) / 24f;
         LayoutElement layout = currentClip.GetComponent<LayoutElement>();
+
+        // Update Layout Component if inside Bin
         if (layout != null) layout.preferredWidth = Mathf.Max(duration * pixelsPerSecond, 60f);
+
+        // --- THE FIX: Force the physical timeline clip to sync dimensions! ---
+        if (currentClip.isOnTimeline)
+        {
+            currentClip.ApplyTrimFromInspector();
+        }
     }
 
     public void CloseWindow()
     {
+        if (EventSystem.current != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
+
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.TrimTo10Seconds && EditorTutorialManager.Instance.isTaskPhaseActive)
+            {
+                float duration = (currentClip.endFrame - currentClip.startFrame) / 24f;
+                string displayDuration = duration.ToString("F1");
+
+                if (displayDuration != "10.0")
+                {
+                    EditorTutorialManager.Instance.ShowWarning("It's not 10 seconds yet! Your duration is " + displayDuration + " Sec. Adjust the pink handles until it says exactly 10.0 Sec!");
+                    return;
+                }
+            }
+        }
+
         gameObject.SetActive(false);
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnTrimWindowClosed();
     }
