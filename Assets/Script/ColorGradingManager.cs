@@ -25,6 +25,9 @@ public class ColorGradingManager : MonoBehaviour
     private float lastB = 1f;
     private float lastC = 1f;
     private float lastS = 1f;
+    private float appliedB = float.NaN;
+    private float appliedC = float.NaN;
+    private float appliedS = float.NaN;
 
     void Start()
     {
@@ -77,11 +80,20 @@ public class ColorGradingManager : MonoBehaviour
             }
         }
 
-        gradingMat.SetFloat("_Brightness", brightnessSlider.value);
-        gradingMat.SetFloat("_Contrast", contrastSlider.value);
-        gradingMat.SetFloat("_Saturation", saturationSlider.value);
+        if (!Mathf.Approximately(brightnessSlider.value, appliedB) ||
+            !Mathf.Approximately(contrastSlider.value, appliedC) ||
+            !Mathf.Approximately(saturationSlider.value, appliedS))
+        {
+            appliedB = brightnessSlider.value;
+            appliedC = contrastSlider.value;
+            appliedS = saturationSlider.value;
 
-        UpdateReadouts();
+            gradingMat.SetFloat("_Brightness", appliedB);
+            gradingMat.SetFloat("_Contrast", appliedC);
+            gradingMat.SetFloat("_Saturation", appliedS);
+
+            UpdateReadouts();
+        }
 
         if (EditorTutorialManager.Instance != null)
         {
@@ -121,5 +133,10 @@ public class ColorGradingManager : MonoBehaviour
         if (fadeInToggle) fadeInToggle.isOn = false;
 
         UpdateReadouts();
+    }
+
+    private void OnDestroy()
+    {
+        if (gradingMat != null) Destroy(gradingMat);
     }
 }

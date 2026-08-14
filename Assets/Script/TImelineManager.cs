@@ -112,4 +112,9 @@ public class TimelineManager : MonoBehaviour
             tmp.overflowMode = TextOverflowModes.Overflow;
         }
     }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
 }

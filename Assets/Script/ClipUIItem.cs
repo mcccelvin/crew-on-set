@@ -12,6 +12,7 @@ public class ClipUIItem : MonoBehaviour
     private string fullFilePath;
     private ComputerUIManager uiManager;
     private Texture2D thumbnailTexture;
+    private Button clipButton;
 
     public void Setup(string filePath, ComputerUIManager manager)
     {
@@ -24,13 +25,13 @@ public class ClipUIItem : MonoBehaviour
         }
 
         // --- THE FIX: Automatically link the Button so it never misses! ---
-        Button btn = GetComponent<Button>();
-        if (btn == null) btn = GetComponentInChildren<Button>();
+        if (clipButton == null) clipButton = GetComponent<Button>();
+        if (clipButton == null) clipButton = GetComponentInChildren<Button>();
 
-        if (btn != null)
+        if (clipButton != null)
         {
-            btn.onClick.RemoveAllListeners();
-            btn.onClick.AddListener(OnPlayButtonClicked);
+            clipButton.onClick.RemoveListener(OnPlayButtonClicked);
+            clipButton.onClick.AddListener(OnPlayButtonClicked);
         }
 
         LoadThumbnail();
@@ -39,6 +40,12 @@ public class ClipUIItem : MonoBehaviour
     private void LoadThumbnail()
     {
         if (previewImage == null || !File.Exists(fullFilePath)) return;
+
+        if (thumbnailTexture != null)
+        {
+            Destroy(thumbnailTexture);
+            thumbnailTexture = null;
+        }
 
         try
         {
@@ -52,8 +59,7 @@ public class ClipUIItem : MonoBehaviour
                     byte[] frameBytes = reader.ReadBytes(frameSize);
 
                     thumbnailTexture = new Texture2D(2, 2);
-                    thumbnailTexture.LoadImage(frameBytes);
-                    thumbnailTexture.Apply();
+                    thumbnailTexture.LoadImage(frameBytes, true);
 
                     previewImage.texture = thumbnailTexture;
                 }
@@ -81,6 +87,8 @@ public class ClipUIItem : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (clipButton != null) clipButton.onClick.RemoveListener(OnPlayButtonClicked);
+
         if (thumbnailTexture != null)
         {
             Destroy(thumbnailTexture);

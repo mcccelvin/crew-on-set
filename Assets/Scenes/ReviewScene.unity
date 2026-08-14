@@ -1946,6 +1946,8 @@ MonoBehaviour:
   gradeColorImage: {fileID: 1452646714}
   feedbackPanel: {fileID: 34546418}
   feedbackDetailedText: {fileID: 204262816}
+  feedbackButtonText: {fileID: 862242877}
+  returnButtonText: {fileID: 4326582052807631906}
 --- !u!224 &1768816904
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2060,6 +2062,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gradePanelUI: {fileID: 1768816903}
+  bossDialoguePrefab: {fileID: 8461526509638622950, guid: 7e44a9efd4316704197d1231febcb63b, type: 3}
 --- !u!4 &1794210126
 Transform:
   m_ObjectHideFlags: 0

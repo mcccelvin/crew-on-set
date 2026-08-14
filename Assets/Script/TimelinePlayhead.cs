@@ -34,4 +34,9 @@ public class TimelinePlayhead : MonoBehaviour
     {
         isPlaying = false;
     }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
 }

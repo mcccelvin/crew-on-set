@@ -65,6 +65,9 @@ public class TutorialManager : MonoBehaviour
 
     private Transform playerTransform;
     private Transform lineTarget;
+    private Player.Manager.InputManager pInput;
+    private GameObject tutorialCube;
+    private GameObject tutorialFlower;
 
     public enum TutorialStep
     {
@@ -101,8 +104,9 @@ public class TutorialManager : MonoBehaviour
     public TutorialStep currentStep;
     private bool isTransitioning = false;
     private bool isTaskPhaseActive = false;
-    private int tutorialItemsBought = 0;
+    private bool isTutorialRecordingLookLocked = false;
     private Coroutine warningCoroutine;
+    private bool restoreTaskPanelAfterWarning = false;
 
     private float lastWarningTime = 0f;
 
@@ -123,8 +127,17 @@ public class TutorialManager : MonoBehaviour
         "It is crucial to follow these instructions precisely. Your success and the <color=red>final payout</color> depend entirely on how accurately you execute the client's specific criteria."
     };
     private int currentExplanationPage = 0;
+    private bool isLevel1Retry = false;
 
-    private void Awake() { if (Instance == null) Instance = this; else Destroy(gameObject); }
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
+    }
 
     private void Start()
     {
@@ -133,6 +146,7 @@ public class TutorialManager : MonoBehaviour
 
         Player.PlayerController.PlayerController pCtrl = FindObjectOfType<Player.PlayerController.PlayerController>();
         if (pCtrl != null) playerTransform = pCtrl.transform;
+        pInput = FindObjectOfType<Player.Manager.InputManager>();
 
         if (objectiveLine != null)
         {
@@ -145,18 +159,34 @@ public class TutorialManager : MonoBehaviour
         if (cameraWalkTriggerCircle != null) cameraWalkTriggerCircle.SetActive(false);
 
         int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
+        int currentLevel = CampaignProgression.GetCurrentLevel();
 
-        if (progress >= 3)
+        if (currentLevel == 1 && PlayerPrefs.GetInt("Level1RetryActive", 0) == 1)
         {
-            if (pCtrl != null) { pCtrl.canLook = true; pCtrl.canMove = true; }
-            UnfreezePlayerMovement();
-            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.taskPanel != null)
-                TutorialUIManager.Instance.taskPanel.SetActive(false);
-            Destroy(gameObject);
+            StartCoroutine(StartLevel1RetryWithDelay());
             return;
         }
 
-        if (progress == 2) { FinishTutorialInstantly(); return; }
+        if (currentLevel >= 4)
+        {
+            currentStep = TutorialStep.Level1Accepted;
+            StartCampaignLevel(currentLevel);
+            return;
+        }
+
+        if (currentLevel == 3)
+        {
+            currentStep = TutorialStep.Level1Accepted;
+            StartLevel3();
+            return;
+        }
+
+        if (currentLevel == 2)
+        {
+            currentStep = TutorialStep.Level1Accepted;
+            StartGokeLevel();
+            return;
+        }
         else if (progress == 1) { StartCoroutine(StartPostEditTutorial()); return; }
 
         StartCoroutine(StartTutorialWithDelay());
@@ -164,6 +194,12 @@ public class TutorialManager : MonoBehaviour
 
     private void Update()
     {// --- ADD THIS TO FIX THE POINT C CAMERA TRIGGER ---
+        if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen())
+        {
+            wasJumpHeld = (pInput != null && pInput.Jump) || Input.GetKey(KeyCode.Space);
+            return;
+        }
+
         if (currentStep == TutorialStep.WalkToStageWithCamera && isTaskPhaseActive)
         {
             if (cameraWalkTriggerCircle != null && playerTransform != null)
@@ -214,25 +250,14 @@ public class TutorialManager : MonoBehaviour
             SpawnCheatSDCard();
         }
 
-        if (Input.GetKeyDown(KeyCode.F12))
-        {
-            PlayerPrefs.DeleteAll();
-            PlayerPrefs.Save();
-            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
-        }
-
-        if (Input.GetKeyDown(KeyCode.F9))
-        {
-            SpawnCheatSDCard();
-        }
+        bool canAdvanceCampaignDialogue = CanAdvanceCampaignDialogue();
 
         if (spacePromptText != null)
         {
-            bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.time >= spacebarCooldown) && (currentStep != TutorialStep.WaitForPrompt);
+            bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.time >= spacebarCooldown) && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
             spacePromptText.gameObject.SetActive(canShowPrompt);
         }
 
-        Player.Manager.InputManager pInput = FindObjectOfType<Player.Manager.InputManager>();
         bool isJumpCurrentlyHeld = (pInput != null && pInput.Jump) || Input.GetKey(KeyCode.Space);
 
         bool jumpJustPressed = isJumpCurrentlyHeld && !wasJumpHeld;
@@ -255,7 +280,7 @@ public class TutorialManager : MonoBehaviour
                         StartCoroutine(TransitionToNextStep(TutorialStep.OpenRecordingsFolder, false));
                     }
                 }
-                else if (!isTaskPhaseActive)
+                else if (!isTaskPhaseActive && canAdvanceCampaignDialogue)
                 {
                     AdvanceDialogue();
                 }
@@ -456,7 +481,7 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.Tablet_SpawnCube && isTaskPhaseActive && !cubeSpawned)
         {
-            if (FindSpawnedObject("Cube") != null)
+            if (tutorialCube != null)
             {
                 cubeSpawned = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -466,10 +491,9 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.Tablet_MoveCube && isTaskPhaseActive && !cubeMoved)
         {
-            GameObject spawnedCube = FindSpawnedObject("Cube");
-            if (spawnedCube != null && cubePlacementTarget != null)
+            if (tutorialCube != null && cubePlacementTarget != null)
             {
-                Vector3 cubePos = spawnedCube.transform.position;
+                Vector3 cubePos = tutorialCube.transform.position;
                 Vector3 targetPos = cubePlacementTarget.transform.position;
                 float hDist = Vector2.Distance(new Vector2(cubePos.x, cubePos.z), new Vector2(targetPos.x, targetPos.z));
 
@@ -485,7 +509,7 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.Tablet_SpawnProp && isTaskPhaseActive && !propSpawned)
         {
-            if (FindSpawnedObject("Flower") != null || FindSpawnedObject("Floral") != null)
+            if (tutorialFlower != null)
             {
                 propSpawned = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -495,14 +519,10 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.Tablet_MovePropToCube && isTaskPhaseActive && !flowerOnCube)
         {
-            GameObject spawnedFlower = FindSpawnedObject("Flower");
-            if (spawnedFlower == null) spawnedFlower = FindSpawnedObject("Floral");
-            GameObject spawnedCube = FindSpawnedObject("Cube");
-
-            if (spawnedFlower != null && spawnedCube != null)
+            if (tutorialFlower != null && tutorialCube != null)
             {
-                Vector3 flowerPos = spawnedFlower.transform.position;
-                Vector3 cubePos = spawnedCube.transform.position;
+                Vector3 flowerPos = tutorialFlower.transform.position;
+                Vector3 cubePos = tutorialCube.transform.position;
 
                 float hDist = Vector2.Distance(new Vector2(flowerPos.x, flowerPos.z), new Vector2(cubePos.x, cubePos.z));
                 float vDist = Mathf.Abs(flowerPos.y - cubePos.y);
@@ -518,13 +538,13 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    private GameObject FindSpawnedObject(string namePart)
+    public void OnPropPlaced(GameObject placedObject)
     {
-        foreach (GameObject obj in FindObjectsOfType<GameObject>())
-        {
-            if (obj.name.Contains(namePart) && obj.activeInHierarchy) return obj;
-        }
-        return null;
+        if (placedObject == null) return;
+
+        string propName = placedObject.name.ToLower();
+        if (propName.Contains("cube")) tutorialCube = placedObject;
+        else if (propName.Contains("flower") || propName.Contains("floral")) tutorialFlower = placedObject;
     }
 
     public void PointLineAt(string targetIdentifier)
@@ -579,7 +599,11 @@ public class TutorialManager : MonoBehaviour
     public void UnfreezePlayerMovement()
     {
         Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
-        if (p != null) p.canMove = true;
+        if (p != null)
+        {
+            p.canMove = true;
+            p.canLook = true;
+        }
     }
 
     private IEnumerator UnlockPlayerAfterFrame()
@@ -655,6 +679,7 @@ public class TutorialManager : MonoBehaviour
     }
 
     private IEnumerator StartTutorialWithDelay() { yield return new WaitForSeconds(1f); currentStep = TutorialStep.Intro; UpdateBossDialogue(); }
+    private IEnumerator StartLevel1RetryWithDelay() { yield return new WaitForSeconds(1f); isLevel1Retry = true; currentStep = TutorialStep.SetTrainingObjectAndMoney; UpdateBossDialogue(); }
     private IEnumerator StartPostEditTutorial() { yield return new WaitForSeconds(1.5f); currentStep = TutorialStep.PostEditComplete; UpdateBossDialogue(); }
 
     public void ShowWarning(string warningMessage)
@@ -662,15 +687,57 @@ public class TutorialManager : MonoBehaviour
         if (Time.time < lastWarningTime + 1.5f) return;
         lastWarningTime = Time.time;
 
+        RememberTaskPanelForWarning();
+
         if (warningCoroutine != null) StopCoroutine(warningCoroutine);
         warningCoroutine = StartCoroutine(ShowBossWarning(warningMessage));
+    }
+
+    public void ShowTimedWarning(string warningMessage, float duration)
+    {
+        lastWarningTime = Time.time;
+
+        RememberTaskPanelForWarning();
+
+        if (warningCoroutine != null) StopCoroutine(warningCoroutine);
+        warningCoroutine = StartCoroutine(ShowTimedBossWarning(warningMessage, duration));
     }
 
     private IEnumerator ShowBossWarning(string warningMessage)
     {
         TutorialUIManager.Instance.ShowBossDialogue(warningMessage, TutorialUIManager.Instance.poseBoss, false, false);
-        yield return new WaitForSeconds(1.5f);
-        if (isTaskPhaseActive) TutorialUIManager.Instance.HideBossDialogue();
+        yield return new WaitForSecondsRealtime(1.5f);
+        TutorialUIManager.Instance.HideBossDialogue();
+        RestoreTaskPanelAfterWarning();
+        warningCoroutine = null;
+    }
+
+    private IEnumerator ShowTimedBossWarning(string warningMessage, float duration)
+    {
+        TutorialUIManager.Instance.ShowBossDialogue(warningMessage, TutorialUIManager.Instance.poseBoss, false, false);
+        yield return new WaitForSecondsRealtime(duration);
+        TutorialUIManager.Instance.HideBossDialogue();
+        RestoreTaskPanelAfterWarning();
+        warningCoroutine = null;
+    }
+
+    private void RememberTaskPanelForWarning()
+    {
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.taskPanel != null && TutorialUIManager.Instance.taskPanel.activeSelf)
+        {
+            restoreTaskPanelAfterWarning = true;
+        }
+    }
+
+    private void RestoreTaskPanelAfterWarning()
+    {
+        if (!restoreTaskPanelAfterWarning) return;
+
+        restoreTaskPanelAfterWarning = false;
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.taskPanel != null)
+        {
+            TutorialUIManager.Instance.taskPanel.SetActive(true);
+        }
     }
 
     public void AdvanceDialogue()
@@ -679,25 +746,35 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.PostEditComplete) { StartCoroutine(TransitionToNextStep(TutorialStep.OfferLevel1, false)); return; }
 
-        if (currentStep == TutorialStep.OfferLevel1) { if (CareerManager.Instance != null) CareerManager.Instance.AcceptJob("Goke Cola", 60000); currentStep = TutorialStep.Level1Accepted; UpdateBossDialogue(); return; }
+        if (currentStep == TutorialStep.OfferLevel1)
+        {
+            currentStep = TutorialStep.Level1Accepted;
+            CampaignProgression.SetCurrentLevel(2);
+            StartGokeLevel();
+            return;
+        }
 
         if (currentStep == TutorialStep.Level1Accepted)
         {
-            PlayerPrefs.SetInt("TutorialProgress", 2); PlayerPrefs.Save();
-            TutorialUIManager.Instance.HideBossDialogue();
-            PointLineAt("");
+            if (CampaignLevelManager.Instance != null)
+            {
+                CampaignLevelManager.Instance.CloseBriefing();
+                return;
+            }
 
-            CleanUpStudio();
+            if (Level3Manager.Instance != null)
+            {
+                Level3Manager.Instance.CloseBriefing();
+                return;
+            }
 
-            TutorialUIManager.Instance.SetupTasks(new string[] {
-                "- Stage: RED backdrop & pull Cola away from wall",
-                "- Camera: Use 'Rule of Thirds' composition",
-                "- Light: Use 3-Point Lighting",
-                "- Edit: 3 Graphics & high contrast!"
-            });
+            if (GokeLevelManager.Instance == null)
+            {
+                StartGokeLevel();
+                return;
+            }
 
-            Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
-            StartCoroutine(UnlockPlayerAfterFrame());
+            GokeLevelManager.Instance.CloseBriefing();
             return;
         }
 
@@ -706,11 +783,30 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.SetTrainingObjectAndMoney)
         {
-            if (CareerManager.Instance != null)
+            int budgetToAdd = 10000;
+
+            if (isLevel1Retry)
             {
-                CareerManager.Instance.playerMoney += 10000;
-                CareerManager.Instance.UpdateMoneyUI();
+                int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
+                budgetToAdd = Mathf.Max(0, 10000 - savedMoney);
             }
+            else if (PlayerPrefs.GetInt("Level1StartingBudgetGranted", 0) == 1)
+            {
+                budgetToAdd = 0;
+            }
+
+            if (CareerManager.Instance != null && budgetToAdd > 0)
+            {
+                CareerManager.Instance.AddMoney(budgetToAdd);
+            }
+            else if (budgetToAdd > 0)
+            {
+                int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
+                PlayerPrefs.SetInt("PlayerMoney", savedMoney + budgetToAdd);
+            }
+
+            PlayerPrefs.SetInt("Level1StartingBudgetGranted", 1);
+            PlayerPrefs.Save();
             StartCoroutine(TransitionToNextStep(TutorialStep.ShowPreProductionTitle, false));
             return;
         }
@@ -735,25 +831,33 @@ public class TutorialManager : MonoBehaviour
         StartTaskPhase();
     }
 
-    private void FinishTutorialInstantly()
+    private void StartGokeLevel()
     {
-        currentStep = TutorialStep.Level1Accepted;
-        if (TutorialUIManager.Instance != null)
-        {
-            TutorialUIManager.Instance.ShowBossDialogue("Get to work on that Goke Cola contract! Use those MMA Syllabus techniques.", TutorialUIManager.Instance.poseBoss, true, false);
+        GokeLevelManager gokeLevelManager = GetComponent<GokeLevelManager>();
+        if (gokeLevelManager == null) gokeLevelManager = gameObject.AddComponent<GokeLevelManager>();
+        gokeLevelManager.BeginLevel(this);
+    }
 
-            TutorialUIManager.Instance.SetupTasks(new string[] {
-                "- Stage: RED backdrop & pull Cola away from wall",
-                "- Camera: Use 'Rule of Thirds' composition",
-                "- Light: Use 3-Point Lighting",
-                "- Edit: 3 Graphics & high contrast!"
-            });
-        }
+    private void StartLevel3()
+    {
+        Level3Manager level3Manager = GetComponent<Level3Manager>();
+        if (level3Manager == null) level3Manager = gameObject.AddComponent<Level3Manager>();
+        level3Manager.BeginLevel(this);
+    }
 
-        CleanUpStudio();
+    private void StartCampaignLevel(int level)
+    {
+        CampaignLevelManager campaignLevelManager = GetComponent<CampaignLevelManager>();
+        if (campaignLevelManager == null) campaignLevelManager = gameObject.AddComponent<CampaignLevelManager>();
+        campaignLevelManager.BeginLevel(this, level);
+    }
 
-        Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
-        StartCoroutine(UnlockPlayerAfterFrame());
+    private bool CanAdvanceCampaignDialogue()
+    {
+        if (currentStep != TutorialStep.Level1Accepted) return true;
+        if (CampaignLevelManager.Instance != null) return CampaignLevelManager.Instance.IsBriefingActive();
+        if (Level3Manager.Instance != null) return Level3Manager.Instance.IsBriefingActive();
+        return GokeLevelManager.Instance == null || GokeLevelManager.Instance.IsBriefingActive();
     }
 
     private void StartTaskPhase()
@@ -914,7 +1018,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.AdjustLight_Tilt:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Use <color=red>[Up/Down Arrows]</color> to set Tilt to -5°" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Use <color=red>[Up/Down Arrows]</color> to set Tilt to -5Â°" });
                 break;
 
             case TutorialStep.DropLight:
@@ -1077,6 +1181,9 @@ public class TutorialManager : MonoBehaviour
     {
         if (currentStep == TutorialStep.OfferFirstContract && isTaskPhaseActive)
         {
+            PlayerPrefs.SetInt("FlowerContractAccepted", 1);
+            PlayerPrefs.Save();
+            if (AlmanacManager.Instance != null) AlmanacManager.Instance.UnlockLevel1Knowledge();
             if (firstContractPanel != null) firstContractPanel.SetActive(false);
             TutorialUIManager.Instance.MarkTaskComplete(0);
             StartCoroutine(TransitionToNextStep(TutorialStep.SetTrainingObjectAndMoney, true));
@@ -1154,6 +1261,12 @@ public class TutorialManager : MonoBehaviour
 
     public void OnShopOpened()
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnShopOpened();
+            return;
+        }
+
         if (currentStep == TutorialStep.BuyLight_WalkToShop && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1195,6 +1308,12 @@ public class TutorialManager : MonoBehaviour
 
     public void OnShopClosed()
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnShopClosed();
+            return;
+        }
+
         if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
 
         if (currentStep == TutorialStep.BuyLight_CloseShop && isTaskPhaseActive)
@@ -1211,6 +1330,12 @@ public class TutorialManager : MonoBehaviour
 
     public void OnEquipmentBought(int itemsCount = 1)
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnEquipmentBought();
+            return;
+        }
+
         if (currentStep == TutorialStep.BuyLight_Checkout && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.SetDynamicGlow("shop", false);
@@ -1263,8 +1388,14 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnCameraPickedUp()
+    public void OnCameraPickedUp(string equipmentName = "")
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnCameraPickedUp(equipmentName);
+            return;
+        }
+
         if (currentStep == TutorialStep.PickUpCamera && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1274,6 +1405,12 @@ public class TutorialManager : MonoBehaviour
 
     public void OnSDCardPickedUp()
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnSDCardPickedUp();
+            return;
+        }
+
         if (currentStep == TutorialStep.PickUpSDCard && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1291,8 +1428,14 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnCardInsertedToCamera()
+    public void OnCardInsertedToCamera(string equipmentName = "")
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnCardInsertedToCamera(equipmentName);
+            return;
+        }
+
         if (currentStep == TutorialStep.InsertSDCard && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.SetDynamicGlow("camera", false);
@@ -1301,7 +1444,29 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnCameraViewEntered() { if (currentStep == TutorialStep.EquipCameraView && isTaskPhaseActive && !cameraViewEntered) { cameraViewEntered = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraZoom, true)); } }
+    public void OnCameraViewEntered(string equipmentName = "")
+    {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnCameraViewEntered(equipmentName);
+            return;
+        }
+
+        if (currentStep == TutorialStep.EquipCameraView && isTaskPhaseActive && !cameraViewEntered)
+        {
+            cameraViewEntered = true;
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraZoom, true));
+        }
+    }
+
+    public void OnCameraViewExited(string equipmentName = "")
+    {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnCameraViewExited(equipmentName);
+        }
+    }
     public void OnSubjectFramed() { if (currentStep == TutorialStep.FrameSubject && isTaskPhaseActive && !subjectFramed) { subjectFramed = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.RecordVideo, true)); } }
     public void OnRecordingFinished() { if (currentStep == TutorialStep.RecordVideo && isTaskPhaseActive) { TutorialUIManager.Instance.SetDynamicGlow("camera", false); TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PickUpUsedSDCard, true)); } }
 
@@ -1381,7 +1546,12 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.LearnMovement: ui.ShowBossDialogue("Use <color=red>[W, A, S, D]</color> to walk, <color=red>[Space]</color> to jump, and <color=red>[SHIFT]</color> to sprint. Getting comfortable moving around your set is crucial for finding the best camera angles later!", ui.posePoint, true, false); break;
             case TutorialStep.GameExplanation: ui.ShowBossDialogue(explanationPages[currentExplanationPage], ui.poseBoss, true, true); break;
             case TutorialStep.OfferFirstContract: ui.ShowBossDialogue("Are you ready for your first contract? Make sure to review the client's criteria and click ACCEPT to begin.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.SetTrainingObjectAndMoney: ui.ShowBossDialogue("Great. Here's your 10000 B-Coins. I've also unlocked the Floral Vase prop inside your Director Tablet's memory.", ui.poseSmile, true, true); break;
+            case TutorialStep.SetTrainingObjectAndMoney:
+                if (isLevel1Retry)
+                    ui.ShowBossDialogue("The first submission missed the client's requirements, but the contract is still active. I restored your working budget up to <color=yellow>10000 B-Coins</color>. Rebuild the set, record a stronger take, and use the grading feedback to fix every mistake.", ui.poseBoss, true, false);
+                else
+                    ui.ShowBossDialogue("Great. Here's your 10000 B-Coins. I've also unlocked the Floral Vase prop and the <color=yellow>Production Almanac</color>. Press <color=red>[P]</color> whenever you need to review your equipment features, controls, or the production techniques you have learned.", ui.poseSmile, true, true);
+                break;
 
             case TutorialStep.ShowPreProductionTitle:
                 if (preProductionTitleCard != null) StartCoroutine(FadeTitleCardSequence(preProductionTitleCard, TutorialStep.ExplainPreProduction));
@@ -1414,7 +1584,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.TabletPracticeFinished: ui.ShowBossDialogue("Perfect set design. Take your time arranging it. You can move props you've already placed by selecting them and pressing <color=red>[T]</color>. When you are happy with the background, close the tablet so we can move on to the one of the most important part of filming: Lighting.", ui.poseChill, true, true); break;
 
             case TutorialStep.BuyLight_WalkToShop: ui.ShowBossDialogue("Let's light the set. Walk to the Equipments Shop and press <color=red>[E]</color> to interact.", ui.posePoint, true, false); break;
-            case TutorialStep.BuyLight_AddToCart: ui.ShowBossDialogue("Find the Stage Light in the shop menu and click the 'ADD TO CART’ button.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.BuyLight_AddToCart: ui.ShowBossDialogue("Find the Stage Light in the shop menu and click the 'ADD TO CARTâ€™ button.", ui.poseOpenHand, true, false); break;
             case TutorialStep.BuyLight_Checkout: ui.ShowBossDialogue("Good. Now click the CONFIRM button to process the transaction and get your gear.", ui.poseSmile, true, false); break;
             case TutorialStep.BuyLight_CloseShop: ui.ShowBossDialogue("Purchase complete! The item is at the delivery zone. Press <color=red>[E]</color> or <color=red>[ESC]</color> to close the terminal.", ui.poseHappy, true, false); break;
 
@@ -1427,7 +1597,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.PracticeLight_Intensity: ui.ShowBossDialogue("Basic Lighting: First, use the <color=red>[Scroll Wheel]</color> to play around with the brightness. Give it a try!", ui.poseSmile, true, false); break;
             case TutorialStep.AdjustLight_Intensity: ui.ShowBossDialogue("Alright, enough playing. The client requested exactly 45% brightness. Use the <color=red>[Scroll Wheel]</color> to set your light intensity to 45%.", ui.posePointUp, true, false); break;
             case TutorialStep.PracticeLight_Tilt: ui.ShowBossDialogue("Now for the tilt. Use the <color=red>[Up/Down Arrows]</color> to tilt the light stand up and down. Try it out.", ui.poseBoss, true, false); break;
-            case TutorialStep.AdjustLight_Tilt: ui.ShowBossDialogue("The client wants a slight upward angle. Use your <color=red>[Up/Down Arrows]</color> to set the tilt to exactly -5°.", ui.poseBoss, true, false); break;
+            case TutorialStep.AdjustLight_Tilt: ui.ShowBossDialogue("The client wants a slight upward angle. Use your <color=red>[Up/Down Arrows]</color> to set the tilt to exactly -5Â°.", ui.poseBoss, true, false); break;
 
             case TutorialStep.DropLight: ui.ShowBossDialogue("Perfect. We don't need to carry the light anymore. Press <color=red>[G]</color> to drop it on the floor.", ui.poseHappy, true, false); break;
 
@@ -1478,9 +1648,8 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.PostEditComplete: ui.ShowBossDialogue("Video successfully rendered! You now know the pure basics: Center framing, simple lighting, and 10-second trims.", ui.poseHappy, true, true); break;
 
-            case TutorialStep.OfferLevel1: ui.ShowBossDialogue("Now for Stage 1. Goke Cola wants a commercial, and you MUST use professional MMA Syllabus techniques. Ready?", ui.posePointUp, true, true); break;
+            case TutorialStep.OfferLevel1: ui.ShowBossDialogue("Your first commercial is complete, and I've got your next challenge ready. Want to hear what's next?", ui.poseHappy, true, true); break;
 
-            case TutorialStep.Level1Accepted: ui.ShowBossDialogue("I've wired your upfront payment. The Cola prop has been unlocked in your Director Tablet! They have strict rules: A RED background, NO reflective light, exactly 10s long, an S-Rank Color grade, and ONLY their Logo. Good luck!", ui.poseBoss, true, false); break;
         }
     }
 
@@ -1564,20 +1733,6 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    private void CleanUpStudio()
-    {
-        DirectorTerminal stageManager = FindObjectOfType<DirectorTerminal>();
-        if (stageManager != null) stageManager.ClearStage();
-
-        foreach (GameObject obj in FindObjectsOfType<GameObject>())
-        {
-            if (obj.name.Contains("Cube") || obj.name.Contains("Flower") || obj.name.Contains("Floral") || obj.name.Contains("Cola"))
-            {
-                Destroy(obj);
-            }
-        }
-    }
-
     public bool CanInteract(string objectType)
     {
         if (currentStep >= TutorialStep.OfferLevel1) return true;
@@ -1592,6 +1747,11 @@ public class TutorialManager : MonoBehaviour
 
     public bool CanBuyItem(int itemIndex)
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            return GokeLevelManager.Instance.CanBuyItem(itemIndex);
+        }
+
         if (currentStep >= TutorialStep.OfferLevel1) return true;
 
         if (currentStep < TutorialStep.BuyLight_WalkToShop) { ShowWarning("Follow your tasks first!"); return false; }
@@ -1608,11 +1768,31 @@ public class TutorialManager : MonoBehaviour
         return true;
     }
 
+    public bool CanInsertSDCard(string equipmentName)
+    {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            return GokeLevelManager.Instance.CanInsertSDCard(equipmentName);
+        }
+
+        return true;
+    }
+
     public bool CanRecord()
     {
         if (currentStep >= TutorialStep.OfferLevel1) return true;
         if (currentStep < TutorialStep.RecordVideo) { ShowWarning("Don't start recording yet! Finish setting up the shot first."); return false; }
         return true;
+    }
+
+    public void SetTutorialRecordingLookLock(bool shouldLock)
+    {
+        isTutorialRecordingLookLocked = shouldLock && currentStep == TutorialStep.RecordVideo && isTaskPhaseActive;
+    }
+
+    public bool IsTutorialRecordingLookLocked()
+    {
+        return isTutorialRecordingLookLocked && currentStep == TutorialStep.RecordVideo && isTaskPhaseActive;
     }
 
     public bool CanCloseUI(string uiType)
@@ -1756,5 +1936,10 @@ public class TutorialManager : MonoBehaviour
         }
 
         return true;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 }

@@ -24,7 +24,9 @@ public class ClipInspector : MonoBehaviour
     public float pixelsPerSecond = 40f;
 
     private DraggableClip currentClip;
-    private List<Texture2D> preloadedFrames = new List<Texture2D>();
+    private List<long> frameOffsets = new List<long>();
+    private BinaryReader frameReader;
+    private Texture2D previewTexture;
     private int totalRawFrames;
     private bool needsToLoad = false;
 
@@ -52,7 +54,6 @@ public class ClipInspector : MonoBehaviour
         if (needsToLoad && currentClip != null)
         {
             needsToLoad = false;
-            UpdateHandlePositions();
             StartCoroutine(LoadFramesCoroutine(currentClip.clipFilePath));
         }
     }
@@ -64,26 +65,24 @@ public class ClipInspector : MonoBehaviour
 
         try
         {
-            foreach (var tex in preloadedFrames) if (tex != null) Destroy(tex);
-            preloadedFrames.Clear();
+            CloseFrameReader();
+            frameOffsets.Clear();
+            totalRawFrames = 0;
 
             if (File.Exists(path))
             {
-                using (BinaryReader reader = new BinaryReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)))
-                {
-                    totalRawFrames = reader.ReadInt32();
-                    if (totalRawFrames > 0)
-                    {
-                        for (int i = 0; i < totalRawFrames; i++)
-                        {
-                            byte[] data = reader.ReadBytes(reader.ReadInt32());
-                            Texture2D tex = new Texture2D(2, 2);
-                            tex.LoadImage(data);
-                            tex.Apply();
-                            preloadedFrames.Add(tex);
+                frameReader = new BinaryReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read));
+                totalRawFrames = frameReader.ReadInt32();
 
-                            if (i % 10 == 0) yield return null;
-                        }
+                if (totalRawFrames > 0)
+                {
+                    for (int i = 0; i < totalRawFrames; i++)
+                    {
+                        frameOffsets.Add(frameReader.BaseStream.Position);
+                        int frameSize = frameReader.ReadInt32();
+                        frameReader.BaseStream.Seek(frameSize, SeekOrigin.Current);
+
+                        if (i % 30 == 0) yield return null;
                     }
                 }
             }
@@ -91,7 +90,11 @@ public class ClipInspector : MonoBehaviour
         finally
         {
             if (loadingSpinner != null) loadingSpinner.SetActive(false);
-            ShowFrame(currentClip.startFrame);
+            if (currentClip != null)
+            {
+                UpdateHandlePositions();
+                ShowFrame(currentClip.startFrame);
+            }
         }
     }
 
@@ -99,8 +102,8 @@ public class ClipInspector : MonoBehaviour
     {
         if (totalRawFrames <= 0) return;
         float trackWidth = trimTrack.rect.width;
-        float leftPct = (float)currentClip.startFrame / (totalRawFrames - 1);
-        float rightPct = (float)currentClip.endFrame / (totalRawFrames - 1);
+        float leftPct = (float)currentClip.startFrame / totalRawFrames;
+        float rightPct = (float)currentClip.endFrame / totalRawFrames;
 
         leftHandle.anchorMin = new Vector2(0, 0.5f);
         leftHandle.anchorMax = new Vector2(0, 0.5f);
@@ -120,15 +123,17 @@ public class ClipInspector : MonoBehaviour
 
         float adjustedX = localPos.x + (trimTrack.pivot.x * trimTrack.rect.width);
         float pct = Mathf.Clamp01(adjustedX / trimTrack.rect.width);
-        int frame = Mathf.RoundToInt(pct * (totalRawFrames - 1));
+        int frame = Mathf.RoundToInt(pct * totalRawFrames);
 
         if (isLeft)
         {
+            frame = Mathf.Clamp(frame, 0, totalRawFrames - 1);
             if (frame >= currentClip.endFrame) frame = currentClip.endFrame - 1;
             currentClip.startFrame = frame;
         }
         else
         {
+            frame = Mathf.Clamp(frame, 1, totalRawFrames);
             if (frame <= currentClip.startFrame) frame = currentClip.startFrame + 1;
             currentClip.endFrame = frame;
         }
@@ -146,14 +151,22 @@ public class ClipInspector : MonoBehaviour
 
     private void ShowFrame(int frameIndex)
     {
-        if (preloadedFrames.Count > 0)
+        if (frameReader != null && frameOffsets.Count > 0)
         {
-            int safeIndex = Mathf.Clamp(frameIndex, 0, preloadedFrames.Count - 1);
-            previewScreen.texture = preloadedFrames[safeIndex];
+            int safeIndex = Mathf.Clamp(frameIndex, 0, frameOffsets.Count - 1);
+            frameReader.BaseStream.Position = frameOffsets[safeIndex];
+
+            int frameSize = frameReader.ReadInt32();
+            byte[] frameData = frameReader.ReadBytes(frameSize);
+
+            if (previewTexture == null) previewTexture = new Texture2D(2, 2);
+            previewTexture.LoadImage(frameData);
+
+            if (previewScreen != null) previewScreen.texture = previewTexture;
 
             if (currentClip != null && frameDataText != null)
             {
-                float duration = (currentClip.endFrame - currentClip.startFrame) / 24f;
+                float duration = (currentClip.endFrame - currentClip.startFrame) / TapeSettings.framesPerSecond;
                 frameDataText.text = $"Trimmed Duration: {duration:F1} Sec";
             }
         }
@@ -161,7 +174,7 @@ public class ClipInspector : MonoBehaviour
 
     private void UpdateClipUI()
     {
-        float duration = (currentClip.endFrame - currentClip.startFrame) / 24f;
+        float duration = (currentClip.endFrame - currentClip.startFrame) / TapeSettings.framesPerSecond;
         LayoutElement layout = currentClip.GetComponent<LayoutElement>();
 
         // Update Layout Component if inside Bin
@@ -185,7 +198,7 @@ public class ClipInspector : MonoBehaviour
         {
             if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.TrimTo10Seconds && EditorTutorialManager.Instance.isTaskPhaseActive)
             {
-                float duration = (currentClip.endFrame - currentClip.startFrame) / 24f;
+                float duration = (currentClip.endFrame - currentClip.startFrame) / TapeSettings.framesPerSecond;
                 string displayDuration = duration.ToString("F1");
 
                 if (displayDuration != "10.0")
@@ -198,5 +211,27 @@ public class ClipInspector : MonoBehaviour
 
         gameObject.SetActive(false);
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnTrimWindowClosed();
+    }
+
+    private void CloseFrameReader()
+    {
+        if (frameReader != null)
+        {
+            frameReader.Dispose();
+            frameReader = null;
+        }
+    }
+
+    private void OnDisable()
+    {
+        StopAllCoroutines();
+        CloseFrameReader();
+    }
+
+    private void OnDestroy()
+    {
+        CloseFrameReader();
+        if (previewTexture != null) Destroy(previewTexture);
+        if (Instance == this) Instance = null;
     }
 }

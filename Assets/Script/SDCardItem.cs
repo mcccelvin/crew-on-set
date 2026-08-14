@@ -12,6 +12,15 @@ namespace Player.Equipment
         public float cameraScore = 0f; // NEW: Camera only (out of 70)
         public float lightScore = 0f;  // NEW: Light only (out of 30)
 
+        [Header("Production Evidence")]
+        public int campaignLevel = 1;
+        public int shotType = 2;
+        public float screenDirection = 0f;
+        public string actorPose = "";
+        public bool requiredSubjectsVisible = false;
+        public bool usedSoftLight = false;
+        public bool hasThreePointRoles = false;
+
         [Header("Icons")]
         [Tooltip("Drag the icon for a RECORDED SD card here")]
         public Sprite usedCardIcon;

@@ -7,6 +7,13 @@ public class FootageData
     public string fileName;
     public float camScore;
     public float lightScore;
+    public int campaignLevel;
+    public int shotType;
+    public float screenDirection;
+    public string actorPose;
+    public bool requiredSubjectsVisible;
+    public bool usedSoftLight;
+    public bool hasThreePointRoles;
 }
 
 public class ProjectDataManager : MonoBehaviour
@@ -18,6 +25,7 @@ public class ProjectDataManager : MonoBehaviour
     // --- NEW: Smuggle the Stage Data ---
     public float savedPreProdScore = 100f;
     public string savedPreProdFeedback = "";
+    public bool savedRequiredSetupMet = true;
 
     private void Awake()
     {
@@ -44,5 +52,11 @@ public class ProjectDataManager : MonoBehaviour
         compiledFootage.Clear();
         savedPreProdScore = 100f;
         savedPreProdFeedback = "";
+        savedRequiredSetupMet = true;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 }

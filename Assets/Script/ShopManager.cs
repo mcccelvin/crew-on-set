@@ -26,18 +26,14 @@ public class ShopManager : MonoBehaviour
         int cost = equipmentCosts[itemIndex];
 
         // 2. Check if the player has enough B coins in their CareerManager!
-        if (CareerManager.Instance != null && CareerManager.Instance.playerMoney >= cost)
+        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(cost))
         {
-            // 3. Deduct the B coins and update the player's screen
-            CareerManager.Instance.playerMoney -= cost;
-            CareerManager.Instance.UpdateMoneyUI();
-
-            // 4. Spawn the brand new equipment at the delivery zone
+            // 3. Spawn the brand new equipment at the delivery zone
             GameObject boughtItem = Instantiate(equipmentPrefabs[itemIndex], deliveryZone.position, deliveryZone.rotation);
 
             Debug.Log($"SUCCESS: Bought item {itemIndex} for {cost} B coins! Remaining balance: {CareerManager.Instance.playerMoney}");
 
-            // 5. Tell the Boss you bought an item so the tutorial can continue!
+            // 4. Tell the Boss you bought an item so the tutorial can continue!
             if (TutorialManager.Instance != null)
             {
                 TutorialManager.Instance.OnEquipmentBought();

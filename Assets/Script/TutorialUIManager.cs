@@ -61,10 +61,19 @@ public class TutorialUIManager : MonoBehaviour
 
     private void Awake() { Instance = this; }
 
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     private void Update()
     {
+        if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
+
         if (Input.GetKeyDown(KeyCode.Tab) && taskPanel != null && taskPanel.activeSelf)
         {
+            if (ContractUIManager.Instance != null && ContractUIManager.Instance.CanToggleQualifications()) return;
+
             isTaskUIExpanded = !isTaskUIExpanded;
             if (taskOpenView != null) taskOpenView.SetActive(isTaskUIExpanded);
             if (taskClosedView != null) taskClosedView.SetActive(!isTaskUIExpanded);
@@ -168,4 +177,4 @@ public class TutorialUIManager : MonoBehaviour
         TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>();
         foreach (var g in glows) if (g.gameObject.name.ToLower().Contains(keyword.ToLower())) { if (state) g.StartGlowing(); else g.StopGlowing(); }
     }
-}   
+}

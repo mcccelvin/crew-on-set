@@ -18,6 +18,7 @@ public class TutorialHighlighter : MonoBehaviour
     private RectTransform targetElement;
     private CanvasGroup frameCanvasGroup;
     private Canvas myCanvas;
+    private readonly Vector3[] targetCorners = new Vector3[4];
 
     // --- NEW: 4-Panel Dimmer Variables ---
     private CanvasGroup dimmerGroup;
@@ -27,7 +28,11 @@ public class TutorialHighlighter : MonoBehaviour
     private void Awake()
     {
         if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
 
         myCanvas = GetComponentInParent<Canvas>();
 
@@ -150,11 +155,10 @@ public class TutorialHighlighter : MonoBehaviour
 
         Camera cam = (targetCanvas.renderMode == RenderMode.ScreenSpaceOverlay) ? null : targetCanvas.worldCamera;
 
-        Vector3[] corners = new Vector3[4];
-        targetElement.GetWorldCorners(corners);
+        targetElement.GetWorldCorners(targetCorners);
 
-        Vector2 screenBottomLeft = RectTransformUtility.WorldToScreenPoint(cam, corners[0]);
-        Vector2 screenTopRight = RectTransformUtility.WorldToScreenPoint(cam, corners[2]);
+        Vector2 screenBottomLeft = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[0]);
+        Vector2 screenTopRight = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[2]);
 
         float width = Mathf.Abs(screenTopRight.x - screenBottomLeft.x);
         float height = Mathf.Abs(screenTopRight.y - screenBottomLeft.y);
@@ -216,5 +220,10 @@ public class TutorialHighlighter : MonoBehaviour
         // 4. Right Panel
         dimmerPanels[3].sizeDelta = new Vector2(parentRight - holeRight, holeH);
         dimmerPanels[3].localPosition = new Vector2(holeRight + (dimmerPanels[3].sizeDelta.x / 2f), holeY);
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 }

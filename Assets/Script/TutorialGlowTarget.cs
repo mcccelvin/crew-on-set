@@ -87,4 +87,15 @@ public class TutorialGlowTarget : MonoBehaviour
             }
         }
     }
+
+    private void OnDestroy()
+    {
+        foreach (Material mat in objectMaterials)
+        {
+            if (mat != null) Destroy(mat);
+        }
+
+        objectMaterials.Clear();
+        originalEmissions.Clear();
+    }
 }

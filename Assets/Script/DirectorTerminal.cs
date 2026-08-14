@@ -39,6 +39,10 @@ public class DirectorTerminal : MonoBehaviour
     [Header("Dynamic Prop Bin Database")]
     public List<LevelPropBank> propDatabase = new List<LevelPropBank>();
 
+    [Header("Level 3 Cast & Vehicle")]
+    public int actorHireCost = 500;
+    public int carSpawnCost = 50;
+
     [Header("Drag Settings")]
     public LayerMask moveableLayer;
     public float dragHeight = 0.1f;
@@ -57,12 +61,25 @@ public class DirectorTerminal : MonoBehaviour
 
     private GameObject draggedObject;
     private GameObject selectedObject;
+    private Collider[] draggedColliders;
+    private Renderer[] draggedRenderers;
+    private Renderer[] selectedRenderers;
     private bool isTerminalActive = false;
     private bool justGrabbed = false;
+    private bool showPropCostWarningOnDrop = false;
+    private bool hasShownPropCostWarning = false;
+    private Button poseActorButton;
+
+    private int displayedRValue = int.MinValue;
+    private int displayedGValue = int.MinValue;
+    private int displayedBValue = int.MinValue;
+    private int displayedMoney = int.MinValue;
 
     private LineRenderer selectionOutline;
+    private Material selectionOutlineMaterial;
 
     public bool HasWall() { return currentWall != null; }
+    public GameObject GetCurrentWall() { return currentWall; }
 
     private void Start()
     {
@@ -71,6 +88,8 @@ public class DirectorTerminal : MonoBehaviour
 
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
+
+        CreatePoseActorButton();
 
         Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
         foreach (Canvas canvas in allCanvases)
@@ -114,11 +133,13 @@ public class DirectorTerminal : MonoBehaviour
             if (IsMouseOverViewport()) TryDelete3DObject();
         }
 
-        bool isWall = selectedObject != null && (selectedObject.name.ToLower().Contains("wall") || selectedObject.name.ToLower().Contains("stage") || selectedObject.name.ToLower().Contains("studio") || selectedObject.name.ToLower().Contains("backdrop"));
+        bool isWall = IsWallObject(selectedObject);
 
         if (Input.GetKeyDown(KeyCode.T) && selectedObject != null && !isWall)
         {
             draggedObject = selectedObject;
+            draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
+            draggedRenderers = selectedRenderers;
             justGrabbed = true;
         }
 
@@ -133,9 +154,9 @@ public class DirectorTerminal : MonoBehaviour
 
         if (step == TutorialManager.TutorialStep.Tablet_PaintWall || step == TutorialManager.TutorialStep.Tablet_PaintCube)
         {
-            float bTarget = bSlider.maxValue > 1f ? 150f : 150f / 255f;
             if (bSlider != null)
             {
+                float bTarget = bSlider.maxValue > 1f ? 150f : 150f / 255f;
                 if (bSlider.value < bTarget)
                 {
                     bSlider.value = bTarget;
@@ -163,18 +184,10 @@ public class DirectorTerminal : MonoBehaviour
 
         if (currentWall == null && wallPrefab != null && spawnPoint != null)
         {
-            if (CareerManager.Instance != null)
+            if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(50))
             {
-                if (CareerManager.Instance.playerMoney >= 50)
-                {
-                    CareerManager.Instance.playerMoney -= 50;
-                    CareerManager.Instance.UpdateMoneyUI();
-                }
-                else
-                {
-                    if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("The wall costs 50 B-Coins!");
-                    return;
-                }
+                if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("The wall costs 50 B-Coins!");
+                return;
             }
 
             currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
@@ -218,7 +231,17 @@ public class DirectorTerminal : MonoBehaviour
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("ClearStage")) return;
 
-        if (currentWall != null) { Destroy(currentWall); currentWall = null; }
+        if (currentWall != null)
+        {
+            if (selectedObject == currentWall)
+            {
+                selectedObject = null;
+                selectedRenderers = null;
+            }
+
+            Destroy(currentWall);
+            currentWall = null;
+        }
 
         currentWallColor = Color.white;
 
@@ -233,10 +256,33 @@ public class DirectorTerminal : MonoBehaviour
 
     private void UpdateUIText()
     {
-        if (rSlider != null && rValueText != null) rValueText.text = Mathf.RoundToInt(rSlider.maxValue > 1f ? rSlider.value : rSlider.value * 255f).ToString();
-        if (gSlider != null && gValueText != null) gValueText.text = Mathf.RoundToInt(gSlider.maxValue > 1f ? gSlider.value : gSlider.value * 255f).ToString();
-        if (bSlider != null && bValueText != null) bValueText.text = Mathf.RoundToInt(bSlider.maxValue > 1f ? bSlider.value : bSlider.value * 255f).ToString();
-        if (bCoinsText != null && CareerManager.Instance != null) bCoinsText.text = CareerManager.Instance.playerMoney.ToString() + " B-Coins";
+        int rValue = rSlider != null ? Mathf.RoundToInt(rSlider.maxValue > 1f ? rSlider.value : rSlider.value * 255f) : 0;
+        int gValue = gSlider != null ? Mathf.RoundToInt(gSlider.maxValue > 1f ? gSlider.value : gSlider.value * 255f) : 0;
+        int bValue = bSlider != null ? Mathf.RoundToInt(bSlider.maxValue > 1f ? bSlider.value : bSlider.value * 255f) : 0;
+
+        if (rValueText != null && displayedRValue != rValue)
+        {
+            displayedRValue = rValue;
+            rValueText.text = rValue.ToString();
+        }
+
+        if (gValueText != null && displayedGValue != gValue)
+        {
+            displayedGValue = gValue;
+            gValueText.text = gValue.ToString();
+        }
+
+        if (bValueText != null && displayedBValue != bValue)
+        {
+            displayedBValue = bValue;
+            bValueText.text = bValue.ToString();
+        }
+
+        if (bCoinsText != null && CareerManager.Instance != null && displayedMoney != CareerManager.Instance.playerMoney)
+        {
+            displayedMoney = CareerManager.Instance.playerMoney;
+            bCoinsText.text = displayedMoney + " B-Coins";
+        }
     }
 
     private void SyncSlidersToColor(Color color)
@@ -259,7 +305,8 @@ public class DirectorTerminal : MonoBehaviour
                 selectionOutline.startWidth = 0.05f; selectionOutline.endWidth = 0.05f;
                 selectionOutline.positionCount = 5; selectionOutline.useWorldSpace = true;
                 selectionOutline.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                selectionOutline.material = new Material(Shader.Find("Sprites/Default"));
+                selectionOutlineMaterial = new Material(Shader.Find("Sprites/Default"));
+                selectionOutline.material = selectionOutlineMaterial;
                 selectionOutline.startColor = Color.green; selectionOutline.endColor = Color.green;
             }
 
@@ -269,11 +316,10 @@ public class DirectorTerminal : MonoBehaviour
             if (isBlinkOn)
             {
                 Bounds bounds = new Bounds(selectedObject.transform.position, Vector3.zero);
-                Renderer[] rends = selectedObject.GetComponentsInChildren<Renderer>();
-                if (rends.Length > 0)
+                if (selectedRenderers != null && selectedRenderers.Length > 0)
                 {
-                    bounds = rends[0].bounds;
-                    foreach (Renderer r in rends) bounds.Encapsulate(r.bounds);
+                    bounds = selectedRenderers[0].bounds;
+                    foreach (Renderer r in selectedRenderers) bounds.Encapsulate(r.bounds);
                 }
 
                 float pad = 0.1f;
@@ -324,36 +370,42 @@ public class DirectorTerminal : MonoBehaviour
             if (rb != null && rb.gameObject.layer == LayerMask.NameToLayer("Props"))
             {
                 selectedObject = rb.gameObject;
+                selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
 
-                Renderer[] rens = selectedObject.GetComponentsInChildren<Renderer>();
-                if (rens.Length > 0)
+                if (selectedRenderers.Length > 0)
                 {
-                    SyncSlidersToColor(rens[0].material.color);
+                    SyncSlidersToColor(selectedRenderers[0].material.color);
                 }
 
                 // --- NEW: Tell Tutorial we clicked a prop! ---
                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnObjectSelected(selectedObject.name);
 
+                UpdatePoseActorButton();
+
                 return;
             }
 
-            string objName = hit.collider.name.ToLower();
-            if (objName.Contains("wall") || objName.Contains("stage") || objName.Contains("studio") || objName.Contains("backdrop"))
+            if (IsWallName(hit.collider.name))
             {
                 selectedObject = hit.collider.gameObject;
+                selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "";
                 SyncSlidersToColor(currentWallColor);
 
                 // --- NEW: Tell Tutorial we clicked the wall! ---
                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnObjectSelected(selectedObject.name);
 
+                UpdatePoseActorButton();
+
                 return;
             }
         }
 
         selectedObject = null;
+        selectedRenderers = null;
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
+        UpdatePoseActorButton();
     }
 
     private void TryDelete3DObject()
@@ -370,7 +422,9 @@ public class DirectorTerminal : MonoBehaviour
                 if (selectedObject == rb.gameObject)
                 {
                     selectedObject = null;
+                    selectedRenderers = null;
                     if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
+                    UpdatePoseActorButton();
                 }
                 Destroy(rb.gameObject);
                 return;
@@ -380,6 +434,8 @@ public class DirectorTerminal : MonoBehaviour
 
     public void StartDraggingNewProp(GameObject prefab3D)
     {
+        showPropCostWarningOnDrop = false;
+
         if (TutorialManager.Instance != null)
         {
             string propName = prefab3D.name.ToLower();
@@ -387,14 +443,11 @@ public class DirectorTerminal : MonoBehaviour
             if ((propName.Contains("flower") || propName.Contains("floral")) && !TutorialManager.Instance.CanUseTabletFeature("SpawnFlower")) return;
         }
 
-        if (CareerManager.Instance != null && CareerManager.Instance.playerMoney >= 50)
+        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(50))
         {
-            CareerManager.Instance.playerMoney -= 50;
-            CareerManager.Instance.UpdateMoneyUI();
-
-            if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep >= TutorialManager.TutorialStep.FreePlayDirectorTablet)
+            if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep >= TutorialManager.TutorialStep.FreePlayDirectorTablet && !hasShownPropCostWarning)
             {
-                TutorialManager.Instance.ShowWarning("Spawned Prop! (-50 B-Coins)");
+                showPropCostWarningOnDrop = true;
             }
         }
         else if (CareerManager.Instance != null)
@@ -446,6 +499,9 @@ public class DirectorTerminal : MonoBehaviour
 
         draggedObject = wrapper;
         selectedObject = wrapper;
+        draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
+        draggedRenderers = rends;
+        selectedRenderers = rends;
         justGrabbed = true;
 
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
@@ -453,14 +509,113 @@ public class DirectorTerminal : MonoBehaviour
         if (rSlider != null) rSlider.value = rSlider.maxValue;
         if (gSlider != null) gSlider.value = gSlider.maxValue;
         if (bSlider != null) bSlider.value = bSlider.maxValue;
+
+        UpdatePoseActorButton();
+    }
+
+    public void StartDraggingStageItem(string itemName, bool isActor, int itemIndex)
+    {
+        showPropCostWarningOnDrop = false;
+
+        int itemCost = isActor ? actorHireCost : carSpawnCost;
+        if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost))
+        {
+            if (TutorialManager.Instance != null)
+            {
+                string itemType = isActor ? "Actor" : "Car";
+                TutorialManager.Instance.ShowWarning("Not enough money! " + itemType + " costs " + itemCost + " B-Coins.");
+            }
+            return;
+        }
+
+        Plane groundPlane = new Plane(Vector3.up, new Vector3(0, dragHeight, 0));
+        Ray ray = GetMouseRay();
+        Vector3 spawnPos = Vector3.zero;
+
+        if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
+
+        GameObject wrapper = isActor ? CreateCubeActor(itemName, itemIndex) : CreateCubeCar(itemName);
+        wrapper.transform.position = spawnPos;
+
+        foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
+        {
+            t.gameObject.layer = LayerMask.NameToLayer("Props");
+        }
+
+        Rigidbody newRb = wrapper.AddComponent<Rigidbody>();
+        newRb.isKinematic = true;
+
+        draggedObject = wrapper;
+        selectedObject = wrapper;
+        draggedColliders = wrapper.GetComponentsInChildren<Collider>();
+        draggedRenderers = wrapper.GetComponentsInChildren<Renderer>();
+        selectedRenderers = draggedRenderers;
+        justGrabbed = true;
+
+        if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + itemName;
+
+        UpdatePoseActorButton();
+    }
+
+    public void StartDraggingCampaignProduct(string itemName, int campaignLevel)
+    {
+        showPropCostWarningOnDrop = false;
+
+        if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(50))
+        {
+            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 50 B-Coins.");
+            return;
+        }
+
+        Plane groundPlane = new Plane(Vector3.up, new Vector3(0, dragHeight, 0));
+        Ray ray = GetMouseRay();
+        Vector3 spawnPos = Vector3.zero;
+
+        if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
+
+        GameObject wrapper = CreateCubeCampaignProduct(itemName, campaignLevel);
+        wrapper.transform.position = spawnPos;
+
+        foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
+        {
+            t.gameObject.layer = LayerMask.NameToLayer("Props");
+        }
+
+        Rigidbody newRb = wrapper.AddComponent<Rigidbody>();
+        newRb.isKinematic = true;
+
+        draggedObject = wrapper;
+        selectedObject = wrapper;
+        draggedColliders = wrapper.GetComponentsInChildren<Collider>();
+        draggedRenderers = wrapper.GetComponentsInChildren<Renderer>();
+        selectedRenderers = draggedRenderers;
+        justGrabbed = true;
+        showPropCostWarningOnDrop = !hasShownPropCostWarning;
+
+        if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + itemName;
+
+        UpdatePoseActorButton();
     }
 
     public void DropDraggedProp()
     {
         if (draggedObject != null)
         {
-            string propName = draggedObject.name.ToLower();
+            GameObject placedObject = draggedObject;
+            bool shouldShowPropCostWarning = showPropCostWarningOnDrop;
             draggedObject = null;
+            draggedColliders = null;
+            draggedRenderers = null;
+            showPropCostWarningOnDrop = false;
+
+            if (TutorialManager.Instance != null)
+                TutorialManager.Instance.OnPropPlaced(placedObject);
+
+            if (shouldShowPropCostWarning && TutorialManager.Instance != null)
+            {
+                hasShownPropCostWarning = true;
+                TutorialManager.Instance.ShowTimedWarning("Spawned Prop! (-50 B-Coins)", 3f);
+            }
         }
     }
 
@@ -469,7 +624,8 @@ public class DirectorTerminal : MonoBehaviour
         Ray ray = GetMouseRay();
         bool stacked = false;
 
-        Collider[] draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
+        if (draggedColliders == null) draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
+        if (draggedRenderers == null) draggedRenderers = draggedObject.GetComponentsInChildren<Renderer>();
         foreach (var col in draggedColliders) col.enabled = false;
 
         int layerMask = (1 << LayerMask.NameToLayer("Props")) | (1 << LayerMask.NameToLayer("Default"));
@@ -478,12 +634,11 @@ public class DirectorTerminal : MonoBehaviour
         {
             if (hit.normal.y > 0.5f)
             {
-                Renderer[] rends = draggedObject.GetComponentsInChildren<Renderer>();
                 float bottomOffset = 0f;
-                if (rends.Length > 0)
+                if (draggedRenderers.Length > 0)
                 {
-                    Bounds b = rends[0].bounds;
-                    foreach (Renderer r in rends) b.Encapsulate(r.bounds);
+                    Bounds b = draggedRenderers[0].bounds;
+                    foreach (Renderer r in draggedRenderers) b.Encapsulate(r.bounds);
                     bottomOffset = draggedObject.transform.position.y - b.min.y;
                 }
 
@@ -501,12 +656,11 @@ public class DirectorTerminal : MonoBehaviour
             {
                 Vector3 flatHit = ray.GetPoint(enter);
 
-                Renderer[] rends = draggedObject.GetComponentsInChildren<Renderer>();
                 float bottomOffset = 0f;
-                if (rends.Length > 0)
+                if (draggedRenderers.Length > 0)
                 {
-                    Bounds b = rends[0].bounds;
-                    foreach (Renderer r in rends) b.Encapsulate(r.bounds);
+                    Bounds b = draggedRenderers[0].bounds;
+                    foreach (Renderer r in draggedRenderers) b.Encapsulate(r.bounds);
                     bottomOffset = draggedObject.transform.position.y - b.min.y;
                 }
 
@@ -525,7 +679,13 @@ public class DirectorTerminal : MonoBehaviour
 
         selectedObject = null;
         draggedObject = null;
+        selectedRenderers = null;
+        draggedColliders = null;
+        draggedRenderers = null;
+        showPropCostWarningOnDrop = false;
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
+
+        UpdatePoseActorButton();
 
         if (selectionOutline != null) selectionOutline.enabled = false;
     }
@@ -534,11 +694,14 @@ public class DirectorTerminal : MonoBehaviour
     {
         Color newCol = NormalizeColor(r, g, b);
 
-        bool isWall = selectedObject != null && (selectedObject.name.ToLower().Contains("wall") || selectedObject.name.ToLower().Contains("stage") || selectedObject.name.ToLower().Contains("studio") || selectedObject.name.ToLower().Contains("backdrop"));
+        bool isWall = IsWallObject(selectedObject);
+
+        if (selectedObject != null && selectedObject.GetComponent<CubeActor>() != null) return;
 
         if (selectedObject != null && !isWall)
         {
-            foreach (MeshRenderer ren in selectedObject.GetComponentsInChildren<MeshRenderer>())
+            if (selectedRenderers == null) selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
+            foreach (Renderer ren in selectedRenderers)
             {
                 ren.material.color = newCol;
             }
@@ -562,12 +725,12 @@ public class DirectorTerminal : MonoBehaviour
         if (propUIContainer == null || uiPropCardPrefab == null) return;
         foreach (Transform child in propUIContainer) Destroy(child.gameObject);
 
-        int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
+        int currentLevel = CampaignProgression.GetCurrentLevel();
 
         foreach (LevelPropBank bank in propDatabase)
         {
-            bool isTutorialMatch = (progress < 2 && bank.progressLevel < 2);
-            bool isLevelMatch = (progress == bank.progressLevel);
+            bool isTutorialMatch = (currentLevel == 1 && bank.progressLevel < 2);
+            bool isLevelMatch = (currentLevel == bank.progressLevel);
 
             if (isTutorialMatch || isLevelMatch)
             {
@@ -580,6 +743,21 @@ public class DirectorTerminal : MonoBehaviour
                 }
             }
         }
+
+        if (currentLevel >= 3)
+        {
+            CreateStageItemCard("ACTOR A", true, 0);
+            CreateStageItemCard("ACTOR B", true, 1);
+            CreateStageItemCard("ACTOR C", true, 2);
+        }
+
+        if (currentLevel == 3 || currentLevel == 5)
+        {
+            CreateStageItemCard("LAMBORMINI CAR", false, 0);
+        }
+
+        if (currentLevel == 4) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
+        if (currentLevel == 5) CreateCampaignProductCard("HARAYA PRODUCT", 5);
     }
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
@@ -595,6 +773,7 @@ public class DirectorTerminal : MonoBehaviour
         Cursor.visible = true;
 
         GeneratePropBankUI();
+        UpdatePoseActorButton();
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnTabletOpened();
     }
 
@@ -616,5 +795,309 @@ public class DirectorTerminal : MonoBehaviour
         if (selectionOutline != null) selectionOutline.enabled = false;
 
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnTabletClosed();
+    }
+
+    private bool IsWallObject(GameObject targetObject)
+    {
+        return targetObject != null && IsWallName(targetObject.name);
+    }
+
+    private void CreateStageItemCard(string itemName, bool isActor, int itemIndex)
+    {
+        GameObject newUICard = Instantiate(uiPropCardPrefab, propUIContainer);
+        UIDragStageItem dragScript = newUICard.GetComponent<UIDragStageItem>();
+        if (dragScript == null) dragScript = newUICard.AddComponent<UIDragStageItem>();
+        dragScript.Setup(itemName, isActor, itemIndex, this);
+
+        TextMeshProUGUI cardText = newUICard.GetComponentInChildren<TextMeshProUGUI>();
+        if (cardText != null) cardText.text = itemName + "\n" + (isActor ? actorHireCost : carSpawnCost) + " B";
+    }
+
+    private void CreateCampaignProductCard(string itemName, int campaignLevel)
+    {
+        GameObject newUICard = Instantiate(uiPropCardPrefab, propUIContainer);
+        UIDragCampaignProduct dragScript = newUICard.GetComponent<UIDragCampaignProduct>();
+        if (dragScript == null) dragScript = newUICard.AddComponent<UIDragCampaignProduct>();
+        dragScript.Setup(itemName, campaignLevel, this);
+
+        TextMeshProUGUI cardText = newUICard.GetComponentInChildren<TextMeshProUGUI>();
+        if (cardText != null) cardText.text = itemName + "\n50 B";
+    }
+
+    private GameObject CreateCubeActor(string actorName, int actorIndex)
+    {
+        GameObject actor = new GameObject(actorName + "_Wrapper");
+        CubeActor cubeActor = actor.AddComponent<CubeActor>();
+
+        Color shirtColor = actorIndex == 0 ? new Color(0.8f, 0.15f, 0.15f) :
+                           actorIndex == 1 ? new Color(0.15f, 0.35f, 0.85f) :
+                           new Color(0.15f, 0.7f, 0.3f);
+        Color skinColor = actorIndex == 2 ? new Color(0.45f, 0.25f, 0.12f) : new Color(0.9f, 0.65f, 0.4f);
+        Color pantsColor = actorIndex == 1 ? new Color(0.12f, 0.12f, 0.12f) : new Color(0.1f, 0.18f, 0.35f);
+
+        CreateCubePart("Body", actor.transform, new Vector3(0, 1.35f, 0), new Vector3(0.7f, 0.9f, 0.35f), shirtColor);
+        CreateCubePart("Head", actor.transform, new Vector3(0, 2.1f, 0), new Vector3(0.5f, 0.5f, 0.5f), skinColor);
+
+        Transform leftArm = CreateLimbPivot("Left Arm", actor.transform, new Vector3(-0.45f, 1.7f, 0), new Vector3(0.22f, 0.8f, 0.22f), shirtColor);
+        Transform rightArm = CreateLimbPivot("Right Arm", actor.transform, new Vector3(0.45f, 1.7f, 0), new Vector3(0.22f, 0.8f, 0.22f), shirtColor);
+        Transform leftLeg = CreateLimbPivot("Left Leg", actor.transform, new Vector3(-0.2f, 0.9f, 0), new Vector3(0.28f, 0.9f, 0.3f), pantsColor);
+        Transform rightLeg = CreateLimbPivot("Right Leg", actor.transform, new Vector3(0.2f, 0.9f, 0), new Vector3(0.28f, 0.9f, 0.3f), pantsColor);
+
+        cubeActor.Setup(leftArm, rightArm, leftLeg, rightLeg);
+        return actor;
+    }
+
+    private GameObject CreateCubeCar(string carName)
+    {
+        GameObject car = new GameObject(carName + "_Wrapper");
+        car.AddComponent<CubeVehicle>();
+
+        CreateCubePart("Car Body", car.transform, new Vector3(0, 0.45f, 0), new Vector3(2.6f, 0.55f, 1.25f), new Color(0.75f, 0.05f, 0.05f));
+        CreateCubePart("Car Cabin", car.transform, new Vector3(0.2f, 0.95f, 0), new Vector3(1.35f, 0.55f, 1f), new Color(0.25f, 0.35f, 0.45f));
+
+        Color wheelColor = new Color(0.05f, 0.05f, 0.05f);
+        CreateCubePart("Front Left Wheel", car.transform, new Vector3(0.85f, 0.2f, -0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
+        CreateCubePart("Front Right Wheel", car.transform, new Vector3(0.85f, 0.2f, 0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
+        CreateCubePart("Back Left Wheel", car.transform, new Vector3(-0.85f, 0.2f, -0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
+        CreateCubePart("Back Right Wheel", car.transform, new Vector3(-0.85f, 0.2f, 0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
+
+        return car;
+    }
+
+    private GameObject CreateCubeCampaignProduct(string productName, int campaignLevel)
+    {
+        GameObject product = new GameObject(productName + "_Wrapper");
+        CampaignProduct campaignProduct = product.AddComponent<CampaignProduct>();
+        campaignProduct.campaignLevel = campaignLevel;
+        product.AddComponent<RecordableSubject>();
+
+        if (campaignLevel == 4)
+        {
+            CreateCubePart("Coffee Package", product.transform, new Vector3(0, 0.65f, 0), new Vector3(0.8f, 1.3f, 0.8f), new Color(0.34f, 0.16f, 0.06f));
+            CreateCubePart("Kape Label", product.transform, new Vector3(0, 0.75f, -0.43f), new Vector3(0.55f, 0.45f, 0.05f), new Color(0.95f, 0.72f, 0.22f));
+        }
+        else
+        {
+            CreateCubePart("Haraya Package", product.transform, new Vector3(0, 0.55f, 0), new Vector3(1.1f, 1.1f, 0.7f), new Color(0.05f, 0.55f, 0.58f));
+            CreateCubePart("Haraya Label", product.transform, new Vector3(0, 0.6f, -0.38f), new Vector3(0.75f, 0.4f, 0.05f), new Color(1f, 0.78f, 0.2f));
+        }
+
+        return product;
+    }
+
+    private Transform CreateLimbPivot(string limbName, Transform parent, Vector3 localPosition, Vector3 limbScale, Color limbColor)
+    {
+        GameObject pivot = new GameObject(limbName + " Pivot");
+        pivot.transform.SetParent(parent);
+        pivot.transform.localPosition = localPosition;
+        pivot.transform.localRotation = Quaternion.identity;
+
+        CreateCubePart(limbName, pivot.transform, new Vector3(0, -limbScale.y * 0.5f, 0), limbScale, limbColor);
+        return pivot.transform;
+    }
+
+    private GameObject CreateCubePart(string partName, Transform parent, Vector3 localPosition, Vector3 localScale, Color partColor)
+    {
+        GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        cube.name = partName;
+        cube.transform.SetParent(parent);
+        cube.transform.localPosition = localPosition;
+        cube.transform.localRotation = Quaternion.identity;
+        cube.transform.localScale = localScale;
+
+        Renderer cubeRenderer = cube.GetComponent<Renderer>();
+        if (cubeRenderer != null) cubeRenderer.material.color = partColor;
+
+        return cube;
+    }
+
+    private void CreatePoseActorButton()
+    {
+        if (spawnWallButton == null || poseActorButton != null) return;
+
+        GameObject poseButtonObject = Instantiate(spawnWallButton, spawnWallButton.transform.parent);
+        poseButtonObject.name = "Pose Actor Button";
+
+        RectTransform poseRect = poseButtonObject.GetComponent<RectTransform>();
+        RectTransform wallRect = spawnWallButton.GetComponent<RectTransform>();
+        if (poseRect != null && wallRect != null)
+        {
+            poseRect.anchoredPosition = wallRect.anchoredPosition + new Vector2(0, wallRect.sizeDelta.y + 30f);
+        }
+
+        TextMeshProUGUI buttonText = poseButtonObject.GetComponentInChildren<TextMeshProUGUI>();
+        if (buttonText != null) buttonText.text = "POSE ACTOR";
+
+        poseActorButton = poseButtonObject.GetComponent<Button>();
+        if (poseActorButton != null)
+        {
+            poseActorButton.onClick = new Button.ButtonClickedEvent();
+            poseActorButton.onClick.AddListener(PoseSelectedActor);
+        }
+
+        poseButtonObject.SetActive(PlayerPrefs.GetInt("TutorialProgress", 0) >= 3);
+        UpdatePoseActorButton();
+    }
+
+    public void PoseSelectedActor()
+    {
+        if (selectedObject == null) return;
+
+        CubeActor cubeActor = selectedObject.GetComponent<CubeActor>();
+        if (cubeActor == null) return;
+
+        cubeActor.CyclePose();
+        if (selectionIndicatorText != null)
+        {
+            selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "") + " - " + cubeActor.GetPoseName();
+        }
+    }
+
+    private void UpdatePoseActorButton()
+    {
+        if (poseActorButton == null) return;
+
+        poseActorButton.gameObject.SetActive(PlayerPrefs.GetInt("TutorialProgress", 0) >= 3);
+        poseActorButton.interactable = selectedObject != null && selectedObject.GetComponent<CubeActor>() != null;
+    }
+
+    private bool IsWallName(string objectName)
+    {
+        if (string.IsNullOrEmpty(objectName)) return false;
+
+        return objectName.IndexOf("wall", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+               objectName.IndexOf("stage", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+               objectName.IndexOf("studio", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+               objectName.IndexOf("backdrop", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void OnDestroy()
+    {
+        if (selectionOutlineMaterial != null) Destroy(selectionOutlineMaterial);
+    }
+}
+
+public class CubeVehicle : MonoBehaviour
+{
+}
+
+public class CubeActor : MonoBehaviour
+{
+    private Transform leftArmPivot;
+    private Transform rightArmPivot;
+    private Transform leftLegPivot;
+    private Transform rightLegPivot;
+    private int currentPose = 0;
+
+    public void Setup(Transform leftArm, Transform rightArm, Transform leftLeg, Transform rightLeg)
+    {
+        leftArmPivot = leftArm;
+        rightArmPivot = rightArm;
+        leftLegPivot = leftLeg;
+        rightLegPivot = rightLeg;
+
+        ApplyPose();
+    }
+
+    public void CyclePose()
+    {
+        currentPose++;
+        if (currentPose > 2) currentPose = 0;
+
+        ApplyPose();
+    }
+
+    public string GetPoseName()
+    {
+        if (currentPose == 1) return "Wave";
+        if (currentPose == 2) return "Action";
+        return "Neutral";
+    }
+
+    private void ApplyPose()
+    {
+        if (leftArmPivot == null || rightArmPivot == null || leftLegPivot == null || rightLegPivot == null) return;
+
+        leftArmPivot.localRotation = Quaternion.Euler(0, 0, -5f);
+        rightArmPivot.localRotation = Quaternion.Euler(0, 0, 5f);
+        leftLegPivot.localRotation = Quaternion.Euler(0, 0, -2f);
+        rightLegPivot.localRotation = Quaternion.Euler(0, 0, 2f);
+
+        if (currentPose == 1)
+        {
+            leftArmPivot.localRotation = Quaternion.Euler(0, 0, -145f);
+            rightArmPivot.localRotation = Quaternion.Euler(0, 0, 20f);
+        }
+        else if (currentPose == 2)
+        {
+            leftArmPivot.localRotation = Quaternion.Euler(0, 0, -70f);
+            rightArmPivot.localRotation = Quaternion.Euler(0, 0, 70f);
+            leftLegPivot.localRotation = Quaternion.Euler(0, 0, -15f);
+            rightLegPivot.localRotation = Quaternion.Euler(0, 0, 15f);
+        }
+    }
+}
+
+public class UIDragStageItem : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
+{
+    private string itemName;
+    private bool isActor;
+    private int itemIndex;
+    private DirectorTerminal terminal;
+
+    public void Setup(string displayName, bool actor, int index, DirectorTerminal term)
+    {
+        itemName = displayName;
+        isActor = actor;
+        itemIndex = index;
+        terminal = term;
+
+        TextMeshProUGUI label = GetComponentInChildren<TextMeshProUGUI>();
+        if (label != null) label.text = displayName;
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (terminal != null) terminal.StartDraggingStageItem(itemName, isActor, itemIndex);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        if (terminal != null) terminal.DropDraggedProp();
+    }
+}
+
+public class UIDragCampaignProduct : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
+{
+    private string itemName;
+    private int campaignLevel;
+    private DirectorTerminal terminal;
+
+    public void Setup(string displayName, int level, DirectorTerminal term)
+    {
+        itemName = displayName;
+        campaignLevel = level;
+        terminal = term;
+
+        TextMeshProUGUI label = GetComponentInChildren<TextMeshProUGUI>();
+        if (label != null) label.text = displayName;
+    }
+
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (terminal != null) terminal.StartDraggingCampaignProduct(itemName, campaignLevel);
+    }
+
+    public void OnDrag(PointerEventData eventData)
+    {
+    }
+
+    public void OnPointerUp(PointerEventData eventData)
+    {
+        if (terminal != null) terminal.DropDraggedProp();
     }
 }

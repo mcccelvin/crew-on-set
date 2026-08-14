@@ -11,6 +11,13 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     public int endFrame;
     public float cameraScore;
     public float lightScore;
+    public int campaignLevel;
+    public int shotType;
+    public float screenDirection;
+    public string actorPose;
+    public bool requiredSubjectsVisible;
+    public bool usedSoftLight;
+    public bool hasThreePointRoles;
 
     [HideInInspector] public Transform originalParent;
     private Transform trueBankParent;
@@ -68,7 +75,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 {
                     if (ClipInspector.Instance == null) ClipInspector.Instance = inspector;
                     inspector.OpenInspector(this);
-                    try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnVideoDoubleClicked(); } catch { }
+                    try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnVideoDoubleClicked(); }
+                    catch (System.Exception e) { Debug.LogException(e, this); }
                 }
             }
             lastLeftClickTime = Time.time;
@@ -101,7 +109,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             if (TimelineManager.Instance != null) TimelineManager.Instance.RefreshTimeline();
         }
 
-        try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnClipDragCancelled(); } catch { }
+        try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnClipDragCancelled(); }
+        catch (System.Exception e) { Debug.LogException(e, this); }
     }
 
     public void AdjustToNewZoom(float zoomRatio)
@@ -193,7 +202,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                     }
                 }
             }
-            catch { }
+            catch (System.Exception e) { Debug.LogException(e, this); }
         }
         else
         {
@@ -207,7 +216,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             transform.SetParent(parentCanvas.transform, true);
             transform.SetAsLastSibling();
 
-            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && !isOnTimeline) EditorTutorialManager.Instance.OnClipDragStarted(); } catch { }
+            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && !isOnTimeline) EditorTutorialManager.Instance.OnClipDragStarted(); }
+            catch (System.Exception e) { Debug.LogException(e, this); }
         }
     }
 
@@ -310,7 +320,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                         }
                     }
                 }
-                catch { }
+                catch (System.Exception e) { Debug.LogException(e, this); }
             }
         }
 
@@ -326,7 +336,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
         if (isNewDrop)
         {
-            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) { EditorTutorialManager.Instance.OnVideoDropped(); EditorTutorialManager.Instance.OnBrandDroppedToScreen(); } } catch { }
+            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) { EditorTutorialManager.Instance.OnVideoDropped(); EditorTutorialManager.Instance.OnBrandDroppedToScreen(); } }
+            catch (System.Exception e) { Debug.LogException(e, this); }
 
             rectTransform.localPosition = new Vector3(rectTransform.localPosition.x, 0f, 0f);
             rectTransform.localRotation = Quaternion.identity;
@@ -336,7 +347,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             {
                 if (TimelineManager.Instance.pixelsPerSecond <= 0) TimelineManager.Instance.RefreshTimeline();
 
-                float fps = (tvPlayer != null && tvPlayer.framesPerSecond > 0) ? tvPlayer.framesPerSecond : 24f;
+                float fps = (tvPlayer != null && tvPlayer.framesPerSecond > 0) ? tvPlayer.framesPerSecond : TapeSettings.framesPerSecond;
                 float durationInSeconds = (float)totalFrames / fps;
 
                 float oldWidth = rectTransform.rect.width;
@@ -379,7 +390,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 float minAllowedX = trueTimelineWidth * rectTransform.pivot.x;
 
                 bool isTutorialFirstDrop = false;
-                try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.DragVideoToTimeline) isTutorialFirstDrop = true; } catch { }
+                try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.DragVideoToTimeline) isTutorialFirstDrop = true; }
+                catch (System.Exception e) { Debug.LogException(e, this); }
 
                 if (isTutorialFirstDrop)
                 {

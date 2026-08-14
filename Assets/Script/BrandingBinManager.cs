@@ -34,8 +34,8 @@ public class BrandingBinManager : MonoBehaviour
         foreach (Transform child in overlaysBinContent) Destroy(child.gameObject);
 
         // 2. Check Progress
-        int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
-        List<BrandingData> activeList = (progress < 2) ? tutorialLogos : level1Logos;
+        int currentLevel = CampaignProgression.GetCurrentLevel();
+        List<BrandingData> activeList = currentLevel == 1 ? tutorialLogos : level1Logos;
 
         // 3. Spawn and Assign Sprites
         foreach (BrandingData data in activeList)

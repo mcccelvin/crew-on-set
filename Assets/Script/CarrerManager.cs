@@ -66,6 +66,29 @@ public class CareerManager : MonoBehaviour
         UpdateMoneyUI();
     }
 
+    public bool TrySpendMoney(int amount)
+    {
+        if (amount < 0 || playerMoney < amount) return false;
+
+        playerMoney -= amount;
+        PlayerPrefs.SetInt("PlayerMoney", playerMoney);
+        PlayerPrefs.Save();
+
+        UpdateMoneyUI();
+        return true;
+    }
+
+    public void AddMoney(int amount)
+    {
+        if (amount <= 0) return;
+
+        playerMoney += amount;
+        PlayerPrefs.SetInt("PlayerMoney", playerMoney);
+        PlayerPrefs.Save();
+
+        UpdateMoneyUI();
+    }
+
     public void UpdateMoneyUI()
     {
         if (moneyTextHUD != null)
@@ -81,13 +104,7 @@ public class CareerManager : MonoBehaviour
         // Press F10 to instantly add 1000 B-Coins
         if (Input.GetKeyDown(KeyCode.F10))
         {
-            playerMoney += 1000;
-
-            // Save the new money to the hard drive so it persists
-            PlayerPrefs.SetInt("PlayerMoney", playerMoney);
-            PlayerPrefs.Save();
-
-            UpdateMoneyUI();
+            AddMoney(1000);
 
             Debug.Log("[Cheat] Added 1000 B-Coins! Don't tell the boss.");
         }
@@ -111,5 +128,10 @@ public class CareerManager : MonoBehaviour
             // 3. (Optional) Reload the scene to start fresh instantly
             UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 }

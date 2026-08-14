@@ -8,8 +8,7 @@ using UnityEngine.SceneManagement;
 
 public class AccountManager : MonoBehaviour
 {
-    const string LAST_EMAIL_KEY = "LastEmail",
-                 LAST_PASSWORD_KEY = "LastPassword";
+    const string LAST_EMAIL_KEY = "LastEmail";
 
     [SerializeField] TMP_Text messageText;
     [SerializeField] TMP_Text username;
@@ -28,7 +27,7 @@ public class AccountManager : MonoBehaviour
     public void Register(string email, string username, string password)
     {
 
-        if (registerPassword.text.Length < 6)
+        if (string.IsNullOrEmpty(password) || password.Length < 6)
         {
             messageText.text = "Password must be at least 6 characters";
             return;
@@ -44,7 +43,7 @@ public class AccountManager : MonoBehaviour
         successfullResult => 
         {
             Login(email, password);
-            if (messageText != null) messageText.text = "Register successful! Welcome " + PlayerPrefs.GetString("Username");
+            if (messageText != null) messageText.text = "Register successful! Welcome " + username;
         },
         PlayfabFailure);
     }
@@ -77,12 +76,11 @@ public class AccountManager : MonoBehaviour
             if (string.IsNullOrEmpty(displayName))
                 displayName = "Guest";
             PlayerPrefs.SetString(LAST_EMAIL_KEY, email);
-            PlayerPrefs.SetString(LAST_PASSWORD_KEY, password);
-            PlayerPrefs.SetString("Username", displayName);
+            PlayerPrefs.SetString("PlayerName", displayName);
             if (messageText != null) messageText.text = "Login successful! Welcome " + displayName;
             if (username != null) username.text = displayName;
 
-            Debug.Log("Login successful! Welcome " + PlayerPrefs.GetString("Username"));
+            Debug.Log("Login successful! Welcome " + PlayerPrefs.GetString("PlayerName"));
 
             SceneManager.LoadScene(3);
         },
@@ -109,14 +107,13 @@ public class AccountManager : MonoBehaviour
         },
         successfullResult => 
         {
-            Recovery(email);
             if (messageText != null) messageText.text = "Recovery email sent!";
         },
         PlayfabFailure);
     }
     #endregion
 
-private void PlayfabFailure(PlayFabError error)
+    private void PlayfabFailure(PlayFabError error)
     {
         if (messageText != null) messageText.text = error.ErrorMessage;
         Debug.Log(error.Error + " : " + error.GenerateErrorReport());

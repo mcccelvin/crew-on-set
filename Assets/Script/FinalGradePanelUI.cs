@@ -21,6 +21,8 @@ public class FinalGradePanelUI : MonoBehaviour
     [Header("Feedback Panel UI")]
     public GameObject feedbackPanel;
     public TextMeshProUGUI feedbackDetailedText;
+    public TextMeshProUGUI feedbackButtonText;
+    public TextMeshProUGUI returnButtonText;
 
     public void DisplayResults(ProductionGrades grades)
     {
@@ -53,8 +55,22 @@ public class FinalGradePanelUI : MonoBehaviour
             }
         }
 
-        if (feedbackDetailedText != null) feedbackDetailedText.text = grades.feedback;
+        if (feedbackDetailedText != null)
+        {
+            if (grades.letterGrade == "F")
+                feedbackDetailedText.text = "<color=yellow><b>BOSS:</b> Review every failed requirement below, then replay the active contract and correct the production.</color>\n\n" + grades.feedback;
+            else
+                feedbackDetailedText.text = grades.feedback;
+        }
+
+        if (feedbackButtonText != null) feedbackButtonText.text = "REVIEW FEEDBACK";
+        if (returnButtonText != null) returnButtonText.text = grades.letterGrade == "F" ? "REPLAY CONTRACT" : "RETURN TO STUDIO";
         if (feedbackPanel != null) feedbackPanel.SetActive(false);
+    }
+
+    public void ShowFailureQuestion(int level)
+    {
+        if (contractStatusText != null) contractStatusText.text = "REPLAY LEVEL " + level + "?";
     }
 
     public void OpenFeedbackPanel() { if (feedbackPanel != null) feedbackPanel.SetActive(true); }

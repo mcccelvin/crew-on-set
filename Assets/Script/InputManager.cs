@@ -40,6 +40,15 @@ namespace Player.Manager
             }
 
             playerMap = PlayerInput.currentActionMap;
+            if (playerMap == null && PlayerInput.actions != null)
+                playerMap = PlayerInput.actions.FindActionMap(PlayerInput.defaultActionMap);
+
+            if (playerMap == null)
+            {
+                Debug.LogError("InputManager: Player action map could not be found on " + gameObject.name);
+                return;
+            }
+
             moveAction = playerMap.FindAction("Move");
             lookAction = playerMap.FindAction("Look");
             runAction = playerMap.FindAction("Run");
@@ -47,45 +56,6 @@ namespace Player.Manager
             interactAction = playerMap.FindAction("Interact");
             dropAction = playerMap.FindAction("Drop");
             equipAction = PlayerInput.actions.FindAction("Equip");
-
-
-            moveAction.performed += onMove;
-            lookAction.performed += onLook;
-            runAction.performed += onRun;
-            jumpAction.performed += onJump;
-
-            moveAction.canceled += onMove;
-            lookAction.canceled += onLook;
-            runAction.canceled += onRun;
-            jumpAction.canceled += onJump;
-
-            // Set one-frame flags on 'performed' only. They are cleared in LateUpdate().
-            if (interactAction != null)
-            {
-                interactAction.performed += ctx => Interact = true;
-            }
-            else
-            {
-                Interact = false;
-            }
-
-            if (dropAction != null)
-            {
-                dropAction.performed += ctx => Drop = true;
-            }
-            else
-            {
-                Drop = false;
-            }
-
-            if (equipAction != null)
-            {
-                equipAction.performed += ctx => Equip = true;
-            }
-            else
-            {
-                Equip = false;
-            }
         }
 
         private void onMove(InputAction.CallbackContext context)
@@ -108,6 +78,10 @@ namespace Player.Manager
             Jump = context.ReadValueAsButton();
         }
 
+        private void onInteract(InputAction.CallbackContext context) { Interact = true; }
+        private void onDrop(InputAction.CallbackContext context) { Drop = true; }
+        private void onEquip(InputAction.CallbackContext context) { Equip = true; }
+
         // Clear one-frame flags here so other scripts can read them during Update()
         private void LateUpdate()
         {
@@ -116,14 +90,42 @@ namespace Player.Manager
             Equip = false;
         }
 
-        private void onEnable()
+        private void OnEnable()
         {
-            if (playerMap != null) playerMap.Enable();
+            if (playerMap == null) return;
+
+            if (moveAction != null) { moveAction.performed += onMove; moveAction.canceled += onMove; }
+            if (lookAction != null) { lookAction.performed += onLook; lookAction.canceled += onLook; }
+            if (runAction != null) { runAction.performed += onRun; runAction.canceled += onRun; }
+            if (jumpAction != null) { jumpAction.performed += onJump; jumpAction.canceled += onJump; }
+
+            if (interactAction != null) interactAction.performed += onInteract;
+            if (dropAction != null) dropAction.performed += onDrop;
+            if (equipAction != null) equipAction.performed += onEquip;
+
+            playerMap.Enable();
         }
 
-        private void onDisable()
+        private void OnDisable()
         {
+            if (moveAction != null) { moveAction.performed -= onMove; moveAction.canceled -= onMove; }
+            if (lookAction != null) { lookAction.performed -= onLook; lookAction.canceled -= onLook; }
+            if (runAction != null) { runAction.performed -= onRun; runAction.canceled -= onRun; }
+            if (jumpAction != null) { jumpAction.performed -= onJump; jumpAction.canceled -= onJump; }
+
+            if (interactAction != null) interactAction.performed -= onInteract;
+            if (dropAction != null) dropAction.performed -= onDrop;
+            if (equipAction != null) equipAction.performed -= onEquip;
+
             if (playerMap != null) playerMap.Disable();
+
+            Move = Vector2.zero;
+            Look = Vector2.zero;
+            Run = false;
+            Jump = false;
+            Interact = false;
+            Drop = false;
+            Equip = false;
         }
     }
 }

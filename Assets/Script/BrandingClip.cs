@@ -31,10 +31,11 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
     {
         if (myRect.sizeDelta.x < 30f) myRect.sizeDelta = new Vector2(80f, myRect.sizeDelta.y);
         myRect.anchoredPosition = new Vector2(myRect.anchoredPosition.x, 0f);
+        SetupHandles();
         UpdateFrameMath();
     }
 
-    void LateUpdate()
+    private void SetupHandles()
     {
         if (leftHandle != null)
         {
@@ -215,7 +216,7 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
             {
                 pps = TimelineManager.Instance.pixelsPerSecond;
             }
-            float pixelsPerFrame = pps / 24f;
+            float pixelsPerFrame = pps / TapeSettings.framesPerSecond;
 
             float startX = myRect.anchoredPosition.x;
             float width = myRect.sizeDelta.x;

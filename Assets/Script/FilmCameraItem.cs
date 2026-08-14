@@ -3,6 +3,7 @@ using UnityEngine.InputSystem;
 using TMPro;
 using Player.Manager;
 using UnityEngine.Rendering.PostProcessing;
+using UnityEngine.UI;
 
 namespace Player.Equipment
 {
@@ -24,6 +25,12 @@ namespace Player.Equipment
         public TMP_Text recordStateText;
         public RectTransform trackingSquare;
         private RecordableSubject targetSubject;
+        private Renderer[] targetRenderers;
+        private Image trackingSquareImage;
+        private Vector3[] trackingCorners = new Vector3[8];
+        private RaycastHit[] trackingHits = new RaycastHit[16];
+        private GameObject ruleOfThirdsGrid;
+        private bool isLevel2Camera = false;
 
         [Header("--- LENS BLUR (DEPTH OF FIELD) ---")]
         public PostProcessVolume postProcessVolume;
@@ -65,6 +72,29 @@ namespace Player.Equipment
         private float totalLightingScoreAccumulated = 0f;
         private int framesSampled = 0;
         private float nextSampleTime = 0f;
+        private float nextHUDUpdateTime = 0f;
+
+        private FilmLightItem[] activeLights;
+        private float nextLightRefreshTime = 0f;
+
+        private CubeActor level3Actor;
+        private CubeVehicle level3Vehicle;
+        private Renderer[] level3ActorRenderers;
+        private Renderer[] level3VehicleRenderers;
+        private float nextLevel3TargetRefreshTime = 0f;
+
+        private CampaignProduct campaignProduct;
+        private Renderer[] campaignProductRenderers;
+        private float nextCampaignTargetRefreshTime = 0f;
+
+        private int recordingCampaignLevel = 1;
+        private float recordedCoverageAccumulated = 0f;
+        private float recordedScreenDirectionAccumulated = 0f;
+        private int recordedMetadataSamples = 0;
+        private int recordedVisibleSamples = 0;
+        private int recordedSoftLightSamples = 0;
+        private int recordedThreePointSamples = 0;
+        private string recordedActorPose = "";
 
         private GameObject mainPlayerUI;
 
@@ -95,6 +125,11 @@ namespace Player.Equipment
             {
                 postProcessVolume.profile.TryGetSettings(out depthOfField);
             }
+
+            if (trackingSquare != null) trackingSquareImage = trackingSquare.GetComponent<Image>();
+            CacheTargetSubject();
+            isLevel2Camera = EquipmentName == "Level 2 Camera";
+            if (isLevel2Camera) CreateRuleOfThirdsGrid();
         }
 
         protected override void Awake()
@@ -115,6 +150,44 @@ namespace Player.Equipment
             if (focusText != null) focusText.text = "FOCUS: 5.0m";
 
             if (trackingSquare != null) trackingSquare.gameObject.SetActive(false);
+        }
+
+        private void CreateRuleOfThirdsGrid()
+        {
+            if (filmUICanvas == null || ruleOfThirdsGrid != null) return;
+
+            ruleOfThirdsGrid = new GameObject("Rule Of Thirds Grid", typeof(RectTransform));
+            ruleOfThirdsGrid.transform.SetParent(filmUICanvas.transform, false);
+
+            RectTransform gridRect = ruleOfThirdsGrid.GetComponent<RectTransform>();
+            gridRect.anchorMin = Vector2.zero;
+            gridRect.anchorMax = Vector2.one;
+            gridRect.offsetMin = Vector2.zero;
+            gridRect.offsetMax = Vector2.zero;
+
+            CreateGridLine("Left Third", ruleOfThirdsGrid.transform, new Vector2(0.333f, 0f), new Vector2(0.333f, 1f), new Vector2(2f, 0f));
+            CreateGridLine("Right Third", ruleOfThirdsGrid.transform, new Vector2(0.666f, 0f), new Vector2(0.666f, 1f), new Vector2(2f, 0f));
+            CreateGridLine("Top Third", ruleOfThirdsGrid.transform, new Vector2(0f, 0.666f), new Vector2(1f, 0.666f), new Vector2(0f, 2f));
+            CreateGridLine("Bottom Third", ruleOfThirdsGrid.transform, new Vector2(0f, 0.333f), new Vector2(1f, 0.333f), new Vector2(0f, 2f));
+
+            ruleOfThirdsGrid.transform.SetAsLastSibling();
+            ruleOfThirdsGrid.SetActive(false);
+        }
+
+        private void CreateGridLine(string lineName, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 sizeDelta)
+        {
+            GameObject lineObject = new GameObject(lineName, typeof(RectTransform), typeof(Image));
+            lineObject.transform.SetParent(parent, false);
+
+            RectTransform lineRect = lineObject.GetComponent<RectTransform>();
+            lineRect.anchorMin = anchorMin;
+            lineRect.anchorMax = anchorMax;
+            lineRect.anchoredPosition = Vector2.zero;
+            lineRect.sizeDelta = sizeDelta;
+
+            Image lineImage = lineObject.GetComponent<Image>();
+            lineImage.color = new Color(1f, 1f, 1f, 0.65f);
+            lineImage.raycastTarget = false;
         }
 
         private void TogglePlayerUI(bool showUI)
@@ -150,9 +223,12 @@ namespace Player.Equipment
 
             isCameraActive = !isCameraActive;
 
-            if (isCameraActive && TutorialManager.Instance != null)
+            if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(isCameraActive);
+
+            if (TutorialManager.Instance != null)
             {
-                TutorialManager.Instance.OnCameraViewEntered();
+                if (isCameraActive) TutorialManager.Instance.OnCameraViewEntered(EquipmentName);
+                else TutorialManager.Instance.OnCameraViewExited(EquipmentName);
             }
 
             if (filmCamera != null)
@@ -218,7 +294,8 @@ namespace Player.Equipment
                     nextSampleTime = Time.time + 0.5f;
                 }
 
-                if (targetSubject != null && filmCamera != null)
+                bool requiresCenterFraming = CampaignProgression.GetCurrentLevel() == 1;
+                if (requiresCenterFraming && targetSubject != null && filmCamera != null)
                 {
                     Vector3 targetCenter = GetSubjectCenter(targetSubject);
                     Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
@@ -275,7 +352,11 @@ namespace Player.Equipment
         private Vector3 GetSubjectCenter(RecordableSubject sub)
         {
             if (sub == null) return Vector3.zero;
-            Renderer[] rends = sub.GetComponentsInChildren<Renderer>();
+
+            Renderer[] rends = targetRenderers;
+            if (sub != targetSubject || rends == null)
+                rends = sub.GetComponentsInChildren<Renderer>();
+
             if (rends.Length > 0)
             {
                 Bounds b = rends[0].bounds;
@@ -285,8 +366,11 @@ namespace Player.Equipment
             return sub.transform.position + Vector3.up * 0.5f;
         }
 
-        private void UpdateCameraHUD()
+        private void UpdateCameraHUD(bool forceUpdate = false)
         {
+            if (!forceUpdate && Time.unscaledTime < nextHUDUpdateTime) return;
+            nextHUDUpdateTime = Time.unscaledTime + 0.05f;
+
             if (focusText != null) focusText.text = $"FOCUS: {currentFocusDistance:F1}m";
 
             float time = isRecording ? (Time.time - recordingStartTime) : 0f;
@@ -317,14 +401,11 @@ namespace Player.Equipment
 
         private void UpdateTrackingSquare()
         {
-            if (targetSubject == null)
-            {
-                targetSubject = FindObjectOfType<RecordableSubject>();
-            }
+            if (targetSubject == null) CacheTargetSubject();
 
             if (targetSubject != null && trackingSquare != null && filmCamera != null)
             {
-                Renderer[] rends = targetSubject.GetComponentsInChildren<Renderer>();
+                Renderer[] rends = targetRenderers;
                 if (rends.Length > 0)
                 {
                     Vector3 targetCenter = GetSubjectCenter(targetSubject);
@@ -339,20 +420,19 @@ namespace Player.Equipment
                         Bounds bounds = rends[0].bounds;
                         foreach (Renderer r in rends) bounds.Encapsulate(r.bounds);
 
-                        Vector3[] corners = new Vector3[8];
-                        corners[0] = new Vector3(bounds.min.x, bounds.min.y, bounds.min.z);
-                        corners[1] = new Vector3(bounds.max.x, bounds.min.y, bounds.min.z);
-                        corners[2] = new Vector3(bounds.min.x, bounds.max.y, bounds.min.z);
-                        corners[3] = new Vector3(bounds.max.x, bounds.max.y, bounds.min.z);
-                        corners[4] = new Vector3(bounds.min.x, bounds.min.y, bounds.max.z);
-                        corners[5] = new Vector3(bounds.max.x, bounds.min.y, bounds.max.z);
-                        corners[6] = new Vector3(bounds.min.x, bounds.max.y, bounds.max.z);
-                        corners[7] = new Vector3(bounds.max.x, bounds.max.y, bounds.max.z);
+                        trackingCorners[0] = new Vector3(bounds.min.x, bounds.min.y, bounds.min.z);
+                        trackingCorners[1] = new Vector3(bounds.max.x, bounds.min.y, bounds.min.z);
+                        trackingCorners[2] = new Vector3(bounds.min.x, bounds.max.y, bounds.min.z);
+                        trackingCorners[3] = new Vector3(bounds.max.x, bounds.max.y, bounds.min.z);
+                        trackingCorners[4] = new Vector3(bounds.min.x, bounds.min.y, bounds.max.z);
+                        trackingCorners[5] = new Vector3(bounds.max.x, bounds.min.y, bounds.max.z);
+                        trackingCorners[6] = new Vector3(bounds.min.x, bounds.max.y, bounds.max.z);
+                        trackingCorners[7] = new Vector3(bounds.max.x, bounds.max.y, bounds.max.z);
 
                         float minX = float.MaxValue, minY = float.MaxValue;
                         float maxX = float.MinValue, maxY = float.MinValue;
 
-                        foreach (Vector3 corner in corners)
+                        foreach (Vector3 corner in trackingCorners)
                         {
                             Vector3 screenCorner = filmCamera.WorldToScreenPoint(corner);
                             minX = Mathf.Min(minX, screenCorner.x);
@@ -373,32 +453,17 @@ namespace Player.Equipment
                         Vector3 directionToTarget = targetCenter - filmCamera.transform.position;
                         float distToSub = Vector3.Distance(filmCamera.transform.position, targetCenter);
 
-                        bool isBlocked = false;
+                        bool isBlocked = IsSubjectBlocked(directionToTarget, distToSub);
 
-                        RaycastHit[] hits = Physics.RaycastAll(filmCamera.transform.position, directionToTarget, distToSub);
-                        foreach (RaycastHit hit in hits)
-                        {
-                            if (hit.collider.transform.root == this.transform.root) continue;
-                            if (hit.collider.isTrigger) continue;
-                            if (hit.collider.GetComponentInParent<RecordableSubject>() != null) continue;
-
-                            if (hit.distance < distToSub - 0.3f)
-                            {
-                                isBlocked = true;
-                                break;
-                            }
-                        }
-
-                        UnityEngine.UI.Image squareImage = trackingSquare.GetComponent<UnityEngine.UI.Image>();
-                        if (squareImage != null)
+                        if (trackingSquareImage != null)
                         {
                             if (isBlocked)
                             {
-                                squareImage.color = Color.red;
+                                trackingSquareImage.color = Color.red;
                             }
                             else
                             {
-                                squareImage.color = Color.green;
+                                trackingSquareImage.color = Color.green;
                                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnSubjectFramed();
                             }
                         }
@@ -421,43 +486,64 @@ namespace Player.Equipment
 
         private void SampleVideoFrame()
         {
-            if (targetSubject == null) targetSubject = FindObjectOfType<RecordableSubject>();
-            if (targetSubject == null) { framesSampled++; return; }
+            int currentLevel = recordingCampaignLevel;
+
+            if (currentLevel == 3)
+            {
+                SampleLevel3Frame();
+                return;
+            }
+
+            if (currentLevel == 4)
+            {
+                SampleLevel4Frame();
+                return;
+            }
+
+            if (currentLevel == 5)
+            {
+                SampleLevel5Frame();
+                return;
+            }
+
+            if (targetSubject == null) CacheTargetSubject();
+            if (targetSubject == null)
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
 
             Vector3 targetCenter = GetSubjectCenter(targetSubject);
             Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
+            bool hasViewportBounds = TryGetViewportBounds(targetRenderers, out Vector4 targetViewport);
 
-            if (viewPos.z <= 0 || viewPos.x < 0 || viewPos.x > 1 || viewPos.y < 0 || viewPos.y > 1) { framesSampled++; return; }
+            if (viewPos.z <= 0 || viewPos.x < 0 || viewPos.x > 1 || viewPos.y < 0 || viewPos.y > 1)
+            {
+                RecordProductionEvidence(targetViewport, false, null, targetCenter);
+                framesSampled++;
+                return;
+            }
 
             Vector3 directionToTarget = targetCenter - filmCamera.transform.position;
             float distToSub = Vector3.Distance(filmCamera.transform.position, targetCenter);
+            bool isBlocked = IsSubjectBlocked(directionToTarget, distToSub);
+            bool isFullyVisible = hasViewportBounds && GradeViewportVisibility(targetViewport, 0.05f) >= 0.99f && !isBlocked;
+            RecordProductionEvidence(targetViewport, isFullyVisible, null, targetCenter);
 
-            bool isBlocked = false;
-            RaycastHit[] hits = Physics.RaycastAll(filmCamera.transform.position, directionToTarget, distToSub);
-
-            foreach (RaycastHit hit in hits)
+            if (isBlocked)
             {
-                if (hit.collider.transform.root == this.transform.root) continue;
-                if (hit.collider.isTrigger) continue;
-                if (hit.collider.GetComponentInParent<RecordableSubject>() != null) continue;
-
-                if (hit.distance < distToSub - 0.3f)
-                {
-                    isBlocked = true;
-                    break;
-                }
+                framesSampled++;
+                return;
             }
 
-            if (isBlocked) { framesSampled++; return; }
+            bool isLevel1 = currentLevel == 1;
 
-            int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
-            bool isTutorial = (progress < 2);
+            float framingScore = isLevel1 ? GradeCenterFraming(viewPos) : GradeRuleOfThirds(viewPos);
+            float shotSizeScore = GradeSubjectSize(targetRenderers, 0.22f, 0.65f);
+            float lightingScore = isLevel1 ? GradeBasicLighting(targetCenter) : Grade3PointLighting(targetCenter);
 
-            float framingScore = isTutorial ? GradeCenterFraming(viewPos) : GradeRuleOfThirds(viewPos);
-            float lightingScore = isTutorial ? GradeBasicLighting(targetCenter) : Grade3PointLighting(targetCenter);
-            float focusScore = 30f;
-
-            totalCameraScoreAccumulated += (framingScore + focusScore);
+            totalCameraScoreAccumulated += (framingScore + shotSizeScore);
             totalLightingScoreAccumulated += lightingScore;
             framesSampled++;
         }
@@ -474,72 +560,700 @@ namespace Player.Equipment
 
         private float GradeRuleOfThirds(Vector3 viewPos)
         {
-            if (viewPos.x > 0.4f && viewPos.x < 0.6f)
-            {
-                return 0f;
-            }
-
-            float score = 40f;
             float distToLeftThird = Mathf.Abs(viewPos.x - 0.33f);
             float distToRightThird = Mathf.Abs(viewPos.x - 0.66f);
-            float closestThirdDist = Mathf.Min(distToLeftThird, distToRightThird);
+            float distToBottomThird = Mathf.Abs(viewPos.y - 0.33f);
+            float distToTopThird = Mathf.Abs(viewPos.y - 0.66f);
 
-            if (closestThirdDist > 0.1f) score -= (closestThirdDist - 0.1f) * 400f;
+            float horizontalScore = 24f * Mathf.Clamp01(1f - Mathf.Min(distToLeftThird, distToRightThird) / 0.17f);
+            float verticalScore = 16f * Mathf.Clamp01(1f - Mathf.Min(distToBottomThird, distToTopThird) / 0.22f);
 
-            return Mathf.Clamp(score, 0f, 40f);
+            return horizontalScore + verticalScore;
+        }
+
+        private float GradeSubjectSize(Renderer[] renderers, float idealMinimum, float idealMaximum)
+        {
+            if (!TryGetViewportBounds(renderers, out Vector4 viewportBounds)) return 0f;
+
+            float subjectWidth = viewportBounds.z - viewportBounds.x;
+            float subjectHeight = viewportBounds.w - viewportBounds.y;
+            float subjectCoverage = Mathf.Max(subjectWidth, subjectHeight);
+            float score = 30f;
+
+            if (subjectCoverage < idealMinimum)
+                score -= (idealMinimum - subjectCoverage) * 140f;
+            else if (subjectCoverage > idealMaximum)
+                score -= (subjectCoverage - idealMaximum) * 120f;
+
+            if (viewportBounds.x < 0f) score -= Mathf.Abs(viewportBounds.x) * 100f;
+            if (viewportBounds.y < 0f) score -= Mathf.Abs(viewportBounds.y) * 100f;
+            if (viewportBounds.z > 1f) score -= (viewportBounds.z - 1f) * 100f;
+            if (viewportBounds.w > 1f) score -= (viewportBounds.w - 1f) * 100f;
+
+            return Mathf.Clamp(score, 0f, 30f);
         }
 
         private float GradeBasicLighting(Vector3 targetCenter)
         {
-            float score = 0f;
-            FilmLightItem[] activeLights = FindObjectsOfType<FilmLightItem>();
+            float bestScore = 0f;
+            FilmLightItem[] lights = GetActiveLights();
 
-            foreach (FilmLightItem light in activeLights)
+            foreach (FilmLightItem light in lights)
             {
-                if (light.spotlight.enabled)
-                {
-                    Vector3 cameraArrow = (filmCamera.transform.position - targetCenter).normalized;
-                    Vector3 lightArrow = (light.transform.position - targetCenter).normalized;
-                    float angle = Vector3.Dot(cameraArrow, lightArrow);
+                if (light == null || !light.IsPoweredOn() || light.spotlight == null) continue;
 
-                    if (angle < -0.2f) score = 30f;
-                }
+                Vector3 lightPosition = light.spotlight.transform.position;
+                Vector3 directionToTarget = (targetCenter - lightPosition).normalized;
+                Vector3 cameraArrow = (filmCamera.transform.position - targetCenter).normalized;
+                Vector3 lightArrow = (lightPosition - targetCenter).normalized;
+
+                float intensityScore = 10f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 45f) / 55f);
+                float tiltScore = 5f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 5f) / 15f);
+                float aimScore = 8f * Mathf.InverseLerp(0.5f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
+                float placementScore = 4f * Mathf.InverseLerp(-0.1f, 0.8f, Vector3.Dot(cameraArrow, lightArrow));
+                float distanceScore = 3f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 1.5f, 6f);
+
+                bestScore = Mathf.Max(bestScore, intensityScore + tiltScore + aimScore + placementScore + distanceScore);
             }
-            return score;
+
+            return Mathf.Clamp(bestScore, 0f, 30f);
         }
 
         private float Grade3PointLighting(Vector3 targetCenter)
         {
-            FilmLightItem[] activeLights = FindObjectsOfType<FilmLightItem>();
-            bool hasKey = false, hasFill = false, hasBacklight = false;
+            FilmLightItem[] lights = GetActiveLights();
+            FindThreePointLights(targetCenter, lights, out FilmLightItem keyLight, out FilmLightItem fillLight, out FilmLightItem backLight);
 
-            foreach (FilmLightItem light in activeLights)
+            float score = GradeThreePointRole(keyLight, targetCenter, 75f, 50f, false);
+            score += GradeThreePointRole(fillLight, targetCenter, 40f, 35f, false);
+            score += GradeThreePointRole(backLight, targetCenter, 60f, 45f, true);
+
+            if (keyLight != null && fillLight != null)
             {
-                if (!light.spotlight.enabled) continue;
+                float keySide = Vector3.Dot((keyLight.spotlight.transform.position - targetCenter).normalized, filmCamera.transform.right);
+                float fillSide = Vector3.Dot((fillLight.spotlight.transform.position - targetCenter).normalized, filmCamera.transform.right);
+                if (keySide * fillSide >= -0.05f) score -= 4f;
+            }
+
+            if (keyLight == null || fillLight == null || backLight == null) score = Mathf.Min(score, 7f);
+
+            return Mathf.Clamp(score, 0f, 30f);
+        }
+
+        public bool HasThreePointLightingRoles(Vector3 targetCenter)
+        {
+            return HasThreePointLightingRoles(targetCenter, FindObjectsOfType<FilmLightItem>());
+        }
+
+        private bool HasThreePointLightingRoles(Vector3 targetCenter, FilmLightItem[] lights)
+        {
+            if (filmCamera == null) return false;
+
+            FindThreePointLights(targetCenter, lights, out FilmLightItem keyLight, out FilmLightItem fillLight, out FilmLightItem backLight);
+            if (keyLight == null || fillLight == null || backLight == null) return false;
+
+            float keySide = Vector3.Dot((keyLight.spotlight.transform.position - targetCenter).normalized, filmCamera.transform.right);
+            float fillSide = Vector3.Dot((fillLight.spotlight.transform.position - targetCenter).normalized, filmCamera.transform.right);
+            return keySide * fillSide < -0.05f;
+        }
+
+        private void FindThreePointLights(Vector3 targetCenter, FilmLightItem[] lights, out FilmLightItem keyLight, out FilmLightItem fillLight, out FilmLightItem backLight)
+        {
+            keyLight = null;
+            fillLight = null;
+            backLight = null;
+            float keyOutput = 0f;
+            float fillOutput = 0f;
+            float backOutput = 0f;
+
+            foreach (FilmLightItem light in lights)
+            {
+                if (light == null || !light.IsPoweredOn() || light.spotlight == null) continue;
+
+                Vector3 lightPosition = light.spotlight.transform.position;
+                Vector3 directionToTarget = (targetCenter - lightPosition).normalized;
+                if (Vector3.Dot(light.spotlight.transform.forward, directionToTarget) < 0.45f) continue;
 
                 Vector3 cameraArrow = (filmCamera.transform.position - targetCenter).normalized;
-                Vector3 lightArrow = (light.transform.position - targetCenter).normalized;
-                float angle = Vector3.Dot(cameraArrow, lightArrow);
+                Vector3 lightArrow = (lightPosition - targetCenter).normalized;
+                float cameraSideDot = Vector3.Dot(cameraArrow, lightArrow);
+                float lightOutput = light.GetCurrentOutput();
 
-                if (angle > 0.5f) hasBacklight = true;
-                else if (angle < -0.2f)
+                if (cameraSideDot < -0.15f)
                 {
-                    if (!hasKey) hasKey = true;
-                    else hasFill = true;
+                    if (lightOutput > backOutput)
+                    {
+                        backLight = light;
+                        backOutput = lightOutput;
+                    }
+                    continue;
+                }
+
+                if (lightOutput > keyOutput)
+                {
+                    fillLight = keyLight;
+                    fillOutput = keyOutput;
+                    keyLight = light;
+                    keyOutput = lightOutput;
+                }
+                else if (lightOutput > fillOutput)
+                {
+                    fillLight = light;
+                    fillOutput = lightOutput;
+                }
+            }
+        }
+
+        private float GradeThreePointRole(FilmLightItem light, Vector3 targetCenter, float idealIntensity, float intensityTolerance, bool isBackLight)
+        {
+            if (light == null || light.spotlight == null) return 0f;
+
+            Vector3 lightPosition = light.spotlight.transform.position;
+            Vector3 directionToTarget = (targetCenter - lightPosition).normalized;
+            Vector3 cameraArrow = (filmCamera.transform.position - targetCenter).normalized;
+            Vector3 lightArrow = (lightPosition - targetCenter).normalized;
+
+            float score = 1f;
+            score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - idealIntensity) / intensityTolerance);
+            score += 3f * Mathf.InverseLerp(0.5f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
+            score += GradeRange(Vector3.Distance(lightPosition, targetCenter), 1.5f, 7f);
+
+            if (isBackLight)
+            {
+                score += 2f * Mathf.InverseLerp(0.15f, 0.75f, -Vector3.Dot(cameraArrow, lightArrow));
+            }
+            else
+            {
+                float cameraSideScore = Mathf.InverseLerp(0f, 0.55f, Vector3.Dot(cameraArrow, lightArrow));
+                float sideAngleScore = Mathf.InverseLerp(0.2f, 0.7f, Mathf.Abs(Vector3.Dot(lightArrow, filmCamera.transform.right)));
+                score += cameraSideScore + sideAngleScore;
+            }
+
+            return score;
+        }
+
+        private void SampleLevel3Frame()
+        {
+            CacheLevel3Targets();
+
+            if (level3Actor == null || level3Vehicle == null)
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
+
+            if (!TryGetViewportBounds(level3ActorRenderers, out Vector4 actorViewport) ||
+                !TryGetViewportBounds(level3VehicleRenderers, out Vector4 vehicleViewport) ||
+                !TryGetWorldBounds(level3ActorRenderers, out Bounds actorBounds) ||
+                !TryGetWorldBounds(level3VehicleRenderers, out Bounds vehicleBounds))
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
+
+            Bounds productionBounds = vehicleBounds;
+            productionBounds.Encapsulate(actorBounds);
+
+            float cameraScore = GradeLevel3Composition(actorViewport, vehicleViewport);
+            bool isActorBlocked = IsCampaignTargetBlocked(actorBounds.center, level3Actor.transform);
+            bool isVehicleBlocked = IsCampaignTargetBlocked(vehicleBounds.center, level3Vehicle.transform);
+            if (isActorBlocked) cameraScore -= 10f;
+            if (isVehicleBlocked) cameraScore -= 15f;
+
+            Vector4 groupViewport = CombineViewportBounds(actorViewport, vehicleViewport);
+            bool allSubjectsVisible = GradeViewportVisibility(actorViewport, 0.05f) >= 0.99f &&
+                                      GradeViewportVisibility(vehicleViewport, 0.05f) >= 0.99f &&
+                                      !isActorBlocked && !isVehicleBlocked;
+            RecordProductionEvidence(groupViewport, allSubjectsVisible, level3Actor, productionBounds.center);
+
+            totalCameraScoreAccumulated += Mathf.Clamp(cameraScore, 0f, 70f);
+            totalLightingScoreAccumulated += GradeLevel3Lighting(productionBounds.center);
+            framesSampled++;
+        }
+
+        private float GradeLevel3Composition(Vector4 actorViewport, Vector4 vehicleViewport)
+        {
+            float score = 0f;
+            score += 12f * GradeViewportVisibility(actorViewport, 0.05f);
+            score += 16f * GradeViewportVisibility(vehicleViewport, 0.05f);
+
+            float groupMinimumX = Mathf.Min(actorViewport.x, vehicleViewport.x);
+            float groupMinimumY = Mathf.Min(actorViewport.y, vehicleViewport.y);
+            float groupMaximumX = Mathf.Max(actorViewport.z, vehicleViewport.z);
+            float groupMaximumY = Mathf.Max(actorViewport.w, vehicleViewport.w);
+            float groupWidth = groupMaximumX - groupMinimumX;
+            float groupHeight = groupMaximumY - groupMinimumY;
+            float groupCoverage = Mathf.Max(groupWidth, groupHeight);
+            score += 14f * GradeRange(groupCoverage, 0.4f, 0.82f);
+
+            Vector2 groupCenter = new Vector2((groupMinimumX + groupMaximumX) * 0.5f, (groupMinimumY + groupMaximumY) * 0.5f);
+            score += 10f * Mathf.Clamp01(1f - Vector2.Distance(groupCenter, new Vector2(0.5f, 0.5f)) / 0.35f);
+
+            float vehicleCenterX = (vehicleViewport.x + vehicleViewport.z) * 0.5f;
+            float closestThird = Mathf.Min(Mathf.Abs(vehicleCenterX - 0.33f), Mathf.Abs(vehicleCenterX - 0.66f));
+            score += 10f * Mathf.Clamp01(1f - closestThird / 0.2f);
+
+            float actorCenterX = (actorViewport.x + actorViewport.z) * 0.5f;
+            score += 5f * GradeRange(Mathf.Abs(actorCenterX - vehicleCenterX), 0.12f, 0.45f);
+            score += 3f * GradeLowViewportOverlap(actorViewport, vehicleViewport);
+
+            return Mathf.Clamp(score, 0f, 70f);
+        }
+
+        private float GradeLevel3Lighting(Vector3 targetCenter)
+        {
+            float bestScore = 0f;
+            FilmLightItem[] lights = GetActiveLights();
+
+            foreach (FilmLightItem light in lights)
+            {
+                if (light == null || !light.IsPoweredOn() || light.spotlight == null) continue;
+
+                Vector3 lightPosition = light.spotlight.transform.position;
+                Vector3 directionToTarget = (targetCenter - lightPosition).normalized;
+                Vector3 cameraArrow = (filmCamera.transform.position - targetCenter).normalized;
+                Vector3 lightArrow = (lightPosition - targetCenter).normalized;
+
+                bool isSoftLight = light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight;
+                float score = isSoftLight ? 5f : 0f;
+                score += 7f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 75f) / 45f);
+                score += 4f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 10f) / 25f);
+                score += 8f * Mathf.InverseLerp(0.45f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
+                score += 3f * Mathf.InverseLerp(-0.15f, 0.75f, Vector3.Dot(cameraArrow, lightArrow));
+                score += 3f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 2f, 8f);
+
+                if (!isSoftLight) score = Mathf.Min(score * 0.5f, 7f);
+                bestScore = Mathf.Max(bestScore, score);
+            }
+
+            return Mathf.Clamp(bestScore, 0f, 30f);
+        }
+
+        private void SampleLevel4Frame()
+        {
+            CacheCampaignTargets(4);
+
+            if (level3Actor == null || campaignProduct == null)
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
+
+            if (!TryGetViewportBounds(level3ActorRenderers, out Vector4 actorViewport) ||
+                !TryGetViewportBounds(campaignProductRenderers, out Vector4 productViewport) ||
+                !TryGetWorldBounds(level3ActorRenderers, out Bounds actorBounds) ||
+                !TryGetWorldBounds(campaignProductRenderers, out Bounds productBounds))
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
+
+            Bounds productionBounds = productBounds;
+            productionBounds.Encapsulate(actorBounds);
+
+            float cameraScore = GradeLevel4Composition(actorViewport, productViewport);
+            bool isActorBlocked = IsCampaignTargetBlocked(actorBounds.center, level3Actor.transform);
+            bool isProductBlocked = IsCampaignTargetBlocked(productBounds.center, campaignProduct.transform);
+            if (isActorBlocked) cameraScore -= 12f;
+            if (isProductBlocked) cameraScore -= 18f;
+
+            Vector4 groupViewport = CombineViewportBounds(actorViewport, productViewport);
+            bool allSubjectsVisible = GradeViewportVisibility(actorViewport, 0.05f) >= 0.99f &&
+                                      GradeViewportVisibility(productViewport, 0.05f) >= 0.99f &&
+                                      !isActorBlocked && !isProductBlocked;
+            RecordProductionEvidence(groupViewport, allSubjectsVisible, level3Actor, productionBounds.center, campaignProduct.transform);
+
+            totalCameraScoreAccumulated += Mathf.Clamp(cameraScore, 0f, 70f);
+            totalLightingScoreAccumulated += GradeLevel3Lighting(productionBounds.center);
+            framesSampled++;
+        }
+
+        private float GradeLevel4Composition(Vector4 actorViewport, Vector4 productViewport)
+        {
+            float score = 0f;
+            score += 18f * GradeViewportVisibility(actorViewport, 0.05f);
+            score += 22f * GradeViewportVisibility(productViewport, 0.05f);
+
+            Vector4 groupViewport = CombineViewportBounds(actorViewport, productViewport);
+            float groupCoverage = GetViewportCoverage(groupViewport);
+            score += 14f * GradeRange(groupCoverage, 0.35f, 0.75f);
+
+            Vector2 groupCenter = GetViewportCenter(groupViewport);
+            score += 8f * Mathf.Clamp01(1f - Vector2.Distance(groupCenter, new Vector2(0.5f, 0.5f)) / 0.35f);
+
+            float productCenterX = GetViewportCenter(productViewport).x;
+            float closestThird = Mathf.Min(Mathf.Abs(productCenterX - 0.33f), Mathf.Abs(productCenterX - 0.66f));
+            score += 5f * Mathf.Clamp01(1f - closestThird / 0.2f);
+            score += 3f * GradeLowViewportOverlap(actorViewport, productViewport);
+
+            return Mathf.Clamp(score, 0f, 70f);
+        }
+
+        private void SampleLevel5Frame()
+        {
+            CacheCampaignTargets(5);
+
+            if (level3Actor == null || campaignProduct == null || level3Vehicle == null)
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
+
+            if (!TryGetViewportBounds(level3ActorRenderers, out Vector4 actorViewport) ||
+                !TryGetViewportBounds(campaignProductRenderers, out Vector4 productViewport) ||
+                !TryGetViewportBounds(level3VehicleRenderers, out Vector4 vehicleViewport) ||
+                !TryGetWorldBounds(level3ActorRenderers, out Bounds actorBounds) ||
+                !TryGetWorldBounds(campaignProductRenderers, out Bounds productBounds) ||
+                !TryGetWorldBounds(level3VehicleRenderers, out Bounds vehicleBounds))
+            {
+                RecordMissingEvidence();
+                framesSampled++;
+                return;
+            }
+
+            Bounds productionBounds = vehicleBounds;
+            productionBounds.Encapsulate(actorBounds);
+            productionBounds.Encapsulate(productBounds);
+
+            float cameraScore = GradeLevel5Composition(actorViewport, productViewport, vehicleViewport);
+            bool isActorBlocked = IsCampaignTargetBlocked(actorBounds.center, level3Actor.transform);
+            bool isProductBlocked = IsCampaignTargetBlocked(productBounds.center, campaignProduct.transform);
+            bool isVehicleBlocked = IsCampaignTargetBlocked(vehicleBounds.center, level3Vehicle.transform);
+            if (isActorBlocked) cameraScore -= 8f;
+            if (isProductBlocked) cameraScore -= 15f;
+            if (isVehicleBlocked) cameraScore -= 12f;
+
+            Vector4 groupViewport = CombineViewportBounds(CombineViewportBounds(actorViewport, productViewport), vehicleViewport);
+            bool allSubjectsVisible = GradeViewportVisibility(actorViewport, 0.05f) >= 0.99f &&
+                                      GradeViewportVisibility(productViewport, 0.05f) >= 0.99f &&
+                                      GradeViewportVisibility(vehicleViewport, 0.05f) >= 0.99f &&
+                                      !isActorBlocked && !isProductBlocked && !isVehicleBlocked;
+            RecordProductionEvidence(groupViewport, allSubjectsVisible, level3Actor, productionBounds.center, campaignProduct.transform);
+
+            totalCameraScoreAccumulated += Mathf.Clamp(cameraScore, 0f, 70f);
+            totalLightingScoreAccumulated += Grade3PointLighting(productionBounds.center);
+            framesSampled++;
+        }
+
+        private float GradeLevel5Composition(Vector4 actorViewport, Vector4 productViewport, Vector4 vehicleViewport)
+        {
+            float score = 0f;
+            score += 12f * GradeViewportVisibility(actorViewport, 0.05f);
+            score += 14f * GradeViewportVisibility(productViewport, 0.05f);
+            score += 16f * GradeViewportVisibility(vehicleViewport, 0.05f);
+
+            Vector4 groupViewport = CombineViewportBounds(CombineViewportBounds(actorViewport, productViewport), vehicleViewport);
+            float groupCoverage = GetViewportCoverage(groupViewport);
+            score += 10f * GradeRange(groupCoverage, 0.45f, 0.88f);
+
+            Vector2 groupCenter = GetViewportCenter(groupViewport);
+            score += 6f * Mathf.Clamp01(1f - Vector2.Distance(groupCenter, new Vector2(0.5f, 0.5f)) / 0.4f);
+
+            float productCenterX = GetViewportCenter(productViewport).x;
+            float closestThird = Mathf.Min(Mathf.Abs(productCenterX - 0.33f), Mathf.Abs(productCenterX - 0.66f));
+            score += 7f * Mathf.Clamp01(1f - closestThird / 0.22f);
+
+            float lowOverlapScore = GradeLowViewportOverlap(actorViewport, productViewport);
+            lowOverlapScore += GradeLowViewportOverlap(productViewport, vehicleViewport);
+            score += 5f * Mathf.Clamp01(lowOverlapScore * 0.5f);
+
+            return Mathf.Clamp(score, 0f, 70f);
+        }
+
+        private void CacheCampaignTargets(int campaignLevel)
+        {
+            bool hasRequiredTargets = campaignProduct != null && level3Actor != null && (campaignLevel != 5 || level3Vehicle != null);
+            if (Time.time < nextCampaignTargetRefreshTime && hasRequiredTargets) return;
+
+            level3Actor = FindObjectOfType<CubeActor>();
+            level3Vehicle = campaignLevel == 5 ? FindObjectOfType<CubeVehicle>() : null;
+            campaignProduct = null;
+
+            CampaignProduct[] campaignProducts = FindObjectsOfType<CampaignProduct>();
+            foreach (CampaignProduct product in campaignProducts)
+            {
+                if (product != null && product.campaignLevel == campaignLevel)
+                {
+                    campaignProduct = product;
+                    break;
                 }
             }
 
-            float score = 0f;
-            if (hasKey) score += 10f;
-            if (hasFill) score += 10f;
-            if (hasBacklight) score += 10f;
+            level3ActorRenderers = level3Actor != null ? level3Actor.GetComponentsInChildren<Renderer>() : null;
+            level3VehicleRenderers = level3Vehicle != null ? level3Vehicle.GetComponentsInChildren<Renderer>() : null;
+            campaignProductRenderers = campaignProduct != null ? campaignProduct.GetComponentsInChildren<Renderer>() : null;
+            nextCampaignTargetRefreshTime = Time.time + 1f;
+        }
 
-            return score;
+        private void CacheLevel3Targets()
+        {
+            if (Time.time < nextLevel3TargetRefreshTime && level3Actor != null && level3Vehicle != null) return;
+
+            level3Actor = FindObjectOfType<CubeActor>();
+            level3Vehicle = FindObjectOfType<CubeVehicle>();
+            level3ActorRenderers = level3Actor != null ? level3Actor.GetComponentsInChildren<Renderer>() : null;
+            level3VehicleRenderers = level3Vehicle != null ? level3Vehicle.GetComponentsInChildren<Renderer>() : null;
+            nextLevel3TargetRefreshTime = Time.time + 1f;
+        }
+
+        private bool TryGetViewportBounds(Renderer[] renderers, out Vector4 viewportBounds)
+        {
+            viewportBounds = Vector4.zero;
+            if (!TryGetWorldBounds(renderers, out Bounds worldBounds) || filmCamera == null) return false;
+
+            SetBoundsCorners(worldBounds);
+            float minimumX = float.MaxValue;
+            float minimumY = float.MaxValue;
+            float maximumX = float.MinValue;
+            float maximumY = float.MinValue;
+
+            for (int i = 0; i < trackingCorners.Length; i++)
+            {
+                Vector3 viewportPoint = filmCamera.WorldToViewportPoint(trackingCorners[i]);
+                if (viewportPoint.z <= 0f) return false;
+
+                minimumX = Mathf.Min(minimumX, viewportPoint.x);
+                minimumY = Mathf.Min(minimumY, viewportPoint.y);
+                maximumX = Mathf.Max(maximumX, viewportPoint.x);
+                maximumY = Mathf.Max(maximumY, viewportPoint.y);
+            }
+
+            viewportBounds = new Vector4(minimumX, minimumY, maximumX, maximumY);
+            return true;
+        }
+
+        private bool TryGetWorldBounds(Renderer[] renderers, out Bounds worldBounds)
+        {
+            worldBounds = new Bounds();
+            if (renderers == null || renderers.Length == 0) return false;
+
+            bool foundRenderer = false;
+            foreach (Renderer renderer in renderers)
+            {
+                if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+
+                if (!foundRenderer)
+                {
+                    worldBounds = renderer.bounds;
+                    foundRenderer = true;
+                }
+                else
+                {
+                    worldBounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return foundRenderer;
+        }
+
+        private void SetBoundsCorners(Bounds bounds)
+        {
+            Vector3 minimum = bounds.min;
+            Vector3 maximum = bounds.max;
+
+            trackingCorners[0] = new Vector3(minimum.x, minimum.y, minimum.z);
+            trackingCorners[1] = new Vector3(maximum.x, minimum.y, minimum.z);
+            trackingCorners[2] = new Vector3(minimum.x, maximum.y, minimum.z);
+            trackingCorners[3] = new Vector3(maximum.x, maximum.y, minimum.z);
+            trackingCorners[4] = new Vector3(minimum.x, minimum.y, maximum.z);
+            trackingCorners[5] = new Vector3(maximum.x, minimum.y, maximum.z);
+            trackingCorners[6] = new Vector3(minimum.x, maximum.y, maximum.z);
+            trackingCorners[7] = new Vector3(maximum.x, maximum.y, maximum.z);
+        }
+
+        private float GradeViewportVisibility(Vector4 viewportBounds, float frameMargin)
+        {
+            float overflow = Mathf.Max(0f, frameMargin - viewportBounds.x);
+            overflow += Mathf.Max(0f, frameMargin - viewportBounds.y);
+            overflow += Mathf.Max(0f, viewportBounds.z - (1f - frameMargin));
+            overflow += Mathf.Max(0f, viewportBounds.w - (1f - frameMargin));
+            return Mathf.Clamp01(1f - overflow * 3f);
+        }
+
+        private float GradeLowViewportOverlap(Vector4 firstBounds, Vector4 secondBounds)
+        {
+            float overlapWidth = Mathf.Max(0f, Mathf.Min(firstBounds.z, secondBounds.z) - Mathf.Max(firstBounds.x, secondBounds.x));
+            float overlapHeight = Mathf.Max(0f, Mathf.Min(firstBounds.w, secondBounds.w) - Mathf.Max(firstBounds.y, secondBounds.y));
+            float overlapArea = overlapWidth * overlapHeight;
+            float firstArea = Mathf.Max(0.001f, (firstBounds.z - firstBounds.x) * (firstBounds.w - firstBounds.y));
+            float secondArea = Mathf.Max(0.001f, (secondBounds.z - secondBounds.x) * (secondBounds.w - secondBounds.y));
+            float overlapRatio = overlapArea / Mathf.Min(firstArea, secondArea);
+            return Mathf.Clamp01(1f - overlapRatio / 0.3f);
+        }
+
+        private Vector4 CombineViewportBounds(Vector4 firstBounds, Vector4 secondBounds)
+        {
+            return new Vector4(
+                Mathf.Min(firstBounds.x, secondBounds.x),
+                Mathf.Min(firstBounds.y, secondBounds.y),
+                Mathf.Max(firstBounds.z, secondBounds.z),
+                Mathf.Max(firstBounds.w, secondBounds.w)
+            );
+        }
+
+        private float GetViewportCoverage(Vector4 viewportBounds)
+        {
+            return Mathf.Max(viewportBounds.z - viewportBounds.x, viewportBounds.w - viewportBounds.y);
+        }
+
+        private Vector2 GetViewportCenter(Vector4 viewportBounds)
+        {
+            return new Vector2(
+                (viewportBounds.x + viewportBounds.z) * 0.5f,
+                (viewportBounds.y + viewportBounds.w) * 0.5f
+            );
+        }
+
+        private void RecordProductionEvidence(Vector4 groupViewport, bool allSubjectsVisible, CubeActor actor, Vector3 targetCenter, Transform continuityReference = null)
+        {
+            recordedMetadataSamples++;
+            recordedCoverageAccumulated += GetViewportCoverage(groupViewport);
+            if (allSubjectsVisible) recordedVisibleSamples++;
+            if (IsUsingSoftLight(targetCenter)) recordedSoftLightSamples++;
+            if (recordingCampaignLevel == 5 && HasThreePointLightingRoles(targetCenter, GetActiveLights())) recordedThreePointSamples++;
+
+            if (actor != null)
+            {
+                recordedActorPose = actor.GetPoseName();
+                recordedScreenDirectionAccumulated += GetActorScreenDirection(actor, continuityReference);
+            }
+        }
+
+        private void RecordMissingEvidence()
+        {
+            recordedMetadataSamples++;
+        }
+
+        private int GetRecordedShotType()
+        {
+            if (recordedMetadataSamples <= 0) return 2;
+
+            float averageCoverage = recordedCoverageAccumulated / recordedMetadataSamples;
+            if (averageCoverage <= 0.45f) return 1;
+            if (averageCoverage <= 0.75f) return 2;
+            return 3;
+        }
+
+        private float GetActorScreenDirection(CubeActor actor, Transform continuityReference)
+        {
+            if (actor == null || filmCamera == null) return 0f;
+
+            Vector3 actorPosition = actor.transform.position + Vector3.up;
+            Vector3 actorViewport = filmCamera.WorldToViewportPoint(actorPosition);
+            float horizontalDirection;
+
+            if (continuityReference != null)
+            {
+                Vector3 referencePosition = continuityReference.position + Vector3.up * 0.5f;
+                Vector3 referenceViewport = filmCamera.WorldToViewportPoint(referencePosition);
+                horizontalDirection = actorViewport.x - referenceViewport.x;
+            }
+            else
+            {
+                Vector3 facingViewport = filmCamera.WorldToViewportPoint(actorPosition + actor.transform.forward);
+                horizontalDirection = facingViewport.x - actorViewport.x;
+            }
+
+            if (Mathf.Abs(horizontalDirection) < 0.02f) return 0f;
+            return Mathf.Sign(horizontalDirection);
+        }
+
+        private bool IsUsingSoftLight(Vector3 targetCenter)
+        {
+            FilmLightItem[] lights = GetActiveLights();
+            foreach (FilmLightItem light in lights)
+            {
+                if (light == null || !light.IsPoweredOn() || light.spotlight == null) continue;
+
+                bool isSoftLight = light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight;
+                if (!isSoftLight) continue;
+
+                Vector3 lightPosition = light.spotlight.transform.position;
+                Vector3 directionToTarget = (targetCenter - lightPosition).normalized;
+                float aim = Vector3.Dot(light.spotlight.transform.forward, directionToTarget);
+                float distance = Vector3.Distance(lightPosition, targetCenter);
+
+                if (aim >= 0.45f && distance <= 12f) return true;
+            }
+
+            return false;
+        }
+
+        private float GradeRange(float value, float idealMinimum, float idealMaximum)
+        {
+            if (value >= idealMinimum && value <= idealMaximum) return 1f;
+
+            float tolerance = Mathf.Max(idealMaximum - idealMinimum, 0.01f);
+            if (value < idealMinimum) return Mathf.Clamp01(1f - (idealMinimum - value) / tolerance);
+            return Mathf.Clamp01(1f - (value - idealMaximum) / tolerance);
+        }
+
+        private bool IsCampaignTargetBlocked(Vector3 targetCenter, Transform targetRoot)
+        {
+            Vector3 directionToTarget = targetCenter - filmCamera.transform.position;
+            float distanceToTarget = directionToTarget.magnitude;
+            int hitCount = Physics.RaycastNonAlloc(filmCamera.transform.position, directionToTarget, trackingHits, distanceToTarget);
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit hit = trackingHits[i];
+                if (hit.collider == null || hit.collider.isTrigger) continue;
+                if (hit.collider.transform.root == transform.root) continue;
+                if (hit.collider.transform.root == targetRoot) continue;
+                if (hit.distance < distanceToTarget - 0.15f) return true;
+            }
+
+            return false;
+        }
+
+        private void CacheTargetSubject()
+        {
+            targetSubject = FindObjectOfType<RecordableSubject>();
+            targetRenderers = targetSubject != null ? targetSubject.GetComponentsInChildren<Renderer>() : null;
+        }
+
+        private bool IsSubjectBlocked(Vector3 directionToTarget, float distanceToTarget)
+        {
+            int hitCount = Physics.RaycastNonAlloc(
+                filmCamera.transform.position,
+                directionToTarget,
+                trackingHits,
+                distanceToTarget
+            );
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit hit = trackingHits[i];
+                if (hit.collider.transform.root == this.transform.root) continue;
+                if (hit.collider.isTrigger) continue;
+                if (hit.collider.GetComponentInParent<RecordableSubject>() != null) continue;
+                if (hit.distance < distanceToTarget - 0.3f) return true;
+            }
+
+            return false;
+        }
+
+        private FilmLightItem[] GetActiveLights()
+        {
+            if (activeLights == null || Time.time >= nextLightRefreshTime)
+            {
+                activeLights = FindObjectsOfType<FilmLightItem>();
+                nextLightRefreshTime = Time.time + 1f;
+            }
+
+            return activeLights;
         }
 
         private void InsertSDCard()
         {
             if (isSDCardInserted) return;
+            if (TutorialManager.Instance != null && !TutorialManager.Instance.CanInsertSDCard(EquipmentName)) return;
+
             Player.Interactor.EquipmentInteractor hotbar = GetComponentInParent<Player.Interactor.EquipmentInteractor>();
             if (hotbar != null && hotbar.HasBlankSDCard())
             {
@@ -549,20 +1263,31 @@ namespace Player.Equipment
                 HotbarUIManager ui = FindObjectOfType<HotbarUIManager>();
                 if (ui != null) ui.UpdateGuideText(EquipmentControls);
 
-                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera();
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera(EquipmentName);
             }
         }
 
         private void ToggleRecording(bool forceCancel = false)
         {
-            Player.PlayerController.PlayerController pCtrl = FindObjectOfType<Player.PlayerController.PlayerController>();
+            if (isRecording && forceCancel)
+            {
+                if (pixelRecorder == null) pixelRecorder = FindObjectOfType<TruePixelRecorder>();
+                if (pixelRecorder != null) pixelRecorder.CancelRecording();
+                isRecording = false;
+
+                if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
+
+                UpdateCameraHUD(true);
+                return;
+            }
 
             if (!isRecording)
             {
                 if (TutorialManager.Instance != null && !TutorialManager.Instance.CanRecord()) return;
 
-                if (targetSubject == null) targetSubject = FindObjectOfType<RecordableSubject>();
-                if (targetSubject != null && filmCamera != null)
+                bool requiresCenterFraming = CampaignProgression.GetCurrentLevel() == 1;
+                if (targetSubject == null) CacheTargetSubject();
+                if (requiresCenterFraming && targetSubject != null && filmCamera != null)
                 {
                     Vector3 targetCenter = GetSubjectCenter(targetSubject);
                     Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
@@ -593,6 +1318,13 @@ namespace Player.Equipment
                 }
             }
 
+            if (pixelRecorder == null) pixelRecorder = FindObjectOfType<TruePixelRecorder>();
+            if (pixelRecorder == null)
+            {
+                Debug.LogError("FilmCameraItem: TruePixelRecorder is missing from the camera!");
+                return;
+            }
+
             isRecording = !isRecording;
             string generatedFileName = "";
             float finalDuration = 0f;
@@ -600,43 +1332,45 @@ namespace Player.Equipment
             float finalCamGrade = 0f;
             float finalLightGrade = 0f;
 
-            if (pixelRecorder == null) pixelRecorder = FindObjectOfType<TruePixelRecorder>();
-
-            if (pixelRecorder != null)
+            if (isRecording)
             {
-                if (isRecording)
+                if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(true);
+
+                if (!pixelRecorder.StartRecording())
                 {
-                    // --- THE FIX: Lock the player's look so they can't move the camera! ---
-                    if (pCtrl != null) pCtrl.canLook = false;
-
-                    pixelRecorder.StartRecording();
-                    recordingStartTime = Time.time;
-                    totalCameraScoreAccumulated = 0f;
-                    totalLightingScoreAccumulated = 0f;
-                    framesSampled = 0;
-                    nextSampleTime = Time.time + 0.5f;
+                    isRecording = false;
+                    if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
+                    UpdateCameraHUD(true);
+                    return;
                 }
-                else
-                {
-                    // --- THE FIX: Unlock the player's look when finished recording! ---
-                    if (pCtrl != null) pCtrl.canLook = true;
 
-                    generatedFileName = pixelRecorder.StopRecording();
-                    finalDuration = Time.time - recordingStartTime;
-
-                    if (framesSampled > 0)
-                    {
-                        finalCamGrade = totalCameraScoreAccumulated / framesSampled;
-                        finalLightGrade = totalLightingScoreAccumulated / framesSampled;
-                        finalGrade = finalCamGrade + finalLightGrade;
-                    }
-                }
+                recordingStartTime = Time.time;
+                recordingCampaignLevel = CampaignProgression.GetCurrentLevel();
+                totalCameraScoreAccumulated = 0f;
+                totalLightingScoreAccumulated = 0f;
+                framesSampled = 0;
+                recordedCoverageAccumulated = 0f;
+                recordedScreenDirectionAccumulated = 0f;
+                recordedMetadataSamples = 0;
+                recordedVisibleSamples = 0;
+                recordedSoftLightSamples = 0;
+                recordedThreePointSamples = 0;
+                recordedActorPose = "";
+                nextSampleTime = Time.time + 0.5f;
             }
-
-            if (!isRecording && forceCancel)
+            else
             {
-                UpdateCameraHUD();
-                return;
+                if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
+
+                generatedFileName = pixelRecorder.StopRecording();
+                finalDuration = Time.time - recordingStartTime;
+
+                if (framesSampled > 0)
+                {
+                    finalCamGrade = totalCameraScoreAccumulated / framesSampled;
+                    finalLightGrade = totalLightingScoreAccumulated / framesSampled;
+                    finalGrade = finalCamGrade + finalLightGrade;
+                }
             }
 
             if (!isRecording) EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
@@ -646,16 +1380,29 @@ namespace Player.Equipment
 
         public override void OnDropped(Camera playerCamera)
         {
-            if (isRecording) ToggleRecording();
+            if (isRecording) ToggleRecording(true);
             if (isCameraActive)
             {
                 isCameraActive = false;
                 if (filmCamera != null) filmCamera.gameObject.SetActive(false);
                 if (filmUICanvas != null) filmUICanvas.SetActive(false);
+                if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(false);
+                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCameraViewExited(EquipmentName);
                 TogglePlayerUI(true);
             }
             base.OnDropped(playerCamera);
         }
+
+        private void OnDisable()
+        {
+            if (!isRecording) return;
+
+            if (pixelRecorder != null) pixelRecorder.CancelRecording();
+            isRecording = false;
+
+            if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
+        }
+
         private void EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
         {
             isSDCardInserted = false;
@@ -672,6 +1419,13 @@ namespace Player.Equipment
                     cardScript.videoScore = finalScore;
                     cardScript.cameraScore = camScore;
                     cardScript.lightScore = lightScore;
+                    cardScript.campaignLevel = recordingCampaignLevel;
+                    cardScript.shotType = GetRecordedShotType();
+                    cardScript.screenDirection = recordedMetadataSamples > 0 ? recordedScreenDirectionAccumulated / recordedMetadataSamples : 0f;
+                    cardScript.actorPose = recordedActorPose;
+                    cardScript.requiredSubjectsVisible = recordedMetadataSamples > 0 && recordedVisibleSamples == recordedMetadataSamples;
+                    cardScript.usedSoftLight = recordedMetadataSamples > 0 && recordedSoftLightSamples >= Mathf.CeilToInt(recordedMetadataSamples * 0.5f);
+                    cardScript.hasThreePointRoles = recordedMetadataSamples > 0 && recordedThreePointSamples == recordedMetadataSamples;
                     cardScript.MarkAsUsed();
                 }
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();

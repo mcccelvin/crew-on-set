@@ -84,4 +84,9 @@ public class CutsceneController : MonoBehaviour
 
         SceneManager.LoadScene(5);
     }
+
+    private void OnDestroy()
+    {
+        if (videoPlayer != null) videoPlayer.loopPointReached -= EndCutscene;
+    }
 }

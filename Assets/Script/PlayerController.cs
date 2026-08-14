@@ -55,8 +55,12 @@ namespace Player.PlayerController
         private void FixedUpdate()
         {
             Move();
-            HandleJump();
             SampleGround();
+        }
+
+        private void Update()
+        {
+            HandleJump();
         }
 
         private void LateUpdate()
@@ -95,7 +99,8 @@ namespace Player.PlayerController
 
         private void CamMovement()
         {
-            if (!hasAnimator || !canLook) return;
+            bool isTutorialRecordingLocked = TutorialManager.Instance != null && TutorialManager.Instance.IsTutorialRecordingLookLocked();
+            if (!hasAnimator || !canLook || isTutorialRecordingLocked) return;
 
             var MouseX = inputManager.Look.x;
             var MouseY = inputManager.Look.y;

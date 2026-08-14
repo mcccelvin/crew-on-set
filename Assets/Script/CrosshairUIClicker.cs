@@ -11,6 +11,8 @@ public class CrosshairUIClicker : MonoBehaviour
 
     void Update()
     {
+        if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
+
         // When the player clicks the Left Mouse Button
         if (Input.GetMouseButtonDown(0))
         {

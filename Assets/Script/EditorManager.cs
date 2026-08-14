@@ -43,6 +43,8 @@ public class EditorManager : MonoBehaviour
     private int cheatClipCounter = 0;
 
     private List<GameObject> clonedLogos = new List<GameObject>();
+    private List<Texture2D> generatedThumbnails = new List<Texture2D>();
+    private Material exportMaterial;
     private float pendingCam = 0f;
     private float pendingLight = 0f;
     private float pendingSec = 0f;
@@ -82,8 +84,8 @@ public class EditorManager : MonoBehaviour
         dummyTex.Apply();
         byte[] jpgData = dummyTex.EncodeToJPG(50);
 
-        // --- 12 seconds * 24 frames per second = 288 frames ---
-        int totalFrames = 288;
+        // --- 12 seconds at the shared tape frame rate ---
+        int totalFrames = Mathf.RoundToInt(12f * TapeSettings.framesPerSecond);
 
         using (BinaryWriter writer = new BinaryWriter(File.Open(fullPath, FileMode.Create)))
         {
@@ -106,6 +108,13 @@ public class EditorManager : MonoBehaviour
                 dragScript.clipFilePath = fullPath;
                 dragScript.cameraScore = UnityEngine.Random.Range(50f, 100f);
                 dragScript.lightScore = UnityEngine.Random.Range(50f, 100f);
+                dragScript.campaignLevel = CampaignProgression.GetCurrentLevel();
+                dragScript.shotType = 2;
+                dragScript.screenDirection = 0f;
+                dragScript.actorPose = "Neutral";
+                dragScript.requiredSubjectsVisible = true;
+                dragScript.usedSoftLight = dragScript.campaignLevel >= 3;
+                dragScript.hasThreePointRoles = false;
             }
 
             TextMeshProUGUI clipText = newClip.GetComponentInChildren<TextMeshProUGUI>();
@@ -128,13 +137,28 @@ public class EditorManager : MonoBehaviour
                 dragScript.clipFilePath = fullPath;
                 dragScript.cameraScore = data.camScore;
                 dragScript.lightScore = data.lightScore;
+                dragScript.campaignLevel = data.campaignLevel;
+                dragScript.shotType = data.shotType;
+                dragScript.screenDirection = data.screenDirection;
+                dragScript.actorPose = data.actorPose;
+                dragScript.requiredSubjectsVisible = data.requiredSubjectsVisible;
+                dragScript.usedSoftLight = data.usedSoftLight;
+                dragScript.hasThreePointRoles = data.hasThreePointRoles;
             }
 
             TextMeshProUGUI clipText = newClip.GetComponentInChildren<TextMeshProUGUI>();
             string displayName = Path.GetFileNameWithoutExtension(data.fileName);
+            if (data.campaignLevel >= 4) displayName += "\n[" + GetShotTypeName(data.shotType) + "]";
 
             if (File.Exists(fullPath)) LoadThumbnail(fullPath, newClip, dragScript, displayName, clipText);
         }
+    }
+
+    private string GetShotTypeName(int shotType)
+    {
+        if (shotType == 1) return "WIDE";
+        if (shotType == 3) return "CLOSE-UP";
+        return "MEDIUM";
     }
 
     private void LoadThumbnail(string path, GameObject clipObj, DraggableClip script, string name, TextMeshProUGUI text)
@@ -144,7 +168,7 @@ public class EditorManager : MonoBehaviour
             using (BinaryReader reader = new BinaryReader(File.Open(path, FileMode.Open)))
             {
                 int frameCount = reader.ReadInt32();
-                float duration = frameCount / 24f;
+                float duration = frameCount / TapeSettings.framesPerSecond;
 
                 if (script != null)
                 {
@@ -165,7 +189,8 @@ public class EditorManager : MonoBehaviour
                     int frameSize = reader.ReadInt32();
                     byte[] frameBytes = reader.ReadBytes(frameSize);
                     Texture2D thumbTex = new Texture2D(2, 2);
-                    thumbTex.LoadImage(frameBytes);
+                    thumbTex.LoadImage(frameBytes, true);
+                    generatedThumbnails.Add(thumbTex);
 
                     RawImage thumbUI = clipObj.GetComponentInChildren<RawImage>();
                     if (thumbUI != null) thumbUI.texture = thumbTex;
@@ -212,9 +237,10 @@ public class EditorManager : MonoBehaviour
 
         foreach (var clip in sortedClips)
         {
-            totalCam += clip.cameraScore;
-            totalLight += clip.lightScore;
-            totalSeconds += (clip.endFrame - clip.startFrame) / 24f;
+            float clipSeconds = Mathf.Max(0f, (clip.endFrame - clip.startFrame) / TapeSettings.framesPerSecond);
+            totalCam += clip.cameraScore * clipSeconds;
+            totalLight += clip.lightScore * clipSeconds;
+            totalSeconds += clipSeconds;
 
             RectTransform rt = clip.GetComponent<RectTransform>();
             float trueStartX = rt.anchoredPosition.x - (rt.rect.width * rt.pivot.x);
@@ -229,10 +255,10 @@ public class EditorManager : MonoBehaviour
             });
         }
 
-        if (clips.Length > 0)
+        if (totalSeconds > 0f)
         {
-            totalCam /= clips.Length;
-            totalLight /= clips.Length;
+            totalCam /= totalSeconds;
+            totalLight /= totalSeconds;
         }
 
         bool hasFadeIn = false;
@@ -258,7 +284,11 @@ public class EditorManager : MonoBehaviour
         if (exportPlayer != null && exportPlayer.computerScreen != null)
         {
             if (gradingManager != null && gradingManager.computerScreen != null)
-                exportPlayer.computerScreen.material = new Material(gradingManager.computerScreen.material);
+            {
+                if (exportMaterial != null) Destroy(exportMaterial);
+                exportMaterial = new Material(gradingManager.computerScreen.material);
+                exportPlayer.computerScreen.material = exportMaterial;
+            }
 
             DraggableOverlay[] allOverlays = FindObjectsOfType<DraggableOverlay>();
             foreach (var overlay in allOverlays)
@@ -306,5 +336,16 @@ public class EditorManager : MonoBehaviour
             CrossSceneData.finalGrades = grader.GenerateGrades(pendingCam, pendingLight, pendingSec);
             SceneManager.LoadScene("ReviewScene");
         }
+    }
+
+    private void OnDestroy()
+    {
+        foreach (Texture2D thumbnail in generatedThumbnails)
+        {
+            if (thumbnail != null) Destroy(thumbnail);
+        }
+
+        if (exportMaterial != null) Destroy(exportMaterial);
+        if (Instance == this) Instance = null;
     }
 }

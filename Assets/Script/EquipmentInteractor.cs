@@ -34,6 +34,8 @@ namespace Player.Interactor
 
         private void Update()
         {
+            if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
+
             if (activeTerminal != null)
             {
                 if (hotbarUI != null) hotbarUI.UpdateGuideText("");
@@ -221,7 +223,7 @@ namespace Player.Interactor
                                 }
                                 else if (lowerObjName.Contains("camera") || lowerItemName.Contains("camera"))
                                 {
-                                    TutorialManager.Instance.OnCameraPickedUp();
+                                    TutorialManager.Instance.OnCameraPickedUp(item.EquipmentName);
                                 }
                                 else if (lowerObjName.Contains("sd") || lowerItemName.Contains("card"))
                                 {

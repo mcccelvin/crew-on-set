@@ -46,6 +46,13 @@ public class ComputerStation : MonoBehaviour, IInteractable
                 newData.fileName = card.recordedFileName;
                 newData.camScore = card.cameraScore;
                 newData.lightScore = card.lightScore;
+                newData.campaignLevel = card.campaignLevel;
+                newData.shotType = card.shotType;
+                newData.screenDirection = card.screenDirection;
+                newData.actorPose = card.actorPose;
+                newData.requiredSubjectsVisible = card.requiredSubjectsVisible;
+                newData.usedSoftLight = card.usedSoftLight;
+                newData.hasThreePointRoles = card.hasThreePointRoles;
                 insertedFiles.Add(newData);
 
                 hotbar.DestroyHeldItem();
@@ -72,7 +79,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
     public void CloseComputerUI()
     {
         TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
-        if (player != null) player.StopAllCoroutines();
+        if (player != null) player.StopTape();
 
         if (computerUICanvas != null) computerUICanvas.SetActive(false);
         Cursor.lockState = CursorLockMode.Locked;
@@ -105,9 +112,10 @@ public class ComputerStation : MonoBehaviour, IInteractable
     {
         if (insertedFiles.Count == 0 || selectedClipIndex >= insertedFiles.Count) return;
         string fileNameToPlay = insertedFiles[selectedClipIndex].fileName;
+        string filePathToPlay = Path.Combine(Application.persistentDataPath, fileNameToPlay);
 
         TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
-        if (player != null) player.PlayTape(fileNameToPlay);
+        if (player != null) player.PlayTape(filePathToPlay);
     }
 
     public void TrimStartOfClip() { TrimClip(true); }
@@ -156,6 +164,13 @@ public class ComputerStation : MonoBehaviour, IInteractable
             cardScript.recordedFileName = data.fileName;
             cardScript.cameraScore = data.camScore;
             cardScript.lightScore = data.lightScore;
+            cardScript.campaignLevel = data.campaignLevel;
+            cardScript.shotType = data.shotType;
+            cardScript.screenDirection = data.screenDirection;
+            cardScript.actorPose = data.actorPose;
+            cardScript.requiredSubjectsVisible = data.requiredSubjectsVisible;
+            cardScript.usedSoftLight = data.usedSoftLight;
+            cardScript.hasThreePointRoles = data.hasThreePointRoles;
         }
 
         MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();

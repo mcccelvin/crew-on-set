@@ -13,4 +13,6 @@ public static class CrossSceneData
 {
     // Holds the final calculated grades while changing scenes
     public static ProductionGrades finalGrades;
+    public static int submittedLevel;
+    public static bool resultApplied;
 }

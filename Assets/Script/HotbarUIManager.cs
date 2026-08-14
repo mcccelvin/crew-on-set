@@ -17,6 +17,8 @@ public class HotbarUIManager : MonoBehaviour
     [Header("Equipment Guide")]
     public TextMeshProUGUI equipmentGuideText;
 
+    private string currentGuideText = "";
+
     private void Start()
     {
         HighlightSlot(0);
@@ -66,6 +68,9 @@ public class HotbarUIManager : MonoBehaviour
     // --- NEW: Function to change the guide text ---
     public void UpdateGuideText(string newText)
     {
+        if (currentGuideText == newText) return;
+        currentGuideText = newText;
+
         if (equipmentGuideText != null)
         {
             equipmentGuideText.text = newText;

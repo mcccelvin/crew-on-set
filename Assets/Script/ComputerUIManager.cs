@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using TMPro;
+using Player.Equipment;
 
 public class ComputerUIManager : MonoBehaviour
 {
@@ -59,7 +60,8 @@ public class ComputerUIManager : MonoBehaviour
 
     private void RefreshGrid()
     {
-        foreach (Transform child in gridContentContainer) Destroy(child.gameObject);
+        int cardIndex = 0;
+
         if (physicalComputer != null)
         {
             List<FootageData> insertedTapes = physicalComputer.GetInsertedFiles();
@@ -68,11 +70,27 @@ public class ComputerUIManager : MonoBehaviour
                 string fullPath = Path.Combine(Application.persistentDataPath, data.fileName);
                 if (File.Exists(fullPath))
                 {
-                    GameObject newCard = Instantiate(clipCardPrefab, gridContentContainer);
+                    GameObject newCard;
+                    if (cardIndex < gridContentContainer.childCount)
+                    {
+                        newCard = gridContentContainer.GetChild(cardIndex).gameObject;
+                        newCard.SetActive(true);
+                    }
+                    else
+                    {
+                        newCard = Instantiate(clipCardPrefab, gridContentContainer);
+                    }
+
                     ClipUIItem clipScript = newCard.GetComponent<ClipUIItem>();
                     if (clipScript != null) clipScript.Setup(fullPath, this);
+                    cardIndex++;
                 }
             }
+        }
+
+        for (int i = cardIndex; i < gridContentContainer.childCount; i++)
+        {
+            gridContentContainer.GetChild(i).gameObject.SetActive(false);
         }
     }
 
@@ -163,35 +181,469 @@ public class ComputerUIManager : MonoBehaviour
 
     private void EvaluateStagePreProduction()
     {
-        float score = 100f;
+        float score = 0f;
         string feedback = "<color=white><b>--- PRE-PRODUCTION ---</b></color>\n";
+        ProjectDataManager.Instance.savedRequiredSetupMet = true;
 
-        int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
+        int currentLevel = CampaignProgression.GetCurrentLevel();
         DirectorTerminal stage = FindObjectOfType<DirectorTerminal>(true);
         RecordableSubject product = FindObjectOfType<RecordableSubject>(true);
 
-        if (progress < 2)
+        if (currentLevel == 1)
         {
-            if (stage != null && stage.currentWallColor.r > 0.5f && stage.currentWallColor.b > 0.5f)
-                feedback += "<color=green>+ Good Pink Stage Design</color>\n";
-            else { score -= 30f; feedback += "<color=yellow>- Backdrop needs to be Pink.</color>\n"; }
+            GradeLevel1Stage(stage, product, ref score, ref feedback);
+        }
+        else if (currentLevel == 2)
+        {
+            GradeLevel2Stage(stage, product, ref score, ref feedback);
+        }
+        else if (currentLevel == 3)
+        {
+            GradeLevel3Stage(ref score, ref feedback);
+        }
+        else if (currentLevel == 4)
+        {
+            GradeLevel4Stage(stage, ref score, ref feedback);
         }
         else
         {
-            if (stage != null && product != null)
-            {
-                float depthDistance = Vector3.Distance(product.transform.position, stage.transform.position);
-                if (depthDistance >= 1.5f) feedback += "<color=green>+ Great Stage Depth</color>\n";
-                else { score -= 30f; feedback += $"<color=yellow>- The shot felt flat. Pull product away from wall.</color>\n"; }
-
-                Color bg = stage.currentWallColor;
-                if (bg.r > 0.5f && bg.g < 0.3f && bg.b < 0.3f) feedback += "<color=green>+ Correct Red Backdrop</color>\n";
-                else { score -= 20f; feedback += "<color=yellow>- Wrong set color. We requested RED.</color>\n"; }
-            }
-            else { score -= 50f; feedback += "<color=red>- Error: Stage or Product missing.</color>\n"; }
+            GradeLevel5Stage(stage, ref score, ref feedback);
         }
 
-        ProjectDataManager.Instance.savedPreProdScore = score;
+        ProjectDataManager.Instance.savedPreProdScore = Mathf.Clamp(score, 0f, 100f);
         ProjectDataManager.Instance.savedPreProdFeedback = feedback + "\n";
+    }
+
+    private void GradeLevel1Stage(DirectorTerminal stage, RecordableSubject product, ref float score, ref string feedback)
+    {
+        if (stage != null && stage.HasWall())
+        {
+            score += 25f;
+            feedback += "<color=green>+ Backdrop placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Add a backdrop before recording.</color>\n";
+        }
+
+        if (product != null)
+        {
+            score += 25f;
+            feedback += "<color=green>+ Product placed on the set.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- The flower vase is missing from the set.</color>\n";
+        }
+
+        if (stage != null && stage.HasWall() && stage.currentWallColor.r > 0.5f && stage.currentWallColor.g < 0.7f && stage.currentWallColor.b > 0.5f)
+        {
+            score += 50f;
+            feedback += "<color=green>+ Good Pink Stage Design.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Backdrop needs to be Pink.</color>\n";
+        }
+
+        FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
+        if (!HasPoweredLight(lights))
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Power at least one production light before recording.</color>\n";
+        }
+    }
+
+    private void GradeLevel2Stage(DirectorTerminal stage, RecordableSubject product, ref float score, ref string feedback)
+    {
+        GameObject wall = stage != null ? stage.GetCurrentWall() : null;
+
+        if (wall != null)
+        {
+            score += 15f;
+            feedback += "<color=green>+ Backdrop placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Add a backdrop for the Goke set.</color>\n";
+        }
+
+        if (product != null)
+        {
+            score += 20f;
+            feedback += "<color=green>+ Goke product placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Goke Cola is missing from the set.</color>\n";
+        }
+
+        if (stage != null)
+        {
+            Color background = stage.currentWallColor;
+            if (background.r > 0.5f && background.g < 0.3f && background.b < 0.3f)
+            {
+                score += 35f;
+                feedback += "<color=green>+ Correct Red Backdrop.</color>\n";
+            }
+            else
+            {
+                MarkRequiredSetupMissing();
+                feedback += "<color=yellow>- Wrong set color. The client requested RED.</color>\n";
+            }
+        }
+
+        if (wall != null && product != null)
+        {
+            float depthDistance = GetDistanceFromObject(product.transform.position, wall);
+            if (depthDistance >= 1.5f)
+            {
+                score += 30f;
+                feedback += "<color=green>+ Great Stage Depth.</color>\n";
+            }
+            else
+            {
+                MarkRequiredSetupMissing();
+                feedback += "<color=yellow>- Pull Goke Cola farther away from the backdrop.</color>\n";
+            }
+        }
+
+        FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
+        if (GetPoweredLightCount(lights) < 3)
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Power the Key, Fill, and Back lights before recording.</color>\n";
+        }
+    }
+
+    private void GradeLevel3Stage(ref float score, ref string feedback)
+    {
+        CubeVehicle[] vehicles = FindObjectsOfType<CubeVehicle>();
+        CubeActor[] actors = FindObjectsOfType<CubeActor>();
+        FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
+
+        if (vehicles.Length == 1)
+        {
+            score += 25f;
+            feedback += "<color=green>+ Lambormini vehicle placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Place exactly one Lambormini vehicle. Found {vehicles.Length}.</color>\n";
+        }
+
+        if (actors.Length == 1)
+        {
+            score += 20f;
+            feedback += "<color=green>+ One actor hired.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Hire exactly one actor. Found {actors.Length}.</color>\n";
+        }
+
+        if (actors.Length == 1 && actors[0].GetPoseName() != "Neutral")
+        {
+            score += 15f;
+            feedback += "<color=green>+ Actor pose selected.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Select the actor and use POSE ACTOR before recording.</color>\n";
+        }
+
+        if (actors.Length == 1 && vehicles.Length == 1 && AreSubjectsBesideEachOther(actors[0].gameObject, vehicles[0].gameObject))
+        {
+            score += 20f;
+            feedback += "<color=green>+ Actor is positioned beside the vehicle.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Place the actor beside the vehicle without blocking it.</color>\n";
+        }
+
+        bool hasSoftLight = false;
+        Vector3 vehicleCenter = vehicles.Length == 1 ? vehicles[0].transform.position : Vector3.zero;
+        if (vehicles.Length == 1 && TryGetObjectBounds(vehicles[0].gameObject, out Bounds vehicleBounds)) vehicleCenter = vehicleBounds.center;
+
+        foreach (FilmLightItem light in lights)
+        {
+            if (light != null && light.IsPoweredOn() && vehicles.Length == 1 &&
+                (light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight) &&
+                Vector3.Distance(light.transform.position, vehicleCenter) <= 12f)
+            {
+                hasSoftLight = true;
+                break;
+            }
+        }
+
+        if (hasSoftLight)
+        {
+            score += 20f;
+            feedback += "<color=green>+ Level 3 Soft Light is positioned on the set.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Bring the Level 3 Soft Light close to the vehicle.</color>\n";
+        }
+    }
+
+    private void GradeLevel4Stage(DirectorTerminal stage, ref float score, ref string feedback)
+    {
+        GetCampaignProduct(4, out int productCount);
+        CubeActor[] actors = FindObjectsOfType<CubeActor>();
+        FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
+
+        if (stage != null && stage.HasWall())
+        {
+            score += 10f;
+            feedback += "<color=green>+ Kape Kultura set and backdrop prepared.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Build a backdrop for the Kape Kultura daily-story set.</color>\n";
+        }
+
+        if (stage != null && stage.HasWall() && IsWarmBrown(stage.currentWallColor))
+        {
+            score += 20f;
+            feedback += "<color=green>+ Warm brown backdrop supports the coffee story.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Change the backdrop to a warm brown color.</color>\n";
+        }
+
+        if (productCount == 1)
+        {
+            score += 20f;
+            feedback += "<color=green>+ Kape Kultura product placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Place exactly one Kape Kultura product. Found {productCount}.</color>\n";
+        }
+
+        if (actors.Length == 1)
+        {
+            score += 15f;
+            feedback += "<color=green>+ One actor hired for the daily routine.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Hire exactly one actor. Found {actors.Length}.</color>\n";
+        }
+
+        if (actors.Length == 1 && actors[0].GetPoseName() != "Neutral")
+        {
+            score += 10f;
+            feedback += "<color=green>+ Actor performance pose prepared.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Select a clear action pose for the actor.</color>\n";
+        }
+
+        if (HasPoweredSoftLight(lights))
+        {
+            score += 25f;
+            feedback += "<color=green>+ Level 3 Soft Light is powered and ready.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Use and power the Level 3 Soft Light for this contract.</color>\n";
+        }
+    }
+
+    private void GradeLevel5Stage(DirectorTerminal stage, ref float score, ref string feedback)
+    {
+        GetCampaignProduct(5, out int productCount);
+        CubeVehicle[] vehicles = FindObjectsOfType<CubeVehicle>();
+        CubeActor[] actors = FindObjectsOfType<CubeActor>();
+
+        if (stage != null && stage.HasWall())
+        {
+            score += 10f;
+            feedback += "<color=green>+ Final campaign set prepared.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=red>- Build a complete backdrop for the Haraya campaign.</color>\n";
+        }
+
+        if (stage != null && stage.HasWall() && IsTeal(stage.currentWallColor))
+        {
+            score += 15f;
+            feedback += "<color=green>+ Teal backdrop matches the Haraya campaign brief.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Change the backdrop to teal for the Haraya campaign.</color>\n";
+        }
+
+        if (productCount == 1)
+        {
+            score += 15f;
+            feedback += "<color=green>+ Haraya campaign product placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Place exactly one Haraya campaign product. Found {productCount}.</color>\n";
+        }
+
+        if (vehicles.Length == 1)
+        {
+            score += 15f;
+            feedback += "<color=green>+ One campaign vehicle placed.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Place exactly one campaign vehicle. Found {vehicles.Length}.</color>\n";
+        }
+
+        if (actors.Length == 1)
+        {
+            score += 10f;
+            feedback += "<color=green>+ One campaign actor hired.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Hire exactly one campaign actor. Found {actors.Length}.</color>\n";
+        }
+
+        if (actors.Length == 1 && actors[0].GetPoseName() != "Neutral")
+        {
+            score += 10f;
+            feedback += "<color=green>+ Actor direction is prepared.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += "<color=yellow>- Direct the campaign actor into a non-neutral pose.</color>\n";
+        }
+
+        int poweredLightCount = GetPoweredLightCount(FindObjectsOfType<FilmLightItem>());
+        if (poweredLightCount >= 3)
+        {
+            score += 25f;
+            feedback += "<color=green>+ Three powered lights are prepared for the campaign.</color>\n";
+        }
+        else
+        {
+            MarkRequiredSetupMissing();
+            feedback += $"<color=red>- Prepare three powered lights before recording. Found {poweredLightCount}.</color>\n";
+        }
+    }
+
+    private CampaignProduct GetCampaignProduct(int campaignLevel, out int productCount)
+    {
+        CampaignProduct selectedProduct = null;
+        productCount = 0;
+
+        foreach (CampaignProduct product in FindObjectsOfType<CampaignProduct>())
+        {
+            if (product == null || product.campaignLevel != campaignLevel) continue;
+
+            productCount++;
+            if (selectedProduct == null) selectedProduct = product;
+        }
+
+        return selectedProduct;
+    }
+
+    private bool HasPoweredLight(FilmLightItem[] lights)
+    {
+        return GetPoweredLightCount(lights) > 0;
+    }
+
+    private bool IsWarmBrown(Color color)
+    {
+        return color.r >= 0.3f && color.r > color.g && color.g > color.b && color.b <= 0.4f;
+    }
+
+    private bool IsTeal(Color color)
+    {
+        return color.r <= 0.35f && color.g >= 0.35f && color.b >= 0.35f && color.g > color.r && color.b > color.r;
+    }
+
+    private void MarkRequiredSetupMissing()
+    {
+        if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.savedRequiredSetupMet = false;
+    }
+
+    private int GetPoweredLightCount(FilmLightItem[] lights)
+    {
+        int poweredLightCount = 0;
+
+        foreach (FilmLightItem light in lights)
+        {
+            if (light != null && light.IsPoweredOn()) poweredLightCount++;
+        }
+
+        return poweredLightCount;
+    }
+
+    private bool HasPoweredSoftLight(FilmLightItem[] lights)
+    {
+        foreach (FilmLightItem light in lights)
+        {
+            if (light != null && light.IsPoweredOn() &&
+                (light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight)) return true;
+        }
+
+        return false;
+    }
+
+    private float GetDistanceFromObject(Vector3 worldPosition, GameObject targetObject)
+    {
+        Collider targetCollider = targetObject.GetComponentInChildren<Collider>();
+        if (targetCollider != null) return Vector3.Distance(worldPosition, targetCollider.ClosestPoint(worldPosition));
+
+        Renderer targetRenderer = targetObject.GetComponentInChildren<Renderer>();
+        if (targetRenderer != null) return Vector3.Distance(worldPosition, targetRenderer.bounds.ClosestPoint(worldPosition));
+        return Vector3.Distance(worldPosition, targetObject.transform.position);
+    }
+
+    private bool AreSubjectsBesideEachOther(GameObject actor, GameObject vehicle)
+    {
+        if (!TryGetObjectBounds(actor, out Bounds actorBounds) || !TryGetObjectBounds(vehicle, out Bounds vehicleBounds)) return false;
+
+        Vector2 actorPosition = new Vector2(actorBounds.center.x, actorBounds.center.z);
+        Vector2 vehiclePosition = new Vector2(vehicleBounds.center.x, vehicleBounds.center.z);
+        float horizontalDistance = Vector2.Distance(actorPosition, vehiclePosition);
+        float floorDifference = Mathf.Abs(actorBounds.min.y - vehicleBounds.min.y);
+        return horizontalDistance >= 1f && horizontalDistance <= 4.5f && floorDifference <= 0.75f;
+    }
+
+    private bool TryGetObjectBounds(GameObject targetObject, out Bounds objectBounds)
+    {
+        objectBounds = new Bounds();
+        Renderer[] renderers = targetObject.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0) return false;
+
+        objectBounds = renderers[0].bounds;
+        for (int i = 1; i < renderers.Length; i++) objectBounds.Encapsulate(renderers[i].bounds);
+        return true;
     }
 }

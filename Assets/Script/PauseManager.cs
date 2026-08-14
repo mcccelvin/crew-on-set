@@ -20,6 +20,12 @@ public class PauseManager : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             Debug.Log("Escape Pressed!");
+            if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen())
+            {
+                AlmanacManager.Instance.ToggleAlmanac();
+                return;
+            }
+
             if (isPaused) Resume();
             else Pause();
         }

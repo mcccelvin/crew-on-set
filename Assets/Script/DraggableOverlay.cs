@@ -7,6 +7,9 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     [HideInInspector] public Transform originalParent;
     private int originalSiblingIndex;
     private CanvasGroup canvasGroup;
+    private RectTransform rectTransform;
+    private Canvas parentCanvas;
+    private readonly Vector3[] parentCorners = new Vector3[4];
 
     private Vector2 origSizeDelta;
     private Vector3 origLocalScale;
@@ -24,6 +27,8 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     {
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
+        rectTransform = GetComponent<RectTransform>();
+        parentCanvas = GetComponentInParent<Canvas>();
     }
 
     public void ReturnToBin()
@@ -41,15 +46,14 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             transform.SetParent(originalParent, false);
             transform.SetSiblingIndex(originalSiblingIndex);
 
-            RectTransform rect = GetComponent<RectTransform>();
-            if (rect != null)
+            if (rectTransform != null)
             {
-                rect.sizeDelta = origSizeDelta;
-                rect.localScale = origLocalScale;
-                rect.anchorMin = origAnchorMin;
-                rect.anchorMax = origAnchorMax;
-                rect.pivot = origPivot;
-                rect.anchoredPosition = Vector2.zero;
+                rectTransform.sizeDelta = origSizeDelta;
+                rectTransform.localScale = origLocalScale;
+                rectTransform.anchorMin = origAnchorMin;
+                rectTransform.anchorMax = origAnchorMax;
+                rectTransform.pivot = origPivot;
+                rectTransform.anchoredPosition = Vector2.zero;
             }
         }
 
@@ -59,7 +63,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
                 EditorTutorialManager.Instance.OnClipDragCancelled();
         }
-        catch { }
+        catch (System.Exception e) { Debug.LogException(e, this); }
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -69,17 +73,15 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
         if (!isOnTimeline)
         {
-            RectTransform rect = GetComponent<RectTransform>();
-            if (rect != null)
+            if (rectTransform != null)
             {
-                origSizeDelta = rect.sizeDelta;
-                origLocalScale = rect.localScale;
-                origAnchorMin = rect.anchorMin;
-                origAnchorMax = rect.anchorMax;
-                origPivot = rect.pivot;
+                origSizeDelta = rectTransform.sizeDelta;
+                origLocalScale = rectTransform.localScale;
+                origAnchorMin = rectTransform.anchorMin;
+                origAnchorMax = rectTransform.anchorMax;
+                origPivot = rectTransform.pivot;
             }
 
-            Canvas parentCanvas = GetComponentInParent<Canvas>();
             if (parentCanvas != null)
             {
                 transform.SetParent(parentCanvas.transform, true);
@@ -91,7 +93,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
                     EditorTutorialManager.Instance.OnClipDragStarted();
             }
-            catch { }
+            catch (System.Exception e) { Debug.LogException(e, this); }
         }
 
         if (canvasGroup != null)
@@ -103,11 +105,9 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnDrag(PointerEventData eventData)
     {
-        Canvas parentCanvas = GetComponentInParent<Canvas>();
-        if (parentCanvas != null)
+        if (parentCanvas != null && rectTransform != null)
         {
-            RectTransform rect = GetComponent<RectTransform>();
-            rect.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
+            rectTransform.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
 
             if (isOnTimeline)
             {
@@ -118,29 +118,27 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void ClampToParent()
     {
-        RectTransform rect = GetComponent<RectTransform>();
         RectTransform parentRect = transform.parent as RectTransform;
 
-        if (rect != null && parentRect != null)
+        if (rectTransform != null && parentRect != null)
         {
-            Vector3[] parentCorners = new Vector3[4];
             parentRect.GetLocalCorners(parentCorners);
 
-            float width = rect.rect.width * rect.localScale.x;
-            float height = rect.rect.height * rect.localScale.y;
+            float width = rectTransform.rect.width * rectTransform.localScale.x;
+            float height = rectTransform.rect.height * rectTransform.localScale.y;
 
-            Vector2 minPos = new Vector2(parentCorners[0].x + (width * rect.pivot.x),
-                                         parentCorners[0].y + (height * rect.pivot.y));
+            Vector2 minPos = new Vector2(parentCorners[0].x + (width * rectTransform.pivot.x),
+                                         parentCorners[0].y + (height * rectTransform.pivot.y));
 
-            Vector2 maxPos = new Vector2(parentCorners[2].x - (width * (1f - rect.pivot.x)),
-                                         parentCorners[2].y - (height * (1f - rect.pivot.y)));
+            Vector2 maxPos = new Vector2(parentCorners[2].x - (width * (1f - rectTransform.pivot.x)),
+                                         parentCorners[2].y - (height * (1f - rectTransform.pivot.y)));
 
-            Vector2 clampedPos = rect.localPosition;
+            Vector2 clampedPos = rectTransform.localPosition;
 
             if (minPos.x <= maxPos.x) clampedPos.x = Mathf.Clamp(clampedPos.x, minPos.x, maxPos.x);
             if (minPos.y <= maxPos.y) clampedPos.y = Mathf.Clamp(clampedPos.y, minPos.y, maxPos.y);
 
-            rect.localPosition = clampedPos;
+            rectTransform.localPosition = clampedPos;
         }
     }
 
@@ -231,13 +229,13 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 if (droppedOnTV)
                 {
                     RectTransformUtility.ScreenPointToLocalPointInRectangle(tvPlayer.computerScreen.GetComponent<RectTransform>(), Input.mousePosition, eventData.pressEventCamera, out Vector2 tvLocal);
-                    GetComponent<RectTransform>().anchoredPosition = tvLocal;
+                    rectTransform.anchoredPosition = tvLocal;
 
                     ClampToParent();
                 }
                 else
                 {
-                    GetComponent<RectTransform>().anchoredPosition = Vector2.zero;
+                    rectTransform.anchoredPosition = Vector2.zero;
                 }
 
                 EditorTutorialManager.Instance.OnBrandDroppedToScreen();

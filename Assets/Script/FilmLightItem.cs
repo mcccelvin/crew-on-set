@@ -134,6 +134,21 @@ namespace Player.Equipment
             }
         }
 
+        public bool IsPoweredOn()
+        {
+            return isLightOn && spotlight != null && spotlight.enabled;
+        }
+
+        public float GetCurrentTilt()
+        {
+            return currentTilt;
+        }
+
+        public float GetCurrentOutput()
+        {
+            return maxLux * (intensityPercent / 100f);
+        }
+
         private void TiltLight(float amount)
         {
             if (spotlight == null) return;
@@ -183,7 +198,7 @@ namespace Player.Equipment
             // 2. Tilt Text Update
             if (tiltText != null)
             {
-                tiltText.text = $"{Mathf.RoundToInt(currentTilt)}°";
+                tiltText.text = $"{Mathf.RoundToInt(currentTilt)} degrees";
                 tiltText.color = isLightOn ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
             }
 

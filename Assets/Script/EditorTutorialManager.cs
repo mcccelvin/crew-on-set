@@ -59,12 +59,28 @@ public class EditorTutorialManager : MonoBehaviour
     [Header("UI Components")]
     public ScrollRect timelineScrollRect;
 
-    private void Awake() { if (Instance == null) Instance = this; else Destroy(gameObject); }
+    private void Awake()
+    {
+        if (Instance == null) Instance = this;
+        else
+        {
+            Destroy(gameObject);
+            return;
+        }
+    }
 
     private void Start()
     {
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
-        if (PlayerPrefs.GetInt("TutorialProgress", 0) == 2) { Destroy(gameObject); return; }
+        if (PlayerPrefs.GetInt("Level1RetryActive", 0) == 1)
+        {
+            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.taskPanel != null) TutorialUIManager.Instance.taskPanel.SetActive(false);
+            if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+            Destroy(gameObject);
+            return;
+        }
+
+        if (PlayerPrefs.GetInt("TutorialProgress", 0) >= 2) { Destroy(gameObject); return; }
 
         if (spacePromptText != null) spacePromptText.gameObject.SetActive(false);
 
@@ -366,8 +382,8 @@ public class EditorTutorialManager : MonoBehaviour
         {
             if (clip.linkedOverlay != null)
             {
-                float startSec = clip.linkedOverlay.startFrame / 24f;
-                float endSec = clip.linkedOverlay.endFrame / 24f;
+                float startSec = clip.linkedOverlay.startFrame / TapeSettings.framesPerSecond;
+                float endSec = clip.linkedOverlay.endFrame / TapeSettings.framesPerSecond;
 
                 if (EditorManager.Instance != null && clip.transform.parent == EditorManager.Instance.brandingTracks[0])
                 {
@@ -538,5 +554,10 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("This is the Review Panel. Here you can watch your final rendered commercial to make sure everything looks perfect before we send it out.", ui.poseOpenHand, false, false); break;
             case EditorStep.ReviewAndSubmit: ui.ShowBossDialogue("If you are happy with your work, hit the Submit Video button to complete the contract and get paid!", ui.poseHappy, false, false); break;
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 }

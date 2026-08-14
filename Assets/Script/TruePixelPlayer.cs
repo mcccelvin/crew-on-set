@@ -20,7 +20,7 @@ public class ClipSegment
 public class TruePixelPlayer : MonoBehaviour
 {
     public RawImage computerScreen;
-    public float framesPerSecond = 24f;
+    public float framesPerSecond = TapeSettings.framesPerSecond;
 
     [Header("UI Buttons")]
     public GameObject playButtonUI;
@@ -37,7 +37,9 @@ public class TruePixelPlayer : MonoBehaviour
     public GameObject loadingPanel;
     public TextMeshProUGUI loadingText;
 
-    private List<Texture2D> preloadedTextures = new List<Texture2D>();
+    private List<byte[]> preloadedFrames = new List<byte[]>();
+    private Texture2D playbackTexture;
+    private DraggableOverlay[] timelineOverlays;
     private bool isPaused = true;
     public bool isFinished = false;
 
@@ -49,61 +51,51 @@ public class TruePixelPlayer : MonoBehaviour
     private float playbackTimer = 0f;
 
     private void Update()
-    {   if (currentFrameIndex >= preloadedTextures.Count)
-            {
-                isFinished = true;
-                isPaused = true;
-                if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
+    {
+        if (preloadedFrames.Count == 0) return;
 
-                // Instantly rewind the playhead to 0.00 when finished
-                currentFrameIndex = 0;
-                RenderCurrentFrame();
-                UpdatePlayPauseUI();
+        float frameInterval = 1f / Mathf.Max(1f, framesPerSecond);
 
-                if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
-                {
-                    // Keep this one (your original fix)
-                    EditorTutorialManager.Instance.OnPlaybackFinished();
-                    
-                    // --- ADD THIS LINE --- 
-                    // This finally tells the tutorial: "The playback task is fully complete!"
-                    EditorTutorialManager.Instance.OnTimelinePlayed(); 
-                }
-            }
-        if (isPaused || isFinished || preloadedTextures.Count == 0) return;
+        if (currentFrameIndex >= preloadedFrames.Count)
+        {
+            FinishPlayback();
+            return;
+        }
+
+        if (isPaused || isFinished) return;
 
         playbackTimer += Time.deltaTime;
-        if (playbackTimer >= (1f / framesPerSecond))
+        if (playbackTimer >= frameInterval)
         {
-            playbackTimer -= (1f / framesPerSecond);
+            playbackTimer -= frameInterval;
             currentFrameIndex++;
 
-            if (currentFrameIndex >= preloadedTextures.Count)
+            if (currentFrameIndex >= preloadedFrames.Count)
             {
-                isFinished = true;
-                isPaused = true;
-                if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
-
-                // Instantly rewind the playhead to 0.00 when finished
-                currentFrameIndex = 0;
-                RenderCurrentFrame();
-                UpdatePlayPauseUI();
-
-                if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
-                {
-                    // Keep this one (your original fix)
-                    EditorTutorialManager.Instance.OnPlaybackFinished();
-
-                    // --- ADD THIS LINE --- 
-                    // This finally tells the tutorial: "The playback task is fully complete!"
-                    EditorTutorialManager.Instance.OnTimelinePlayed();
-                }
+                FinishPlayback();
             }
             else
             {
                 RenderCurrentFrame();
                 if (exportProgressBar != null) exportProgressBar.SetValueWithoutNotify(currentFrameIndex);
             }
+        }
+    }
+
+    private void FinishPlayback()
+    {
+        isFinished = true;
+        isPaused = true;
+        if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
+
+        currentFrameIndex = 0;
+        RenderCurrentFrame();
+        UpdatePlayPauseUI();
+
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            EditorTutorialManager.Instance.OnPlaybackFinished();
+            EditorTutorialManager.Instance.OnTimelinePlayed();
         }
     }
 
@@ -122,6 +114,7 @@ public class TruePixelPlayer : MonoBehaviour
     {
         StopTape();
         currentSequence.Clear();
+        isFadingIn = false;
         StartCoroutine(LoadSingleTapeCoroutine(tapeFilePath));
     }
 
@@ -132,8 +125,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         try
         {
-            foreach (var tex in preloadedTextures) if (tex != null) Destroy(tex);
-            preloadedTextures.Clear();
+            preloadedFrames.Clear();
 
             if (File.Exists(tapeFilePath))
             {
@@ -145,12 +137,9 @@ public class TruePixelPlayer : MonoBehaviour
                         int frameSize = reader.ReadInt32();
                         byte[] frameBytes = reader.ReadBytes(frameSize);
 
-                        Texture2D tex = new Texture2D(2, 2);
-                        tex.LoadImage(frameBytes);
-                        tex.Apply();
-                        preloadedTextures.Add(tex);
+                        preloadedFrames.Add(frameBytes);
 
-                        if (preloadedTextures.Count % 10 == 0) yield return null;
+                        if (preloadedFrames.Count % 10 == 0) yield return null;
                     }
                 }
             }
@@ -158,8 +147,8 @@ public class TruePixelPlayer : MonoBehaviour
         finally
         {
             HideLoading();
-            isPaused = false;
-            isFinished = false;
+            isPaused = preloadedFrames.Count == 0;
+            isFinished = preloadedFrames.Count == 0;
             currentFrameIndex = 0;
             playbackTimer = 0f;
 
@@ -173,7 +162,7 @@ public class TruePixelPlayer : MonoBehaviour
     {
         StopTape();
         currentSequence = sequence;
-        isFadingIn = false;
+        isFadingIn = useFadeIn;
         StartCoroutine(LoadSequenceCoroutine());
     }
 
@@ -184,8 +173,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         try
         {
-            foreach (var tex in preloadedTextures) if (tex != null) Destroy(tex);
-            preloadedTextures.Clear();
+            preloadedFrames.Clear();
 
             foreach (var clip in currentSequence)
             {
@@ -194,28 +182,27 @@ public class TruePixelPlayer : MonoBehaviour
                     using (BinaryReader reader = new BinaryReader(new FileStream(clip.path, FileMode.Open, FileAccess.Read, FileShare.Read)))
                     {
                         int frameCount = reader.ReadInt32();
+                        if (frameCount <= 0) continue;
+
                         int start = Mathf.Clamp(clip.startFrame, 0, frameCount - 1);
                         int end = Mathf.Clamp(clip.endFrame, start + 1, frameCount);
 
-                        clip.globalStartFrame = preloadedTextures.Count;
+                        clip.globalStartFrame = preloadedFrames.Count;
 
                         for (int i = 0; i < start; i++) reader.ReadBytes(reader.ReadInt32());
 
                         for (int i = start; i < end; i++)
                         {
                             byte[] data = reader.ReadBytes(reader.ReadInt32());
-                            Texture2D tex = new Texture2D(2, 2);
-                            tex.LoadImage(data);
-                            tex.Apply();
-                            preloadedTextures.Add(tex);
+                            preloadedFrames.Add(data);
 
-                            if (preloadedTextures.Count % 10 == 0)
+                            if (preloadedFrames.Count % 10 == 0)
                             {
-                                if (loadingText != null) loadingText.text = $"Compiling Frame {preloadedTextures.Count}...";
+                                if (loadingText != null) loadingText.text = $"Compiling Frame {preloadedFrames.Count}...";
                                 yield return null;
                             }
                         }
-                        clip.globalEndFrame = preloadedTextures.Count;
+                        clip.globalEndFrame = preloadedFrames.Count;
                     }
                 }
             }
@@ -223,13 +210,14 @@ public class TruePixelPlayer : MonoBehaviour
         finally
         {
             HideLoading();
-            isPaused = false;
-            isFinished = false;
+            isPaused = preloadedFrames.Count == 0;
+            isFinished = preloadedFrames.Count == 0;
             currentFrameIndex = 0;
             playbackTimer = 0f;
 
-            if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StartPlayback();
+            if (TimelinePlayhead.Instance != null && preloadedFrames.Count > 0) TimelinePlayhead.Instance.StartPlayback();
 
+            RefreshOverlays();
             SetupScrubBar();
             RenderCurrentFrame();
             UpdatePlayPauseUI();
@@ -265,6 +253,7 @@ public class TruePixelPlayer : MonoBehaviour
     public void StopTape()
     {
         StopAllCoroutines();
+        HideLoading();
         isPaused = true;
         isFinished = true;
         if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
@@ -279,9 +268,20 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void RenderCurrentFrame()
     {
-        if (computerScreen == null || preloadedTextures.Count == 0 || currentFrameIndex >= preloadedTextures.Count) return;
+        if (computerScreen == null || preloadedFrames.Count == 0 || currentFrameIndex >= preloadedFrames.Count) return;
 
-        computerScreen.texture = preloadedTextures[currentFrameIndex];
+        if (playbackTexture == null) playbackTexture = new Texture2D(2, 2);
+        playbackTexture.LoadImage(preloadedFrames[currentFrameIndex]);
+        computerScreen.texture = playbackTexture;
+
+        Color screenColor = computerScreen.color;
+        if (isFadingIn)
+        {
+            int fadeFrameCount = Mathf.Max(1, Mathf.RoundToInt(framesPerSecond));
+            screenColor.a = Mathf.Clamp01((float)currentFrameIndex / fadeFrameCount);
+        }
+        else screenColor.a = 1f;
+        computerScreen.color = screenColor;
 
         float newX = 0f;
 
@@ -291,7 +291,7 @@ public class TruePixelPlayer : MonoBehaviour
 
             foreach (var clip in currentSequence)
             {
-                if (currentFrameIndex >= clip.globalStartFrame && currentFrameIndex <= clip.globalEndFrame)
+                if (currentFrameIndex >= clip.globalStartFrame && currentFrameIndex < clip.globalEndFrame)
                 {
                     activeClip = clip;
                     break;
@@ -318,7 +318,7 @@ public class TruePixelPlayer : MonoBehaviour
                 pps = TimelineManager.Instance.pixelsPerSecond;
             }
 
-            float pixelsPerFrame = pps / framesPerSecond;
+            float pixelsPerFrame = pps / Mathf.Max(1f, framesPerSecond);
             newX = currentFrameIndex * pixelsPerFrame;
         }
 
@@ -332,25 +332,25 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void SetupScrubBar()
     {
-        if (exportProgressBar != null && preloadedTextures.Count > 0)
+        if (exportProgressBar != null && preloadedFrames.Count > 0)
         {
             exportProgressBar.minValue = 0;
-            exportProgressBar.maxValue = preloadedTextures.Count - 1;
+            exportProgressBar.maxValue = preloadedFrames.Count - 1;
             exportProgressBar.value = 0;
-            exportProgressBar.onValueChanged.RemoveAllListeners();
+            exportProgressBar.onValueChanged.RemoveListener(OnScrub);
             exportProgressBar.onValueChanged.AddListener(OnScrub);
         }
     }
 
     public void OnScrub(float value)
     {
-        if (preloadedTextures.Count == 0) return;
+        if (preloadedFrames.Count == 0) return;
 
         isPaused = true;
         if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.PausePlayback();
         UpdatePlayPauseUI();
 
-        currentFrameIndex = Mathf.Clamp(Mathf.RoundToInt(value), 0, preloadedTextures.Count - 1);
+        currentFrameIndex = Mathf.Clamp(Mathf.RoundToInt(value), 0, preloadedFrames.Count - 1);
         RenderCurrentFrame();
 
         if (isFinished)
@@ -366,18 +366,24 @@ public class TruePixelPlayer : MonoBehaviour
 
         if (TimelineManager.Instance != null && TimelineManager.Instance.pixelsPerSecond > 0)
         {
-            float pixelsPerFrame = TimelineManager.Instance.pixelsPerSecond / framesPerSecond;
+            float pixelsPerFrame = TimelineManager.Instance.pixelsPerSecond / Mathf.Max(1f, framesPerSecond);
             if (pixelsPerFrame > 0) currentTimelineFrame = Mathf.RoundToInt(timelinePixelX / pixelsPerFrame);
         }
 
-        DraggableOverlay[] overlays = FindObjectsOfType<DraggableOverlay>();
-        foreach (var o in overlays)
+        if (timelineOverlays == null) return;
+
+        foreach (DraggableOverlay overlay in timelineOverlays)
         {
-            if (o.isOnTimeline)
+            if (overlay != null && overlay.isOnTimeline)
             {
-                o.EvaluateVisibility(currentTimelineFrame, !isPaused);
+                overlay.EvaluateVisibility(currentTimelineFrame, !isPaused);
             }
         }
+    }
+
+    public void RefreshOverlays()
+    {
+        timelineOverlays = FindObjectsOfType<DraggableOverlay>();
     }
 
     public void ShowPreviewFrame(string tapeFilePath)
@@ -386,14 +392,24 @@ public class TruePixelPlayer : MonoBehaviour
 
         using (BinaryReader reader = new BinaryReader(new FileStream(tapeFilePath, FileMode.Open, FileAccess.Read, FileShare.Read)))
         {
-            reader.ReadInt32();
+            int frameCount = reader.ReadInt32();
+            if (frameCount <= 0) return;
+
             int frameSize = reader.ReadInt32();
             byte[] frameBytes = reader.ReadBytes(frameSize);
             if (thumb != null) Destroy(thumb);
             thumb = new Texture2D(2, 2);
             thumb.LoadImage(frameBytes);
-            thumb.Apply();
             computerScreen.texture = thumb;
         }
+    }
+
+    private void OnDestroy()
+    {
+        if (exportProgressBar != null)
+            exportProgressBar.onValueChanged.RemoveListener(OnScrub);
+
+        if (playbackTexture != null) Destroy(playbackTexture);
+        if (thumb != null) Destroy(thumb);
     }
 }
