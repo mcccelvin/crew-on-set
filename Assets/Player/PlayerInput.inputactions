@@ -68,6 +68,15 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
+                },
+                {
+                    "name": "Use",
+                    "type": "Button",
+                    "id": "10000000-0000-0000-0000-000000000001",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -162,7 +171,7 @@
                 {
                     "name": "",
                     "id": "75cfdcdf-c3f4-403a-b8ee-b71850aef188",
-                    "path": "",
+                    "path": "<Gamepad>/leftStickPress",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
@@ -195,7 +204,7 @@
                 {
                     "name": "",
                     "id": "2603e8ed-5a14-46c8-8b4d-216fd5da860a",
-                    "path": "",
+                    "path": "<Gamepad>/dpad/down",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
@@ -217,18 +226,84 @@
                 {
                     "name": "",
                     "id": "1ecff805-3b7b-4d0f-877c-a207e18436c4",
-                    "path": "",
+                    "path": "<Gamepad>/buttonNorth",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
                     "action": "Equip",
                     "isComposite": false,
                     "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "10000000-0000-0000-0000-000000000002",
+                    "path": "<Gamepad>/leftStick",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Move",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "10000000-0000-0000-0000-000000000003",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Jump",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "10000000-0000-0000-0000-000000000004",
+                    "path": "<Gamepad>/rightStick",
+                    "interactions": "",
+                    "processors": "scaleVector2(x=5,y=5)",
+                    "groups": "",
+                    "action": "Look",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "10000000-0000-0000-0000-000000000005",
+                    "path": "<Gamepad>/buttonWest",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Interact",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "10000000-0000-0000-0000-000000000006",
+                    "path": "<Mouse>/leftButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Use",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "10000000-0000-0000-0000-000000000007",
+                    "path": "<Gamepad>/rightTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Use",
+                    "isComposite": false,
+                    "isPartOfComposite": false
                 }
             ]
         },
         {
-            "name": "Pause",
+            "name": "Global",
             "id": "4d2d19d5-8ebb-46ba-bd1f-15e1e80c3c99",
             "actions": [
                 {
@@ -238,6 +313,33 @@
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Almanac",
+                    "type": "Button",
+                    "id": "20000000-0000-0000-0000-000000000001",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Context Panel",
+                    "type": "Button",
+                    "id": "20000000-0000-0000-0000-000000000002",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Continue",
+                    "type": "Button",
+                    "id": "20000000-0000-0000-0000-000000000003",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
                     "initialStateCheck": false
                 }
             ],
@@ -256,22 +358,88 @@
                 {
                     "name": "",
                     "id": "b404e5e0-6016-46eb-8a60-cf3e223409b6",
-                    "path": "",
+                    "path": "<Gamepad>/start",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
                     "action": "Pause",
                     "isComposite": false,
                     "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "20000000-0000-0000-0000-000000000004",
+                    "path": "<Keyboard>/p",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Almanac",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "20000000-0000-0000-0000-000000000005",
+                    "path": "<Keyboard>/tab",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Context Panel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "20000000-0000-0000-0000-000000000006",
+                    "path": "<Keyboard>/space",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Continue",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "20000000-0000-0000-0000-000000000007",
+                    "path": "<Gamepad>/select",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Almanac",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "20000000-0000-0000-0000-000000000008",
+                    "path": "<Gamepad>/dpad/up",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Context Panel",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "20000000-0000-0000-0000-000000000009",
+                    "path": "<Gamepad>/buttonSouth",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Continue",
+                    "isComposite": false,
+                    "isPartOfComposite": false
                 }
             ]
         },
         {
-            "name": "Equipments",
+            "name": "Equipment",
             "id": "693d5758-3af6-4d20-b326-b4b4e13e2214",
             "actions": [
                 {
-                    "name": "Equip",
+                    "name": "Insert Card",
                     "type": "Button",
                     "id": "11ef1ee9-eca7-4ac5-82a1-7d3ffb897324",
                     "expectedControlType": "",
@@ -280,12 +448,84 @@
                     "initialStateCheck": false
                 },
                 {
-                    "name": "New action",
+                    "name": "Record",
                     "type": "Button",
                     "id": "6b2af469-b5aa-4433-a55c-6b8c7bcf2b50",
                     "expectedControlType": "",
                     "processors": "",
                     "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Adjust",
+                    "type": "Value",
+                    "id": "30000000-0000-0000-0000-000000000001",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Camera Pedestal",
+                    "type": "Value",
+                    "id": "30000000-0000-0000-0000-000000000002",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Light Tilt",
+                    "type": "Value",
+                    "id": "30000000-0000-0000-0000-000000000003",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Hotbar 1",
+                    "type": "Button",
+                    "id": "30000000-0000-0000-0000-000000000004",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Hotbar 2",
+                    "type": "Button",
+                    "id": "30000000-0000-0000-0000-000000000005",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Hotbar 3",
+                    "type": "Button",
+                    "id": "30000000-0000-0000-0000-000000000006",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Hotbar 4",
+                    "type": "Button",
+                    "id": "30000000-0000-0000-0000-000000000007",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Hotbar 5",
+                    "type": "Button",
+                    "id": "30000000-0000-0000-0000-000000000008",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Press",
                     "initialStateCheck": false
                 }
             ],
@@ -293,33 +533,176 @@
                 {
                     "name": "",
                     "id": "a0d09f35-ff60-4af3-9ce0-8c5d2a3beb41",
-                    "path": "<Keyboard>/f",
+                    "path": "<Keyboard>/c",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Equip",
+                    "action": "Insert Card",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
                 {
                     "name": "",
                     "id": "443d423d-8067-4d74-b648-a0a358fdfa11",
-                    "path": "",
+                    "path": "<Gamepad>/leftShoulder",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "Equip",
+                    "action": "Insert Card",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },
                 {
                     "name": "",
                     "id": "03fc7e54-59ca-4cbb-a1fc-db69b54e9efa",
-                    "path": "",
+                    "path": "<Keyboard>/r",
                     "interactions": "",
                     "processors": "",
                     "groups": "",
-                    "action": "New action",
+                    "action": "Record",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000009",
+                    "path": "<Gamepad>/rightShoulder",
+                    "interactions": "Press",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Record",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000010",
+                    "path": "<Mouse>/scroll/y",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Adjust",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "Pedestal",
+                    "id": "30000000-0000-0000-0000-000000000011",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Camera Pedestal",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "30000000-0000-0000-0000-000000000012",
+                    "path": "<Keyboard>/q",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Camera Pedestal",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "30000000-0000-0000-0000-000000000013",
+                    "path": "<Keyboard>/e",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Camera Pedestal",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "Tilt",
+                    "id": "30000000-0000-0000-0000-000000000014",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Tilt",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "30000000-0000-0000-0000-000000000015",
+                    "path": "<Keyboard>/upArrow",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Tilt",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "30000000-0000-0000-0000-000000000016",
+                    "path": "<Keyboard>/downArrow",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Tilt",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000017",
+                    "path": "<Keyboard>/1",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Hotbar 1",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000018",
+                    "path": "<Keyboard>/2",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Hotbar 2",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000019",
+                    "path": "<Keyboard>/3",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Hotbar 3",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000020",
+                    "path": "<Keyboard>/4",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Hotbar 4",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "30000000-0000-0000-0000-000000000021",
+                    "path": "<Keyboard>/5",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Hotbar 5",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Photon.Pun;
+using UnityEngine.InputSystem;
 
 public class MultiplayerPauseManager : MonoBehaviour
 {
@@ -19,7 +20,8 @@ public class MultiplayerPauseManager : MonoBehaviour
     void Update()
     {
         // Listen for the Escape key to toggle the menu
-        if (Input.GetKeyDown(KeyCode.Escape))
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
         {
             if (isPaused) Resume();
             else Pause();

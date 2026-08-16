@@ -110,6 +110,8 @@ public class TutorialHighlighter : MonoBehaviour
 
     public void HighlightElement(RectTransform uiElementToHighlight)
     {
+        HideHighlight();
+
         if (uiElementToHighlight == null)
         {
             Debug.LogWarning("TUTORIAL ERROR: You triggered a tutorial step, but the button slot in the TutorialManager Inspector is empty!");
@@ -144,6 +146,12 @@ public class TutorialHighlighter : MonoBehaviour
     {
         if (targetElement == null || highlightFrame == null) return;
 
+        if (!targetElement.gameObject.activeInHierarchy)
+        {
+            HideHighlight();
+            return;
+        }
+
         if (myCanvas == null)
         {
             Debug.LogError("HIGHLIGHT ERROR: This script must be placed on a UI Canvas, or a child of a UI Canvas!");
@@ -160,10 +168,6 @@ public class TutorialHighlighter : MonoBehaviour
         Vector2 screenBottomLeft = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[0]);
         Vector2 screenTopRight = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[2]);
 
-        float width = Mathf.Abs(screenTopRight.x - screenBottomLeft.x);
-        float height = Mathf.Abs(screenTopRight.y - screenBottomLeft.y);
-        Vector2 screenCenter = (screenBottomLeft + screenTopRight) / 2f;
-
         RectTransform parentRect = highlightFrame.parent as RectTransform;
         if (parentRect == null)
         {
@@ -171,12 +175,16 @@ public class TutorialHighlighter : MonoBehaviour
             return;
         }
 
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screenCenter, null, out Vector2 localPoint);
-        highlightFrame.localPosition = localPoint;
+        Camera highlightCamera = myCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : myCanvas.worldCamera;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screenBottomLeft, highlightCamera, out Vector2 localBottomLeft);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRect, screenTopRight, highlightCamera, out Vector2 localTopRight);
 
-        float scale = myCanvas.scaleFactor > 0 ? myCanvas.scaleFactor : 1f;
-        highlightFrame.sizeDelta = new Vector2((width / scale) + padding, (height / scale) + padding);
-        highlightFrame.rotation = targetElement.rotation;
+        Vector2 localCenter = (localBottomLeft + localTopRight) / 2f;
+        Vector2 localSize = new Vector2(Mathf.Abs(localTopRight.x - localBottomLeft.x), Mathf.Abs(localTopRight.y - localBottomLeft.y));
+
+        highlightFrame.position = parentRect.TransformPoint(localCenter);
+        highlightFrame.sizeDelta = localSize + Vector2.one * padding;
+        highlightFrame.localRotation = Quaternion.identity;
 
         // --- NEW: UPDATE THE DARKNESS MASK TO FRAME THE HOLE ---
         UpdateDimmerPanels(parentRect);
@@ -187,8 +195,9 @@ public class TutorialHighlighter : MonoBehaviour
         if (dimmerPanels[0] == null) return;
 
         // Get the exact location of the "hole"
-        float holeX = highlightFrame.localPosition.x;
-        float holeY = highlightFrame.localPosition.y;
+        Vector2 holePosition = parentRect.InverseTransformPoint(highlightFrame.position);
+        float holeX = holePosition.x;
+        float holeY = holePosition.y;
         float holeW = highlightFrame.sizeDelta.x;
         float holeH = highlightFrame.sizeDelta.y;
 
@@ -200,18 +209,18 @@ public class TutorialHighlighter : MonoBehaviour
         // Get the edges of the screen
         float parentW = parentRect.rect.width;
         float parentH = parentRect.rect.height;
-        float parentLeft = -(parentW / 2f);
-        float parentRight = (parentW / 2f);
-        float parentTop = (parentH / 2f);
-        float parentBottom = -(parentH / 2f);
+        float parentLeft = -parentRect.pivot.x * parentW;
+        float parentRight = parentLeft + parentW;
+        float parentBottom = -parentRect.pivot.y * parentH;
+        float parentTop = parentBottom + parentH;
 
         // 1. Top Panel
         dimmerPanels[0].sizeDelta = new Vector2(parentW, parentTop - holeTop);
-        dimmerPanels[0].localPosition = new Vector2(0, holeTop + (dimmerPanels[0].sizeDelta.y / 2f));
+        dimmerPanels[0].localPosition = new Vector2((parentLeft + parentRight) / 2f, holeTop + (dimmerPanels[0].sizeDelta.y / 2f));
 
         // 2. Bottom Panel
         dimmerPanels[1].sizeDelta = new Vector2(parentW, holeBottom - parentBottom);
-        dimmerPanels[1].localPosition = new Vector2(0, holeBottom - (dimmerPanels[1].sizeDelta.y / 2f));
+        dimmerPanels[1].localPosition = new Vector2((parentLeft + parentRight) / 2f, holeBottom - (dimmerPanels[1].sizeDelta.y / 2f));
 
         // 3. Left Panel
         dimmerPanels[2].sizeDelta = new Vector2(holeLeft - parentLeft, holeH);

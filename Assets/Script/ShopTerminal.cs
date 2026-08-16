@@ -50,6 +50,7 @@ public class ShopTerminal : MonoBehaviour
     private PlayerController playerController;
     private GameObject mainPlayerUI;
     private CrosshairUIClicker crosshairClicker;
+    private bool isTerminalActive = false;
 
     private void Start()
     {
@@ -573,6 +574,7 @@ public class ShopTerminal : MonoBehaviour
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
+        isTerminalActive = true;
         playerController = pController;
         if (playerController != null) playerController.enabled = false;
 
@@ -589,6 +591,7 @@ public class ShopTerminal : MonoBehaviour
 
     public void CloseTerminal()
     {
+        isTerminalActive = false;
         if (playerController != null) playerController.enabled = true;
 
         if (mainPlayerUI != null) mainPlayerUI.SetActive(true);
@@ -606,5 +609,10 @@ public class ShopTerminal : MonoBehaviour
         shoppingCart.Clear();
         currentTotalCost = 0;
         UpdateTotalUI();
+    }
+
+    public bool IsTerminalActive()
+    {
+        return isTerminalActive;
     }
 }

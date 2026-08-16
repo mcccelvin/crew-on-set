@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class GokeLevelManager : MonoBehaviour
 {
@@ -840,7 +841,7 @@ public class GokeLevelManager : MonoBehaviour
 
     private IEnumerator UnlockPlayerAfterSpace()
     {
-        yield return new WaitUntil(() => !Input.GetKey(KeyCode.Space));
+        yield return new WaitUntil(() => Keyboard.current == null || !Keyboard.current.spaceKey.isPressed);
         yield return null;
 
         Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();

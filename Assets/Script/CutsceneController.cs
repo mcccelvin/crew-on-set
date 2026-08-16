@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Video;
 using UnityEngine.SceneManagement;
 using TMPro; // We need this to talk to the text component!
+using UnityEngine.InputSystem;
 
 public class CutsceneController : MonoBehaviour
 {
@@ -64,7 +65,8 @@ public class CutsceneController : MonoBehaviour
         }
 
         // If allowed to skip AND the player presses Spacebar, skip the scene!
-        if (canSkip && Input.GetKeyDown(KeyCode.Space))
+        Keyboard keyboard = Keyboard.current;
+        if (canSkip && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
         {
             EndCutscene(videoPlayer);
         }

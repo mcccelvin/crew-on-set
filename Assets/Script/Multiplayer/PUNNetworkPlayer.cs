@@ -1,5 +1,6 @@
 using Photon.Pun;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 // Inherit from MonoBehaviourPun to easily access the photonView
 public class PUNNetworkPlayer : MonoBehaviourPun
@@ -25,10 +26,18 @@ public class PUNNetworkPlayer : MonoBehaviourPun
         // Only let the keyboard move the character if THIS computer owns it
         if (photonView.IsMine)
         {
-            float moveX = Input.GetAxis("Horizontal");
-            float moveZ = Input.GetAxis("Vertical");
+            Keyboard keyboard = Keyboard.current;
+            Vector2 moveInput = Vector2.zero;
 
-            Vector3 moveDirection = new Vector3(moveX, 0, moveZ).normalized;
+            if (keyboard != null)
+            {
+                if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) moveInput.x -= 1f;
+                if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) moveInput.x += 1f;
+                if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) moveInput.y -= 1f;
+                if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) moveInput.y += 1f;
+            }
+
+            Vector3 moveDirection = new Vector3(moveInput.x, 0, moveInput.y).normalized;
             transform.position += moveDirection * moveSpeed * Time.deltaTime;
         }
     }

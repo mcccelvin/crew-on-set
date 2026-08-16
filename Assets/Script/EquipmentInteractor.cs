@@ -35,11 +35,21 @@ namespace Player.Interactor
         private void Update()
         {
             if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
+            if (PauseManager.isPaused) return;
+            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return;
+            if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) return;
+
+            if (activeTerminal != null && !activeTerminal.IsTerminalActive()) activeTerminal = null;
+            if (activeShop != null && !activeShop.IsTerminalActive()) activeShop = null;
 
             if (activeTerminal != null)
             {
                 if (hotbarUI != null) hotbarUI.UpdateGuideText("");
-                if (inputManager.Interact) { activeTerminal.CloseTerminal(); activeTerminal = null; }
+                if (inputManager.Interact)
+                {
+                    activeTerminal.CloseTerminal();
+                    if (!activeTerminal.IsTerminalActive()) activeTerminal = null;
+                }
                 return;
             }
 
@@ -57,14 +67,21 @@ namespace Player.Interactor
                 return;
             }
 
+            if (Cursor.visible || Cursor.lockState != CursorLockMode.Locked) return;
+
             HandleHotbarInput();
             HandleHoverText();
 
-            if (inputManager.Interact) { TryPickupOrInteract(); return; }
+            Equipment.FilmCameraItem heldCamera = currentEquipment as Equipment.FilmCameraItem;
+            bool isUsingCamera = heldCamera != null && heldCamera.IsCameraViewActive();
+
+            if (inputManager.Interact && !isUsingCamera) { TryPickupOrInteract(); return; }
             if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
 
-            if (UnityEngine.InputSystem.Mouse.current != null && UnityEngine.InputSystem.Mouse.current.leftButton.wasPressedThisFrame)
+            if (inputManager.ConsumeUse())
             {
+                if (CrosshairUIClicker.TryClickButton()) return;
+
                 if (currentEquipment != null)
                 {
                     currentEquipment.OnUse(PlayerCamera);
@@ -142,13 +159,7 @@ namespace Player.Interactor
 
         private void HandleHotbarInput()
         {
-            if (UnityEngine.InputSystem.Keyboard.current == null) return;
-
-            if (UnityEngine.InputSystem.Keyboard.current.digit1Key.wasPressedThisFrame) SwitchSlot(0);
-            else if (UnityEngine.InputSystem.Keyboard.current.digit2Key.wasPressedThisFrame) SwitchSlot(1);
-            else if (UnityEngine.InputSystem.Keyboard.current.digit3Key.wasPressedThisFrame) SwitchSlot(2);
-            else if (UnityEngine.InputSystem.Keyboard.current.digit4Key.wasPressedThisFrame) SwitchSlot(3);
-            else if (UnityEngine.InputSystem.Keyboard.current.digit5Key.wasPressedThisFrame) SwitchSlot(4);
+            if (inputManager.HotbarSlot >= 0) SwitchSlot(inputManager.HotbarSlot);
         }
 
         private void SwitchSlot(int newSlotIndex)

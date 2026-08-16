@@ -2,6 +2,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Collections;
+using UnityEngine.InputSystem;
 
 [System.Serializable]
 public class TaskUIRow
@@ -58,6 +59,8 @@ public class TutorialUIManager : MonoBehaviour
     private bool isTaskUIExpanded = false;
     private Coroutine notificationCoroutine;
     private Coroutine taskRevealCoroutine;
+    private Player.Manager.InputManager inputManager;
+    private bool[] completedTaskRows;
 
     private void Awake() { Instance = this; }
 
@@ -68,9 +71,16 @@ public class TutorialUIManager : MonoBehaviour
 
     private void Update()
     {
+        if (PauseManager.isPaused) return;
         if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
 
-        if (Input.GetKeyDown(KeyCode.Tab) && taskPanel != null && taskPanel.activeSelf)
+        if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
+
+        Keyboard keyboard = Keyboard.current;
+        bool contextPanelPressed = (inputManager != null && inputManager.ContextPanel) ||
+                                   (keyboard != null && keyboard.tabKey.wasPressedThisFrame);
+
+        if (contextPanelPressed && taskPanel != null && taskPanel.activeSelf)
         {
             if (ContractUIManager.Instance != null && ContractUIManager.Instance.CanToggleQualifications()) return;
 
@@ -96,9 +106,16 @@ public class TutorialUIManager : MonoBehaviour
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
     }
 
+    public bool IsBossDialogueOpen()
+    {
+        return bossHUDCanvas != null && bossHUDCanvas.activeSelf;
+    }
+
     public void SetupTasks(string[] tasks)
     {
         if (taskPanel != null) taskPanel.SetActive(true);
+
+        completedTaskRows = new bool[taskRows.Length];
 
         // Hide all rows initially
         foreach (var row in taskRows)
@@ -125,15 +142,7 @@ public class TutorialUIManager : MonoBehaviour
                 string cleanText = tasks[i].StartsWith("- ") ? tasks[i].Substring(2) : tasks[i];
 
                 taskRows[i].taskText.text = cleanText;
-                taskRows[i].taskText.color = activeTextColor;
-
-                // Reset the icon to the diamond
-                if (taskRows[i].taskIcon != null && defaultDiamondIcon != null)
-                    taskRows[i].taskIcon.sprite = defaultDiamondIcon;
-
-                // Show the gold line
-                if (taskRows[i].underline != null)
-                    taskRows[i].underline.gameObject.SetActive(true);
+                ApplyTaskState(i);
 
                 taskRows[i].rowContainer.SetActive(true);
                 yield return new WaitForSeconds(0.4f);
@@ -143,23 +152,34 @@ public class TutorialUIManager : MonoBehaviour
 
     public void MarkTaskComplete(int index)
     {
-        if (index < taskRows.Length && taskRows[index] != null && taskRows[index].rowContainer != null)
+        if (index < 0 || index >= taskRows.Length || taskRows[index] == null) return;
+
+        if (completedTaskRows == null || completedTaskRows.Length != taskRows.Length)
         {
-            if (!taskRows[index].taskText.text.StartsWith("<s>"))
-            {
-                // Strikethrough and dim the text
-                taskRows[index].taskText.text = "<s>" + taskRows[index].taskText.text + "</s>";
-                taskRows[index].taskText.color = completedTextColor;
-
-                // Optional: Change the diamond icon to a checkmark!
-                if (taskRows[index].taskIcon != null && completedCheckIcon != null)
-                    taskRows[index].taskIcon.sprite = completedCheckIcon;
-
-                // Optional: Hide the underline when complete for a cleaner look
-                if (taskRows[index].underline != null)
-                    taskRows[index].underline.gameObject.SetActive(false);
-            }
+            completedTaskRows = new bool[taskRows.Length];
         }
+
+        completedTaskRows[index] = true;
+        if (taskRows[index].rowContainer != null && taskRows[index].rowContainer.activeSelf) ApplyTaskState(index);
+    }
+
+    private void ApplyTaskState(int index)
+    {
+        TaskUIRow row = taskRows[index];
+        bool isComplete = completedTaskRows != null && index < completedTaskRows.Length && completedTaskRows[index];
+
+        if (isComplete)
+        {
+            if (row.taskText != null && !row.taskText.text.StartsWith("<s>")) row.taskText.text = "<s>" + row.taskText.text + "</s>";
+            if (row.taskText != null) row.taskText.color = completedTextColor;
+            if (row.taskIcon != null && completedCheckIcon != null) row.taskIcon.sprite = completedCheckIcon;
+            if (row.underline != null) row.underline.gameObject.SetActive(false);
+            return;
+        }
+
+        if (row.taskText != null) row.taskText.color = activeTextColor;
+        if (row.taskIcon != null && defaultDiamondIcon != null) row.taskIcon.sprite = defaultDiamondIcon;
+        if (row.underline != null) row.underline.gameObject.SetActive(true);
     }
 
     private IEnumerator ShowNewTaskNotification()
@@ -174,7 +194,62 @@ public class TutorialUIManager : MonoBehaviour
 
     public void SetDynamicGlow(string keyword, bool state)
     {
-        TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>();
-        foreach (var g in glows) if (g.gameObject.name.ToLower().Contains(keyword.ToLower())) { if (state) g.StartGlowing(); else g.StopGlowing(); }
+        TutorialGlowTarget[] glows = FindObjectsOfType<TutorialGlowTarget>(true);
+
+        if (state) ClearDynamicGlows(glows);
+
+        TutorialGlowTarget assignedGlow = GetAssignedGlow(keyword);
+        if (assignedGlow != null)
+        {
+            if (state && assignedGlow.gameObject.activeInHierarchy) assignedGlow.StartGlowing();
+            else assignedGlow.StopGlowing();
+            return;
+        }
+
+        foreach (TutorialGlowTarget glow in glows)
+        {
+            if (glow == null || !glow.gameObject.name.ToLower().Contains(keyword.ToLower())) continue;
+
+            if (state && glow.gameObject.activeInHierarchy) glow.StartGlowing();
+            else glow.StopGlowing();
+        }
+    }
+
+    public void SetDynamicGlow(TutorialGlowTarget glowTarget, bool state)
+    {
+        if (glowTarget == null) return;
+
+        if (state) ClearDynamicGlows();
+
+        if (state && glowTarget.gameObject.activeInHierarchy) glowTarget.StartGlowing();
+        else glowTarget.StopGlowing();
+    }
+
+    private TutorialGlowTarget GetAssignedGlow(string keyword)
+    {
+        switch (keyword.ToLower())
+        {
+            case "director": return directorTerminalGlow;
+            case "shop": return shopTerminalGlow;
+            case "computer": return computerGlow;
+            case "stage": return stageGlow;
+            case "pointa": return pointAGlow;
+            case "pointb": return pointBGlow;
+            case "pointc": return pointCGlow;
+            default: return null;
+        }
+    }
+
+    public void ClearDynamicGlows()
+    {
+        ClearDynamicGlows(FindObjectsOfType<TutorialGlowTarget>(true));
+    }
+
+    private void ClearDynamicGlows(TutorialGlowTarget[] glows)
+    {
+        foreach (TutorialGlowTarget glow in glows)
+        {
+            if (glow != null) glow.StopGlowing();
+        }
     }
 }

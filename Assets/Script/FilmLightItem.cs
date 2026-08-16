@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using Player.Manager;
 using TMPro;
 using UnityEngine.UI;
@@ -118,20 +117,11 @@ namespace Player.Equipment
         {
             if (!isLightOn) return;
 
-            // Scroll wheel for intensity
-            if (Mouse.current != null)
-            {
-                float scroll = Mouse.current.scroll.y.ReadValue();
-                if (scroll > 0) AdjustIntensity(5f);
-                else if (scroll < 0) AdjustIntensity(-5f);
-            }
+            float scroll = input.EquipmentAdjust;
+            if (scroll > 0) AdjustIntensity(5f);
+            else if (scroll < 0) AdjustIntensity(-5f);
 
-            // Up/Down arrows for tilt
-            if (Keyboard.current != null)
-            {
-                if (Keyboard.current.upArrowKey.wasPressedThisFrame) TiltLight(-tiltStep);
-                if (Keyboard.current.downArrowKey.wasPressedThisFrame) TiltLight(tiltStep);
-            }
+            if (input.LightTilt != 0f) TiltLight(input.LightTilt * tiltStep);
         }
 
         public bool IsPoweredOn()

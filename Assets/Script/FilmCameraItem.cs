@@ -1,5 +1,4 @@
 ﻿using UnityEngine;
-using UnityEngine.InputSystem;
 using TMPro;
 using Player.Manager;
 using UnityEngine.Rendering.PostProcessing;
@@ -245,11 +244,11 @@ namespace Player.Equipment
 
         public override void OnHeldUpdate(InputManager input)
         {
-            if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame) InsertSDCard();
+            if (input.InsertCard) InsertSDCard();
 
             if (!isCameraActive) return;
 
-            if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
+            if (input.Record)
             {
                 if (!isRecording && !isSDCardInserted) { Debug.LogWarning("Insert SD Card first!"); return; }
                 ToggleRecording();
@@ -258,26 +257,17 @@ namespace Player.Equipment
             // --- THE FIX: Only allow camera adjustments if NOT recording ---
             if (!isRecording)
             {
-                if (Mouse.current != null)
-                {
-                    float scroll = Mouse.current.scroll.y.ReadValue();
-                    if (scroll > 0) filmCamera.fieldOfView -= zoomSpeed;
-                    else if (scroll < 0) filmCamera.fieldOfView += zoomSpeed;
-                    filmCamera.fieldOfView = Mathf.Clamp(filmCamera.fieldOfView, minFOV, maxFOV);
-                }
+                float scroll = input.EquipmentAdjust;
+                if (scroll > 0) filmCamera.fieldOfView -= zoomSpeed;
+                else if (scroll < 0) filmCamera.fieldOfView += zoomSpeed;
+                filmCamera.fieldOfView = Mathf.Clamp(filmCamera.fieldOfView, minFOV, maxFOV);
 
-                if (Keyboard.current != null)
+                float pedestalShift = input.CameraPedestal * pedestalSpeed * Time.deltaTime;
+                if (pedestalShift != 0)
                 {
-                    float pedestalShift = 0f;
-                    if (Keyboard.current.qKey.isPressed) pedestalShift -= pedestalSpeed * Time.deltaTime;
-                    if (Keyboard.current.eKey.isPressed) pedestalShift += pedestalSpeed * Time.deltaTime;
-
-                    if (pedestalShift != 0)
-                    {
-                        Vector3 newPos = filmCamera.transform.localPosition;
-                        newPos.y = Mathf.Clamp(newPos.y + pedestalShift, originalLocalPos.y + maxPedestalDown, originalLocalPos.y + maxPedestalUp);
-                        filmCamera.transform.localPosition = newPos;
-                    }
+                    Vector3 newPos = filmCamera.transform.localPosition;
+                    newPos.y = Mathf.Clamp(newPos.y + pedestalShift, originalLocalPos.y + maxPedestalDown, originalLocalPos.y + maxPedestalUp);
+                    filmCamera.transform.localPosition = newPos;
                 }
             }
 
@@ -313,6 +303,11 @@ namespace Player.Equipment
                     }
                 }
             }
+        }
+
+        public bool IsCameraViewActive()
+        {
+            return isCameraActive;
         }
 
         private void HandleSmoothAutoFocus()
@@ -1373,9 +1368,10 @@ namespace Player.Equipment
                 }
             }
 
-            if (!isRecording) EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
+            GameObject ejectedSDCard = null;
+            if (!isRecording) ejectedSDCard = EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
 
-            if (TutorialManager.Instance != null && !isRecording && !forceCancel) TutorialManager.Instance.OnRecordingFinished();
+            if (TutorialManager.Instance != null && !isRecording && !forceCancel) TutorialManager.Instance.OnRecordingFinished(ejectedSDCard);
         }
 
         public override void OnDropped(Camera playerCamera)
@@ -1403,7 +1399,7 @@ namespace Player.Equipment
             if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
         }
 
-        private void EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
+        private GameObject EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
         {
             isSDCardInserted = false;
             if (sdCardPrefab != null)
@@ -1439,7 +1435,10 @@ namespace Player.Equipment
                 rb.isKinematic = false;
                 rb.useGravity = true;
                 rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
+                return ejectedCard;
             }
+
+            return null;
         }
     }
 

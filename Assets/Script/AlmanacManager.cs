@@ -3,6 +3,7 @@ using TMPro;
 using UnityEngine.UI;
 using System.Collections.Generic;
 using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem;
 
 [System.Serializable]
 public class KnowledgeEntry
@@ -14,6 +15,278 @@ public class KnowledgeEntry
     public int level = 1;
     public int sortOrder = 0;
     public bool isUnlocked = false;
+}
+
+public class AlmanacGuidePlayer : MonoBehaviour
+{
+    private const int previewLayer = 30;
+    private const float guideDuration = 12f;
+
+    private RawImage previewImage;
+    private TextMeshProUGUI captionText;
+    private TextMeshProUGUI playPauseText;
+    private GameObject previewRoot;
+    private GameObject subjectGroup;
+    private Camera guideCamera;
+    private RenderTexture guideTexture;
+    private List<Material> guideMaterials = new List<Material>();
+    private bool isGuideOpen = false;
+    private bool isPlaying = false;
+    private float playbackTime = 0f;
+
+    public void Initialize(RawImage targetPreviewImage, TextMeshProUGUI targetCaptionText, TextMeshProUGUI targetPlayPauseText)
+    {
+        previewImage = targetPreviewImage;
+        captionText = targetCaptionText;
+        playPauseText = targetPlayPauseText;
+    }
+
+    public void OpenGuide(GameObject subjectPrefab)
+    {
+        if (previewRoot == null) CreateGuideScene(subjectPrefab);
+
+        isGuideOpen = true;
+        isPlaying = true;
+        playbackTime = 0f;
+
+        if (guideCamera != null) guideCamera.enabled = true;
+        if (previewImage != null) previewImage.texture = guideTexture;
+
+        UpdateGuideFrame();
+        UpdatePlayPauseText();
+    }
+
+    public void CloseGuide()
+    {
+        isGuideOpen = false;
+        isPlaying = false;
+        if (guideCamera != null) guideCamera.enabled = false;
+        UpdatePlayPauseText();
+    }
+
+    public void TogglePlayPause()
+    {
+        if (!isGuideOpen) return;
+
+        isPlaying = !isPlaying;
+        UpdatePlayPauseText();
+    }
+
+    public void Replay()
+    {
+        if (!isGuideOpen) return;
+
+        playbackTime = 0f;
+        isPlaying = true;
+        UpdateGuideFrame();
+        UpdatePlayPauseText();
+    }
+
+    private void Update()
+    {
+        if (!isGuideOpen || !isPlaying) return;
+
+        playbackTime += Time.unscaledDeltaTime;
+        if (playbackTime >= guideDuration) playbackTime = 0f;
+        UpdateGuideFrame();
+    }
+
+    private void UpdateGuideFrame()
+    {
+        if (subjectGroup == null) return;
+
+        float horizontalPosition = 0f;
+
+        if (playbackTime < 3f)
+        {
+            horizontalPosition = 0f;
+            if (captionText != null) captionText.text = "<color=#FF6B6B>NOT THE REQUESTED COMPOSITION:</color> The product is centered and ignores the Rule of Thirds brief.";
+        }
+        else if (playbackTime < 5f)
+        {
+            float movementProgress = Mathf.SmoothStep(0f, 1f, (playbackTime - 3f) / 2f);
+            horizontalPosition = Mathf.Lerp(0f, -2.05f, movementProgress);
+            if (captionText != null) captionText.text = "Move the product toward a vertical grid line while keeping the important label visible.";
+        }
+        else if (playbackTime < 9f)
+        {
+            horizontalPosition = -2.05f;
+            if (captionText != null) captionText.text = "<color=#65F28B>STRONG COMPOSITION:</color> The product sits on the left third with useful open space on the right.";
+        }
+        else
+        {
+            horizontalPosition = -2.05f;
+            if (captionText != null) captionText.text = "Keep the main detail close to a grid intersection, then confirm the product remains fully visible before recording.";
+        }
+
+        subjectGroup.transform.localPosition = new Vector3(horizontalPosition, 0f, 0f);
+        subjectGroup.transform.localRotation = Quaternion.Euler(0f, Mathf.Sin(playbackTime * 0.8f) * 4f, 0f);
+    }
+
+    private void UpdatePlayPauseText()
+    {
+        if (playPauseText != null) playPauseText.text = isPlaying ? "PAUSE" : "PLAY";
+    }
+
+    private void CreateGuideScene(GameObject subjectPrefab)
+    {
+        previewRoot = new GameObject("Almanac Rule of Thirds Preview");
+        previewRoot.transform.position = new Vector3(0f, -1000f, 0f);
+        SetLayerRecursively(previewRoot, previewLayer);
+
+        guideTexture = new RenderTexture(640, 360, 24, RenderTextureFormat.ARGB32);
+        guideTexture.name = "Rule of Thirds Guide Texture";
+        guideTexture.Create();
+
+        GameObject cameraObject = new GameObject("Guide Camera", typeof(Camera));
+        cameraObject.transform.SetParent(previewRoot.transform, false);
+        cameraObject.transform.localPosition = new Vector3(0f, 2.1f, -8f);
+        cameraObject.transform.LookAt(previewRoot.transform.TransformPoint(new Vector3(0f, 1.35f, 0f)));
+        cameraObject.layer = previewLayer;
+
+        guideCamera = cameraObject.GetComponent<Camera>();
+        guideCamera.clearFlags = CameraClearFlags.SolidColor;
+        guideCamera.backgroundColor = new Color(0.08f, 0.08f, 0.09f, 1f);
+        guideCamera.orthographic = true;
+        guideCamera.orthographicSize = 3.2f;
+        guideCamera.cullingMask = 1 << previewLayer;
+        guideCamera.targetTexture = guideTexture;
+
+        CreatePreviewPrimitive("Red Commercial Backdrop", PrimitiveType.Cube, previewRoot.transform, new Vector3(0f, 2.5f, 2.6f), new Vector3(12f, 7f, 0.25f), new Color(0.55f, 0.045f, 0.055f));
+        CreatePreviewPrimitive("Studio Floor", PrimitiveType.Cube, previewRoot.transform, new Vector3(0f, -0.15f, 0f), new Vector3(12f, 0.3f, 8f), new Color(0.55f, 0.42f, 0.25f));
+
+        subjectGroup = new GameObject("Animated Product");
+        subjectGroup.transform.SetParent(previewRoot.transform, false);
+        subjectGroup.layer = previewLayer;
+
+        CreatePreviewPrimitive("Product Pedestal", PrimitiveType.Cube, subjectGroup.transform, new Vector3(0f, 0.15f, 0f), new Vector3(1.8f, 0.3f, 1.5f), new Color(0.72f, 0.72f, 0.7f));
+
+        if (subjectPrefab != null) CreateGameProduct(subjectPrefab);
+        else CreateFallbackProduct();
+
+        CreateGuideLight("Guide Key Light", 1.25f, new Vector3(35f, -35f, 0f));
+        CreateGuideLight("Guide Fill Light", 0.45f, new Vector3(25f, 145f, 0f));
+    }
+
+    private void CreateGameProduct(GameObject subjectPrefab)
+    {
+        GameObject subjectObject = Instantiate(subjectPrefab, subjectGroup.transform);
+        subjectObject.name = "Goke Product From Game";
+        subjectObject.transform.localPosition = Vector3.zero;
+        subjectObject.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+        SetLayerRecursively(subjectObject, previewLayer);
+
+        foreach (MonoBehaviour behaviour in subjectObject.GetComponentsInChildren<MonoBehaviour>(true)) behaviour.enabled = false;
+        foreach (Collider subjectCollider in subjectObject.GetComponentsInChildren<Collider>(true)) subjectCollider.enabled = false;
+        foreach (Rigidbody subjectBody in subjectObject.GetComponentsInChildren<Rigidbody>(true))
+        {
+            subjectBody.isKinematic = true;
+            subjectBody.useGravity = false;
+        }
+
+        Renderer[] subjectRenderers = subjectObject.GetComponentsInChildren<Renderer>(true);
+        if (subjectRenderers.Length == 0)
+        {
+            Destroy(subjectObject);
+            CreateFallbackProduct();
+            return;
+        }
+
+        Bounds subjectBounds = subjectRenderers[0].bounds;
+        for (int rendererIndex = 1; rendererIndex < subjectRenderers.Length; rendererIndex++) subjectBounds.Encapsulate(subjectRenderers[rendererIndex].bounds);
+
+        if (subjectBounds.size.y > 0.001f)
+        {
+            float targetScale = 1.8f / subjectBounds.size.y;
+            subjectObject.transform.localScale *= targetScale;
+
+            subjectBounds = subjectRenderers[0].bounds;
+            for (int rendererIndex = 1; rendererIndex < subjectRenderers.Length; rendererIndex++) subjectBounds.Encapsulate(subjectRenderers[rendererIndex].bounds);
+        }
+
+        Vector3 desiredCenter = subjectGroup.transform.TransformPoint(new Vector3(0f, 1.3f, 0f));
+        subjectObject.transform.position += desiredCenter - subjectBounds.center;
+    }
+
+    private void CreateFallbackProduct()
+    {
+        GameObject product = CreatePreviewPrimitive("Goke Guide Can", PrimitiveType.Cylinder, subjectGroup.transform, new Vector3(0f, 1.15f, 0f), new Vector3(0.6f, 0.9f, 0.6f), new Color(0.75f, 0.03f, 0.04f));
+        product.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
+
+        GameObject label = CreatePreviewPrimitive("Goke Label", PrimitiveType.Cube, product.transform, new Vector3(0f, 0f, -0.51f), new Vector3(0.65f, 0.22f, 0.03f), Color.white);
+        label.transform.localRotation = Quaternion.identity;
+    }
+
+    private GameObject CreatePreviewPrimitive(string objectName, PrimitiveType primitiveType, Transform parent, Vector3 localPosition, Vector3 localScale, Color color)
+    {
+        GameObject previewObject = GameObject.CreatePrimitive(primitiveType);
+        previewObject.name = objectName;
+        previewObject.transform.SetParent(parent, false);
+        previewObject.transform.localPosition = localPosition;
+        previewObject.transform.localScale = localScale;
+        previewObject.layer = previewLayer;
+
+        Collider previewCollider = previewObject.GetComponent<Collider>();
+        if (previewCollider != null) Destroy(previewCollider);
+
+        Renderer previewRenderer = previewObject.GetComponent<Renderer>();
+        if (previewRenderer != null)
+        {
+            Material previewMaterial = CreateGuideMaterial(color);
+            previewRenderer.sharedMaterial = previewMaterial;
+        }
+
+        return previewObject;
+    }
+
+    private Material CreateGuideMaterial(Color color)
+    {
+        Shader guideShader = Shader.Find("Standard");
+        if (guideShader == null) guideShader = Shader.Find("Universal Render Pipeline/Lit");
+
+        Material guideMaterial = new Material(guideShader);
+        guideMaterial.color = color;
+        guideMaterials.Add(guideMaterial);
+        return guideMaterial;
+    }
+
+    private void CreateGuideLight(string lightName, float intensity, Vector3 rotation)
+    {
+        GameObject lightObject = new GameObject(lightName, typeof(Light));
+        lightObject.transform.SetParent(previewRoot.transform, false);
+        lightObject.transform.localRotation = Quaternion.Euler(rotation);
+        lightObject.layer = previewLayer;
+
+        Light guideLight = lightObject.GetComponent<Light>();
+        guideLight.type = LightType.Directional;
+        guideLight.intensity = intensity;
+        guideLight.cullingMask = 1 << previewLayer;
+    }
+
+    private void SetLayerRecursively(GameObject targetObject, int targetLayer)
+    {
+        targetObject.layer = targetLayer;
+        foreach (Transform child in targetObject.transform) SetLayerRecursively(child.gameObject, targetLayer);
+    }
+
+    private void OnDestroy()
+    {
+        if (guideCamera != null) guideCamera.targetTexture = null;
+
+        if (guideTexture != null)
+        {
+            guideTexture.Release();
+            Destroy(guideTexture);
+        }
+
+        if (previewRoot != null) Destroy(previewRoot);
+
+        foreach (Material guideMaterial in guideMaterials)
+        {
+            if (guideMaterial != null) Destroy(guideMaterial);
+        }
+        guideMaterials.Clear();
+    }
 }
 
 [System.Serializable]
@@ -66,7 +339,10 @@ public class AlmanacManager : MonoBehaviour
     private Button allKnowledgeButton;
     private Button equipmentKnowledgeButton;
     private Button techniquesKnowledgeButton;
+    private GameObject techniqueGuidePanel;
+    private AlmanacGuidePlayer ruleOfThirdsGuidePlayer;
     private int knowledgeCategoryFilter = 0;
+    private Player.Manager.InputManager inputManager;
     private Player.PlayerController.PlayerController playerController;
     private bool playerCouldMove = true;
     private bool playerCouldLook = true;
@@ -175,6 +451,8 @@ public class AlmanacManager : MonoBehaviour
         allKnowledgeButton = null;
         equipmentKnowledgeButton = null;
         techniquesKnowledgeButton = null;
+        techniqueGuidePanel = null;
+        ruleOfThirdsGuidePlayer = null;
         knowledgeCategoryFilter = 0;
         playerController = null;
         hasPlayerStateSnapshot = false;
@@ -197,7 +475,14 @@ public class AlmanacManager : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.P))
+        if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
+
+        Keyboard keyboard = Keyboard.current;
+        bool almanacPressed = inputManager != null ?
+                              inputManager.ConsumeAlmanac() :
+                              keyboard != null && keyboard.pKey.wasPressedThisFrame;
+
+        if (almanacPressed)
         {
             ToggleAlmanac();
         }
@@ -246,6 +531,7 @@ public class AlmanacManager : MonoBehaviour
         }
         else
         {
+            CloseTechniqueGuide();
             RestoreInputState();
 
             if (GokeLevelManager.Instance != null) GokeLevelManager.Instance.OnAlmanacClosed();
@@ -407,6 +693,7 @@ public class AlmanacManager : MonoBehaviour
 
     private void OpenTab(int tabIndex)
     {
+        if (tabIndex != 1) CloseTechniqueGuide();
         if (playerInfoPanel != null) playerInfoPanel.SetActive(tabIndex == 0);
         if (knowledgePanel != null) knowledgePanel.SetActive(tabIndex == 1);
         if (achievementsPanel != null) achievementsPanel.SetActive(tabIndex == 2);
@@ -485,7 +772,7 @@ public class AlmanacManager : MonoBehaviour
     {
         AddKnowledgeEntry("level_1_workflow", "LEVEL 1 - COMPLETE PRODUCTION WORKFLOW", "Use this order for every commercial.\n\n1. CONTRACT: Read the client brief before spending B-Coins.\n2. PRE-PRODUCTION: Build the backdrop, choose its color, and stage the approved props.\n3. LIGHTING: Place, power, aim, and balance your lights.\n4. CAMERA: Insert a blank SD Card, frame the subject, and record the required duration.\n5. INGEST: Pick up the used SD Card and press [F] at the computer tower.\n6. POST-PRODUCTION: Trim, add branding, color grade, export, review, and submit.", 1, 0);
         AddKnowledgeEntry("contracts_and_guides", "LEVEL 1 - CONTRACTS, ALMANAC & QUALIFICATIONS", "Use the correct reference for the job.\n\n- The contract board tells you the client, payment, and required deliverables before acceptance.\n- Press [P] to open this Production Almanac for permanent equipment, controls, and technique guides.\n- Press [TAB] after accepting a supported contract to open its exact qualification sheet.\n- The on-screen task list shows your current objective, but it does not replace the full contract.\n- Check the brief before buying, building, recording, and exporting.", 1, 10);
-        AddKnowledgeEntry("director_tablet", "LEVEL 1 - DIRECTOR TABLET CONTROLS", "The Director Tablet is the stage-building control center.\n\n- Press [E] at the terminal to open or close it.\n- ADD WALL creates the stage backdrop. Select the wall before using the RGB controls.\n- Drag an approved prop card onto the stage to spawn and position it.\n- Select a placed prop and press [T] to reposition it.\n- Props and walls cost B-Coins, so avoid unnecessary duplicates.\n- CLEAR STAGE removes the current setup when you need to rebuild.", 1, 20);
+        AddKnowledgeEntry("director_tablet", "LEVEL 1 - DIRECTOR TABLET CONTROLS", "The Director Tablet is the stage-building control center.\n\n- Press [E] at the terminal to open or close it.\n- ADD WALL creates the stage backdrop. Select the wall before using the RGB controls.\n- Click an approved prop card to attach it to the cursor, then click the stage to place it.\n- Select a placed prop and press [T] to reposition it.\n- Props and walls cost B-Coins, so avoid unnecessary duplicates.\n- CLEAR STAGE removes the current setup when you need to rebuild.", 1, 20);
         AddKnowledgeEntry("set_building", "LEVEL 1 - SET BUILDING & PRODUCT STAGING", "Build for the camera, not only for the Scene view.\n\n- Match the backdrop color requested by the client.\n- Pull the product away from the wall to create separation and reduce flat shadows.\n- Use cubes or approved props as supports when the product needs height.\n- Keep the main product visible and avoid placing graphics, actors, or props directly in front of it.\n- Open the camera viewfinder before recording and correct any overlap or empty framing.", 1, 30);
         AddKnowledgeEntry("led_panel", "LEVEL 1 - 160 LED PANEL", "Portable light used as a key, fill, or back light.\n\n- [LMB] toggles power while the light is held.\n- [Scroll] changes intensity in 5% steps from 0-100%.\n- [Up/Down Arrows] adjust tilt in 5-degree steps.\n- [G] drops the light in its current position.\n- Aim the light at the subject before dropping it. One light can illuminate a basic shot; multiple lights create depth and separation.", 1, 40);
         AddKnowledgeEntry("nony_fx_camera", "LEVEL 1 - NONY FX CAMERA", "Your first production camera for stable center framing.\n\n- [C] inserts a blank SD Card from the hotbar.\n- [LMB] opens or closes the viewfinder.\n- [Scroll] changes zoom and [Q/E] changes pedestal height.\n- [R] starts or stops recording. Camera adjustments are locked while recording.\n- For the Flower Vase training contract, keep the subject centered and hold the shot for 10 seconds.", 1, 50);
@@ -506,14 +793,14 @@ public class AlmanacManager : MonoBehaviour
     private void EnsureLevel3KnowledgeEntries()
     {
         AddKnowledgeEntry("level_3_soft_light", "LEVEL 3 - SOFT LIGHT", "Higher-output light designed for cleaner subject and vehicle lighting.\n\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Softer shadows create smoother transitions across faces and reflective body panels.\n- For Lambormini, start near 75% intensity and -10 degrees tilt.\n- [LMB] toggles power, [Scroll] changes intensity, [Up/Down Arrows] adjust tilt, and [G] drops it.\n- Aim it across the actor and vehicle, then check that both remain readable through the camera.", 3, 0);
-        AddKnowledgeEntry("hiring_and_posing_actors", "LEVEL 3 - HIRING & POSING ACTORS", "Actors are hired and staged through the Director Terminal.\n\n- Open the Director Terminal and drag an Actor card onto the stage like a prop.\n- Each actor hire costs 500 B-Coins.\n- Select the placed actor to enable the POSE ACTOR button.\n- The button cycles between Neutral, Wave, and Action poses.\n- Press [T] while the actor is selected to reposition them.\n- Keep the actor clear of the main product or vehicle so both remain readable.", 3, 10);
-        AddKnowledgeEntry("automotive_staging", "LEVEL 3 - AUTOMOTIVE STAGING", "Vehicle commercials require a readable silhouette, controlled reflections, and deliberate actor placement.\n\n- Drag the approved car from the Director Terminal onto the stage.\n- Leave open space around the vehicle and show its important front or side shape.\n- Position the actor beside the vehicle instead of directly in front of it.\n- Use the Soft Light across body panels to reveal their form.\n- Use the Level 2 Camera grid to balance the actor and vehicle.\n- Press [TAB] during the active contract to review its exact qualifications.", 3, 20);
+        AddKnowledgeEntry("hiring_and_posing_actors", "LEVEL 3 - HIRING & POSING ACTORS", "Actors are hired and staged through the Director Terminal.\n\n- Click an Actor card to attach the actor to the cursor, then click the stage to place them.\n- Each actor hire costs 500 B-Coins.\n- Select the placed actor to enable the POSE ACTOR button.\n- The button cycles between Neutral, Wave, and Action poses.\n- Press [T] while the actor is selected to reposition them.\n- Keep the actor clear of the main product or vehicle so both remain readable.", 3, 10);
+        AddKnowledgeEntry("automotive_staging", "LEVEL 3 - AUTOMOTIVE STAGING", "Vehicle commercials require a readable silhouette, controlled reflections, and deliberate actor placement.\n\n- Click the approved car card, move it over the stage, then click to place it.\n- Leave open space around the vehicle and show its important front or side shape.\n- Position the actor beside the vehicle instead of directly in front of it.\n- Use the Soft Light across body panels to reveal their form.\n- Use the Level 2 Camera grid to balance the actor and vehicle.\n- Press [TAB] during the active contract to review its exact qualifications.", 3, 20);
         AddKnowledgeEntry("level_3_workflow", "LEVEL 3 - ACTOR & VEHICLE WORKFLOW", "Use this plan for the Lambormini production.\n\n1. Get the Level 3 Soft Light from the delivery area.\n2. Open the Director Terminal and place the approved vehicle.\n3. Hire an actor, position them beside the vehicle, and choose a suitable pose.\n4. Light the actor and vehicle while preserving shape and separation.\n5. Frame both subjects clearly with the Level 2 Camera grid.\n6. Confirm that the actor does not block the vehicle, then record and complete post-production.\n7. Use [P] for techniques and [TAB] for exact contract qualifications.", 3, 30);
     }
 
     private void EnsureEquipmentAndTechniqueEntries()
     {
-        AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- Use ADD WALL, select the wall, then adjust the RGB sliders.\n- Drag an approved prop, vehicle, or actor card onto the stage.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
+        AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- Use ADD WALL, select the wall, then adjust the RGB sliders.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
         AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 100 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
         AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "LEVEL 1 EQUIPMENT - 4,000 B-COINS\n\nFEATURES\n- Production camera with a 15-60 degree zoom range.\n- Continuous autofocus and a subject-tracking viewfinder HUD.\n- Displays focus distance, REC status, recording time, and subject position.\n- Supports zoom and pedestal-height adjustment.\n\nHOW TO USE\n- Pick it up with [E] and press [C] to insert a blank SD Card.\n- Press [LMB] to open or close the viewfinder.\n- Use [Scroll] to zoom and [Q/E] to change camera height.\n- Press [R] to start or stop recording.\n- Press [G] to drop it. Camera adjustments lock during recording.", "Equipment", 1, 20);
         AddKnowledgeEntry("sd_card", "EQUIPMENT - SD CARD", "LEVEL 1 EQUIPMENT - 50 B-COINS\n\nFEATURES\n- Blank cards provide recording storage for every camera.\n- Used cards store the footage filename, duration, camera score, lighting score, and total score.\n\nHOW TO USE\n- Keep a blank card in the hotbar and press [C] while holding a camera.\n- Stop the recording to eject the used card.\n- Pick it up with [E].\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E] to review the recording.", "Equipment", 1, 30);
@@ -529,7 +816,7 @@ public class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("three_point_lighting", "TECHNIQUE - 3-POINT LIGHTING", "LEVEL 2 TECHNIQUE\n\n- KEY LIGHT: strongest, about 45 degrees to one side. Start near 75% intensity.\n- FILL LIGHT: opposite side controlling shadow depth. Start near 40%.\n- BACK LIGHT: behind the product for separation. Start near 60%.\n- Aim every beam at the product and adjust tilt until the light reaches it.\n- Check the camera image for depth, readable highlights, and controlled shadows.", "Technique", 2, 10);
         AddKnowledgeEntry("product_separation", "TECHNIQUE - PRODUCT & BACKDROP SEPARATION", "LEVEL 2 TECHNIQUE\n\n- Pull the product forward instead of leaving it against the backdrop.\n- Physical distance creates depth and gives the Back Light room to work.\n- Keep the product silhouette clear from props with similar colors.\n- For Goke Cola, use a red backdrop and keep the can at least 1.5 units away from the wall.\n- Use lighting and color contrast to guide attention toward the product.", "Technique", 2, 20);
         AddKnowledgeEntry("commercial_color_grading", "TECHNIQUE - COMMERCIAL COLOR GRADING", "LEVEL 2 TECHNIQUE\n\n- Brightness controls overall exposure, contrast separates light and dark areas, and saturation controls color strength.\n- Avoid excessive contrast that removes shadow detail.\n- For Goke Cola, trim the edit to 9-11 seconds and use exactly 3 graphics.\n- Use Brightness 0.85-1.15, Contrast 1.15-1.70, and Saturation 1.20-1.60.\n- Match the grade to the contract instead of applying the same settings to every commercial.", "Technique", 2, 30);
-        AddKnowledgeEntry("hiring_and_posing_actors", "TECHNIQUE - HIRING, BLOCKING & POSING ACTORS", "LEVEL 3 TECHNIQUE\n\n- Drag an Actor card from the Director Terminal onto the stage. Each hire costs 500 B-Coins.\n- Select the actor to enable POSE ACTOR.\n- Cycle between Neutral, Wave, and Action poses to match the commercial.\n- Select the actor and press [T] to reposition them.\n- Block the actor beside the product or vehicle without hiding its important shape.", "Technique", 3, 0);
+        AddKnowledgeEntry("hiring_and_posing_actors", "TECHNIQUE - HIRING, BLOCKING & POSING ACTORS", "LEVEL 3 TECHNIQUE\n\n- Click an Actor card, move the actor over the stage, then click again to place them. Each hire costs 500 B-Coins.\n- Select the actor to enable POSE ACTOR.\n- Cycle between Neutral, Wave, and Action poses to match the commercial.\n- Select the actor and press [T] to reposition them.\n- Block the actor beside the product or vehicle without hiding its important shape.", "Technique", 3, 0);
         AddKnowledgeEntry("automotive_staging", "TECHNIQUE - AUTOMOTIVE STAGING & COMPOSITION", "LEVEL 3 TECHNIQUE\n\n- Show a readable front or side silhouette of the vehicle.\n- Leave open space around the body instead of crowding it with props.\n- Place the actor beside the car rather than directly in front of it.\n- Use the Rule of Thirds grid to balance the actor and vehicle as two subjects.\n- Check that the pose, vehicle direction, and empty space guide the viewer through the frame.", "Technique", 3, 10);
         AddKnowledgeEntry("soft_light_technique", "TECHNIQUE - SOFT LIGHTING FOR REFLECTIVE SURFACES", "LEVEL 3 TECHNIQUE\n\n- Move the Level 3 Soft Light across the front or side of the vehicle to reveal body shape.\n- Start near 75% intensity and -10 degrees tilt, then aim the beam at the actor and car.\n- Change distance and intensity together: farther placement widens coverage but reduces brightness.\n- Keep enough shadow to preserve depth instead of lighting every surface equally.\n- In post use Contrast 1.15-1.45, Saturation 0.95-1.20, and Brightness 0.90-1.10.", "Technique", 3, 20);
         AddKnowledgeEntry("shot_coverage", "TECHNIQUE - SHOT COVERAGE", "LEVEL 4 TECHNIQUE\n\n- Coverage records the same action at useful shot sizes so the editor can build a clear sequence.\n- WIDE establishes the actor, product, and setting.\n- MEDIUM shows the actor using or presenting the product.\n- CLOSE-UP emphasizes the product or a meaningful detail.\n- For Kape Kultura, record all three sizes and keep every required subject visible before moving to the next setup.", "Technique", 4, 0);
@@ -770,7 +1057,8 @@ public class AlmanacManager : MonoBehaviour
     {
         GameObject entryObject = CreatePanel("Knowledge Entry", knowledgeListContainer, entryColor);
         LayoutElement layoutElement = entryObject.AddComponent<LayoutElement>();
-        layoutElement.preferredHeight = Mathf.Clamp(190f + entry.description.Length * 0.3f, 250f, 390f);
+        bool hasVideoGuide = entry.id == "rule_of_thirds" && entry.category == "Technique";
+        layoutElement.preferredHeight = Mathf.Clamp(190f + entry.description.Length * 0.3f, 250f, hasVideoGuide ? 450f : 390f);
 
         TextMeshProUGUI titleText = CreateText("Title", entryObject.transform, entry.title, 30, TextAlignmentOptions.Left);
         SetStretchRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(25f, -75f), new Vector2(-25f, -25f));
@@ -779,7 +1067,14 @@ public class AlmanacManager : MonoBehaviour
         else titleText.color = new Color(1f, 0.7f, 0.3f);
 
         TextMeshProUGUI descriptionText = CreateText("Description", entryObject.transform, entry.description, 20, TextAlignmentOptions.TopLeft);
-        SetStretchRect(descriptionText.rectTransform, Vector2.zero, Vector2.one, new Vector2(25f, 20f), new Vector2(-25f, -80f));
+        SetStretchRect(descriptionText.rectTransform, Vector2.zero, Vector2.one, new Vector2(25f, hasVideoGuide ? 85f : 20f), new Vector2(-25f, -80f));
+
+        if (hasVideoGuide)
+        {
+            Button watchGuideButton = CreateButton("Watch Rule of Thirds Guide", entryObject.transform, "WATCH IN-GAME VIDEO GUIDE");
+            SetRect(watchGuideButton.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(190f, 43f), new Vector2(330f, 56f));
+            watchGuideButton.onClick.AddListener(ShowRuleOfThirdsGuide);
+        }
     }
 
     private void CreateAchievementEntryUI(AchievementEntry achievement)
@@ -898,6 +1193,7 @@ public class AlmanacManager : MonoBehaviour
 
         knowledgeListContainer = CreateScrollList("Equipment List", knowledgePanel.transform);
         BuildKnowledgeFilters();
+        BuildTechniqueGuidePanel();
     }
 
     private void BuildKnowledgeFilters()
@@ -918,6 +1214,102 @@ public class AlmanacManager : MonoBehaviour
             RectTransform scrollRect = knowledgeListContainer.parent.parent.GetComponent<RectTransform>();
             SetStretchRect(scrollRect, Vector2.zero, Vector2.one, new Vector2(10f, 10f), new Vector2(-10f, -150f));
         }
+    }
+
+    private void BuildTechniqueGuidePanel()
+    {
+        if (knowledgePanel == null || techniqueGuidePanel != null) return;
+
+        techniqueGuidePanel = CreatePanel("Technique Video Guide", knowledgePanel.transform, new Color(0.035f, 0.05f, 0.075f, 1f));
+        SetStretchRect(techniqueGuidePanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+
+        TextMeshProUGUI guideTitle = CreateText("Guide Title", techniqueGuidePanel.transform, "RULE OF THIRDS - IN-GAME VIDEO GUIDE", 32, TextAlignmentOptions.Left);
+        SetStretchRect(guideTitle.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(25f, -70f), new Vector2(-220f, -15f));
+        guideTitle.fontStyle = FontStyles.Bold;
+        guideTitle.color = new Color(1f, 0.7f, 0.3f);
+
+        Button closeGuideButton = CreateButton("Close Guide Button", techniqueGuidePanel.transform, "BACK TO GUIDES");
+        SetRect(closeGuideButton.GetComponent<RectTransform>(), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-125f, -42f), new Vector2(220f, 52f));
+        closeGuideButton.onClick.AddListener(CloseTechniqueGuide);
+
+        GameObject videoFrame = CreatePanel("Video Frame", techniqueGuidePanel.transform, Color.black);
+        SetRect(videoFrame.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -335f), new Vector2(930f, 520f));
+
+        GameObject previewObject = new GameObject("In-Game Preview", typeof(RectTransform), typeof(CanvasRenderer), typeof(RawImage));
+        previewObject.transform.SetParent(videoFrame.transform, false);
+        RawImage previewImage = previewObject.GetComponent<RawImage>();
+        previewImage.color = Color.white;
+        SetStretchRect(previewImage.rectTransform, Vector2.zero, Vector2.one, new Vector2(8f, 8f), new Vector2(-8f, -8f));
+
+        CreateGuideGridLine("Left Vertical Third", previewImage.transform, new Vector2(1f / 3f, 0f), new Vector2(1f / 3f, 1f), new Vector2(3f, 0f));
+        CreateGuideGridLine("Right Vertical Third", previewImage.transform, new Vector2(2f / 3f, 0f), new Vector2(2f / 3f, 1f), new Vector2(3f, 0f));
+        CreateGuideGridLine("Upper Horizontal Third", previewImage.transform, new Vector2(0f, 2f / 3f), new Vector2(1f, 2f / 3f), new Vector2(0f, 3f));
+        CreateGuideGridLine("Lower Horizontal Third", previewImage.transform, new Vector2(0f, 1f / 3f), new Vector2(1f, 1f / 3f), new Vector2(0f, 3f));
+
+        GameObject captionPanel = CreatePanel("Guide Caption", videoFrame.transform, new Color(0f, 0f, 0f, 0.78f));
+        SetStretchRect(captionPanel.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(8f, 8f), new Vector2(-8f, 92f));
+
+        TextMeshProUGUI captionText = CreateText("Caption", captionPanel.transform, "", 21, TextAlignmentOptions.Center);
+        SetStretchRect(captionText.rectTransform, Vector2.zero, Vector2.one, new Vector2(20f, 6f), new Vector2(-20f, -6f));
+
+        TextMeshProUGUI videoLabel = CreateText("Video Label", videoFrame.transform, "IN-GAME CAMERA DEMONSTRATION", 17, TextAlignmentOptions.Left);
+        SetStretchRect(videoLabel.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(20f, -38f), new Vector2(-20f, -10f));
+        videoLabel.fontStyle = FontStyles.Bold;
+
+        Button playPauseButton = CreateButton("Play Pause Button", techniqueGuidePanel.transform, "PAUSE");
+        SetRect(playPauseButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-130f, 42f), new Vector2(220f, 56f));
+
+        Button replayButton = CreateButton("Replay Button", techniqueGuidePanel.transform, "REPLAY");
+        SetRect(replayButton.GetComponent<RectTransform>(), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(130f, 42f), new Vector2(220f, 56f));
+
+        ruleOfThirdsGuidePlayer = techniqueGuidePanel.AddComponent<AlmanacGuidePlayer>();
+        ruleOfThirdsGuidePlayer.Initialize(previewImage, captionText, playPauseButton.GetComponentInChildren<TextMeshProUGUI>());
+        playPauseButton.onClick.AddListener(ruleOfThirdsGuidePlayer.TogglePlayPause);
+        replayButton.onClick.AddListener(ruleOfThirdsGuidePlayer.Replay);
+
+        techniqueGuidePanel.SetActive(false);
+    }
+
+    private void CreateGuideGridLine(string lineName, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 sizeDelta)
+    {
+        GameObject lineObject = CreatePanel(lineName, parent, new Color(1f, 1f, 1f, 0.72f));
+        RectTransform lineRect = lineObject.GetComponent<RectTransform>();
+        lineRect.anchorMin = anchorMin;
+        lineRect.anchorMax = anchorMax;
+        lineRect.anchoredPosition = Vector2.zero;
+        lineRect.sizeDelta = sizeDelta;
+        lineObject.GetComponent<Image>().raycastTarget = false;
+    }
+
+    private void ShowRuleOfThirdsGuide()
+    {
+        if (techniqueGuidePanel == null || ruleOfThirdsGuidePlayer == null) return;
+
+        techniqueGuidePanel.SetActive(true);
+        techniqueGuidePanel.transform.SetAsLastSibling();
+        ruleOfThirdsGuidePlayer.OpenGuide(FindRuleOfThirdsSubjectPrefab());
+    }
+
+    private void CloseTechniqueGuide()
+    {
+        if (ruleOfThirdsGuidePlayer != null) ruleOfThirdsGuidePlayer.CloseGuide();
+        if (techniqueGuidePanel != null) techniqueGuidePanel.SetActive(false);
+    }
+
+    private GameObject FindRuleOfThirdsSubjectPrefab()
+    {
+        DirectorTerminal directorTerminal = FindObjectOfType<DirectorTerminal>(true);
+        if (directorTerminal == null) return null;
+
+        foreach (LevelPropBank propBank in directorTerminal.propDatabase)
+        {
+            foreach (GameObject propPrefab in propBank.allowedProps)
+            {
+                if (propPrefab != null && propPrefab.name.ToLower().Contains("goke")) return propPrefab;
+            }
+        }
+
+        return null;
     }
 
     private void BuildAchievementsPanel(Transform parent)

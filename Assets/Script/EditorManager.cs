@@ -5,6 +5,7 @@ using UnityEngine.UI;
 using TMPro;
 using System.IO;
 using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem;
 
 public class EditorManager : MonoBehaviour
 {
@@ -63,7 +64,8 @@ public class EditorManager : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.F11)) GenerateCheatClip();
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard != null && keyboard.f11Key.wasPressedThisFrame) GenerateCheatClip();
     }
 
     private void GenerateCheatClip()

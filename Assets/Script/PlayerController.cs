@@ -15,6 +15,8 @@ namespace Player.PlayerController
         [SerializeField] private float LowerLimit = 70f;
         [SerializeField] private float MouseSensitivity = 21.9f;
         [SerializeField, Range(10, 500)] private float JumpFactor = 260f;
+        [SerializeField] private float JumpBufferTime = 0.15f;
+        [SerializeField] private float CoyoteTime = 0.1f;
         [SerializeField] private float AirResistance = 0.8f;
         [SerializeField] private LayerMask GroundCheck;
 
@@ -31,6 +33,8 @@ namespace Player.PlayerController
         private bool hasAnimator;
         private int xVelHash, yVelHash, zVelHash, jumpHash, groundHash, fallingHash;
         private float xRotation;
+        private float jumpBufferCounter;
+        private float coyoteCounter;
 
         private const float walkSpeed = 2f;
         private const float runSpeed = 6f;
@@ -54,13 +58,19 @@ namespace Player.PlayerController
 
         private void FixedUpdate()
         {
-            Move();
             SampleGround();
+            HandleJump();
+            Move();
         }
 
         private void Update()
         {
-            HandleJump();
+            if (inputManager == null) return;
+
+            if (inputManager.ConsumeJump())
+            {
+                jumpBufferCounter = canMove ? JumpBufferTime : 0f;
+            }
         }
 
         private void LateUpdate()
@@ -115,17 +125,27 @@ namespace Player.PlayerController
 
         private void HandleJump()
         {
-            if (!hasAnimator) return;
-            if (!canMove) return; // --- THE FIX: Prevent jumping when frozen! ---
-            if (!inputManager.Jump) return;
-            if (!grounded) return;
+            if (grounded) coyoteCounter = CoyoteTime;
+            else coyoteCounter = Mathf.Max(0f, coyoteCounter - Time.fixedDeltaTime);
+
+            jumpBufferCounter = Mathf.Max(0f, jumpBufferCounter - Time.fixedDeltaTime);
+
+            if (!hasAnimator || !canMove) return;
+            if (jumpBufferCounter <= 0f || coyoteCounter <= 0f) return;
+
+            playerRigidbody.AddForce(-playerRigidbody.velocity.y * Vector3.up, ForceMode.VelocityChange);
+            playerRigidbody.AddForce(Vector3.up * JumpFactor, ForceMode.Impulse);
             animator.SetTrigger(jumpHash);
+
+            grounded = false;
+            jumpBufferCounter = 0f;
+            coyoteCounter = 0f;
         }
 
         public void JumpAddForce()
         {
-            playerRigidbody.AddForce(-playerRigidbody.velocity.y * Vector3.up, ForceMode.VelocityChange);
-            playerRigidbody.AddForce(Vector3.up * JumpFactor, ForceMode.Impulse);
+            // The jump force is applied immediately in FixedUpdate().
+            // This animation event now only cleans up the visual trigger.
             animator.ResetTrigger(jumpHash);
         }
 
@@ -133,8 +153,11 @@ namespace Player.PlayerController
         {
             if (!hasAnimator) return;
 
-            float rayLength = 1.2f;
-            grounded = Physics.Raycast(transform.position, Vector3.down, rayLength);
+            float rayLength = 0.25f;
+            int groundMask = GroundCheck.value == 0 ? Physics.DefaultRaycastLayers : GroundCheck.value;
+            Vector3 rayOrigin = transform.position + Vector3.up * 0.1f;
+            bool groundHit = Physics.Raycast(rayOrigin, Vector3.down, rayLength, groundMask, QueryTriggerInteraction.Ignore);
+            grounded = groundHit && playerRigidbody.velocity.y <= 0.1f;
 
             animator.SetFloat(zVelHash, playerRigidbody.velocity.y);
             animator.SetBool(fallingHash, !grounded && playerRigidbody.velocity.y < -0.1f);

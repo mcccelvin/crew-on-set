@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 using TMPro;
+using UnityEngine.InputSystem;
 
 [System.Serializable]
 public struct TutorialTarget
@@ -66,8 +67,11 @@ public class TutorialManager : MonoBehaviour
     private Transform playerTransform;
     private Transform lineTarget;
     private Player.Manager.InputManager pInput;
+    private DirectorTerminal directorTerminal;
     private GameObject tutorialCube;
     private GameObject tutorialFlower;
+    private Transform tutorialUsedSDCard;
+    private TutorialGlowTarget tutorialUsedSDCardGlow;
 
     public enum TutorialStep
     {
@@ -147,6 +151,7 @@ public class TutorialManager : MonoBehaviour
         Player.PlayerController.PlayerController pCtrl = FindObjectOfType<Player.PlayerController.PlayerController>();
         if (pCtrl != null) playerTransform = pCtrl.transform;
         pInput = FindObjectOfType<Player.Manager.InputManager>();
+        directorTerminal = FindObjectOfType<DirectorTerminal>();
 
         if (objectiveLine != null)
         {
@@ -160,6 +165,12 @@ public class TutorialManager : MonoBehaviour
 
         int progress = PlayerPrefs.GetInt("TutorialProgress", 0);
         int currentLevel = CampaignProgression.GetCurrentLevel();
+
+        if (currentLevel == 1 && PlayerPrefs.GetInt("FlowerContractGraded", 0) == 0)
+        {
+            PlayerPrefs.SetInt("AlmanacUnlocked", 0);
+            PlayerPrefs.Save();
+        }
 
         if (currentLevel == 1 && PlayerPrefs.GetInt("Level1RetryActive", 0) == 1)
         {
@@ -194,9 +205,23 @@ public class TutorialManager : MonoBehaviour
 
     private void Update()
     {// --- ADD THIS TO FIX THE POINT C CAMERA TRIGGER ---
+        Keyboard keyboard = Keyboard.current;
+        Mouse mouse = Mouse.current;
+        bool spaceHeld = keyboard != null && keyboard.spaceKey.isPressed;
+        bool sprintHeld = keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
+        bool movementHeld = keyboard != null &&
+                            (keyboard.wKey.isPressed || keyboard.aKey.isPressed || keyboard.sKey.isPressed || keyboard.dKey.isPressed ||
+                             keyboard.upArrowKey.isPressed || keyboard.leftArrowKey.isPressed || keyboard.downArrowKey.isPressed || keyboard.rightArrowKey.isPressed);
+
+        if (PauseManager.isPaused)
+        {
+            wasJumpHeld = (pInput != null && pInput.Jump) || spaceHeld;
+            return;
+        }
+
         if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen())
         {
-            wasJumpHeld = (pInput != null && pInput.Jump) || Input.GetKey(KeyCode.Space);
+            wasJumpHeld = (pInput != null && pInput.Jump) || spaceHeld;
             return;
         }
 
@@ -238,14 +263,14 @@ public class TutorialManager : MonoBehaviour
         // -----------------------------------------------
         UpdatePlacementChecks();
 
-        if (Input.GetKeyDown(KeyCode.F12))
+        if (keyboard != null && keyboard.f12Key.wasPressedThisFrame)
         {
             PlayerPrefs.DeleteAll();
             PlayerPrefs.Save();
             UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
         }
 
-        if (Input.GetKeyDown(KeyCode.F9))
+        if (keyboard != null && keyboard.f9Key.wasPressedThisFrame)
         {
             SpawnCheatSDCard();
         }
@@ -258,9 +283,9 @@ public class TutorialManager : MonoBehaviour
             spacePromptText.gameObject.SetActive(canShowPrompt);
         }
 
-        bool isJumpCurrentlyHeld = (pInput != null && pInput.Jump) || Input.GetKey(KeyCode.Space);
+        bool isJumpCurrentlyHeld = (pInput != null && pInput.Jump) || spaceHeld;
 
-        bool jumpJustPressed = isJumpCurrentlyHeld && !wasJumpHeld;
+        bool jumpJustPressed = (pInput != null && pInput.Continue) || (isJumpCurrentlyHeld && !wasJumpHeld);
         wasJumpHeld = isJumpCurrentlyHeld;
 
         if (jumpJustPressed && !isTransitioning)
@@ -287,7 +312,10 @@ public class TutorialManager : MonoBehaviour
             }
         }
 
-        if (Input.GetKeyDown(KeyCode.Tab) && !isTransitioning && currentStep == TutorialStep.WaitForPrompt)
+        bool contextPanelPressed = (pInput != null && pInput.ContextPanel) ||
+                                   (keyboard != null && keyboard.tabKey.wasPressedThisFrame);
+
+        if (contextPanelPressed && !isTransitioning && currentStep == TutorialStep.WaitForPrompt)
         {
             StartCoroutine(TransitionToNextStep(TutorialStep.OfferFirstContract, false));
         }
@@ -296,21 +324,24 @@ public class TutorialManager : MonoBehaviour
         if (currentStep == TutorialStep.LearnMovement && isTaskPhaseActive)
         {
             // 1. Check Movement (WASD or Custom Input)
-            if (!moved && ((pInput != null && pInput.Move.sqrMagnitude > 0.01f) || Input.GetAxis("Horizontal") != 0 || Input.GetAxis("Vertical") != 0))
+            if (!moved && ((pInput != null && pInput.Move.sqrMagnitude > 0.01f) || movementHeld))
             {
                 moved = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
             }
 
             // 2. Check Jump (Spacebar or Custom Input)
-            if (!jumped && ((pInput != null && pInput.Jump) || Input.GetKey(KeyCode.Space)))
+            bool jumpPressedThisFrame = (pInput != null && pInput.JumpPressedThisFrame) ||
+                                        (pInput == null && keyboard != null && keyboard.spaceKey.wasPressedThisFrame);
+
+            if (!jumped && jumpPressedThisFrame)
             {
                 jumped = true;
                 TutorialUIManager.Instance.MarkTaskComplete(1);
             }
 
             // 3. Check Sprint (Shift or Custom Input)
-            if (!sprinted && ((pInput != null && pInput.Run) || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)))
+            if (!sprinted && ((pInput != null && pInput.Run) || sprintHeld))
             {
                 sprinted = true;
                 TutorialUIManager.Instance.MarkTaskComplete(2);
@@ -326,12 +357,12 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.PracticeCameraZoom && isTaskPhaseActive && !cameraZoomed)
         {
-            if (Input.mouseScrollDelta.y != 0) { cameraZoomed = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraPedestal, true)); }
+            if (mouse != null && mouse.scroll.ReadValue().y != 0) { cameraZoomed = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraPedestal, true)); }
         }
 
         if (currentStep == TutorialStep.PracticeCameraPedestal && isTaskPhaseActive && !cameraPedestalMoved)
         {
-            if (Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.E)) { cameraPedestalMoved = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.FrameSubject, true)); }
+            if (keyboard != null && (keyboard.qKey.isPressed || keyboard.eKey.isPressed)) { cameraPedestalMoved = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.FrameSubject, true)); }
         }
 
         if (currentStep == TutorialStep.WalkToStageWithLight && isTaskPhaseActive)
@@ -355,7 +386,7 @@ public class TutorialManager : MonoBehaviour
                 }
             }
         }
-        if (Input.GetKeyDown(KeyCode.F8))
+        if (keyboard != null && keyboard.f8Key.wasPressedThisFrame)
         {
             CheatCompleteCurrentStep();
         }
@@ -477,7 +508,10 @@ public class TutorialManager : MonoBehaviour
 
     private void UpdatePlacementChecks()
     {
-        if (Input.GetMouseButton(0)) return;
+        Mouse mouse = Mouse.current;
+        if (mouse != null && mouse.leftButton.isPressed) return;
+
+        bool isPlacingProp = directorTerminal != null && directorTerminal.IsPlacingProp();
 
         if (currentStep == TutorialStep.Tablet_SpawnCube && isTaskPhaseActive && !cubeSpawned)
         {
@@ -489,7 +523,7 @@ public class TutorialManager : MonoBehaviour
             }
         }
 
-        if (currentStep == TutorialStep.Tablet_MoveCube && isTaskPhaseActive && !cubeMoved)
+        if (currentStep == TutorialStep.Tablet_MoveCube && isTaskPhaseActive && !cubeMoved && !isPlacingProp)
         {
             if (tutorialCube != null && cubePlacementTarget != null)
             {
@@ -517,7 +551,7 @@ public class TutorialManager : MonoBehaviour
             }
         }
 
-        if (currentStep == TutorialStep.Tablet_MovePropToCube && isTaskPhaseActive && !flowerOnCube)
+        if (currentStep == TutorialStep.Tablet_MovePropToCube && isTaskPhaseActive && !flowerOnCube && !isPlacingProp)
         {
             if (tutorialFlower != null && tutorialCube != null)
             {
@@ -530,7 +564,8 @@ public class TutorialManager : MonoBehaviour
                 if (hDist <= 4.0f && vDist <= 6.0f)
                 {
                     flowerOnCube = true;
-                    TutorialUIManager.Instance.SetDynamicGlow("cube", false);
+                    TutorialUIManager.Instance.SetDynamicGlow("pointB", false);
+                    if (cubePlacementTarget != null) cubePlacementTarget.SetActive(false);
                     TutorialUIManager.Instance.MarkTaskComplete(0);
                     StartCoroutine(TransitionToNextStep(TutorialStep.TabletPracticeFinished, true));
                 }
@@ -545,6 +580,51 @@ public class TutorialManager : MonoBehaviour
         string propName = placedObject.name.ToLower();
         if (propName.Contains("cube")) tutorialCube = placedObject;
         else if (propName.Contains("flower") || propName.Contains("floral")) tutorialFlower = placedObject;
+    }
+
+    public void OnPropPickedFromUI(GameObject pickedObject)
+    {
+        if (pickedObject == null || !isTaskPhaseActive) return;
+
+        string propName = pickedObject.name.ToLower();
+
+        if (currentStep == TutorialStep.Tablet_SpawnCube && propName.Contains("cube"))
+        {
+            tutorialCube = pickedObject;
+            cubeSpawned = true;
+            cubeMoved = false;
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+
+            currentStep = TutorialStep.Tablet_MoveCube;
+            TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Cube over the center marker, then click to place it" });
+            TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
+            if (cubePlacementTarget != null) cubePlacementTarget.SetActive(true);
+            return;
+        }
+
+        if (currentStep == TutorialStep.Tablet_SpawnProp && (propName.Contains("flower") || propName.Contains("floral")))
+        {
+            tutorialFlower = pickedObject;
+            propSpawned = true;
+            flowerOnCube = false;
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+
+            currentStep = TutorialStep.Tablet_MovePropToCube;
+            TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Flower over the pink Cube, then click to place it" });
+            TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
+            if (cubePlacementTarget != null) cubePlacementTarget.SetActive(true);
+        }
+    }
+
+    public void RegisterDirectorPropCard(string propName, RectTransform propCard)
+    {
+        if (string.IsNullOrEmpty(propName) || propCard == null) return;
+
+        string lowerName = propName.ToLower();
+        if (lowerName.Contains("cube")) cubePropCardRect = propCard;
+        else if (lowerName.Contains("flower") || lowerName.Contains("floral")) flowerPropCardRect = propCard;
     }
 
     public void PointLineAt(string targetIdentifier)
@@ -568,15 +648,54 @@ public class TutorialManager : MonoBehaviour
             }
         }
 
+        if (targetIdentifier.ToLower() == "sd")
+        {
+            FindTutorialUsedSDCard();
+            if (tutorialUsedSDCard != null)
+            {
+                lineTarget = tutorialUsedSDCard;
+                objectiveLine.enabled = true;
+                return;
+            }
+        }
 
         if (targetIdentifier.ToLower() == "computer")
         {
             ComputerStation comp = FindObjectOfType<ComputerStation>();
-            if (comp != null) { lineTarget = comp.transform; objectiveLine.enabled = true; return; }
+            if (comp != null) { lineTarget = comp.ejectPoint != null ? comp.ejectPoint : comp.transform; objectiveLine.enabled = true; return; }
         }
 
         Debug.LogWarning("Objective Line: Could not find '" + targetIdentifier + "'! Check your spelling or your Inspector list.");
         objectiveLine.enabled = false;
+    }
+
+    private void FindTutorialUsedSDCard()
+    {
+        if (tutorialUsedSDCard != null) return;
+
+        Player.Equipment.SDCardItem[] cards = FindObjectsOfType<Player.Equipment.SDCardItem>();
+        float closestDistance = float.MaxValue;
+
+        foreach (Player.Equipment.SDCardItem card in cards)
+        {
+            if (card == null || !card.isUsedCard) continue;
+
+            float distance = playerTransform != null ? Vector3.Distance(playerTransform.position, card.transform.position) : 0f;
+            if (distance >= closestDistance) continue;
+
+            closestDistance = distance;
+            tutorialUsedSDCard = card.transform;
+            tutorialUsedSDCardGlow = card.GetComponent<TutorialGlowTarget>();
+            if (tutorialUsedSDCardGlow == null) tutorialUsedSDCardGlow = card.GetComponentInChildren<TutorialGlowTarget>();
+        }
+    }
+
+    private void SetUsedSDCardGlow(bool state)
+    {
+        FindTutorialUsedSDCard();
+
+        if (tutorialUsedSDCardGlow != null) TutorialUIManager.Instance.SetDynamicGlow(tutorialUsedSDCardGlow, state);
+        else TutorialUIManager.Instance.SetDynamicGlow("sd", state);
     }
 
     private void LockPlayer()
@@ -608,7 +727,7 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator UnlockPlayerAfterFrame()
     {
-        yield return new WaitUntil(() => !Input.GetKey(KeyCode.Space));
+        yield return new WaitUntil(() => Keyboard.current == null || !Keyboard.current.spaceKey.isPressed);
         yield return null;
 
         Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
@@ -663,24 +782,20 @@ public class TutorialManager : MonoBehaviour
         cg.alpha = 0f;
         cg.gameObject.SetActive(false);
 
-        isTransitioning = false;
-
         currentStep = nextStep;
+        isTransitioning = false;
         UpdateBossDialogue();
-    }
-
-    private IEnumerator AutoAdvanceTimer(float duration, TutorialStep expectedStep)
-    {
-        yield return new WaitForSeconds(duration);
-        if (currentStep == expectedStep && !isTransitioning)
-        {
-            AdvanceDialogue();
-        }
     }
 
     private IEnumerator StartTutorialWithDelay() { yield return new WaitForSeconds(1f); currentStep = TutorialStep.Intro; UpdateBossDialogue(); }
     private IEnumerator StartLevel1RetryWithDelay() { yield return new WaitForSeconds(1f); isLevel1Retry = true; currentStep = TutorialStep.SetTrainingObjectAndMoney; UpdateBossDialogue(); }
-    private IEnumerator StartPostEditTutorial() { yield return new WaitForSeconds(1.5f); currentStep = TutorialStep.PostEditComplete; UpdateBossDialogue(); }
+    private IEnumerator StartPostEditTutorial()
+    {
+        yield return new WaitForSeconds(1.5f);
+        if (AlmanacManager.Instance != null) AlmanacManager.Instance.UnlockLevel1Knowledge();
+        currentStep = TutorialStep.PostEditComplete;
+        UpdateBossDialogue();
+    }
 
     public void ShowWarning(string warningMessage)
     {
@@ -932,7 +1047,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.Tablet_MoveCube:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Drag the cube to the center of the stage" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Cube over the center marker, then click to place it" });
                 TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
 
                 cubeMoved = false;
@@ -954,10 +1069,11 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.Tablet_MovePropToCube:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Drag the flower and place it directly ON TOP of the pink cube" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Flower over the pink Cube, then click to place it" });
                 flowerOnCube = false;
 
-                TutorialUIManager.Instance.SetDynamicGlow("cube", true);
+                TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
+                if (cubePlacementTarget != null) cubePlacementTarget.SetActive(true);
                 break;
 
             case TutorialStep.FreePlayDirectorTablet:
@@ -1092,13 +1208,13 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.PickUpUsedSDCard:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Pick up the ejected SD Card" });
-                TutorialUIManager.Instance.SetDynamicGlow("sd", true);
+                SetUsedSDCardGlow(true);
                 PointLineAt("sd");
                 break;
 
             case TutorialStep.InsertToComputer:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Hold the used SD card", "- Press <color=red>[F]</color> on the computer tower" });
-                TutorialUIManager.Instance.SetDynamicGlow("sd", false);
+                SetUsedSDCardGlow(false);
                 TutorialUIManager.Instance.SetDynamicGlow("computer", true);
                 PointLineAt("computer");
                 break;
@@ -1111,32 +1227,32 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.OpenRecordingsFolder:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click the 'RECORDINGS' folder on the desktop" });
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(compFolderRect);
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(GetComputerHighlightTarget("Folder", compFolderRect));
                 break;
 
             case TutorialStep.ClickVideoClip:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click your raw video file to review it" });
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(compClipCardRect);
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(GetComputerHighlightTarget("VideoClip", compClipCardRect));
                 break;
 
             case TutorialStep.PlayVideoClip:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click Play to review your camera work" });
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(compPlayBtnRect);
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(GetComputerHighlightTarget("Play", compPlayBtnRect));
                 break;
 
             case TutorialStep.ClickBack:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click the 'Close' or 'Back' button to return to the desktop" });
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(compBackBtnRect);
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(GetComputerHighlightTarget("Back", compBackBtnRect));
                 break;
 
             case TutorialStep.ClickEditorApp:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click the 'Editor' Application" });
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(compEditorAppRect);
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(GetComputerHighlightTarget("Editor", compEditorAppRect));
                 break;
 
             case TutorialStep.ClickConfirmEditor:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click 'Confirm' to leave the studio and begin Post-Production" });
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(compConfirmBtnRect);
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(GetComputerHighlightTarget("Confirm", compConfirmBtnRect));
                 break;
         }
     }
@@ -1159,7 +1275,7 @@ public class TutorialManager : MonoBehaviour
         PointLineAt("");
 
         if (cubePlacementTarget != null) cubePlacementTarget.SetActive(false);
-        TutorialUIManager.Instance.SetDynamicGlow("cube", false);
+        TutorialUIManager.Instance.ClearDynamicGlows();
 
         if (stageWalkTriggerCircle != null) stageWalkTriggerCircle.SetActive(false);
         if (cameraWalkTriggerCircle != null) cameraWalkTriggerCircle.SetActive(false);
@@ -1173,8 +1289,17 @@ public class TutorialManager : MonoBehaviour
 
         yield return new WaitForSeconds(.1f);
         currentStep = nextStep;
-        UpdateBossDialogue();
         isTransitioning = false;
+        UpdateBossDialogue();
+    }
+
+    private RectTransform GetComputerHighlightTarget(string targetName, RectTransform fallbackTarget)
+    {
+        ComputerUIManager computerUI = FindObjectOfType<ComputerUIManager>(true);
+        if (computerUI == null) return fallbackTarget;
+
+        RectTransform activeTarget = computerUI.GetTutorialHighlightTarget(targetName);
+        return activeTarget != null ? activeTarget : fallbackTarget;
     }
 
     public void OnFirstContractAccepted()
@@ -1183,7 +1308,6 @@ public class TutorialManager : MonoBehaviour
         {
             PlayerPrefs.SetInt("FlowerContractAccepted", 1);
             PlayerPrefs.Save();
-            if (AlmanacManager.Instance != null) AlmanacManager.Instance.UnlockLevel1Knowledge();
             if (firstContractPanel != null) firstContractPanel.SetActive(false);
             TutorialUIManager.Instance.MarkTaskComplete(0);
             StartCoroutine(TransitionToNextStep(TutorialStep.SetTrainingObjectAndMoney, true));
@@ -1422,7 +1546,7 @@ public class TutorialManager : MonoBehaviour
     {
         if (currentStep == TutorialStep.PickUpUsedSDCard && isTaskPhaseActive)
         {
-            TutorialUIManager.Instance.SetDynamicGlow("sd", false);
+            SetUsedSDCardGlow(false);
             TutorialUIManager.Instance.MarkTaskComplete(0);
             StartCoroutine(TransitionToNextStep(TutorialStep.InsertToComputer, true));
         }
@@ -1468,7 +1592,22 @@ public class TutorialManager : MonoBehaviour
         }
     }
     public void OnSubjectFramed() { if (currentStep == TutorialStep.FrameSubject && isTaskPhaseActive && !subjectFramed) { subjectFramed = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.RecordVideo, true)); } }
-    public void OnRecordingFinished() { if (currentStep == TutorialStep.RecordVideo && isTaskPhaseActive) { TutorialUIManager.Instance.SetDynamicGlow("camera", false); TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PickUpUsedSDCard, true)); } }
+    public void OnRecordingFinished(GameObject usedSDCard = null)
+    {
+        if (usedSDCard != null)
+        {
+            tutorialUsedSDCard = usedSDCard.transform;
+            tutorialUsedSDCardGlow = usedSDCard.GetComponent<TutorialGlowTarget>();
+            if (tutorialUsedSDCardGlow == null) tutorialUsedSDCardGlow = usedSDCard.GetComponentInChildren<TutorialGlowTarget>();
+        }
+
+        if (currentStep == TutorialStep.RecordVideo && isTaskPhaseActive)
+        {
+            TutorialUIManager.Instance.SetDynamicGlow("camera", false);
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            StartCoroutine(TransitionToNextStep(TutorialStep.PickUpUsedSDCard, true));
+        }
+    }
 
     public void OnCardInsertedToComputer() { if (currentStep == TutorialStep.InsertToComputer && isTaskPhaseActive) { TutorialUIManager.Instance.SetDynamicGlow("computer", false); TutorialUIManager.Instance.MarkTaskComplete(0); TutorialUIManager.Instance.MarkTaskComplete(1); StartCoroutine(TransitionToNextStep(TutorialStep.OpenComputer, true)); } }
     public void OnComputerOpened() { if (currentStep == TutorialStep.OpenComputer && isTaskPhaseActive) { TutorialUIManager.Instance.SetDynamicGlow("computer", false); TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.ExplainComputerEditor, true)); } }
@@ -1550,7 +1689,7 @@ public class TutorialManager : MonoBehaviour
                 if (isLevel1Retry)
                     ui.ShowBossDialogue("The first submission missed the client's requirements, but the contract is still active. I restored your working budget up to <color=yellow>10000 B-Coins</color>. Rebuild the set, record a stronger take, and use the grading feedback to fix every mistake.", ui.poseBoss, true, false);
                 else
-                    ui.ShowBossDialogue("Great. Here's your 10000 B-Coins. I've also unlocked the Floral Vase prop and the <color=yellow>Production Almanac</color>. Press <color=red>[P]</color> whenever you need to review your equipment features, controls, or the production techniques you have learned.", ui.poseSmile, true, true);
+                    ui.ShowBossDialogue("Great. Here's your 10000 B-Coins. I've also unlocked the Floral Vase prop for your first commercial. Follow the production steps carefully and finish the contract first.", ui.poseSmile, true, true);
                 break;
 
             case TutorialStep.ShowPreProductionTitle:
@@ -1560,7 +1699,6 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.ExplainPreProduction:
                 ui.ShowBossDialogue("Pre-Production is all about preparation. Before we even touch a camera, we must build the physical set and arrange our props.", ui.poseBoss, true, true);
-                StartCoroutine(AutoAdvanceTimer(3f, TutorialStep.ExplainPreProduction));
                 break;
 
             case TutorialStep.BuildStageWall: ui.ShowBossDialogue("As a Director, you use the Director's Tablet to instantly spawn and paint walls, saving hours of physical labor. Press <color=red>[E]</color> on the tablet to open it.", ui.poseOpenHand, true, false); break;
@@ -1579,7 +1717,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.Tablet_PaintCube: ui.ShowBossDialogue("Now Paint the cube to match the Pink wall. Set <color=red>Red</color> to ~255, <color=green>Green</color> to 0, and <color=blue>Blue</color> to ~150.", ui.posePointUp, true, false); break;
 
             case TutorialStep.Tablet_SpawnProp: ui.ShowBossDialogue("Now click the 'Prop' button to spawn the Floral arrangement.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.Tablet_MovePropToCube: ui.ShowBossDialogue("Proper staging is everything. Pick up the flower and place it directly ON TOP of the pink cube.", ui.poseBoss, true, false); break;
+            case TutorialStep.Tablet_MovePropToCube: ui.ShowBossDialogue("Proper staging is everything. Move the flower over the pink cube, then click to place it directly ON TOP.", ui.poseBoss, true, false); break;
 
             case TutorialStep.TabletPracticeFinished: ui.ShowBossDialogue("Perfect set design. Take your time arranging it. You can move props you've already placed by selecting them and pressing <color=red>[T]</color>. When you are happy with the background, close the tablet so we can move on to the one of the most important part of filming: Lighting.", ui.poseChill, true, true); break;
 
@@ -1606,10 +1744,8 @@ public class TutorialManager : MonoBehaviour
                 else StartCoroutine(TransitionToNextStep(TutorialStep.ExplainProduction, false));
                 break;
 
-            // --- THE FIX: Added the 3-Second AutoAdvanceTimer to Production! ---
             case TutorialStep.ExplainProduction:
                 ui.ShowBossDialogue("Now we enter the Production phase. The stage is set and lit. This is where we break out the camera, frame our shot, and actually record the footage.", ui.poseBoss, true, true);
-                StartCoroutine(AutoAdvanceTimer(3f, TutorialStep.ExplainProduction));
                 break;
 
             case TutorialStep.BuyCamera_WalkToShop: ui.ShowBossDialogue("Go back to the Equipment Shop. We need to buy a Camera to actually record this scene.", ui.poseOpenHand, true, false); break;
@@ -1646,7 +1782,7 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.Complete: ui.ShowBossDialogue("Raw footage submitted! Loading the Editor...", ui.poseEndWave, false, false); break;
 
-            case TutorialStep.PostEditComplete: ui.ShowBossDialogue("Video successfully rendered! You now know the pure basics: Center framing, simple lighting, and 10-second trims.", ui.poseHappy, true, true); break;
+            case TutorialStep.PostEditComplete: ui.ShowBossDialogue("Video successfully rendered! You finished your first commercial and unlocked the <color=yellow>Production Almanac</color>. Press <color=red>[P]</color> whenever you want to review equipment features, controls, and every production technique you have learned.", ui.poseHappy, true, true); break;
 
             case TutorialStep.OfferLevel1: ui.ShowBossDialogue("Your first commercial is complete, and I've got your next challenge ready. Want to hear what's next?", ui.poseHappy, true, true); break;
 
@@ -1695,6 +1831,9 @@ public class TutorialManager : MonoBehaviour
 
         Vector3 spawnPos = playerTransform.position + playerTransform.forward * 1.5f + Vector3.up * 1.5f;
         GameObject fakeCard = Instantiate(sdCardPrefab, spawnPos, Quaternion.identity);
+        tutorialUsedSDCard = fakeCard.transform;
+        tutorialUsedSDCardGlow = fakeCard.GetComponent<TutorialGlowTarget>();
+        if (tutorialUsedSDCardGlow == null) tutorialUsedSDCardGlow = fakeCard.GetComponentInChildren<TutorialGlowTarget>();
 
         Player.Equipment.SDCardItem cardScript = fakeCard.GetComponent<Player.Equipment.SDCardItem>();
         if (cardScript != null)
@@ -1728,7 +1867,7 @@ public class TutorialManager : MonoBehaviour
             currentStep = TutorialStep.PickUpUsedSDCard;
             UpdateBossDialogue();
             TutorialUIManager.Instance.SetDynamicGlow("camera", false);
-            TutorialUIManager.Instance.SetDynamicGlow("sd", true);
+            SetUsedSDCardGlow(true);
             PointLineAt("sd");
         }
     }
@@ -1805,7 +1944,7 @@ public class TutorialManager : MonoBehaviour
             if (currentStep == TutorialStep.Tablet_SelectWall) { ShowWarning("Click the wall to select it before closing!"); return false; }
             if (currentStep == TutorialStep.Tablet_PaintWall) { ShowWarning("Paint the background pink before closing!"); return false; }
             if (currentStep == TutorialStep.Tablet_SpawnCube) { ShowWarning("Spawn the Cube before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_MoveCube) { ShowWarning("Drag the Cube to the center before closing!"); return false; }
+            if (currentStep == TutorialStep.Tablet_MoveCube) { ShowWarning("Place the Cube on the center marker before closing!"); return false; }
             if (currentStep == TutorialStep.Tablet_PaintCube) { ShowWarning("Paint the Cube pink before closing!"); return false; }
             if (currentStep == TutorialStep.Tablet_SpawnProp) { ShowWarning("Spawn the Floral arrangement before closing!"); return false; }
             if (currentStep == TutorialStep.Tablet_MovePropToCube) { ShowWarning("Place the flower ON TOP of the cube before closing!"); return false; }

@@ -19840,7 +19840,7 @@ MonoBehaviour:
   compFolderRect: {fileID: 45679543}
   compClipCardRect: {fileID: 6232967238986215828}
   compPlayBtnRect: {fileID: 890959726}
-  compBackBtnRect: {fileID: 0}
+  compBackBtnRect: {fileID: 1080186905}
   compEditorAppRect: {fileID: 279586718}
   compConfirmBtnRect: {fileID: 1521129951}
   stageWalkTriggerCircle: {fileID: 307014004}

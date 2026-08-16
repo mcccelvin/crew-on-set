@@ -146,6 +146,28 @@ public class ComputerUIManager : MonoBehaviour
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnEditorAppClicked();
     }
 
+    public RectTransform GetTutorialHighlightTarget(string targetName)
+    {
+        if (targetName == "VideoClip" && gridContentContainer != null)
+        {
+            for (int i = 0; i < gridContentContainer.childCount; i++)
+            {
+                RectTransform clipRect = gridContentContainer.GetChild(i) as RectTransform;
+                if (clipRect != null && clipRect.gameObject.activeInHierarchy) return clipRect;
+            }
+        }
+
+        string objectName = targetName == "Folder" ? "FolderLogo" : targetName;
+        RectTransform[] rectTransforms = GetComponentsInChildren<RectTransform>(true);
+
+        foreach (RectTransform rectTransform in rectTransforms)
+        {
+            if (rectTransform.gameObject.activeInHierarchy && rectTransform.gameObject.name == objectName) return rectTransform;
+        }
+
+        return null;
+    }
+
     public void SendToEditor()
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("ConfirmEditor")) return;

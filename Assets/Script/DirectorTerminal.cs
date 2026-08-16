@@ -4,6 +4,7 @@ using Player.PlayerController;
 using TMPro;
 using System.Collections.Generic;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 [System.Serializable]
 public class LevelPropBank
@@ -106,6 +107,10 @@ public class DirectorTerminal : MonoBehaviour
     private void Update()
     {
         if (!isTerminalActive) return;
+        if (PauseManager.isPaused) return;
+
+        Mouse mouse = Mouse.current;
+        Keyboard keyboard = Keyboard.current;
 
         TutorialClampSliders();
 
@@ -113,10 +118,16 @@ public class DirectorTerminal : MonoBehaviour
 
         if (draggedObject != null)
         {
+            if (mouse == null)
+            {
+                UpdateSelectionOutline();
+                return;
+            }
+
             MoveObjectWithMouse();
             UpdateSelectionOutline();
 
-            if (!justGrabbed && (Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0)))
+            if (!justGrabbed && mouse != null && mouse.leftButton.wasPressedThisFrame)
             {
                 if (IsMouseOverViewport()) DropDraggedProp();
             }
@@ -124,18 +135,18 @@ public class DirectorTerminal : MonoBehaviour
             return;
         }
 
-        if (Input.GetMouseButtonDown(0))
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
         {
             if (IsMouseOverViewport()) TrySelect3DObject();
         }
-        else if (Input.GetMouseButtonDown(1))
+        else if (mouse != null && mouse.rightButton.wasPressedThisFrame)
         {
             if (IsMouseOverViewport()) TryDelete3DObject();
         }
 
         bool isWall = IsWallObject(selectedObject);
 
-        if (Input.GetKeyDown(KeyCode.T) && selectedObject != null && !isWall)
+        if (keyboard != null && keyboard.tKey.wasPressedThisFrame && selectedObject != null && !isWall)
         {
             draggedObject = selectedObject;
             draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
@@ -343,19 +354,28 @@ public class DirectorTerminal : MonoBehaviour
     private bool IsMouseOverViewport()
     {
         if (viewportUI == null) return true;
-        return RectTransformUtility.RectangleContainsScreenPoint(viewportUI, Input.mousePosition, null);
+
+        Mouse mouse = Mouse.current;
+        if (mouse == null) return false;
+
+        return RectTransformUtility.RectangleContainsScreenPoint(viewportUI, mouse.position.ReadValue(), null);
     }
 
     private Ray GetMouseRay()
     {
+        Mouse mouse = Mouse.current;
+        if (mouse == null) return new Ray();
+
+        Vector2 mousePosition = mouse.position.ReadValue();
+
         if (viewportUI != null && topDownCamera != null)
         {
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(viewportUI, Input.mousePosition, null, out Vector2 localPoint);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(viewportUI, mousePosition, null, out Vector2 localPoint);
             float normalizedX = (localPoint.x - viewportUI.rect.x) / viewportUI.rect.width;
             float normalizedY = (localPoint.y - viewportUI.rect.y) / viewportUI.rect.height;
             return topDownCamera.ViewportPointToRay(new Vector3(normalizedX, normalizedY, 0));
         }
-        return topDownCamera != null ? topDownCamera.ScreenPointToRay(Input.mousePosition) : new Ray();
+        return topDownCamera != null ? topDownCamera.ScreenPointToRay(mousePosition) : new Ray();
     }
 
     private void TrySelect3DObject()
@@ -434,6 +454,8 @@ public class DirectorTerminal : MonoBehaviour
 
     public void StartDraggingNewProp(GameObject prefab3D)
     {
+        if (draggedObject != null) return;
+
         showPropCostWarningOnDrop = false;
 
         if (TutorialManager.Instance != null)
@@ -511,10 +533,14 @@ public class DirectorTerminal : MonoBehaviour
         if (bSlider != null) bSlider.value = bSlider.maxValue;
 
         UpdatePoseActorButton();
+
+        if (TutorialManager.Instance != null) TutorialManager.Instance.OnPropPickedFromUI(wrapper);
     }
 
     public void StartDraggingStageItem(string itemName, bool isActor, int itemIndex)
     {
+        if (draggedObject != null) return;
+
         showPropCostWarningOnDrop = false;
 
         int itemCost = isActor ? actorHireCost : carSpawnCost;
@@ -559,6 +585,8 @@ public class DirectorTerminal : MonoBehaviour
 
     public void StartDraggingCampaignProduct(string itemName, int campaignLevel)
     {
+        if (draggedObject != null) return;
+
         showPropCostWarningOnDrop = false;
 
         if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(50))
@@ -617,6 +645,11 @@ public class DirectorTerminal : MonoBehaviour
                 TutorialManager.Instance.ShowTimedWarning("Spawned Prop! (-50 B-Coins)", 3f);
             }
         }
+    }
+
+    public bool IsPlacingProp()
+    {
+        return draggedObject != null;
     }
 
     private void MoveObjectWithMouse()
@@ -740,6 +773,11 @@ public class DirectorTerminal : MonoBehaviour
                     UIDragProp dragScript = newUICard.GetComponent<UIDragProp>();
                     if (dragScript == null) dragScript = newUICard.AddComponent<UIDragProp>();
                     dragScript.Setup(allowedPrefab, this);
+
+                    if (TutorialManager.Instance != null)
+                    {
+                        TutorialManager.Instance.RegisterDirectorPropCard(allowedPrefab.name, newUICard.GetComponent<RectTransform>());
+                    }
                 }
             }
         }
@@ -795,6 +833,11 @@ public class DirectorTerminal : MonoBehaviour
         if (selectionOutline != null) selectionOutline.enabled = false;
 
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnTabletClosed();
+    }
+
+    public bool IsTerminalActive()
+    {
+        return isTerminalActive;
     }
 
     private bool IsWallObject(GameObject targetObject)
@@ -1038,7 +1081,7 @@ public class CubeActor : MonoBehaviour
     }
 }
 
-public class UIDragStageItem : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
+public class UIDragStageItem : MonoBehaviour, IPointerClickHandler
 {
     private string itemName;
     private bool isActor;
@@ -1056,22 +1099,13 @@ public class UIDragStageItem : MonoBehaviour, IPointerDownHandler, IPointerUpHan
         if (label != null) label.text = displayName;
     }
 
-    public void OnPointerDown(PointerEventData eventData)
+    public void OnPointerClick(PointerEventData eventData)
     {
         if (terminal != null) terminal.StartDraggingStageItem(itemName, isActor, itemIndex);
     }
-
-    public void OnDrag(PointerEventData eventData)
-    {
-    }
-
-    public void OnPointerUp(PointerEventData eventData)
-    {
-        if (terminal != null) terminal.DropDraggedProp();
-    }
 }
 
-public class UIDragCampaignProduct : MonoBehaviour, IPointerDownHandler, IPointerUpHandler, IDragHandler
+public class UIDragCampaignProduct : MonoBehaviour, IPointerClickHandler
 {
     private string itemName;
     private int campaignLevel;
@@ -1087,17 +1121,8 @@ public class UIDragCampaignProduct : MonoBehaviour, IPointerDownHandler, IPointe
         if (label != null) label.text = displayName;
     }
 
-    public void OnPointerDown(PointerEventData eventData)
+    public void OnPointerClick(PointerEventData eventData)
     {
         if (terminal != null) terminal.StartDraggingCampaignProduct(itemName, campaignLevel);
-    }
-
-    public void OnDrag(PointerEventData eventData)
-    {
-    }
-
-    public void OnPointerUp(PointerEventData eventData)
-    {
-        if (terminal != null) terminal.DropDraggedProp();
     }
 }

@@ -279,7 +279,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("New equipment is only part of Level 3. From now on, some contracts will also require an <color=yellow>Actor</color>. Open the Director Terminal and drag one of the actor cards onto the stage, just like a prop. Select the actor afterward and use the <color=yellow>POSE ACTOR</color> button to change the performance pose. There is also a temporary car model available for larger productions.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("New equipment is only part of Level 3. From now on, some contracts will also require an <color=yellow>Actor</color>. Open the Director Terminal and click an actor card to attach it to your cursor, then click the stage to place it. Select the actor afterward and use the <color=yellow>POSE ACTOR</color> button to change the performance pose. There is also a temporary car model available for larger productions.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 

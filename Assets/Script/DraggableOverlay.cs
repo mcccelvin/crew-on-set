@@ -180,7 +180,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 {
                     droppedOnTrack = true;
                     targetTrack = track;
-                    RectTransformUtility.ScreenPointToLocalPointInRectangle(track.GetComponent<RectTransform>(), Input.mousePosition, eventData.pressEventCamera, out Vector2 localPoint);
+                    RectTransformUtility.ScreenPointToLocalPointInRectangle(track.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out Vector2 localPoint);
                     spawnX = Mathf.Max(0, localPoint.x);
                     break;
                 }
@@ -228,7 +228,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
                 if (droppedOnTV)
                 {
-                    RectTransformUtility.ScreenPointToLocalPointInRectangle(tvPlayer.computerScreen.GetComponent<RectTransform>(), Input.mousePosition, eventData.pressEventCamera, out Vector2 tvLocal);
+                    RectTransformUtility.ScreenPointToLocalPointInRectangle(tvPlayer.computerScreen.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out Vector2 tvLocal);
                     rectTransform.anchoredPosition = tvLocal;
 
                     ClampToParent();

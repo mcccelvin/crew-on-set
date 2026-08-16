@@ -1,5 +1,6 @@
 using UnityEngine;
 using Photon.Pun;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
 public class SimpleMultiplayerPlayer : MonoBehaviourPun
@@ -45,8 +46,10 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
         if (!photonView.IsMine) return;
 
         // --- 1. LOOK AROUND (MOUSE) ---
-        float mouseX = Input.GetAxis("Mouse X") * lookSensitivity;
-        float mouseY = Input.GetAxis("Mouse Y") * lookSensitivity;
+        Mouse mouse = Mouse.current;
+        Vector2 mouseDelta = mouse != null ? mouse.delta.ReadValue() * 0.1f : Vector2.zero;
+        float mouseX = mouseDelta.x * lookSensitivity;
+        float mouseY = mouseDelta.y * lookSensitivity;
 
         // Turn body left/right
         transform.Rotate(Vector3.up * mouseX);
@@ -61,10 +64,18 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
         }
 
         // --- 2. WALK (WASD) ---
-        float moveX = Input.GetAxis("Horizontal");
-        float moveZ = Input.GetAxis("Vertical");
+        Keyboard keyboard = Keyboard.current;
+        Vector2 moveInput = Vector2.zero;
 
-        Vector3 move = transform.right * moveX + transform.forward * moveZ;
+        if (keyboard != null)
+        {
+            if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) moveInput.x -= 1f;
+            if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) moveInput.x += 1f;
+            if (keyboard.sKey.isPressed || keyboard.downArrowKey.isPressed) moveInput.y -= 1f;
+            if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) moveInput.y += 1f;
+        }
+
+        Vector3 move = transform.right * moveInput.x + transform.forward * moveInput.y;
         cc.Move(move * walkSpeed * Time.deltaTime);
 
         // --- 3. GRAVITY ---

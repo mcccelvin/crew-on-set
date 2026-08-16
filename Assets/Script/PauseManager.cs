@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.InputSystem;
 
 public class PauseManager : MonoBehaviour
 {
@@ -8,16 +9,32 @@ public class PauseManager : MonoBehaviour
     [Header("UI References")]
     public GameObject pauseMenuCanvas; // The main Panel holding your design
 
+    private Player.Manager.InputManager inputManager;
+    private Player.PlayerController.PlayerController playerController;
+    private bool playerWasEnabled = true;
+    private bool playerCouldMove = true;
+    private bool playerCouldLook = true;
+    private CursorLockMode previousCursorLockState = CursorLockMode.Locked;
+    private bool previousCursorVisible = false;
+
     // --- FIX: Reset the static variable when the scene loads ---
     void Start()
     {
         isPaused = false;
         Time.timeScale = 1f;
+        inputManager = FindObjectOfType<Player.Manager.InputManager>();
     }
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
+
+        Keyboard keyboard = Keyboard.current;
+        bool pausePressed = inputManager != null ?
+                            inputManager.ConsumePause() :
+                            keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+
+        if (pausePressed)
         {
             Debug.Log("Escape Pressed!");
             if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen())
@@ -41,21 +58,23 @@ public class PauseManager : MonoBehaviour
     }
     public void Resume()
     {
-        pauseMenuCanvas.SetActive(false);
+        if (pauseMenuCanvas != null) pauseMenuCanvas.SetActive(false);
         Time.timeScale = 1f; // Resumes game physics/animations
         isPaused = false;
 
-        // Re-lock the cursor for gameplay
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+        Cursor.lockState = previousCursorLockState;
+        Cursor.visible = previousCursorVisible;
 
-        // Re-enable player controls if needed
-        EnablePlayerControls(true);
+        RestorePlayerControls();
     }
 
     void Pause()
     {
-        pauseMenuCanvas.SetActive(true);
+        previousCursorLockState = Cursor.lockState;
+        previousCursorVisible = Cursor.visible;
+        CapturePlayerControls();
+
+        if (pauseMenuCanvas != null) pauseMenuCanvas.SetActive(true);
         Time.timeScale = 0f; 
         isPaused = true;
 
@@ -63,14 +82,26 @@ public class PauseManager : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        EnablePlayerControls(false);
+        if (playerController != null) playerController.enabled = false;
     }
 
-
-
-    void EnablePlayerControls(bool state)
+    void CapturePlayerControls()
     {
-        Player.PlayerController.PlayerController player = FindObjectOfType<Player.PlayerController.PlayerController>();
-        if (player != null) player.enabled = state;
+        playerController = FindObjectOfType<Player.PlayerController.PlayerController>();
+        if (playerController == null) return;
+
+        playerWasEnabled = playerController.enabled;
+        playerCouldMove = playerController.canMove;
+        playerCouldLook = playerController.canLook;
+    }
+
+    void RestorePlayerControls()
+    {
+        if (playerController == null) return;
+
+        playerController.canMove = playerCouldMove;
+        playerController.canLook = playerCouldLook;
+        playerController.enabled = playerWasEnabled;
+        playerController = null;
     }
 }

@@ -22,6 +22,12 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     private int selectedClipIndex = 0;
     private EquipmentInteractor currentInteractor;
+    private Player.PlayerController.PlayerController playerController;
+    private bool playerCouldMove = true;
+    private bool playerCouldLook = true;
+    private bool hasPlayerStateSnapshot = false;
+    private CursorLockMode previousCursorLockState = CursorLockMode.Locked;
+    private bool previousCursorVisible = false;
 
     private void Start() { if (computerUICanvas != null) computerUICanvas.SetActive(false); }
 
@@ -69,6 +75,23 @@ public class ComputerStation : MonoBehaviour, IInteractable
     public void OpenComputerUI(EquipmentInteractor interactor)
     {
         currentInteractor = interactor;
+
+        if (!hasPlayerStateSnapshot)
+        {
+            playerController = interactor != null ? interactor.GetComponent<Player.PlayerController.PlayerController>() : null;
+            if (playerController != null)
+            {
+                playerCouldMove = playerController.canMove;
+                playerCouldLook = playerController.canLook;
+                playerController.canMove = false;
+                playerController.canLook = false;
+            }
+
+            previousCursorLockState = Cursor.lockState;
+            previousCursorVisible = Cursor.visible;
+            hasPlayerStateSnapshot = true;
+        }
+
         if (computerUICanvas != null) computerUICanvas.SetActive(true);
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -82,9 +105,24 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (player != null) player.StopTape();
 
         if (computerUICanvas != null) computerUICanvas.SetActive(false);
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
+
+        if (hasPlayerStateSnapshot)
+        {
+            Cursor.lockState = previousCursorLockState;
+            Cursor.visible = previousCursorVisible;
+
+            if (playerController != null)
+            {
+                playerController.canMove = playerCouldMove;
+                playerController.canLook = playerCouldLook;
+            }
+
+            playerController = null;
+            hasPlayerStateSnapshot = false;
+        }
+
         if (currentInteractor != null) currentInteractor.ClearActiveComputer();
+        currentInteractor = null;
     }
 
     private void UpdateUI()

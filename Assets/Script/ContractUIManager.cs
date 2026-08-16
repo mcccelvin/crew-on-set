@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.InputSystem;
 
 public class ContractUIManager : MonoBehaviour
 {
@@ -18,6 +19,7 @@ public class ContractUIManager : MonoBehaviour
     private Action acceptContractAction;
     private bool qualificationsUnlocked = false;
     private bool isQualificationsOpen = false;
+    private Player.Manager.InputManager inputManager;
     private Player.PlayerController.PlayerController playerController;
     private bool playerCouldMove = true;
     private bool playerCouldLook = true;
@@ -49,7 +51,14 @@ public class ContractUIManager : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Tab) && CanToggleQualifications())
+        if (PauseManager.isPaused) return;
+        if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
+
+        Keyboard keyboard = Keyboard.current;
+        bool contextPanelPressed = (inputManager != null && inputManager.ContextPanel) ||
+                                   (keyboard != null && keyboard.tabKey.wasPressedThisFrame);
+
+        if (contextPanelPressed && CanToggleQualifications())
         {
             ToggleQualifications();
         }
@@ -130,6 +139,11 @@ public class ContractUIManager : MonoBehaviour
     public bool IsQualificationsOpen()
     {
         return isQualificationsOpen;
+    }
+
+    public bool IsContractUIOpen()
+    {
+        return contractCanvas != null && contractCanvas.activeSelf;
     }
 
     private void AcceptContract()

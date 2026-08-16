@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using UnityEngine.InputSystem;
 
 public class CareerManager : MonoBehaviour
 {
@@ -99,10 +100,13 @@ public class CareerManager : MonoBehaviour
 
     private void Update()
     {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null) return;
+
         // --- SECRET DEVELOPER CHEAT CODES ---
 
         // Press F10 to instantly add 1000 B-Coins
-        if (Input.GetKeyDown(KeyCode.F10))
+        if (keyboard.f10Key.wasPressedThisFrame)
         {
             AddMoney(1000);
 
@@ -110,7 +114,7 @@ public class CareerManager : MonoBehaviour
         }
 
         // Press F12 to wipe all save data and reset money to 0!
-        if (Input.GetKeyDown(KeyCode.F12))
+        if (keyboard.f12Key.wasPressedThisFrame)
         {
             Debug.Log("<color=red>DEV COMMAND: WIPING ALL SAVE DATA!</color>");
 

@@ -2,6 +2,7 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.InputSystem;
 
 public class EditorTutorialManager : MonoBehaviour
 {
@@ -89,6 +90,8 @@ public class EditorTutorialManager : MonoBehaviour
 
     private void Update()
     {
+        Keyboard keyboard = Keyboard.current;
+
         if (spacePromptText != null)
         {
             bool canShowPrompt = (!isTaskPhaseActive || isWarningActive) && !isTransitioning && (Time.time >= spacebarCooldown) &&
@@ -96,7 +99,7 @@ public class EditorTutorialManager : MonoBehaviour
             spacePromptText.gameObject.SetActive(canShowPrompt);
         }
 
-        if (Input.GetKeyDown(KeyCode.Space) && !isTransitioning)
+        if (keyboard != null && keyboard.spaceKey.wasPressedThisFrame && !isTransitioning)
         {
             if (Time.time >= spacebarCooldown)
             {
@@ -118,7 +121,7 @@ public class EditorTutorialManager : MonoBehaviour
                 }
             }
         }
-        if (Input.GetKeyDown(KeyCode.F8))
+        if (keyboard != null && keyboard.f8Key.wasPressedThisFrame)
         {
             CheatCompleteCurrentStep();
         }

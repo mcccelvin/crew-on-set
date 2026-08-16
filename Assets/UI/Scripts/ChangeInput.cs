@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 public class ChangeInput : MonoBehaviour
 {
@@ -15,32 +16,54 @@ public class ChangeInput : MonoBehaviour
     {
 
         system = EventSystem.current;
-        firstInput.Select();
+        if (firstInput != null) firstInput.Select();
     }
 
     // Update is called once per frame
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Tab) && Input.GetKey(KeyCode.LeftShift))
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null) return;
+
+        if (system == null) system = EventSystem.current;
+
+        if (keyboard.tabKey.wasPressedThisFrame && keyboard.leftShiftKey.isPressed)
         {
-            Selectable previous = system.currentSelectedGameObject.GetComponent<Selectable>().FindSelectableOnUp();
+            Selectable current = system != null && system.currentSelectedGameObject != null ?
+                                 system.currentSelectedGameObject.GetComponent<Selectable>() : null;
+            if (current == null)
+            {
+                if (firstInput != null) firstInput.Select();
+                return;
+            }
+
+            Selectable previous = current.FindSelectableOnUp();
             if (previous != null)
             {
                 previous.Select();
             }
         }
-        else if (Input.GetKeyDown(KeyCode.Tab))
+        else if (keyboard.tabKey.wasPressedThisFrame)
         {
-            Selectable next = system.currentSelectedGameObject.GetComponent<Selectable>().FindSelectableOnDown();
+            Selectable current = system != null && system.currentSelectedGameObject != null ?
+                                 system.currentSelectedGameObject.GetComponent<Selectable>() : null;
+            if (current == null)
+            {
+                if (firstInput != null) firstInput.Select();
+                return;
+            }
+
+            Selectable next = current.FindSelectableOnDown();
             if (next != null)
             {
                 next.Select();
             }
         }
-        else if (Input.GetKeyDown(KeyCode.Return))
+        else if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
         {
-            submitButton.onClick.Invoke();
-            Debug.Log("Button Pressed");
+            Button selectedButton = system != null && system.currentSelectedGameObject != null ?
+                                    system.currentSelectedGameObject.GetComponent<Button>() : null;
+            if (selectedButton == null && submitButton != null) submitButton.onClick.Invoke();
         }
     }
 }
