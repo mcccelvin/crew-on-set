@@ -342,6 +342,7 @@ public class AlmanacManager : MonoBehaviour
     private GameObject techniqueGuidePanel;
     private AlmanacGuidePlayer ruleOfThirdsGuidePlayer;
     private int knowledgeCategoryFilter = 0;
+    private HashSet<string> stagedHiddenKnowledge = new HashSet<string>();
     private Player.Manager.InputManager inputManager;
     private Player.PlayerController.PlayerController playerController;
     private bool playerCouldMove = true;
@@ -550,6 +551,21 @@ public class AlmanacManager : MonoBehaviour
         UnlockLevel1Knowledge();
     }
 
+    public void PrepareLevelIntroduction(int level)
+    {
+        int introductionLevel = Mathf.Clamp(level, CampaignProgression.MinimumLevel, CampaignProgression.MaximumLevel);
+        EnsureEquipmentAndTechniqueEntries();
+        RemoveLegacyKnowledgeEntries();
+        stagedHiddenKnowledge.Clear();
+
+        foreach (KnowledgeEntry entry in database)
+        {
+            if (entry.level >= introductionLevel) stagedHiddenKnowledge.Add(entry.id);
+        }
+
+        if (isAlmanacOpen) RefreshKnowledgeUI();
+    }
+
     public void UnlockLevel1Knowledge()
     {
         PlayerPrefs.SetInt("AlmanacUnlocked", 1);
@@ -631,26 +647,40 @@ public class AlmanacManager : MonoBehaviour
             UnlockLevel1Knowledge();
         }
 
-        if (PlayerPrefs.GetInt("GokeContractAccepted", 0) == 1 || PlayerPrefs.GetInt("GokeContractGraded", 0) == 1 || PlayerPrefs.GetInt("Knowledge_rule_of_thirds", 0) == 1)
+        if (!HasStagedKnowledgeForLevel(2) &&
+            (PlayerPrefs.GetInt("GokeContractAccepted", 0) == 1 || PlayerPrefs.GetInt("GokeContractGraded", 0) == 1 || PlayerPrefs.GetInt("Knowledge_rule_of_thirds", 0) == 1))
         {
             UnlockKnowledge("level_2_camera");
             UnlockProductionTechniques();
         }
 
-        if (PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 1 || PlayerPrefs.GetInt("LamborminiContractGraded", 0) == 1 || PlayerPrefs.GetInt("Knowledge_level_3_soft_light", 0) == 1)
+        if (!HasStagedKnowledgeForLevel(3) &&
+            (PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 1 || PlayerPrefs.GetInt("LamborminiContractGraded", 0) == 1 || PlayerPrefs.GetInt("Knowledge_level_3_soft_light", 0) == 1))
         {
             UnlockLevel3Equipment();
         }
 
-        if (PlayerPrefs.GetInt("KapeKulturaContractAccepted", 0) == 1 || PlayerPrefs.GetInt("KapeKulturaContractGraded", 0) == 1 || PlayerPrefs.GetInt("Knowledge_shot_coverage", 0) == 1)
+        if (!HasStagedKnowledgeForLevel(4) &&
+            (PlayerPrefs.GetInt("KapeKulturaContractAccepted", 0) == 1 || PlayerPrefs.GetInt("KapeKulturaContractGraded", 0) == 1 || PlayerPrefs.GetInt("Knowledge_shot_coverage", 0) == 1))
         {
             UnlockLevel4Knowledge();
         }
 
-        if (PlayerPrefs.GetInt("HarayaContractAccepted", 0) == 1 || PlayerPrefs.GetInt("HarayaContractGraded", 0) == 1 || PlayerPrefs.GetInt("CampaignCompleted", 0) == 1 || PlayerPrefs.GetInt("Knowledge_creative_brief", 0) == 1)
+        if (!HasStagedKnowledgeForLevel(5) &&
+            (PlayerPrefs.GetInt("HarayaContractAccepted", 0) == 1 || PlayerPrefs.GetInt("HarayaContractGraded", 0) == 1 || PlayerPrefs.GetInt("CampaignCompleted", 0) == 1 || PlayerPrefs.GetInt("Knowledge_creative_brief", 0) == 1))
         {
             UnlockLevel5Knowledge();
         }
+    }
+
+    private bool HasStagedKnowledgeForLevel(int level)
+    {
+        foreach (KnowledgeEntry entry in database)
+        {
+            if (entry.level == level && stagedHiddenKnowledge.Contains(entry.id)) return true;
+        }
+
+        return false;
     }
 
     private void CaptureInputState()
@@ -885,15 +915,21 @@ public class AlmanacManager : MonoBehaviour
 
     public void UnlockKnowledge(string id)
     {
+        bool wasStagedKnowledge = stagedHiddenKnowledge.Remove(id);
+
         foreach (var entry in database)
         {
-            if (entry.id == id && !entry.isUnlocked)
+            if (entry.id != id) continue;
+
+            if (!entry.isUnlocked)
             {
                 entry.isUnlocked = true;
                 Debug.Log($"<color=cyan>Knowledge Unlocked: {entry.title}</color>");
                 SaveAlmanacData();
-                return;
             }
+
+            if (wasStagedKnowledge && isAlmanacOpen) RefreshKnowledgeUI();
+            return;
         }
     }
 
@@ -918,7 +954,7 @@ public class AlmanacManager : MonoBehaviour
 
     private void RefreshAllUI()
     {
-        if (playerNameText != null) playerNameText.text = "Director: " + PlayerPrefs.GetString("PlayerName", "Guest");
+        if (playerNameText != null) playerNameText.text = "Director: Guest";
 
         if (CareerManager.Instance != null && playerMoneyText != null)
             playerMoneyText.text = "Bank: " + CareerManager.Instance.playerMoney + " B-Coins";
@@ -953,6 +989,7 @@ public class AlmanacManager : MonoBehaviour
         foreach (var entry in database)
         {
             if (!entry.isUnlocked) continue;
+            if (stagedHiddenKnowledge.Contains(entry.id)) continue;
             if (knowledgeCategoryFilter == 1 && entry.category != "Equipment") continue;
             if (knowledgeCategoryFilter == 2 && entry.category != "Technique") continue;
 
@@ -1162,7 +1199,7 @@ public class AlmanacManager : MonoBehaviour
         playerInfoPanel = CreatePanel("Director Panel", parent, new Color(0f, 0f, 0f, 0f));
         SetStretchRect(playerInfoPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
-        TextMeshProUGUI sectionTitle = CreateText("Section Title", playerInfoPanel.transform, "DIRECTOR PROFILE", 38, TextAlignmentOptions.Left);
+        TextMeshProUGUI sectionTitle = CreateText("Section Title", playerInfoPanel.transform, "GUEST PROFILE", 38, TextAlignmentOptions.Left);
         SetStretchRect(sectionTitle.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(20f, -70f), new Vector2(-40f, -10f));
         sectionTitle.fontStyle = FontStyles.Bold;
 

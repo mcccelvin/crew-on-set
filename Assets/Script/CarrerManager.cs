@@ -105,6 +105,14 @@ public class CareerManager : MonoBehaviour
 
         // --- SECRET DEVELOPER CHEAT CODES ---
 
+        bool capsLockHeld = keyboard.capsLockKey.isPressed;
+        if (capsLockHeld)
+        {
+            if (keyboard.digit1Key.wasPressedThisFrame) { SwitchLevelCheat(1); return; }
+            if (keyboard.digit2Key.wasPressedThisFrame) { SwitchLevelCheat(2); return; }
+            if (keyboard.digit3Key.wasPressedThisFrame) { SwitchLevelCheat(3); return; }
+        }
+
         // Press F10 to instantly add 1000 B-Coins
         if (keyboard.f10Key.wasPressedThisFrame)
         {
@@ -132,6 +140,34 @@ public class CareerManager : MonoBehaviour
             // 3. (Optional) Reload the scene to start fresh instantly
             UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
         }
+    }
+
+    private void SwitchLevelCheat(int targetLevel)
+    {
+        CampaignProgression.SetCheatLevel(targetLevel);
+
+        int minimumMoney = targetLevel == 1 ? 10000 : 20000;
+        int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
+        if (savedMoney < minimumMoney) PlayerPrefs.SetInt("PlayerMoney", minimumMoney);
+
+        playerMoney = PlayerPrefs.GetInt("PlayerMoney", minimumMoney);
+        currentActiveJob = "None";
+        UpdateMoneyUI();
+
+        if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
+
+        CrossSceneData.finalGrades = new ProductionGrades();
+        CrossSceneData.submittedLevel = 0;
+        CrossSceneData.resultApplied = false;
+
+        PauseManager.isPaused = false;
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        PlayerPrefs.Save();
+        Debug.Log("<color=yellow>DEV LEVEL CHEAT: Loading Level " + targetLevel + "</color>");
+        UnityEngine.SceneManagement.SceneManager.LoadScene("SingleStudio");
     }
 
     private void OnDestroy()

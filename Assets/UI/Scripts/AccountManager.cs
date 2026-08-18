@@ -54,6 +54,15 @@ public class AccountManager : MonoBehaviour
     [SerializeField] TMP_InputField loginEmail;
     [SerializeField] TMP_InputField loginPassword;
 
+    private void Start()
+    {
+        if (username == null) return;
+
+        PlayerPrefs.SetString("PlayerName", "Guest");
+        PlayerPrefs.Save();
+        username.text = "Guest Profile";
+    }
+
     public void OnLoginPressed()
     {
         Login(loginEmail.text, loginPassword.text); 

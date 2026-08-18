@@ -70,7 +70,13 @@ public class CampaignLevelManager : MonoBehaviour
             return;
         }
 
-        if (PlayerPrefs.GetInt(CampaignProgression.GetAcceptedKey(activeLevel), 0) == 1)
+        bool contractAlreadyAccepted = PlayerPrefs.GetInt(CampaignProgression.GetAcceptedKey(activeLevel), 0) == 1;
+        if (AlmanacManager.Instance != null && !contractAlreadyAccepted)
+        {
+            AlmanacManager.Instance.PrepareLevelIntroduction(activeLevel);
+        }
+
+        if (contractAlreadyAccepted)
         {
             if (CareerManager.Instance != null)
             {
@@ -452,30 +458,7 @@ public class CampaignLevelManager : MonoBehaviour
     {
         if (TutorialUIManager.Instance == null) return;
 
-        if (activeLevel == 4)
-        {
-            TutorialUIManager.Instance.SetupTasks(new string[]
-            {
-                "- KAPE KULTURA CONTRACT",
-                "- Build a warm brown set",
-                "- Place exactly 1 product and 1 posed actor",
-                "- Record Wide, Medium, and Close-Up with the actor on the same side",
-                "- Use the Level 3 Soft Light in every clip",
-                "- Edit 15 seconds with 2 graphics and a warm grade"
-            });
-        }
-        else
-        {
-            TutorialUIManager.Instance.SetupTasks(new string[]
-            {
-                "- HARAYA FINAL CAMPAIGN",
-                "- Build a teal set with exactly 1 product, 1 actor, and 1 vehicle",
-                "- Record at least 4 shots using 3 shot sizes",
-                "- Aim distinct Key, Fill, and Back Light roles",
-                "- Edit 20 seconds with 3 graphics and a polished grade",
-                "- Press <color=red>[TAB]</color> to review qualifications"
-            });
-        }
+        TutorialUIManager.Instance.HideTasks();
     }
 
     private void UnlockCampaignKnowledge()

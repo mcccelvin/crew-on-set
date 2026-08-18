@@ -54,7 +54,15 @@ public class Level3Manager : MonoBehaviour
         SetupLevel3Equipment();
         SetupContractUI();
 
-        if (PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 1)
+        bool restartLevelIntroduction = CampaignProgression.ConsumeCheatIntroduction(3);
+        bool contractAlreadyAccepted = PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 1;
+
+        if (AlmanacManager.Instance != null && (!contractAlreadyAccepted || restartLevelIntroduction))
+        {
+            AlmanacManager.Instance.PrepareLevelIntroduction(3);
+        }
+
+        if (contractAlreadyAccepted && !restartLevelIntroduction)
         {
             if (CareerManager.Instance != null) CareerManager.Instance.currentActiveJob = "Lambormini";
             if (contractUIManager != null) contractUIManager.UnlockQualifications();
@@ -377,14 +385,6 @@ public class Level3Manager : MonoBehaviour
     private void ShowLevelTasks()
     {
         if (TutorialUIManager.Instance == null) return;
-
-        TutorialUIManager.Instance.SetupTasks(new string[]
-        {
-            "- LAMBORMINI CONTRACT",
-            "- Get the Level 3 Soft Light",
-            "- Add the Lambormini car from the Director Terminal",
-            "- Hire and pose one actor beside the car",
-            "- Frame the actor and car for the commercial"
-        });
+        TutorialUIManager.Instance.HideTasks();
     }
 }

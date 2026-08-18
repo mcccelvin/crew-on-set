@@ -1456,7 +1456,7 @@ public class TutorialManager : MonoBehaviour
     {
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
-            GokeLevelManager.Instance.OnEquipmentBought();
+            GokeLevelManager.Instance.OnEquipmentBought(itemsCount);
             return;
         }
 
@@ -1474,12 +1474,54 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnLightPickedUp() { if (currentStep == TutorialStep.PickUpLight && isTaskPhaseActive) { TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.WalkToStageWithLight, true)); } }
-
-    public void OnLightTurnedOn() { if (currentStep == TutorialStep.TurnOnLight && isTaskPhaseActive) { TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PracticeLight_Intensity, true)); } }
-
-    public void OnLightIntensityChanged(float intensity)
+    public void OnLightPickedUp(Player.Equipment.FilmLightItem light = null)
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnLightPickedUp(light);
+            return;
+        }
+
+        if (currentStep == TutorialStep.PickUpLight && isTaskPhaseActive)
+        {
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            StartCoroutine(TransitionToNextStep(TutorialStep.WalkToStageWithLight, true));
+        }
+    }
+
+    public bool CanPickUpLight(Player.Equipment.FilmLightItem light)
+    {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            return GokeLevelManager.Instance.CanPickUpLight(light);
+        }
+
+        return true;
+    }
+
+    public void OnLightTurnedOn(Player.Equipment.FilmLightItem light = null)
+    {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnLightTurnedOn(light);
+            return;
+        }
+
+        if (currentStep == TutorialStep.TurnOnLight && isTaskPhaseActive)
+        {
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            StartCoroutine(TransitionToNextStep(TutorialStep.PracticeLight_Intensity, true));
+        }
+    }
+
+    public void OnLightIntensityChanged(float intensity, Player.Equipment.FilmLightItem light = null)
+    {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnLightIntensityChanged(light, intensity);
+            return;
+        }
+
         if (currentStep == TutorialStep.AdjustLight_Intensity && isTaskPhaseActive)
         {
             if (Mathf.RoundToInt(intensity) == 45)
@@ -1502,8 +1544,14 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnLightDropped()
+    public void OnLightDropped(Player.Equipment.FilmLightItem light = null)
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+        {
+            GokeLevelManager.Instance.OnLightDropped(light);
+            return;
+        }
+
         if (currentStep == TutorialStep.DropLight && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);

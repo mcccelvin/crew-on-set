@@ -107,7 +107,7 @@ namespace Player.Equipment
 
             if (isLightOn && TutorialManager.Instance != null)
             {
-                TutorialManager.Instance.OnLightTurnedOn();
+                TutorialManager.Instance.OnLightTurnedOn(this);
             }
 
             UpdateLightUI();
@@ -139,6 +139,19 @@ namespace Player.Equipment
             return maxLux * (intensityPercent / 100f);
         }
 
+        public void AimAt(Vector3 targetPosition)
+        {
+            if (spotlight == null) return;
+
+            Vector3 targetDirection = targetPosition - spotlight.transform.position;
+            if (targetDirection.sqrMagnitude <= 0.001f) return;
+
+            spotlight.transform.rotation = Quaternion.LookRotation(targetDirection.normalized, Vector3.up);
+            startAngles = spotlight.transform.localEulerAngles;
+            currentTilt = 0f;
+            UpdateLightUI();
+        }
+
         private void TiltLight(float amount)
         {
             if (spotlight == null) return;
@@ -164,7 +177,7 @@ namespace Player.Equipment
             UpdateLightUI(); // Update the UI text & slider!
 
             // --- THE FIX: Send the intensity percentage! ---
-            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightIntensityChanged(intensityPercent);
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnLightIntensityChanged(intensityPercent, this);
         }
 
         private void UpdateLightOutput()

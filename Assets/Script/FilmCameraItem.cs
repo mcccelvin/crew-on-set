@@ -29,6 +29,8 @@ namespace Player.Equipment
         private Vector3[] trackingCorners = new Vector3[8];
         private RaycastHit[] trackingHits = new RaycastHit[16];
         private GameObject ruleOfThirdsGrid;
+        private Image[] ruleOfThirdsIntersections = new Image[4];
+        private TMP_Text ruleOfThirdsInstructionText;
         private bool isLevel2Camera = false;
 
         [Header("--- LENS BLUR (DEPTH OF FIELD) ---")]
@@ -128,7 +130,27 @@ namespace Player.Equipment
             if (trackingSquare != null) trackingSquareImage = trackingSquare.GetComponent<Image>();
             CacheTargetSubject();
             isLevel2Camera = EquipmentName == "Level 2 Camera";
-            if (isLevel2Camera) CreateRuleOfThirdsGrid();
+            if (isLevel2Camera)
+            {
+                ConfigureLevel2Camera();
+                CreateRuleOfThirdsGrid();
+            }
+        }
+
+        private void ConfigureLevel2Camera()
+        {
+            minFOV = 28f;
+            maxFOV = 55f;
+            zoomSpeed = 2f;
+            pedestalSpeed = 0.35f;
+            maxPedestalUp = 0.75f;
+            maxPedestalDown = -0.75f;
+            focusBoxRadius = 0.4f;
+            focusSmoothTime = 0.15f;
+            swayIntensity = 0.12f;
+            swaySpeed = 0.35f;
+
+            if (filmCamera != null) filmCamera.fieldOfView = 42f;
         }
 
         protected override void Awake()
@@ -168,6 +190,13 @@ namespace Player.Equipment
             CreateGridLine("Right Third", ruleOfThirdsGrid.transform, new Vector2(0.666f, 0f), new Vector2(0.666f, 1f), new Vector2(2f, 0f));
             CreateGridLine("Top Third", ruleOfThirdsGrid.transform, new Vector2(0f, 0.666f), new Vector2(1f, 0.666f), new Vector2(0f, 2f));
             CreateGridLine("Bottom Third", ruleOfThirdsGrid.transform, new Vector2(0f, 0.333f), new Vector2(1f, 0.333f), new Vector2(0f, 2f));
+            ruleOfThirdsIntersections[0] = CreateGridIntersection("Lower Left Power Point", ruleOfThirdsGrid.transform, new Vector2(0.333f, 0.333f));
+            ruleOfThirdsIntersections[1] = CreateGridIntersection("Upper Left Power Point", ruleOfThirdsGrid.transform, new Vector2(0.333f, 0.666f));
+            ruleOfThirdsIntersections[2] = CreateGridIntersection("Lower Right Power Point", ruleOfThirdsGrid.transform, new Vector2(0.666f, 0.333f));
+            ruleOfThirdsIntersections[3] = CreateGridIntersection("Upper Right Power Point", ruleOfThirdsGrid.transform, new Vector2(0.666f, 0.666f));
+            CreateGridLabel("Left Third Label", ruleOfThirdsGrid.transform, new Vector2(0.333f, 0.08f), "LEFT THIRD");
+            CreateGridLabel("Right Third Label", ruleOfThirdsGrid.transform, new Vector2(0.666f, 0.08f), "RIGHT THIRD");
+            CreateRuleOfThirdsLessonPanel(ruleOfThirdsGrid.transform);
 
             ruleOfThirdsGrid.transform.SetAsLastSibling();
             ruleOfThirdsGrid.SetActive(false);
@@ -185,8 +214,81 @@ namespace Player.Equipment
             lineRect.sizeDelta = sizeDelta;
 
             Image lineImage = lineObject.GetComponent<Image>();
-            lineImage.color = new Color(1f, 1f, 1f, 0.65f);
+            lineImage.color = new Color(1f, 1f, 1f, 0.8f);
             lineImage.raycastTarget = false;
+        }
+
+        private Image CreateGridIntersection(string markerName, Transform parent, Vector2 anchor)
+        {
+            GameObject markerObject = new GameObject(markerName, typeof(RectTransform), typeof(Image));
+            markerObject.transform.SetParent(parent, false);
+
+            RectTransform markerRect = markerObject.GetComponent<RectTransform>();
+            markerRect.anchorMin = anchor;
+            markerRect.anchorMax = anchor;
+            markerRect.anchoredPosition = Vector2.zero;
+            markerRect.sizeDelta = new Vector2(18f, 18f);
+            markerRect.localEulerAngles = new Vector3(0f, 0f, 45f);
+
+            Image markerImage = markerObject.GetComponent<Image>();
+            markerImage.color = new Color(1f, 0.78f, 0.05f, 0.75f);
+            markerImage.raycastTarget = false;
+            return markerImage;
+        }
+
+        private void CreateGridLabel(string labelName, Transform parent, Vector2 anchor, string labelText)
+        {
+            GameObject labelObject = new GameObject(labelName, typeof(RectTransform), typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(parent, false);
+
+            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.anchorMin = anchor;
+            labelRect.anchorMax = anchor;
+            labelRect.anchoredPosition = Vector2.zero;
+            labelRect.sizeDelta = new Vector2(180f, 28f);
+
+            TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
+            label.font = focusText != null ? focusText.font : TMP_Settings.defaultFontAsset;
+            label.fontSize = 17f;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = new Color(1f, 0.86f, 0.25f, 0.9f);
+            label.raycastTarget = false;
+            label.text = labelText;
+        }
+
+        private void CreateRuleOfThirdsLessonPanel(Transform parent)
+        {
+            GameObject panelObject = new GameObject("Rule Of Thirds Lesson Panel", typeof(RectTransform), typeof(Image));
+            panelObject.transform.SetParent(parent, false);
+
+            RectTransform panelRect = panelObject.GetComponent<RectTransform>();
+            panelRect.anchorMin = new Vector2(0.5f, 0.92f);
+            panelRect.anchorMax = new Vector2(0.5f, 0.92f);
+            panelRect.anchoredPosition = Vector2.zero;
+            panelRect.sizeDelta = new Vector2(920f, 82f);
+
+            Image panelImage = panelObject.GetComponent<Image>();
+            panelImage.color = new Color(0.02f, 0.04f, 0.08f, 0.82f);
+            panelImage.raycastTarget = false;
+
+            GameObject instructionObject = new GameObject("Rule Of Thirds Instruction", typeof(RectTransform), typeof(TextMeshProUGUI));
+            instructionObject.transform.SetParent(panelObject.transform, false);
+
+            RectTransform instructionRect = instructionObject.GetComponent<RectTransform>();
+            instructionRect.anchorMin = Vector2.zero;
+            instructionRect.anchorMax = Vector2.one;
+            instructionRect.offsetMin = new Vector2(20f, 8f);
+            instructionRect.offsetMax = new Vector2(-20f, -8f);
+
+            ruleOfThirdsInstructionText = instructionObject.GetComponent<TextMeshProUGUI>();
+            ruleOfThirdsInstructionText.font = focusText != null ? focusText.font : TMP_Settings.defaultFontAsset;
+            ruleOfThirdsInstructionText.fontSize = 21f;
+            ruleOfThirdsInstructionText.fontStyle = FontStyles.Bold;
+            ruleOfThirdsInstructionText.alignment = TextAlignmentOptions.Center;
+            ruleOfThirdsInstructionText.color = Color.white;
+            ruleOfThirdsInstructionText.raycastTarget = false;
+            ruleOfThirdsInstructionText.text = "RULE OF THIRDS  •  PLACE THE PRODUCT ON A YELLOW POWER POINT";
         }
 
         private void TogglePlayerUI(bool showUI)
@@ -275,6 +377,7 @@ namespace Player.Equipment
             ApplyCameraSway();
             UpdateCameraHUD();
             UpdateTrackingSquare();
+            UpdateRuleOfThirdsPractice();
 
             if (isRecording)
             {
@@ -303,6 +406,97 @@ namespace Player.Equipment
                     }
                 }
             }
+        }
+
+        private void UpdateRuleOfThirdsPractice()
+        {
+            if (!isLevel2Camera || filmCamera == null || GokeLevelManager.Instance == null) return;
+
+            if (targetSubject == null) CacheTargetSubject();
+            if (targetSubject == null)
+            {
+                GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false);
+                return;
+            }
+
+            Vector3 targetCenter = GetSubjectCenter(targetSubject);
+            Vector3 viewPosition = filmCamera.WorldToViewportPoint(targetCenter);
+            bool hasViewportBounds = TryGetViewportBounds(targetRenderers, out Vector4 viewportBounds);
+
+            float horizontalDistance = Mathf.Min(Mathf.Abs(viewPosition.x - 0.333f), Mathf.Abs(viewPosition.x - 0.666f));
+            float verticalDistance = Mathf.Min(Mathf.Abs(viewPosition.y - 0.333f), Mathf.Abs(viewPosition.y - 0.666f));
+            float subjectCoverage = hasViewportBounds ? Mathf.Max(viewportBounds.z - viewportBounds.x, viewportBounds.w - viewportBounds.y) : 0f;
+
+            bool isOnIntersection = horizontalDistance <= 0.065f && verticalDistance <= 0.085f;
+            bool hasUsefulShotSize = subjectCoverage >= 0.2f && subjectCoverage <= 0.58f;
+            bool isFullyVisible = hasViewportBounds && GradeViewportVisibility(viewportBounds, 0.03f) >= 0.99f;
+            bool hasCorrectComposition = viewPosition.z > 0f && isOnIntersection && hasUsefulShotSize && isFullyVisible;
+
+            UpdateRuleOfThirdsLessonOverlay(viewPosition, subjectCoverage, hasViewportBounds, isFullyVisible, hasCorrectComposition);
+
+            GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(hasCorrectComposition);
+        }
+
+        private void UpdateRuleOfThirdsLessonOverlay(Vector3 viewPosition, float subjectCoverage, bool hasViewportBounds, bool isFullyVisible, bool hasCorrectComposition)
+        {
+            float leftDistance = Mathf.Abs(viewPosition.x - 0.333f);
+            float rightDistance = Mathf.Abs(viewPosition.x - 0.666f);
+            float bottomDistance = Mathf.Abs(viewPosition.y - 0.333f);
+            float topDistance = Mathf.Abs(viewPosition.y - 0.666f);
+            int closestIntersection = (leftDistance <= rightDistance ? 0 : 2) + (bottomDistance <= topDistance ? 0 : 1);
+
+            for (int i = 0; i < ruleOfThirdsIntersections.Length; i++)
+            {
+                if (ruleOfThirdsIntersections[i] == null) continue;
+
+                bool isClosest = i == closestIntersection;
+                ruleOfThirdsIntersections[i].color = hasCorrectComposition && isClosest
+                    ? new Color(0.2f, 1f, 0.45f, 1f)
+                    : isClosest
+                        ? new Color(1f, 0.78f, 0.05f, 1f)
+                        : new Color(1f, 0.78f, 0.05f, 0.45f);
+                ruleOfThirdsIntersections[i].rectTransform.sizeDelta = isClosest ? new Vector2(24f, 24f) : new Vector2(18f, 18f);
+            }
+
+            if (ruleOfThirdsInstructionText == null) return;
+
+            if (viewPosition.z <= 0f || !hasViewportBounds)
+            {
+                ruleOfThirdsInstructionText.text = "<color=#FF6666>FIND THE PRODUCT</color>  •  KEEP IT INSIDE THE VIEWFINDER";
+                return;
+            }
+
+            if (Mathf.Min(leftDistance, rightDistance) > 0.065f)
+            {
+                ruleOfThirdsInstructionText.text = "<color=#FFD84A>MOVE LEFT OR RIGHT</color>  •  ALIGN THE PRODUCT WITH A VERTICAL THIRD";
+                return;
+            }
+
+            if (Mathf.Min(bottomDistance, topDistance) > 0.085f)
+            {
+                ruleOfThirdsInstructionText.text = "<color=#FFD84A>USE Q / E</color>  •  ALIGN THE PRODUCT WITH A HORIZONTAL THIRD";
+                return;
+            }
+
+            if (!isFullyVisible)
+            {
+                ruleOfThirdsInstructionText.text = "<color=#FF9B54>LEAVE BREATHING ROOM</color>  •  DO NOT CROP THE PRODUCT";
+                return;
+            }
+
+            if (subjectCoverage < 0.2f)
+            {
+                ruleOfThirdsInstructionText.text = "<color=#FFD84A>SCROLL UP TO ZOOM IN</color>  •  MAKE THE PRODUCT VISUALLY DOMINANT";
+                return;
+            }
+
+            if (subjectCoverage > 0.58f)
+            {
+                ruleOfThirdsInstructionText.text = "<color=#FFD84A>SCROLL DOWN TO ZOOM OUT</color>  •  PRESERVE NEGATIVE SPACE FOR GRAPHICS";
+                return;
+            }
+
+            ruleOfThirdsInstructionText.text = "<color=#55FF88>GOOD VISUAL HIERARCHY</color>  •  HOLD THE RULE OF THIRDS FRAME STEADY";
         }
 
         public bool IsCameraViewActive()

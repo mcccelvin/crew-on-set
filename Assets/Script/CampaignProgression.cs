@@ -4,9 +4,18 @@ public static class CampaignProgression
 {
     public const int MinimumLevel = 1;
     public const int MaximumLevel = 5;
+    private const string levelCheatOverrideKey = "CampaignLevelCheatOverride";
+    private const string levelCheatIntroductionKey = "CampaignLevelCheatIntroduction";
 
     public static int GetCurrentLevel()
     {
+        int cheatLevel = PlayerPrefs.GetInt(levelCheatOverrideKey, 0);
+        if (cheatLevel >= MinimumLevel && cheatLevel <= MaximumLevel)
+        {
+            PlayerPrefs.SetInt("CurrentLevel", cheatLevel);
+            return cheatLevel;
+        }
+
         int currentLevel = PlayerPrefs.GetInt("CurrentLevel", 0);
         int tutorialProgress = PlayerPrefs.GetInt("TutorialProgress", 0);
 
@@ -36,6 +45,30 @@ public static class CampaignProgression
 
         if (currentLevel >= 2) PlayerPrefs.SetInt("TutorialProgress", currentLevel);
         PlayerPrefs.Save();
+    }
+
+    public static void SetCheatLevel(int level)
+    {
+        int cheatLevel = Mathf.Clamp(level, MinimumLevel, MaximumLevel);
+        PlayerPrefs.SetInt(levelCheatOverrideKey, cheatLevel);
+        PlayerPrefs.SetInt("CurrentLevel", cheatLevel);
+        PlayerPrefs.SetInt("TutorialProgress", cheatLevel >= 2 ? cheatLevel : 0);
+        PlayerPrefs.DeleteKey("Level1RetryActive");
+
+        if (cheatLevel >= 2) PlayerPrefs.SetInt(levelCheatIntroductionKey, cheatLevel);
+        else PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
+
+        PlayerPrefs.Save();
+    }
+
+    public static bool ConsumeCheatIntroduction(int level)
+    {
+        int currentLevel = Mathf.Clamp(level, MinimumLevel, MaximumLevel);
+        if (PlayerPrefs.GetInt(levelCheatIntroductionKey, 0) != currentLevel) return false;
+
+        PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
+        PlayerPrefs.Save();
+        return true;
     }
 
     public static string GetContractName(int level)
@@ -73,6 +106,8 @@ public static class CampaignProgression
     public static void CompleteLevel(int completedLevel)
     {
         int level = Mathf.Clamp(completedLevel, MinimumLevel, MaximumLevel);
+        PlayerPrefs.DeleteKey(levelCheatOverrideKey);
+        PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
         string gradedKey = GetGradedKey(level);
         bool isFirstCompletion = PlayerPrefs.GetInt(gradedKey, 0) == 0;
 

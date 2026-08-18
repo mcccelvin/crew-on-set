@@ -142,12 +142,43 @@ public class TutorialUIManager : MonoBehaviour
                 string cleanText = tasks[i].StartsWith("- ") ? tasks[i].Substring(2) : tasks[i];
 
                 taskRows[i].taskText.text = cleanText;
+                taskRows[i].taskText.enableWordWrapping = false;
+                taskRows[i].taskText.overflowMode = TextOverflowModes.Ellipsis;
+                taskRows[i].taskText.enableAutoSizing = true;
+                taskRows[i].taskText.fontSizeMin = 14f;
                 ApplyTaskState(i);
 
                 taskRows[i].rowContainer.SetActive(true);
                 yield return new WaitForSeconds(0.4f);
             }
         }
+    }
+
+    public void ShowActiveContract(string contractName)
+    {
+        SetupTasks(new string[]
+        {
+            "- " + contractName + " CONTRACT ACTIVE",
+            "- Press <color=red>[TAB]</color> to view the selected contract"
+        });
+    }
+
+    public void HideTasks()
+    {
+        if (taskRevealCoroutine != null)
+        {
+            StopCoroutine(taskRevealCoroutine);
+            taskRevealCoroutine = null;
+        }
+
+        if (notificationCoroutine != null)
+        {
+            StopCoroutine(notificationCoroutine);
+            notificationCoroutine = null;
+        }
+
+        if (taskPanel != null) taskPanel.SetActive(false);
+        if (newTaskNotification != null) newTaskNotification.SetActive(false);
     }
 
     public void MarkTaskComplete(int index)

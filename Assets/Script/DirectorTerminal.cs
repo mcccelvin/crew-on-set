@@ -82,6 +82,45 @@ public class DirectorTerminal : MonoBehaviour
     public bool HasWall() { return currentWall != null; }
     public GameObject GetCurrentWall() { return currentWall; }
 
+    public GameObject CreatePracticeWall(Color wallColor)
+    {
+        if (wallPrefab == null || spawnPoint == null) return null;
+
+        if (currentWall != null) Destroy(currentWall);
+
+        currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
+        currentWall.name = "Goke Practice Wall";
+        currentWallColor = wallColor;
+        ApplyColorToWall(currentWallColor);
+
+        if (spawnWallButton != null) spawnWallButton.SetActive(false);
+        if (colorControlPanel != null) colorControlPanel.SetActive(true);
+        SyncSlidersToColor(currentWallColor);
+        return currentWall;
+    }
+
+    public void RemovePracticeWall(GameObject practiceWall)
+    {
+        if (practiceWall == null || currentWall != practiceWall) return;
+
+        if (selectedObject == currentWall)
+        {
+            selectedObject = null;
+            selectedRenderers = null;
+        }
+
+        Destroy(currentWall);
+        currentWall = null;
+        currentWallColor = Color.white;
+
+        if (spawnWallButton != null) spawnWallButton.SetActive(true);
+        if (colorControlPanel != null) colorControlPanel.SetActive(true);
+
+        if (rSlider != null) rSlider.value = rSlider.maxValue;
+        if (gSlider != null) gSlider.value = gSlider.maxValue;
+        if (bSlider != null) bSlider.value = bSlider.maxValue;
+    }
+
     private void Start()
     {
         if (tabletUI != null) tabletUI.SetActive(false);

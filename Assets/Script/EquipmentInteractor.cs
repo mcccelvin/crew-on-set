@@ -56,7 +56,11 @@ namespace Player.Interactor
             if (activeShop != null)
             {
                 if (hotbarUI != null) hotbarUI.UpdateGuideText("");
-                if (inputManager.Interact) { activeShop.CloseTerminal(); activeShop = null; }
+                if (inputManager.Interact)
+                {
+                    activeShop.CloseTerminal();
+                    if (!activeShop.IsTerminalActive()) activeShop = null;
+                }
                 return;
             }
 
@@ -204,6 +208,9 @@ namespace Player.Interactor
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
+                    Equipment.FilmLightItem lightItem = item.GetComponent<Equipment.FilmLightItem>();
+                    if (lightItem != null && TutorialManager.Instance != null && !TutorialManager.Instance.CanPickUpLight(lightItem)) return;
+
                     for (int i = 0; i < 5; i++)
                     {
                         if (hotbar[i] == null)
@@ -230,7 +237,7 @@ namespace Player.Interactor
 
                                 if (lowerObjName.Contains("light") || lowerItemName.Contains("light"))
                                 {
-                                    TutorialManager.Instance.OnLightPickedUp();
+                                    TutorialManager.Instance.OnLightPickedUp(item.GetComponent<Equipment.FilmLightItem>());
                                 }
                                 else if (lowerObjName.Contains("camera") || lowerItemName.Contains("camera"))
                                 {
@@ -282,15 +289,15 @@ namespace Player.Interactor
         {
             if (currentEquipment == null) return;
 
-            if (TutorialManager.Instance != null)
-            {
-                if (currentEquipment.gameObject.name.ToLower().Contains("light") || currentEquipment.EquipmentName.ToLower().Contains("light"))
-                {
-                    TutorialManager.Instance.OnLightDropped();
-                }
-            }
+            Equipment.FilmLightItem droppedLight = currentEquipment.GetComponent<Equipment.FilmLightItem>();
 
             currentEquipment.OnDropped(PlayerCamera);
+
+            if (TutorialManager.Instance != null && droppedLight != null)
+            {
+                TutorialManager.Instance.OnLightDropped(droppedLight);
+            }
+
             hotbar[currentSlotIndex] = null;
             currentEquipment = null;
 

@@ -591,6 +591,10 @@ public class ShopTerminal : MonoBehaviour
 
     public void CloseTerminal()
     {
+        if (GokeLevelManager.Instance != null &&
+            GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
+            !GokeLevelManager.Instance.CanCancelPurchase()) return;
+
         isTerminalActive = false;
         if (playerController != null) playerController.enabled = true;
 

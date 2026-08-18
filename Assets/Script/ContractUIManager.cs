@@ -66,9 +66,7 @@ public class ContractUIManager : MonoBehaviour
 
     public void ShowGokeContract(Action onAccepted)
     {
-        activeContractLevel = 2;
-        isLevel3Contract = false;
-        ConfigureGokeContract();
+        PrepareGokeContract();
         ShowContract(onAccepted);
     }
 
@@ -95,6 +93,13 @@ public class ContractUIManager : MonoBehaviour
         activeContractLevel = 3;
         isLevel3Contract = true;
         ConfigureLevel3Contract();
+    }
+
+    public void PrepareGokeContract()
+    {
+        activeContractLevel = 2;
+        isLevel3Contract = false;
+        ConfigureGokeContract();
     }
 
     public void PrepareCampaignContract(int level)
@@ -217,7 +222,9 @@ public class ContractUIManager : MonoBehaviour
             "EDIT    - Three graphics, Contrast 1.15-1.70, Saturation 1.20-1.60\n\n" +
             "UPFRONT PAYMENT: 60,000 B-COINS");
 
-        SetQualificationText("GOKE COLA - CONTRACT QUALIFICATIONS",
+        SetQualificationSummary("STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 3 graphics + strong contrast");
+
+        SetQualificationText("GOKE COLA - SELECTED CONTRACT",
             "RULE OF THIRDS",
             "Divide the frame into a 3 x 3 grid.\n\n" +
             "- Place the Cola near a grid intersection.\n" +
@@ -251,7 +258,9 @@ public class ContractUIManager : MonoBehaviour
             "EDIT    - 10-second premium automotive color grade\n\n" +
             "UPFRONT PAYMENT: 80,000 B-COINS");
 
-        SetQualificationText("LAMBORMINI - CONTRACT QUALIFICATIONS",
+        SetQualificationSummary("STAGE: Lambormini car + one posed actor     CAMERA: Premium automotive frame\nLIGHT: Level 3 Soft Light     EDIT: 10-second premium grade");
+
+        SetQualificationText("LAMBORMINI - SELECTED CONTRACT",
             "ACTOR DIRECTION",
             "The actor must support the vehicle instead of hiding it.\n\n" +
             "- Hire an actor from the Director Terminal.\n" +
@@ -287,7 +296,9 @@ public class ContractUIManager : MonoBehaviour
             "EDIT    - 15 seconds, 2 graphics, warm color grade\n\n" +
             "UPFRONT PAYMENT: 100,000 B-COINS");
 
-        SetQualificationText("KAPE KULTURA - CONTRACT QUALIFICATIONS",
+        SetQualificationSummary("STAGE: Brown set + 1 product + 1 posed actor     CAMERA: Wide, Medium & Close-Up\nLIGHT: Soft Light every clip     EDIT: 15 seconds + 2 graphics");
+
+        SetQualificationText("KAPE KULTURA - SELECTED CONTRACT",
             "COVERAGE & CONTINUITY",
             "Record at least 3 clips: one Wide, one Medium, and one Close-Up.\n\n" +
             "- Place exactly one actor and one coffee product.\n" +
@@ -324,7 +335,9 @@ public class ContractUIManager : MonoBehaviour
             "EDIT    - 20 seconds, 3 graphics, polished color grade\n\n" +
             "UPFRONT PAYMENT: 150,000 B-COINS");
 
-        SetQualificationText("HARAYA - FINAL CONTRACT QUALIFICATIONS",
+        SetQualificationSummary("STAGE: Teal set + actor + product + vehicle     CAMERA: 4 shots / 3 sizes\nLIGHT: Key, Fill & Back     EDIT: 20 seconds + 3 graphics");
+
+        SetQualificationText("HARAYA CAMPAIGN - SELECTED CONTRACT",
             "INTEGRATED PRODUCTION",
             "Every department must support one campaign idea.\n\n" +
             "- Stage exactly one actor, one product, and one vehicle.\n" +
@@ -377,6 +390,14 @@ public class ContractUIManager : MonoBehaviour
         if (leftDescriptionTransform != null) leftDescriptionTransform.GetComponent<TextMeshProUGUI>().text = leftDescription;
         if (rightTitleTransform != null) rightTitleTransform.GetComponent<TextMeshProUGUI>().text = rightTitle;
         if (rightDescriptionTransform != null) rightDescriptionTransform.GetComponent<TextMeshProUGUI>().text = rightDescription;
+    }
+
+    private void SetQualificationSummary(string summary)
+    {
+        if (qualificationsPanel == null) return;
+
+        Transform summaryTransform = qualificationsPanel.transform.Find("Qualifications Book/Contract Summary");
+        if (summaryTransform != null) summaryTransform.GetComponent<TextMeshProUGUI>().text = summary;
     }
 
     private void SetPreviousContractText(string title, string description)
@@ -482,12 +503,19 @@ public class ContractUIManager : MonoBehaviour
         GameObject mainPanel = CreatePanel("Qualifications Book", qualificationsPanel.transform, new Color(0.07f, 0.09f, 0.12f, 1f));
         SetRect(mainPanel.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1450f, 850f));
 
-        TextMeshProUGUI headingText = CreateText("Heading", mainPanel.transform, "GOKE COLA — CONTRACT QUALIFICATIONS", 42, TextAlignmentOptions.Center);
-        SetRect(headingText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -65f), new Vector2(1300f, 70f));
+        TextMeshProUGUI headingText = CreateText("Heading", mainPanel.transform, "GOKE COLA - SELECTED CONTRACT", 42, TextAlignmentOptions.Center);
+        SetRect(headingText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -48f), new Vector2(1300f, 60f));
         headingText.fontStyle = FontStyles.Bold;
 
+        TextMeshProUGUI contractSummary = CreateText("Contract Summary", mainPanel.transform,
+            "STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 3 graphics + strong contrast",
+            21, TextAlignmentOptions.Center);
+        SetRect(contractSummary.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -115f), new Vector2(1320f, 68f));
+        contractSummary.color = new Color(1f, 0.82f, 0.35f);
+        contractSummary.fontStyle = FontStyles.Bold;
+
         GameObject thirdsCard = CreatePanel("Rule of Thirds", mainPanel.transform, new Color(0.11f, 0.16f, 0.21f, 1f));
-        SetRect(thirdsCard.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-335f, 40f), new Vector2(620f, 570f));
+        SetRect(thirdsCard.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-335f, -25f), new Vector2(620f, 500f));
 
         TextMeshProUGUI thirdsTitle = CreateText("Title", thirdsCard.transform, "RULE OF THIRDS", 34, TextAlignmentOptions.Center);
         SetRect(thirdsTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(550f, 60f));
@@ -504,7 +532,7 @@ public class ContractUIManager : MonoBehaviour
         SetStretchRect(thirdsDescription.rectTransform, Vector2.zero, Vector2.one, new Vector2(45f, 45f), new Vector2(-45f, -115f));
 
         GameObject lightingCard = CreatePanel("Three Point Lighting", mainPanel.transform, new Color(0.11f, 0.16f, 0.21f, 1f));
-        SetRect(lightingCard.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(335f, 40f), new Vector2(620f, 570f));
+        SetRect(lightingCard.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(335f, -25f), new Vector2(620f, 500f));
 
         TextMeshProUGUI lightingTitle = CreateText("Title", lightingCard.transform, "3-POINT LIGHTING", 34, TextAlignmentOptions.Center);
         SetRect(lightingTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(550f, 60f));
@@ -520,7 +548,7 @@ public class ContractUIManager : MonoBehaviour
             25, TextAlignmentOptions.TopLeft);
         SetStretchRect(lightingDescription.rectTransform, Vector2.zero, Vector2.one, new Vector2(45f, 45f), new Vector2(-45f, -115f));
 
-        TextMeshProUGUI closeHint = CreateText("Close Hint", mainPanel.transform, "Press [TAB] to close contract qualifications", 24, TextAlignmentOptions.Center);
+        TextMeshProUGUI closeHint = CreateText("Close Hint", mainPanel.transform, "Press [TAB] to close the selected contract", 24, TextAlignmentOptions.Center);
         SetRect(closeHint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 45f), new Vector2(900f, 45f));
 
         qualificationsPanel.SetActive(false);
