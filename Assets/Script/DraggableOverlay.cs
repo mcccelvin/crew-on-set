@@ -10,6 +10,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     private RectTransform rectTransform;
     private Canvas parentCanvas;
     private readonly Vector3[] parentCorners = new Vector3[4];
+    private readonly Vector3[] overlayCorners = new Vector3[4];
 
     private Vector2 origSizeDelta;
     private Vector3 origLocalScale;
@@ -238,7 +239,9 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                     rectTransform.anchoredPosition = Vector2.zero;
                 }
 
-                EditorTutorialManager.Instance.OnBrandDroppedToScreen();
+                PrepareForCommercialOutput();
+
+                if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnBrandDroppedToScreen();
 
                 // --- THE FIX: Stop the script here so it doesn't accidentally run "ReturnToBin()" below! ---
                 return;
@@ -247,6 +250,91 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
         // If you dropped it anywhere else, send it back!
         ReturnToBin();
+    }
+
+    private void PrepareForCommercialOutput()
+    {
+        RectTransform previewRect = transform.parent as RectTransform;
+        if (rectTransform == null || previewRect == null) return;
+
+        float visibleWidth = rectTransform.rect.width * Mathf.Abs(rectTransform.localScale.x);
+        float visibleHeight = rectTransform.rect.height * Mathf.Abs(rectTransform.localScale.y);
+        float maximumWidth = previewRect.rect.width * 0.34f;
+        float maximumHeight = previewRect.rect.height * 0.22f;
+
+        float scaleAmount = 1f;
+        if (visibleWidth > maximumWidth) scaleAmount = Mathf.Min(scaleAmount, maximumWidth / visibleWidth);
+        if (visibleHeight > maximumHeight) scaleAmount = Mathf.Min(scaleAmount, maximumHeight / visibleHeight);
+
+        if (scaleAmount < 1f) rectTransform.localScale *= scaleAmount;
+
+        AddReadabilityOutline();
+        KeepInsideTitleSafeArea();
+    }
+
+    private void AddReadabilityOutline()
+    {
+        Graphic[] graphics = GetComponentsInChildren<Graphic>(true);
+
+        foreach (Graphic graphic in graphics)
+        {
+            if (graphic == null || graphic.GetComponent<Outline>() != null) continue;
+
+            Outline outline = graphic.gameObject.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.72f);
+            outline.effectDistance = new Vector2(2f, -2f);
+            outline.useGraphicAlpha = true;
+        }
+    }
+
+    private void KeepInsideTitleSafeArea()
+    {
+        RectTransform previewRect = transform.parent as RectTransform;
+        if (rectTransform == null || previewRect == null) return;
+
+        rectTransform.GetWorldCorners(overlayCorners);
+        Vector3 localBottomLeft = previewRect.InverseTransformPoint(overlayCorners[0]);
+        Vector3 localTopRight = previewRect.InverseTransformPoint(overlayCorners[2]);
+
+        float horizontalMargin = previewRect.rect.width * 0.06f;
+        float verticalMargin = previewRect.rect.height * 0.06f;
+        float safeLeft = previewRect.rect.xMin + horizontalMargin;
+        float safeRight = previewRect.rect.xMax - horizontalMargin;
+        float safeBottom = previewRect.rect.yMin + verticalMargin;
+        float safeTop = previewRect.rect.yMax - verticalMargin;
+
+        Vector2 correction = Vector2.zero;
+        if (localBottomLeft.x < safeLeft) correction.x += safeLeft - localBottomLeft.x;
+        if (localTopRight.x > safeRight) correction.x -= localTopRight.x - safeRight;
+        if (localBottomLeft.y < safeBottom) correction.y += safeBottom - localBottomLeft.y;
+        if (localTopRight.y > safeTop) correction.y -= localTopRight.y - safeTop;
+
+        rectTransform.anchoredPosition += correction;
+    }
+
+    public bool IsProfessionalPlacement()
+    {
+        RectTransform previewRect = transform.parent as RectTransform;
+        if (rectTransform == null || previewRect == null || !isOnTimeline) return false;
+
+        rectTransform.GetWorldCorners(overlayCorners);
+        Vector3 localBottomLeft = previewRect.InverseTransformPoint(overlayCorners[0]);
+        Vector3 localTopRight = previewRect.InverseTransformPoint(overlayCorners[2]);
+
+        float horizontalMargin = previewRect.rect.width * 0.05f;
+        float verticalMargin = previewRect.rect.height * 0.05f;
+        bool insideSafeArea = localBottomLeft.x >= previewRect.rect.xMin + horizontalMargin &&
+                              localTopRight.x <= previewRect.rect.xMax - horizontalMargin &&
+                              localBottomLeft.y >= previewRect.rect.yMin + verticalMargin &&
+                              localTopRight.y <= previewRect.rect.yMax - verticalMargin;
+
+        float overlayArea = Mathf.Abs((localTopRight.x - localBottomLeft.x) * (localTopRight.y - localBottomLeft.y));
+        float previewArea = Mathf.Max(1f, previewRect.rect.width * previewRect.rect.height);
+        float coverage = overlayArea / previewArea;
+        bool readableScale = coverage >= 0.0025f && coverage <= 0.22f;
+        bool usefulDuration = endFrame - startFrame >= Mathf.RoundToInt(TapeSettings.framesPerSecond * 2f);
+
+        return insideSafeArea && readableScale && usefulDuration;
     }
 
     public void EvaluateVisibility(int currentFrame, bool isPlaying)

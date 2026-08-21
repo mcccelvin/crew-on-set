@@ -288,9 +288,9 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
                 break;
 
-            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { "- Set Brightness to exactly 0.95" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
-            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { "- Set Contrast to exactly 1.15" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
-            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { "- Set Saturation to exactly 1.10" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
+            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { "- Set Brightness to 0.98 to protect highlight detail" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
+            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { "- Set Contrast to 1.12 for controlled separation" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
+            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { "- Set Saturation to 1.08 to protect the brand color" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
 
             case EditorStep.ClickExport: TutorialUIManager.Instance.SetupTasks(new string[] { "- Click the 'Export' button" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(exportButtonRect); exported = false; break;
 
@@ -546,12 +546,12 @@ public class EditorTutorialManager : MonoBehaviour
 
             case EditorStep.PrepareForColorGrade: ui.ShowBossDialogue("Take your time organizing your branding. When you are completely ready and the branding is set properly, click the Color Grade phase.", ui.poseHappy, false, false); break;
 
-            case EditorStep.ExplainColorGrading: ui.ShowBossDialogue("Color Grading is where we set the mood of the commercial. We can completely change how the footage feels with these three sliders.", ui.poseOpenHand, false, false); break;
-            case EditorStep.AdjustBrightness: ui.ShowBossDialogue("First, drop the Brightness to exactly 0.95. The slider will lock in place when you find the perfect spot.", ui.poseHappy, false, false); break;
-            case EditorStep.AdjustContrast: ui.ShowBossDialogue("Next, push the Contrast up to exactly 1.15 to deepen the shadows and make the subject stand out.", ui.poseSmile, false, false); break;
-            case EditorStep.AdjustSaturation: ui.ShowBossDialogue("Finally, a simple color pop. Set the Saturation to exactly 1.10 to make those colors vibrant.", ui.posePoint, false, false); break;
+            case EditorStep.ExplainColorGrading: ui.ShowBossDialogue("Color grading starts with primary correction: first protect exposure, then shape contrast, and only then adjust saturation. The green markers and the Commercial Look monitor show the client-safe range, but you still judge the image in the Program Monitor.", ui.poseOpenHand, false, false); break;
+            case EditorStep.AdjustBrightness: ui.ShowBossDialogue("Start with exposure. Set Brightness to 0.98. This keeps the white petals detailed instead of clipping them into a flat white shape.", ui.poseHappy, false, false); break;
+            case EditorStep.AdjustContrast: ui.ShowBossDialogue("Now set Contrast to 1.12. That separates the flower from the pink set while preserving texture in both shadows and highlights.", ui.poseSmile, false, false); break;
+            case EditorStep.AdjustSaturation: ui.ShowBossDialogue("Finish with Saturation at 1.08. A small increase supports the brand palette; too much would make the pink background compete with the product.", ui.posePoint, false, false); break;
 
-            case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("See what those did? The lower brightness created a moody vibe, the high contrast sharpened the image, and the extra saturation made the product pop! It's a completely different video now.", ui.poseHappy, false, false); break;
+            case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("That is a controlled commercial grade: detailed highlights, readable shape, and believable brand color. Notice that a polished image comes from balance, not from pushing every slider as high as possible.", ui.poseHappy, false, false); break;
             case EditorStep.ClickExport: ui.ShowBossDialogue("We are officially done! Hit the Export button when you are ready to render the final commercial.", ui.poseBoss, false, false); break;
 
             case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("This is the Review Panel. Here you can watch your final rendered commercial to make sure everything looks perfect before we send it out.", ui.poseOpenHand, false, false); break;

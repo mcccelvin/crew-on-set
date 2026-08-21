@@ -35,17 +35,20 @@ Shader "UI/VideoGrading"
 
             fixed4 frag (v2f i) : SV_Target {
                 fixed4 col = tex2D(_MainTex, i.uv) * _Tint;
-                
-                // Brightness
-                col.rgb *= _Brightness;
-                
-                // Contrast
-                col.rgb = ((col.rgb - 0.5) * _Contrast) + 0.5;
-                
-                // Saturation
-                float luminance = dot(col.rgb, float3(0.2126, 0.7152, 0.0722));
-                col.rgb = lerp(float3(luminance, luminance, luminance), col.rgb, _Saturation);
-                
+                float3 gradedColor = max(col.rgb, 0.0);
+
+                gradedColor *= _Brightness;
+                gradedColor = ((gradedColor - 0.5) * _Contrast) + 0.5;
+
+                float luminance = dot(gradedColor, float3(0.2126, 0.7152, 0.0722));
+                gradedColor = lerp(float3(luminance, luminance, luminance), gradedColor, _Saturation);
+
+                // Preserve color relationships when a strong grade pushes a channel over white.
+                // This produces a softer commercial highlight instead of clipping red products flat.
+                float brightestChannel = max(gradedColor.r, max(gradedColor.g, gradedColor.b));
+                if (brightestChannel > 1.0) gradedColor /= brightestChannel;
+
+                col.rgb = saturate(gradedColor);
                 return col;
             }
             ENDCG

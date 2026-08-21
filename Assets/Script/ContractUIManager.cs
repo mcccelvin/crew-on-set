@@ -219,10 +219,11 @@ public class ContractUIManager : MonoBehaviour
             "STAGE   - RED backdrop and Cola away from the wall\n" +
             "CAMERA  - Rule of Thirds composition\n" +
             "LIGHT   - 3-Point Lighting\n" +
-            "EDIT    - Three graphics, Contrast 1.15-1.70, Saturation 1.20-1.60\n\n" +
+            "EDIT    - 10 seconds, 3 title-safe graphics, balanced red commercial grade\n" +
+            "GRADE   - Brightness 0.94-1.02, Contrast 1.14-1.26, Saturation 1.04-1.16\n\n" +
             "UPFRONT PAYMENT: 60,000 B-COINS");
 
-        SetQualificationSummary("STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 3 graphics + strong contrast");
+        SetQualificationSummary("STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 3 title-safe graphics + balanced color");
 
         SetQualificationText("GOKE COLA - SELECTED CONTRACT",
             "RULE OF THIRDS",
@@ -237,14 +238,18 @@ public class ContractUIManager : MonoBehaviour
             "- FILL: softer opposite light controlling shadows.\n" +
             "- BACK: light behind the subject for separation.\n" +
             "- Recommended starting point: Key 75%, Fill 40%, Back 60%.\n" +
-            "- Aim every beam at the product and keep the key dominant.");
+            "- Aim every beam at the product and keep the key dominant.\n\n" +
+            "POST-PRODUCTION\n" +
+            "Keep graphics inside title safe. Protect the red brand palette with B 0.94-1.02, C 1.14-1.26, and S 1.04-1.16.");
 
         SetPreviousContractText("ARTISAN\nFLOWER VASE",
             "PREVIOUS CONTRACT\n\n" +
             "Pink backdrop\n" +
             "Centered composition\n" +
             "Single-light setup\n" +
-            "10-second commercial");
+            "10-second commercial\n" +
+            "2 title-safe graphics\n" +
+            "Balanced primary color grade");
     }
 
     private void ConfigureLevel3Contract()
@@ -479,7 +484,7 @@ public class ContractUIManager : MonoBehaviour
             "STAGE   • RED backdrop and Cola away from the wall\n" +
             "CAMERA  • Rule of Thirds composition\n" +
             "LIGHT   • 3-Point Lighting\n" +
-            "EDIT    • Three graphics and high contrast\n\n" +
+            "EDIT    • 10 seconds, three title-safe graphics, balanced color\n\n" +
             "UPFRONT PAYMENT: 60,000 B-COINS",
             25, TextAlignmentOptions.TopLeft);
         SetStretchRect(contractDescription.rectTransform, Vector2.zero, Vector2.one, new Vector2(50f, 170f), new Vector2(-50f, -135f));
@@ -508,7 +513,7 @@ public class ContractUIManager : MonoBehaviour
         headingText.fontStyle = FontStyles.Bold;
 
         TextMeshProUGUI contractSummary = CreateText("Contract Summary", mainPanel.transform,
-            "STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 3 graphics + strong contrast",
+            "STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 3 title-safe graphics + balanced color",
             21, TextAlignmentOptions.Center);
         SetRect(contractSummary.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -115f), new Vector2(1320f, 68f));
         contractSummary.color = new Color(1f, 0.82f, 0.35f);

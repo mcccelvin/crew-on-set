@@ -49,6 +49,7 @@ public class EditorManager : MonoBehaviour
     private float pendingCam = 0f;
     private float pendingLight = 0f;
     private float pendingSec = 0f;
+    private GameObject titleSafeGuide;
 
     private void Awake() { Instance = this; }
 
@@ -58,6 +59,7 @@ public class EditorManager : MonoBehaviour
         Cursor.visible = true;
 
         currentPhase = 0;
+        BuildProfessionalPreview();
         UpdatePhaseUI();
         LoadClipsFromBridge();
     }
@@ -216,14 +218,86 @@ public class EditorManager : MonoBehaviour
         if (brandingBinPanel != null) brandingBinPanel.SetActive(currentPhase == 1);
         if (colorGradingBin != null) colorGradingBin.SetActive(currentPhase == 2);
         if (exportButton != null) exportButton.SetActive(currentPhase == 2);
+        if (titleSafeGuide != null) titleSafeGuide.SetActive(currentPhase == 1 || currentPhase == 2);
 
         if (tabButtonImages != null && tabButtonImages.Length > 0)
         {
             for (int i = 0; i < tabButtonImages.Length; i++)
             {
-                if (tabButtonImages[i] != null) tabButtonImages[i].color = (i == currentPhase) ? activeTabColor : inactiveTabColor;
+                if (tabButtonImages[i] != null)
+                {
+                    tabButtonImages[i].color = (i == currentPhase) ? new Color(0.12f, 0.62f, 0.92f, 1f) : new Color(0.09f, 0.12f, 0.16f, 1f);
+                }
             }
         }
+    }
+
+    private void BuildProfessionalPreview()
+    {
+        if (gradingManager == null || gradingManager.computerScreen == null) return;
+
+        RectTransform screenRect = gradingManager.computerScreen.rectTransform;
+        int currentLevel = CampaignProgression.GetCurrentLevel();
+
+        GameObject headerObject = CreatePreviewImage("Program Monitor Header", screenRect, new Color(0.02f, 0.035f, 0.055f, 0.92f));
+        RectTransform headerRect = headerObject.GetComponent<RectTransform>();
+        headerRect.anchorMin = new Vector2(0f, 1f);
+        headerRect.anchorMax = new Vector2(1f, 1f);
+        headerRect.pivot = new Vector2(0.5f, 1f);
+        headerRect.anchoredPosition = Vector2.zero;
+        headerRect.sizeDelta = new Vector2(0f, 38f);
+
+        GameObject headerTextObject = new GameObject("Program Monitor Text", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        headerTextObject.layer = screenRect.gameObject.layer;
+        headerTextObject.transform.SetParent(headerObject.transform, false);
+
+        TextMeshProUGUI headerText = headerTextObject.GetComponent<TextMeshProUGUI>();
+        headerText.text = "<b>PROGRAM MONITOR</b>     LEVEL " + currentLevel + "     1920 × 1080     TITLE SAFE";
+        headerText.fontSize = 19f;
+        headerText.alignment = TextAlignmentOptions.Center;
+        headerText.color = new Color(0.78f, 0.88f, 0.96f);
+        headerText.raycastTarget = false;
+        StretchPreviewRect(headerText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12f, 2f), new Vector2(-12f, -2f));
+
+        titleSafeGuide = new GameObject("Title Safe Guide", typeof(RectTransform));
+        titleSafeGuide.layer = screenRect.gameObject.layer;
+        titleSafeGuide.transform.SetParent(screenRect, false);
+        StretchPreviewRect(titleSafeGuide.GetComponent<RectTransform>(), new Vector2(0.06f, 0.06f), new Vector2(0.94f, 0.94f), Vector2.zero, Vector2.zero);
+
+        CreateSafeLine("Top", titleSafeGuide.transform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0f, -1f), new Vector2(0f, 2f));
+        CreateSafeLine("Bottom", titleSafeGuide.transform, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0f, 1f), new Vector2(0f, 2f));
+        CreateSafeLine("Left", titleSafeGuide.transform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 0f), new Vector2(2f, 0f));
+        CreateSafeLine("Right", titleSafeGuide.transform, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(-1f, 0f), new Vector2(2f, 0f));
+    }
+
+    private GameObject CreatePreviewImage(string objectName, Transform parent, Color color)
+    {
+        GameObject imageObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        imageObject.layer = parent.gameObject.layer;
+        imageObject.transform.SetParent(parent, false);
+
+        Image image = imageObject.GetComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+        return imageObject;
+    }
+
+    private void CreateSafeLine(string objectName, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 sizeDelta)
+    {
+        GameObject lineObject = CreatePreviewImage(objectName, parent, new Color(0.35f, 0.85f, 1f, 0.48f));
+        RectTransform lineRect = lineObject.GetComponent<RectTransform>();
+        lineRect.anchorMin = anchorMin;
+        lineRect.anchorMax = anchorMax;
+        lineRect.anchoredPosition = anchoredPosition;
+        lineRect.sizeDelta = sizeDelta;
+    }
+
+    private void StretchPreviewRect(RectTransform rectTransform, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax)
+    {
+        rectTransform.anchorMin = anchorMin;
+        rectTransform.anchorMax = anchorMax;
+        rectTransform.offsetMin = offsetMin;
+        rectTransform.offsetMax = offsetMax;
     }
 
     public void ExportCommercial()

@@ -27,47 +27,26 @@ public class ContractGrader : MonoBehaviour
         AddProductionFeedback(GameLevel.Level1, avgCam, avgLight, ref feedback);
         feedback += "<color=white><b>--- POST-PRODUCTION ---</b></color>\n";
 
-        if (Mathf.Abs(totalSeconds - 10f) <= 1.5f) feedback += "<color=green>+ Clean 10-second commercial cut.</color>\n";
+        if (Mathf.Abs(totalSeconds - 10f) <= 0.75f) feedback += "<color=green>+ Precise 10-second commercial cut.</color>\n";
         else
         {
             post -= 30f;
-            feedback += $"<color=red>- Timing: Target 10.0 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
+            feedback += $"<color=red>- Timing: Deliver 10.0 seconds within a 0.75-second tolerance. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
-        int logoCount = FindObjectsOfType<BrandingClip>(true).Length;
-        if (logoCount == 2) feedback += "<color=green>+ Correct 2-graphic branding sequence.</color>\n";
-        else
-        {
-            post -= 20f;
-            feedback += $"<color=red>- Branding: Place 2 graphics. Found {logoCount}.</color>\n";
-        }
+        GradeBrandingQuality(2, "Artisan Flower Vase", ref post, ref feedback);
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (grading != null)
         {
-            if (grading.saturationSlider.value >= 1.05f && grading.saturationSlider.value <= 1.25f)
-                feedback += "<color=green>+ Natural, balanced saturation.</color>\n";
-            else
-            {
-                post -= 10f;
-                feedback += "<color=yellow>- Saturation: Keep the product natural around 1.05 to 1.25.</color>\n";
-            }
-
-            if (grading.contrastSlider.value >= 1.1f && grading.contrastSlider.value <= 1.4f)
-                feedback += "<color=green>+ Controlled product contrast.</color>\n";
-            else
-            {
-                post -= 10f;
-                feedback += "<color=yellow>- Contrast: Use about 1.10 to 1.40.</color>\n";
-            }
-
-            if (grading.brightnessSlider.value >= 0.8f && grading.brightnessSlider.value <= 1.1f)
-                feedback += "<color=green>+ Flower highlights retain detail.</color>\n";
-            else
-            {
-                post -= 10f;
-                feedback += "<color=yellow>- Brightness: Keep exposure between 0.80 and 1.10.</color>\n";
-            }
+            GradeColorRange(grading.brightnessSlider.value, 0.94f, 1.02f, 16f, "Exposure", "Use 0.94 to 1.02 so the white flower keeps highlight detail.", ref post, ref feedback);
+            GradeColorRange(grading.contrastSlider.value, 1.06f, 1.18f, 16f, "Contrast", "Use 1.06 to 1.18 for shape without crushing the pink set.", ref post, ref feedback);
+            GradeColorRange(grading.saturationSlider.value, 1.03f, 1.13f, 16f, "Saturation", "Use 1.03 to 1.13 so the pink palette stays vibrant but believable.", ref post, ref feedback);
+        }
+        else
+        {
+            post -= 36f;
+            feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
         return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 15000, IsRequiredSetupComplete());
@@ -82,47 +61,26 @@ public class ContractGrader : MonoBehaviour
         AddProductionFeedback(GameLevel.Level2, avgCam, avgLight, ref feedback);
         feedback += "<color=white><b>--- POST-PRODUCTION ---</b></color>\n";
 
-        if (Mathf.Abs(totalSeconds - 10f) <= 1f) feedback += "<color=green>+ Precise 10-second commercial cut.</color>\n";
+        if (Mathf.Abs(totalSeconds - 10f) <= 0.75f) feedback += "<color=green>+ Precise 10-second commercial cut.</color>\n";
         else
         {
             post -= 30f;
-            feedback += $"<color=red>- Timing: Target 10.0 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
+            feedback += $"<color=red>- Timing: Deliver 10.0 seconds within a 0.75-second tolerance. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
-        int logoCount = FindObjectsOfType<BrandingClip>(true).Length;
-        if (logoCount == 3) feedback += "<color=green>+ Correct 3-graphic Goke sequence.</color>\n";
-        else
-        {
-            post -= 25f;
-            feedback += $"<color=red>- Branding: Place 3 graphics. Found {logoCount}.</color>\n";
-        }
+        GradeBrandingQuality(3, "Goke", ref post, ref feedback);
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (grading != null)
         {
-            if (grading.contrastSlider.value >= 1.15f && grading.contrastSlider.value <= 1.7f)
-                feedback += "<color=green>+ Strong commercial contrast.</color>\n";
-            else
-            {
-                post -= 20f;
-                feedback += "<color=yellow>- Contrast: Goke needs 1.15 to 1.70.</color>\n";
-            }
-
-            if (grading.saturationSlider.value >= 1.2f && grading.saturationSlider.value <= 1.6f)
-                feedback += "<color=green>+ Vibrant Goke color.</color>\n";
-            else
-            {
-                post -= 15f;
-                feedback += "<color=yellow>- Saturation: Use 1.20 to 1.60 for a vibrant result.</color>\n";
-            }
-
-            if (grading.brightnessSlider.value >= 0.85f && grading.brightnessSlider.value <= 1.15f)
-                feedback += "<color=green>+ Controlled exposure.</color>\n";
-            else
-            {
-                post -= 10f;
-                feedback += "<color=yellow>- Brightness: Keep exposure between 0.85 and 1.15.</color>\n";
-            }
+            GradeColorRange(grading.brightnessSlider.value, 0.94f, 1.02f, 20f, "Exposure", "Use 0.94 to 1.02 so the can and logo retain highlight detail.", ref post, ref feedback);
+            GradeColorRange(grading.contrastSlider.value, 1.14f, 1.26f, 20f, "Contrast", "Use 1.14 to 1.26 for separation without crushing the red set.", ref post, ref feedback);
+            GradeColorRange(grading.saturationSlider.value, 1.04f, 1.16f, 20f, "Saturation", "Use 1.04 to 1.16. Stronger saturation merges the red product, backdrop, and graphics.", ref post, ref feedback);
+        }
+        else
+        {
+            post -= 42f;
+            feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
         return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 60000, IsRequiredSetupComplete());
@@ -523,6 +481,51 @@ public class ContractGrader : MonoBehaviour
         }
 
         return true;
+    }
+
+    private void GradeBrandingQuality(int requiredGraphics, string clientName, ref float post, ref string feedback)
+    {
+        BrandingClip[] allBrandingClips = FindObjectsOfType<BrandingClip>(true);
+        List<BrandingClip> timelineBranding = new List<BrandingClip>();
+
+        foreach (BrandingClip brandingClip in allBrandingClips)
+        {
+            if (brandingClip != null && brandingClip.linkedOverlay != null && brandingClip.linkedOverlay.isOnTimeline)
+            {
+                timelineBranding.Add(brandingClip);
+            }
+        }
+
+        if (timelineBranding.Count == requiredGraphics)
+        {
+            feedback += "<color=green>+ Correct " + requiredGraphics + "-graphic " + clientName + " branding sequence.</color>\n";
+        }
+        else
+        {
+            post -= 25f;
+            feedback += "<color=red>- Branding count: Place exactly " + requiredGraphics + " graphics. Found " + timelineBranding.Count + ".</color>\n";
+        }
+
+        bool allGraphicsProfessional = timelineBranding.Count > 0;
+
+        foreach (BrandingClip brandingClip in timelineBranding)
+        {
+            if (!brandingClip.linkedOverlay.IsProfessionalPlacement())
+            {
+                allGraphicsProfessional = false;
+                break;
+            }
+        }
+
+        if (allGraphicsProfessional)
+        {
+            feedback += "<color=green>+ Graphics are readable, title-safe, and held long enough to read.</color>\n";
+        }
+        else
+        {
+            post -= 20f;
+            feedback += "<color=yellow>- Graphic layout: Keep every graphic inside the title-safe guide, below 22% screen coverage, and visible for at least 2 seconds.</color>\n";
+        }
     }
 
     private void GradeColorRange(float value, float minimum, float maximum, float deduction, string label, string correction, ref float post, ref string feedback)
