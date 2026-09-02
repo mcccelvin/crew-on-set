@@ -12,8 +12,10 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
     private RectTransform myRect;
     private CanvasGroup canvasGroup;
 
-    private float unsnappedX;
     private Canvas parentCanvas;
+    private Transform dragOriginalParent;
+    private int dragOriginalSiblingIndex;
+    private Vector2 dragOriginalPosition;
 
     void Awake()
     {
@@ -65,12 +67,20 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
     public void OnBeginDrag(PointerEventData eventData)
     {
         if (parentCanvas == null) parentCanvas = GetComponentInParent<Canvas>();
+        if (parentCanvas == null)
+        {
+            Debug.LogWarning("BRANDING: The timeline clip is not inside a Canvas and cannot be dragged.");
+            return;
+        }
+
+        dragOriginalParent = transform.parent;
+        dragOriginalSiblingIndex = transform.GetSiblingIndex();
+        dragOriginalPosition = myRect.anchoredPosition;
 
         // Let it float freely while dragging so we can switch tracks!
         transform.SetParent(parentCanvas.transform, true);
 
         canvasGroup.blocksRaycasts = false;
-        unsnappedX = myRect.anchoredPosition.x;
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -87,11 +97,11 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         Transform newTrack = null;
 
         // Check if we dropped it on a new Branding Track!
-        if (droppedOn != null && EditorManager.Instance != null)
+        if (droppedOn != null && EditorManager.Instance != null && EditorManager.Instance.brandingTracks != null)
         {
             foreach (Transform track in EditorManager.Instance.brandingTracks)
             {
-                if (droppedOn.transform == track || droppedOn.transform.IsChildOf(track))
+                if (track != null && (droppedOn.transform == track || droppedOn.transform.IsChildOf(track)))
                 {
                     newTrack = track;
                     break;
@@ -99,10 +109,10 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
             }
         }
 
-        // If we missed, just snap it back to the first available track
-        if (newTrack == null && EditorManager.Instance != null)
+        if (newTrack == null)
         {
-            newTrack = EditorManager.Instance.brandingTracks[0];
+            RestoreAfterCancelledDrag();
+            return;
         }
 
         if (newTrack != null)
@@ -139,6 +149,7 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         }
 
         UpdateFrameMath();
+        NotifyTutorialClipChanged();
     }
 
     public void Trim(bool isLeft, PointerEventData eventData)
@@ -204,7 +215,7 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         }
 
         UpdateFrameMath();
-        if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnBrandTrimmed();
+        NotifyTutorialClipChanged();
     }
 
     private void UpdateFrameMath()
@@ -223,6 +234,31 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
 
             linkedOverlay.startFrame = Mathf.RoundToInt(startX / pixelsPerFrame);
             linkedOverlay.endFrame = Mathf.RoundToInt((startX + width) / pixelsPerFrame);
+        }
+    }
+
+    private void RestoreAfterCancelledDrag()
+    {
+        if (dragOriginalParent != null)
+        {
+            transform.SetParent(dragOriginalParent, false);
+            transform.SetSiblingIndex(dragOriginalSiblingIndex);
+            myRect.anchoredPosition = dragOriginalPosition;
+        }
+
+        UpdateFrameMath();
+
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            EditorTutorialManager.Instance.OnClipDragCancelled();
+        }
+    }
+
+    private void NotifyTutorialClipChanged()
+    {
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            EditorTutorialManager.Instance.OnBrandingClipChanged(this);
         }
     }
 

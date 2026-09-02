@@ -62,7 +62,11 @@ public class TutorialUIManager : MonoBehaviour
     private Player.Manager.InputManager inputManager;
     private bool[] completedTaskRows;
 
-    private void Awake() { Instance = this; }
+    private void Awake()
+    {
+        Instance = this;
+        RecoverTaskPanel();
+    }
 
     private void OnDestroy()
     {
@@ -93,6 +97,7 @@ public class TutorialUIManager : MonoBehaviour
 
     public void ShowBossDialogue(string message, Sprite pose, bool showOk, bool showSkip)
     {
+        RecoverTaskPanel();
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
         if (taskPanel != null) taskPanel.SetActive(false);
         if (bossText != null) bossText.text = message;
@@ -113,27 +118,43 @@ public class TutorialUIManager : MonoBehaviour
 
     public void SetupTasks(string[] tasks)
     {
-        if (taskPanel != null) taskPanel.SetActive(true);
-
-        completedTaskRows = new bool[taskRows.Length];
-
-        // Hide all rows initially
-        foreach (var row in taskRows)
+        if (tasks == null || tasks.Length == 0)
         {
-            if (row.rowContainer != null) row.rowContainer.SetActive(false);
+            HideTasks();
+            return;
         }
 
-        if (taskRevealCoroutine != null) StopCoroutine(taskRevealCoroutine);
-        taskRevealCoroutine = StartCoroutine(RevealTasksSequentially(tasks));
+        RecoverTaskPanel();
 
-        if (notificationCoroutine != null) StopCoroutine(notificationCoroutine);
+        if (taskRevealCoroutine != null)
+        {
+            StopCoroutine(taskRevealCoroutine);
+            taskRevealCoroutine = null;
+        }
+
+        if (notificationCoroutine != null)
+        {
+            StopCoroutine(notificationCoroutine);
+            notificationCoroutine = null;
+        }
+
+        HideTaskRows();
+
+        int taskRowCount = taskRows != null ? taskRows.Length : 0;
+        completedTaskRows = new bool[taskRowCount];
+
+        if (taskPanel != null) taskPanel.SetActive(true);
+        if (taskRowCount > 0) taskRevealCoroutine = StartCoroutine(RevealTasksSequentially(tasks));
+
         if (newTaskNotification != null) newTaskNotification.SetActive(false);
 
-        notificationCoroutine = StartCoroutine(ShowNewTaskNotification());
+        if (newTaskNotification != null) notificationCoroutine = StartCoroutine(ShowNewTaskNotification());
     }
 
     private IEnumerator RevealTasksSequentially(string[] tasks)
     {
+        if (taskRows == null) yield break;
+
         for (int i = 0; i < tasks.Length; i++)
         {
             if (i < taskRows.Length && taskRows[i] != null && taskRows[i].rowContainer != null)
@@ -141,17 +162,22 @@ public class TutorialUIManager : MonoBehaviour
                 // Clean up the text (remove the dash if it exists so it looks cleaner next to the icon)
                 string cleanText = tasks[i].StartsWith("- ") ? tasks[i].Substring(2) : tasks[i];
 
-                taskRows[i].taskText.text = cleanText;
-                taskRows[i].taskText.enableWordWrapping = false;
-                taskRows[i].taskText.overflowMode = TextOverflowModes.Ellipsis;
-                taskRows[i].taskText.enableAutoSizing = true;
-                taskRows[i].taskText.fontSizeMin = 14f;
+                if (taskRows[i].taskText != null)
+                {
+                    taskRows[i].taskText.text = cleanText;
+                    taskRows[i].taskText.enableWordWrapping = false;
+                    taskRows[i].taskText.overflowMode = TextOverflowModes.Ellipsis;
+                    taskRows[i].taskText.enableAutoSizing = true;
+                    taskRows[i].taskText.fontSizeMin = 14f;
+                }
                 ApplyTaskState(i);
 
                 taskRows[i].rowContainer.SetActive(true);
-                yield return new WaitForSeconds(0.4f);
+                yield return new WaitForSecondsRealtime(0.4f);
             }
         }
+
+        taskRevealCoroutine = null;
     }
 
     public void ShowActiveContract(string contractName)
@@ -177,13 +203,58 @@ public class TutorialUIManager : MonoBehaviour
             notificationCoroutine = null;
         }
 
+        HideTaskRows();
+
+        RecoverTaskPanel();
         if (taskPanel != null) taskPanel.SetActive(false);
         if (newTaskNotification != null) newTaskNotification.SetActive(false);
     }
 
+    public void ShowTasks()
+    {
+        RecoverTaskPanel();
+        if (taskPanel != null) taskPanel.SetActive(true);
+    }
+
+    private void HideTaskRows()
+    {
+        if (taskRows == null) return;
+
+        foreach (TaskUIRow row in taskRows)
+        {
+            if (row != null && row.rowContainer != null) row.rowContainer.SetActive(false);
+        }
+    }
+
+    private void RecoverTaskPanel()
+    {
+        if (taskPanel != null || taskRows == null) return;
+
+        Transform commonParent = null;
+
+        foreach (TaskUIRow row in taskRows)
+        {
+            if (row == null || row.rowContainer == null) continue;
+
+            Transform rowTransform = row.rowContainer.transform;
+            if (commonParent == null)
+            {
+                commonParent = rowTransform.parent != null ? rowTransform.parent : rowTransform;
+                continue;
+            }
+
+            while (commonParent != null && rowTransform != commonParent && !rowTransform.IsChildOf(commonParent))
+            {
+                commonParent = commonParent.parent;
+            }
+        }
+
+        if (commonParent != null) taskPanel = commonParent.gameObject;
+    }
+
     public void MarkTaskComplete(int index)
     {
-        if (index < 0 || index >= taskRows.Length || taskRows[index] == null) return;
+        if (taskRows == null || index < 0 || index >= taskRows.Length || taskRows[index] == null) return;
 
         if (completedTaskRows == null || completedTaskRows.Length != taskRows.Length)
         {
@@ -196,6 +267,8 @@ public class TutorialUIManager : MonoBehaviour
 
     private void ApplyTaskState(int index)
     {
+        if (taskRows == null || index < 0 || index >= taskRows.Length || taskRows[index] == null) return;
+
         TaskUIRow row = taskRows[index];
         bool isComplete = completedTaskRows != null && index < completedTaskRows.Length && completedTaskRows[index];
 
@@ -218,9 +291,11 @@ public class TutorialUIManager : MonoBehaviour
         if (newTaskNotification != null)
         {
             newTaskNotification.SetActive(true);
-            yield return new WaitForSeconds(4f);
+            yield return new WaitForSecondsRealtime(4f);
             if (newTaskNotification != null) newTaskNotification.SetActive(false);
         }
+
+        notificationCoroutine = null;
     }
 
     public void SetDynamicGlow(string keyword, bool state)

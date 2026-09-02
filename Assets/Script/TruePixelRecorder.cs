@@ -21,6 +21,8 @@ public class TruePixelRecorder : MonoBehaviour
     private BinaryWriter tapeWriter;
     private string currentFileName = "";
     private int recordedFrameCount = 0;
+    private float recordingStartTime = 0f;
+    private byte[] lastFrameData;
 
     public bool StartRecording()
     {
@@ -49,6 +51,8 @@ public class TruePixelRecorder : MonoBehaviour
             tapeWriter.Write(0); // Frame count is filled in when recording stops.
 
             recordedFrameCount = 0;
+            recordingStartTime = Time.unscaledTime;
+            lastFrameData = null;
             captureTexture = new RenderTexture(captureWidth, captureHeight, 24);
             captureTexture.Create();
             screenShot = new Texture2D(captureWidth, captureHeight, TextureFormat.RGB24, false);
@@ -77,6 +81,8 @@ public class TruePixelRecorder : MonoBehaviour
             recordingCoroutine = null;
         }
 
+        FillMissingFrames(Time.unscaledTime - recordingStartTime);
+
         string savedFileName = FinalizeTapeFile();
         CleanUpCaptureResources();
         return savedFileName;
@@ -103,6 +109,8 @@ public class TruePixelRecorder : MonoBehaviour
 
         currentFileName = "";
         recordedFrameCount = 0;
+        recordingStartTime = 0f;
+        lastFrameData = null;
     }
 
     private IEnumerator RecordFramesCoroutine()
@@ -137,13 +145,40 @@ public class TruePixelRecorder : MonoBehaviour
             }
 
             byte[] frameData = screenShot.EncodeToJPG(Mathf.Clamp(jpgQuality, 10, 100));
-            if (tapeWriter != null)
+            if (tapeWriter != null && frameData != null && frameData.Length > 0)
             {
-                tapeWriter.Write(frameData.Length);
-                tapeWriter.Write(frameData);
-                recordedFrameCount++;
+                int expectedFrameCount = Mathf.Max(recordedFrameCount + 1, Mathf.RoundToInt((Time.unscaledTime - recordingStartTime) * Mathf.Max(1f, framesPerSecond)));
+
+                if (lastFrameData != null)
+                {
+                    while (recordedFrameCount < expectedFrameCount - 1)
+                    {
+                        WriteFrame(lastFrameData);
+                    }
+                }
+
+                WriteFrame(frameData);
+                lastFrameData = frameData;
             }
         }
+    }
+
+    private void FillMissingFrames(float recordedDuration)
+    {
+        if (tapeWriter == null || lastFrameData == null) return;
+
+        int expectedFrameCount = Mathf.Max(1, Mathf.RoundToInt(recordedDuration * Mathf.Max(1f, framesPerSecond)));
+        while (recordedFrameCount < expectedFrameCount)
+        {
+            WriteFrame(lastFrameData);
+        }
+    }
+
+    private void WriteFrame(byte[] frameData)
+    {
+        tapeWriter.Write(frameData.Length);
+        tapeWriter.Write(frameData);
+        recordedFrameCount++;
     }
 
     private string FinalizeTapeFile()
@@ -175,6 +210,8 @@ public class TruePixelRecorder : MonoBehaviour
 
         currentFileName = "";
         recordedFrameCount = 0;
+        recordingStartTime = 0f;
+        lastFrameData = null;
         return savedFileName;
     }
 

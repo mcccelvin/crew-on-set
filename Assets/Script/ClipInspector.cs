@@ -36,9 +36,32 @@ public class ClipInspector : MonoBehaviour
         if (gameObject.activeSelf) gameObject.SetActive(false);
     }
 
-    public void OpenInspector(DraggableClip clip)
+    public bool OpenInspector(DraggableClip clip)
     {
+        if (clip == null)
+        {
+            ShowInspectorWarning("The selected clip is missing. Choose a valid recorded clip from the media bin.");
+            return false;
+        }
+
+        if (!TryGetTapeFrameCount(clip.clipFilePath, out int frameCount))
+        {
+            ShowInspectorWarning("This recording cannot be opened because its tape file is missing or damaged.");
+            return false;
+        }
+
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            float maximumDuration = frameCount / TapeSettings.framesPerSecond;
+            if (maximumDuration < 9.95f)
+            {
+                ShowInspectorWarning("This recording is only " + maximumDuration.ToString("F1") + " seconds long. The tutorial edit needs at least 10.0 seconds of footage. Record a new take before opening the Editor.");
+                return false;
+            }
+        }
+
         currentClip = clip;
+        totalRawFrames = 0;
         needsToLoad = true;
 
         if (transform.parent != null && !transform.parent.gameObject.activeSelf)
@@ -47,6 +70,7 @@ public class ClipInspector : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        return true;
     }
 
     private void OnEnable()
@@ -100,7 +124,7 @@ public class ClipInspector : MonoBehaviour
 
     private void UpdateHandlePositions()
     {
-        if (totalRawFrames <= 0) return;
+        if (totalRawFrames <= 0 || currentClip == null || trimTrack == null || leftHandle == null || rightHandle == null) return;
         float trackWidth = trimTrack.rect.width;
         float leftPct = (float)currentClip.startFrame / totalRawFrames;
         float rightPct = (float)currentClip.endFrame / totalRawFrames;
@@ -194,16 +218,28 @@ public class ClipInspector : MonoBehaviour
             EventSystem.current.SetSelectedGameObject(null);
         }
 
+        if (currentClip == null)
+        {
+            ShowInspectorWarning("There is no clip loaded in the Trim Inspector.");
+            return;
+        }
+
         if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
         {
             if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.TrimTo10Seconds && EditorTutorialManager.Instance.isTaskPhaseActive)
             {
-                float duration = (currentClip.endFrame - currentClip.startFrame) / TapeSettings.framesPerSecond;
-                string displayDuration = duration.ToString("F1");
-
-                if (displayDuration != "10.0")
+                float maximumDuration = totalRawFrames / TapeSettings.framesPerSecond;
+                if (totalRawFrames <= 0 || maximumDuration < 9.95f)
                 {
-                    EditorTutorialManager.Instance.ShowWarning("It's not 10 seconds yet! Your duration is " + displayDuration + " Sec. Adjust the pink handles until it says exactly 10.0 Sec!");
+                    ShowInspectorWarning("This recording is only " + maximumDuration.ToString("F1") + " seconds long. It cannot be trimmed to the required 10.0 seconds.");
+                    return;
+                }
+
+                float duration = (currentClip.endFrame - currentClip.startFrame) / TapeSettings.framesPerSecond;
+
+                if (Mathf.Abs(duration - 10f) > 0.05f)
+                {
+                    EditorTutorialManager.Instance.ShowWarning("It's not 10 seconds yet! Your duration is " + duration.ToString("F1") + " Sec. Adjust the pink handles until it says exactly 10.0 Sec!");
                     return;
                 }
             }
@@ -211,6 +247,50 @@ public class ClipInspector : MonoBehaviour
 
         gameObject.SetActive(false);
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnTrimWindowClosed();
+    }
+
+    private bool TryGetTapeFrameCount(string path, out int frameCount)
+    {
+        frameCount = 0;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return false;
+
+        try
+        {
+            using (BinaryReader reader = new BinaryReader(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)))
+            {
+                if (reader.BaseStream.Length < sizeof(int)) return false;
+                frameCount = reader.ReadInt32();
+                if (frameCount <= 0) return false;
+
+                for (int i = 0; i < frameCount; i++)
+                {
+                    if (reader.BaseStream.Position + sizeof(int) > reader.BaseStream.Length) return false;
+
+                    int frameSize = reader.ReadInt32();
+                    if (frameSize <= 0 || reader.BaseStream.Position + frameSize > reader.BaseStream.Length) return false;
+                    reader.BaseStream.Seek(frameSize, SeekOrigin.Current);
+                }
+
+                return true;
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("Trim Inspector Tape Error: " + e.Message);
+            return false;
+        }
+    }
+
+    private void ShowInspectorWarning(string message)
+    {
+        if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
+        {
+            EditorTutorialManager.Instance.ShowWarning(message);
+        }
+        else
+        {
+            Debug.LogWarning(message);
+        }
     }
 
     private void CloseFrameReader()

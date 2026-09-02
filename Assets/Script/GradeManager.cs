@@ -59,8 +59,7 @@ public class GradeManager : MonoBehaviour
 
                 if (CareerManager.Instance != null) CareerManager.Instance.CompleteActiveJob(grades.earnedBCoins);
 
-                string gradedKey = CampaignProgression.GetGradedKey(submittedLevel);
-                if (PlayerPrefs.GetInt(gradedKey, 0) == 0) CampaignProgression.CompleteLevel(submittedLevel);
+                CampaignProgression.CompleteLevel(submittedLevel);
             }
 
             CrossSceneData.resultApplied = true;
@@ -183,10 +182,7 @@ public class GradeManager : MonoBehaviour
         if (isLoadingScene) return;
 
         int submittedLevel = Mathf.Clamp(CrossSceneData.submittedLevel, CampaignProgression.MinimumLevel, CampaignProgression.MaximumLevel);
-        CampaignProgression.SetCurrentLevel(submittedLevel);
-
-        if (submittedLevel == 1) PlayerPrefs.SetInt("Level1RetryActive", 1);
-        PlayerPrefs.Save();
+        CampaignProgression.SetRetryLevel(submittedLevel);
 
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
 

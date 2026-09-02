@@ -234,7 +234,7 @@ MonoBehaviour:
   HoldRotationOffset: {x: 0, y: -90, z: 0}
   spotlight: {fileID: 1717998380998936278}
   intensityPercent: 100
-  maxLux: 20
+  maxLux: 4
   tiltStep: 5
   maxTiltUp: -45
   maxTiltDown: 45

@@ -40,7 +40,7 @@ public class DirectorTerminal : MonoBehaviour
     [Header("Dynamic Prop Bin Database")]
     public List<LevelPropBank> propDatabase = new List<LevelPropBank>();
 
-    [Header("Level 3 Cast & Vehicle")]
+    [Header("Level 3 Vehicle & Level 4 Cast")]
     public int actorHireCost = 500;
     public int carSpawnCost = 50;
 
@@ -678,6 +678,12 @@ public class DirectorTerminal : MonoBehaviour
             if (TutorialManager.Instance != null)
                 TutorialManager.Instance.OnPropPlaced(placedObject);
 
+            CubeActor placedActor = placedObject.GetComponent<CubeActor>();
+            if (placedActor != null && CampaignLevelManager.Instance != null)
+            {
+                CampaignLevelManager.Instance.OnActorPlaced(placedObject);
+            }
+
             if (shouldShowPropCostWarning && TutorialManager.Instance != null)
             {
                 hasShownPropCostWarning = true;
@@ -821,7 +827,7 @@ public class DirectorTerminal : MonoBehaviour
             }
         }
 
-        if (currentLevel >= 3)
+        if (currentLevel >= 4)
         {
             CreateStageItemCard("ACTOR A", true, 0);
             CreateStageItemCard("ACTOR B", true, 1);
@@ -1017,7 +1023,7 @@ public class DirectorTerminal : MonoBehaviour
             poseActorButton.onClick.AddListener(PoseSelectedActor);
         }
 
-        poseButtonObject.SetActive(PlayerPrefs.GetInt("TutorialProgress", 0) >= 3);
+        poseButtonObject.SetActive(CampaignProgression.GetCurrentLevel() >= 4);
         UpdatePoseActorButton();
     }
 
@@ -1033,13 +1039,15 @@ public class DirectorTerminal : MonoBehaviour
         {
             selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "") + " - " + cubeActor.GetPoseName();
         }
+
+        if (CampaignLevelManager.Instance != null) CampaignLevelManager.Instance.OnActorPosed(cubeActor);
     }
 
     private void UpdatePoseActorButton()
     {
         if (poseActorButton == null) return;
 
-        poseActorButton.gameObject.SetActive(PlayerPrefs.GetInt("TutorialProgress", 0) >= 3);
+        poseActorButton.gameObject.SetActive(CampaignProgression.GetCurrentLevel() >= 4);
         poseActorButton.interactable = selectedObject != null && selectedObject.GetComponent<CubeActor>() != null;
     }
 

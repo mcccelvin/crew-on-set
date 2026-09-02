@@ -122,6 +122,7 @@ public class TutorialManager : MonoBehaviour
 
     private float spacebarCooldown = 0f;
     private bool wasJumpHeld = false;
+    private bool isTutorialInitialized = false;
 
     [Header("Game Explanation Dialogue")]
     private string[] explanationPages = new string[]
@@ -181,6 +182,7 @@ public class TutorialManager : MonoBehaviour
         if (currentLevel >= 4)
         {
             currentStep = TutorialStep.Level1Accepted;
+            FinishTutorialInitialization();
             StartCampaignLevel(currentLevel);
             return;
         }
@@ -188,6 +190,7 @@ public class TutorialManager : MonoBehaviour
         if (currentLevel == 3)
         {
             currentStep = TutorialStep.Level1Accepted;
+            FinishTutorialInitialization();
             StartLevel3();
             return;
         }
@@ -195,6 +198,7 @@ public class TutorialManager : MonoBehaviour
         if (currentLevel == 2)
         {
             currentStep = TutorialStep.Level1Accepted;
+            FinishTutorialInitialization();
             StartGokeLevel();
             return;
         }
@@ -207,6 +211,9 @@ public class TutorialManager : MonoBehaviour
     {// --- ADD THIS TO FIX THE POINT C CAMERA TRIGGER ---
         Keyboard keyboard = Keyboard.current;
         Mouse mouse = Mouse.current;
+
+        if (!isTutorialInitialized) return;
+
         bool spaceHeld = keyboard != null && keyboard.spaceKey.isPressed;
         bool sprintHeld = keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
         bool movementHeld = keyboard != null &&
@@ -279,7 +286,7 @@ public class TutorialManager : MonoBehaviour
 
         if (spacePromptText != null)
         {
-            bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.time >= spacebarCooldown) && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
+            bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.unscaledTime >= spacebarCooldown) && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
             spacePromptText.gameObject.SetActive(canShowPrompt);
         }
 
@@ -290,7 +297,7 @@ public class TutorialManager : MonoBehaviour
 
         if (jumpJustPressed && !isTransitioning)
         {
-            if (Time.time >= spacebarCooldown)
+            if (Time.unscaledTime >= spacebarCooldown)
             {
                 if (currentStep == TutorialStep.GameExplanation || currentStep == TutorialStep.ExplainComputerEditor)
                 {
@@ -787,14 +794,39 @@ public class TutorialManager : MonoBehaviour
         UpdateBossDialogue();
     }
 
-    private IEnumerator StartTutorialWithDelay() { yield return new WaitForSeconds(1f); currentStep = TutorialStep.Intro; UpdateBossDialogue(); }
-    private IEnumerator StartLevel1RetryWithDelay() { yield return new WaitForSeconds(1f); isLevel1Retry = true; currentStep = TutorialStep.SetTrainingObjectAndMoney; UpdateBossDialogue(); }
+    private IEnumerator StartTutorialWithDelay()
+    {
+        yield return new WaitForSecondsRealtime(1f);
+        currentStep = TutorialStep.Intro;
+        FinishTutorialInitialization();
+        UpdateBossDialogue();
+    }
+
+    private IEnumerator StartLevel1RetryWithDelay()
+    {
+        yield return new WaitForSecondsRealtime(1f);
+        isLevel1Retry = true;
+        currentStep = TutorialStep.SetTrainingObjectAndMoney;
+        FinishTutorialInitialization();
+        UpdateBossDialogue();
+    }
+
     private IEnumerator StartPostEditTutorial()
     {
-        yield return new WaitForSeconds(1.5f);
+        yield return new WaitForSecondsRealtime(1.5f);
         if (AlmanacManager.Instance != null) AlmanacManager.Instance.UnlockLevel1Knowledge();
         currentStep = TutorialStep.PostEditComplete;
+        FinishTutorialInitialization();
         UpdateBossDialogue();
+    }
+
+    private void FinishTutorialInitialization()
+    {
+        Keyboard keyboard = Keyboard.current;
+        bool spaceHeld = keyboard != null && keyboard.spaceKey.isPressed;
+        wasJumpHeld = (pInput != null && pInput.Jump) || spaceHeld;
+        spacebarCooldown = Time.unscaledTime + 0.2f;
+        isTutorialInitialized = true;
     }
 
     public void ShowWarning(string warningMessage)
@@ -1270,6 +1302,7 @@ public class TutorialManager : MonoBehaviour
     private IEnumerator TransitionToNextStep(TutorialStep nextStep, bool didTaskJustComplete)
     {
         if (isTransitioning) yield break;
+        CancelActiveWarning();
         isTransitioning = true;
         isTaskPhaseActive = false;
         PointLineAt("");
@@ -1293,6 +1326,17 @@ public class TutorialManager : MonoBehaviour
         UpdateBossDialogue();
     }
 
+    private void CancelActiveWarning()
+    {
+        if (warningCoroutine != null)
+        {
+            StopCoroutine(warningCoroutine);
+            warningCoroutine = null;
+        }
+
+        restoreTaskPanelAfterWarning = false;
+    }
+
     private RectTransform GetComputerHighlightTarget(string targetName, RectTransform fallbackTarget)
     {
         ComputerUIManager computerUI = FindObjectOfType<ComputerUIManager>(true);
@@ -1314,7 +1358,22 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    public void OnTabletOpened() { if (currentStep == TutorialStep.BuildStageWall && isTaskPhaseActive && !tabletOpened) { tabletOpened = true; TutorialUIManager.Instance.MarkTaskComplete(0); TutorialUIManager.Instance.SetDynamicGlow("director", false); StartCoroutine(TransitionToNextStep(TutorialStep.ExplainDirectorTablet, true)); } }
+    public void OnTabletOpened()
+    {
+        if (CampaignLevelManager.Instance != null && CampaignLevelManager.Instance.IsActorIntroductionActive())
+        {
+            CampaignLevelManager.Instance.OnDirectorTerminalOpened();
+            return;
+        }
+
+        if (currentStep == TutorialStep.BuildStageWall && isTaskPhaseActive && !tabletOpened)
+        {
+            tabletOpened = true;
+            TutorialUIManager.Instance.MarkTaskComplete(0);
+            TutorialUIManager.Instance.SetDynamicGlow("director", false);
+            StartCoroutine(TransitionToNextStep(TutorialStep.ExplainDirectorTablet, true));
+        }
+    }
 
     public void OnWallAdded()
     {
@@ -1379,6 +1438,12 @@ public class TutorialManager : MonoBehaviour
     {
         if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
 
+        if (CampaignLevelManager.Instance != null && CampaignLevelManager.Instance.IsActorIntroductionActive())
+        {
+            CampaignLevelManager.Instance.OnDirectorTerminalClosed();
+            return;
+        }
+
         if (currentStep == TutorialStep.FreePlayDirectorTablet && isTaskPhaseActive)
             StartCoroutine(TransitionToNextStep(TutorialStep.BuyLight_WalkToShop, false));
     }
@@ -1388,6 +1453,12 @@ public class TutorialManager : MonoBehaviour
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             GokeLevelManager.Instance.OnShopOpened();
+            return;
+        }
+
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnShopOpened();
             return;
         }
 
@@ -1438,6 +1509,12 @@ public class TutorialManager : MonoBehaviour
             return;
         }
 
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnShopClosed();
+            return;
+        }
+
         if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
 
         if (currentStep == TutorialStep.BuyLight_CloseShop && isTaskPhaseActive)
@@ -1457,6 +1534,12 @@ public class TutorialManager : MonoBehaviour
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             GokeLevelManager.Instance.OnEquipmentBought(itemsCount);
+            return;
+        }
+
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnEquipmentBought(itemsCount);
             return;
         }
 
@@ -1482,6 +1565,12 @@ public class TutorialManager : MonoBehaviour
             return;
         }
 
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnLightPickedUp(light);
+            return;
+        }
+
         if (currentStep == TutorialStep.PickUpLight && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1496,6 +1585,11 @@ public class TutorialManager : MonoBehaviour
             return GokeLevelManager.Instance.CanPickUpLight(light);
         }
 
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            return Level3Manager.Instance.CanPickUpLight(light);
+        }
+
         return true;
     }
 
@@ -1504,6 +1598,12 @@ public class TutorialManager : MonoBehaviour
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             GokeLevelManager.Instance.OnLightTurnedOn(light);
+            return;
+        }
+
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnLightTurnedOn(light);
             return;
         }
 
@@ -1522,6 +1622,12 @@ public class TutorialManager : MonoBehaviour
             return;
         }
 
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnLightIntensityChanged(light, intensity);
+            return;
+        }
+
         if (currentStep == TutorialStep.AdjustLight_Intensity && isTaskPhaseActive)
         {
             if (Mathf.RoundToInt(intensity) == 45)
@@ -1534,6 +1640,12 @@ public class TutorialManager : MonoBehaviour
 
     public void OnLightTilted(float tilt)
     {
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnLightTilted(tilt);
+            return;
+        }
+
         if (currentStep == TutorialStep.AdjustLight_Tilt && isTaskPhaseActive)
         {
             if (Mathf.RoundToInt(tilt) == -5)
@@ -1544,11 +1656,25 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
+    public void OnLightFeatureChanged(Player.Equipment.FilmLightItem light)
+    {
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnLightFeatureChanged(light);
+        }
+    }
+
     public void OnLightDropped(Player.Equipment.FilmLightItem light = null)
     {
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             GokeLevelManager.Instance.OnLightDropped(light);
+            return;
+        }
+
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            Level3Manager.Instance.OnLightDropped(light);
             return;
         }
 
@@ -1716,11 +1842,12 @@ public class TutorialManager : MonoBehaviour
 
     private void UpdateBossDialogue()
     {
+        CancelActiveWarning();
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
         LockPlayer();
 
-        spacebarCooldown = Time.time + 0.2f;
+        spacebarCooldown = Time.unscaledTime + 0.2f;
 
         if (spacePromptText != null) spacePromptText.gameObject.SetActive(false);
 
@@ -1937,6 +2064,11 @@ public class TutorialManager : MonoBehaviour
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             return GokeLevelManager.Instance.CanBuyItem(itemIndex);
+        }
+
+        if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
+        {
+            return Level3Manager.Instance.CanBuyItem(itemIndex);
         }
 
         if (currentStep >= TutorialStep.OfferLevel1) return true;

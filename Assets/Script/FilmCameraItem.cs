@@ -925,16 +925,14 @@ namespace Player.Equipment
         {
             CacheLevel3Targets();
 
-            if (level3Actor == null || level3Vehicle == null)
+            if (level3Vehicle == null)
             {
                 RecordMissingEvidence();
                 framesSampled++;
                 return;
             }
 
-            if (!TryGetViewportBounds(level3ActorRenderers, out Vector4 actorViewport) ||
-                !TryGetViewportBounds(level3VehicleRenderers, out Vector4 vehicleViewport) ||
-                !TryGetWorldBounds(level3ActorRenderers, out Bounds actorBounds) ||
+            if (!TryGetViewportBounds(level3VehicleRenderers, out Vector4 vehicleViewport) ||
                 !TryGetWorldBounds(level3VehicleRenderers, out Bounds vehicleBounds))
             {
                 RecordMissingEvidence();
@@ -942,51 +940,34 @@ namespace Player.Equipment
                 return;
             }
 
-            Bounds productionBounds = vehicleBounds;
-            productionBounds.Encapsulate(actorBounds);
-
-            float cameraScore = GradeLevel3Composition(actorViewport, vehicleViewport);
-            bool isActorBlocked = IsCampaignTargetBlocked(actorBounds.center, level3Actor.transform);
+            float cameraScore = GradeLevel3Composition(vehicleViewport);
             bool isVehicleBlocked = IsCampaignTargetBlocked(vehicleBounds.center, level3Vehicle.transform);
-            if (isActorBlocked) cameraScore -= 10f;
             if (isVehicleBlocked) cameraScore -= 15f;
 
-            Vector4 groupViewport = CombineViewportBounds(actorViewport, vehicleViewport);
-            bool allSubjectsVisible = GradeViewportVisibility(actorViewport, 0.05f) >= 0.99f &&
-                                      GradeViewportVisibility(vehicleViewport, 0.05f) >= 0.99f &&
-                                      !isActorBlocked && !isVehicleBlocked;
-            RecordProductionEvidence(groupViewport, allSubjectsVisible, level3Actor, productionBounds.center);
+            bool allSubjectsVisible = GradeViewportVisibility(vehicleViewport, 0.05f) >= 0.99f && !isVehicleBlocked;
+            RecordProductionEvidence(vehicleViewport, allSubjectsVisible, null, vehicleBounds.center);
 
             totalCameraScoreAccumulated += Mathf.Clamp(cameraScore, 0f, 70f);
-            totalLightingScoreAccumulated += GradeLevel3Lighting(productionBounds.center);
+            totalLightingScoreAccumulated += GradeLevel3Lighting(vehicleBounds.center);
             framesSampled++;
         }
 
-        private float GradeLevel3Composition(Vector4 actorViewport, Vector4 vehicleViewport)
+        private float GradeLevel3Composition(Vector4 vehicleViewport)
         {
             float score = 0f;
-            score += 12f * GradeViewportVisibility(actorViewport, 0.05f);
-            score += 16f * GradeViewportVisibility(vehicleViewport, 0.05f);
+            score += 25f * GradeViewportVisibility(vehicleViewport, 0.05f);
 
-            float groupMinimumX = Mathf.Min(actorViewport.x, vehicleViewport.x);
-            float groupMinimumY = Mathf.Min(actorViewport.y, vehicleViewport.y);
-            float groupMaximumX = Mathf.Max(actorViewport.z, vehicleViewport.z);
-            float groupMaximumY = Mathf.Max(actorViewport.w, vehicleViewport.w);
-            float groupWidth = groupMaximumX - groupMinimumX;
-            float groupHeight = groupMaximumY - groupMinimumY;
-            float groupCoverage = Mathf.Max(groupWidth, groupHeight);
-            score += 14f * GradeRange(groupCoverage, 0.4f, 0.82f);
-
-            Vector2 groupCenter = new Vector2((groupMinimumX + groupMaximumX) * 0.5f, (groupMinimumY + groupMaximumY) * 0.5f);
-            score += 10f * Mathf.Clamp01(1f - Vector2.Distance(groupCenter, new Vector2(0.5f, 0.5f)) / 0.35f);
+            float vehicleWidth = vehicleViewport.z - vehicleViewport.x;
+            float vehicleHeight = vehicleViewport.w - vehicleViewport.y;
+            float vehicleCoverage = Mathf.Max(vehicleWidth, vehicleHeight);
+            score += 20f * GradeRange(vehicleCoverage, 0.38f, 0.78f);
 
             float vehicleCenterX = (vehicleViewport.x + vehicleViewport.z) * 0.5f;
             float closestThird = Mathf.Min(Mathf.Abs(vehicleCenterX - 0.33f), Mathf.Abs(vehicleCenterX - 0.66f));
-            score += 10f * Mathf.Clamp01(1f - closestThird / 0.2f);
+            score += 15f * Mathf.Clamp01(1f - closestThird / 0.2f);
 
-            float actorCenterX = (actorViewport.x + actorViewport.z) * 0.5f;
-            score += 5f * GradeRange(Mathf.Abs(actorCenterX - vehicleCenterX), 0.12f, 0.45f);
-            score += 3f * GradeLowViewportOverlap(actorViewport, vehicleViewport);
+            float vehicleCenterY = (vehicleViewport.y + vehicleViewport.w) * 0.5f;
+            score += 10f * Mathf.Clamp01(1f - Mathf.Abs(vehicleCenterY - 0.5f) / 0.3f);
 
             return Mathf.Clamp(score, 0f, 70f);
         }
@@ -1006,12 +987,14 @@ namespace Player.Equipment
                 Vector3 lightArrow = (lightPosition - targetCenter).normalized;
 
                 bool isSoftLight = light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight;
-                float score = isSoftLight ? 5f : 0f;
-                score += 7f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 75f) / 45f);
-                score += 4f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 10f) / 25f);
-                score += 8f * Mathf.InverseLerp(0.45f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
-                score += 3f * Mathf.InverseLerp(-0.15f, 0.75f, Vector3.Dot(cameraArrow, lightArrow));
-                score += 3f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 2f, 8f);
+                float score = isSoftLight ? 3f : 0f;
+                score += 6f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 75f) / 45f);
+                score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 10f) / 25f);
+                score += 7f * Mathf.InverseLerp(0.45f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
+                score += 2f * Mathf.InverseLerp(-0.15f, 0.75f, Vector3.Dot(cameraArrow, lightArrow));
+                score += 2f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 2f, 8f);
+                score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetColorTemperature() - 5400f) / 2200f);
+                score += 4f * Mathf.Clamp01(1f - Mathf.Abs(light.GetDiffusionPercent() - 75f) / 50f);
 
                 if (!isSoftLight) score = Mathf.Min(score * 0.5f, 7f);
                 bestScore = Mathf.Max(bestScore, score);
@@ -1181,11 +1164,11 @@ namespace Player.Equipment
 
         private void CacheLevel3Targets()
         {
-            if (Time.time < nextLevel3TargetRefreshTime && level3Actor != null && level3Vehicle != null) return;
+            if (Time.time < nextLevel3TargetRefreshTime && level3Vehicle != null) return;
 
-            level3Actor = FindObjectOfType<CubeActor>();
+            level3Actor = null;
             level3Vehicle = FindObjectOfType<CubeVehicle>();
-            level3ActorRenderers = level3Actor != null ? level3Actor.GetComponentsInChildren<Renderer>() : null;
+            level3ActorRenderers = null;
             level3VehicleRenderers = level3Vehicle != null ? level3Vehicle.GetComponentsInChildren<Renderer>() : null;
             nextLevel3TargetRefreshTime = Time.time + 1f;
         }

@@ -910,7 +910,7 @@ public class GokeLevelManager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola is offering a 60,000 B-Coin contract requiring a RED stage, Rule of Thirds, 3-Point Lighting, three graphics, and a high-contrast edit. Press Space to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola is offering a 60,000 B-Coin contract requiring a RED stage, Rule of Thirds, 3-Point Lighting, two graphics, and a balanced high-contrast edit. Press Space to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -1487,7 +1487,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("After the set, camera, and lighting are ready, record your take and bring the SD Card to the editing computer. Goke Cola wants <color=yellow>three graphics</color> and a bold, high-contrast finish. Keep the colors vibrant, but do not raise contrast so far that the shadows are crushed.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("After the set, camera, and lighting are ready, record your take and bring the SD Card to the editing computer. Goke Cola wants <color=yellow>two graphics</color>: place the first from 0-5 seconds and the second from 5-10 seconds. Keep both title-safe and preserve the bold red palette without crushing the shadows.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 

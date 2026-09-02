@@ -28,6 +28,8 @@ namespace Player.Manager
         public bool ContextPanel { get; private set; }
         public bool Continue { get; private set; }
         public float LightTilt { get; private set; }
+        public float LightTemperature { get; private set; }
+        public float LightDiffusion { get; private set; }
         public int HotbarSlot { get; private set; } = -1;
 
         private InputActionMap playerMap;
@@ -46,6 +48,8 @@ namespace Player.Manager
         private InputAction equipmentAdjustAction;
         private InputAction cameraPedestalAction;
         private InputAction lightTiltAction;
+        private InputAction lightTemperatureAction;
+        private InputAction lightDiffusionAction;
         private InputAction hotbar1Action;
         private InputAction hotbar2Action;
         private InputAction hotbar3Action;
@@ -100,6 +104,8 @@ namespace Player.Manager
                 equipmentAdjustAction = equipmentMap.FindAction("Adjust");
                 cameraPedestalAction = equipmentMap.FindAction("Camera Pedestal");
                 lightTiltAction = equipmentMap.FindAction("Light Tilt");
+                lightTemperatureAction = equipmentMap.FindAction("Light Temperature");
+                lightDiffusionAction = equipmentMap.FindAction("Light Diffusion");
                 hotbar1Action = equipmentMap.FindAction("Hotbar 1");
                 hotbar2Action = equipmentMap.FindAction("Hotbar 2");
                 hotbar3Action = equipmentMap.FindAction("Hotbar 3");
@@ -154,6 +160,8 @@ namespace Player.Manager
         private void onEquipmentAdjust(InputAction.CallbackContext context) { EquipmentAdjust = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
         private void onCameraPedestal(InputAction.CallbackContext context) { CameraPedestal = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
         private void onLightTilt(InputAction.CallbackContext context) { LightTilt = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
+        private void onLightTemperature(InputAction.CallbackContext context) { LightTemperature = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
+        private void onLightDiffusion(InputAction.CallbackContext context) { LightDiffusion = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
         private void onHotbar1(InputAction.CallbackContext context) { if (CanReadGameplayAction()) HotbarSlot = 0; }
         private void onHotbar2(InputAction.CallbackContext context) { if (CanReadGameplayAction()) HotbarSlot = 1; }
         private void onHotbar3(InputAction.CallbackContext context) { if (CanReadGameplayAction()) HotbarSlot = 2; }
@@ -221,6 +229,8 @@ namespace Player.Manager
                 EquipmentAdjust = 0f;
                 CameraPedestal = 0f;
                 LightTilt = 0f;
+                LightTemperature = 0f;
+                LightDiffusion = 0f;
             }
         }
 
@@ -239,6 +249,8 @@ namespace Player.Manager
             Continue = false;
             JumpPressedThisFrame = false;
             LightTilt = 0f;
+            LightTemperature = 0f;
+            LightDiffusion = 0f;
             HotbarSlot = -1;
         }
 
@@ -260,6 +272,8 @@ namespace Player.Manager
             if (equipmentAdjustAction != null) { equipmentAdjustAction.performed += onEquipmentAdjust; equipmentAdjustAction.canceled += onEquipmentAdjust; }
             if (cameraPedestalAction != null) { cameraPedestalAction.performed += onCameraPedestal; cameraPedestalAction.canceled += onCameraPedestal; }
             if (lightTiltAction != null) { lightTiltAction.performed += onLightTilt; lightTiltAction.canceled += onLightTilt; }
+            if (lightTemperatureAction != null) { lightTemperatureAction.performed += onLightTemperature; lightTemperatureAction.canceled += onLightTemperature; }
+            if (lightDiffusionAction != null) { lightDiffusionAction.performed += onLightDiffusion; lightDiffusionAction.canceled += onLightDiffusion; }
             if (hotbar1Action != null) hotbar1Action.performed += onHotbar1;
             if (hotbar2Action != null) hotbar2Action.performed += onHotbar2;
             if (hotbar3Action != null) hotbar3Action.performed += onHotbar3;
@@ -291,6 +305,8 @@ namespace Player.Manager
             if (equipmentAdjustAction != null) { equipmentAdjustAction.performed -= onEquipmentAdjust; equipmentAdjustAction.canceled -= onEquipmentAdjust; }
             if (cameraPedestalAction != null) { cameraPedestalAction.performed -= onCameraPedestal; cameraPedestalAction.canceled -= onCameraPedestal; }
             if (lightTiltAction != null) { lightTiltAction.performed -= onLightTilt; lightTiltAction.canceled -= onLightTilt; }
+            if (lightTemperatureAction != null) { lightTemperatureAction.performed -= onLightTemperature; lightTemperatureAction.canceled -= onLightTemperature; }
+            if (lightDiffusionAction != null) { lightDiffusionAction.performed -= onLightDiffusion; lightDiffusionAction.canceled -= onLightDiffusion; }
             if (hotbar1Action != null) hotbar1Action.performed -= onHotbar1;
             if (hotbar2Action != null) hotbar2Action.performed -= onHotbar2;
             if (hotbar3Action != null) hotbar3Action.performed -= onHotbar3;
@@ -323,6 +339,8 @@ namespace Player.Manager
             EquipmentAdjust = 0f;
             CameraPedestal = 0f;
             LightTilt = 0f;
+            LightTemperature = 0f;
+            LightDiffusion = 0f;
             HotbarSlot = -1;
             jumpPressed = false;
         }

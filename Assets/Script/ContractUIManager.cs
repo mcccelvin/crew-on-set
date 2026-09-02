@@ -219,11 +219,11 @@ public class ContractUIManager : MonoBehaviour
             "STAGE   - RED backdrop and Cola away from the wall\n" +
             "CAMERA  - Rule of Thirds composition\n" +
             "LIGHT   - 3-Point Lighting\n" +
-            "EDIT    - 10 seconds, 3 title-safe graphics, balanced red commercial grade\n" +
+            "EDIT    - 10 seconds, 2 title-safe graphics, balanced red commercial grade\n" +
             "GRADE   - Brightness 0.94-1.02, Contrast 1.14-1.26, Saturation 1.04-1.16\n\n" +
             "UPFRONT PAYMENT: 60,000 B-COINS");
 
-        SetQualificationSummary("STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 3 title-safe graphics + balanced color");
+        SetQualificationSummary("STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 2 title-safe graphics + balanced color");
 
         SetQualificationText("GOKE COLA - SELECTED CONTRACT",
             "RULE OF THIRDS",
@@ -240,7 +240,7 @@ public class ContractUIManager : MonoBehaviour
             "- Recommended starting point: Key 75%, Fill 40%, Back 60%.\n" +
             "- Aim every beam at the product and keep the key dominant.\n\n" +
             "POST-PRODUCTION\n" +
-            "Keep graphics inside title safe. Protect the red brand palette with B 0.94-1.02, C 1.14-1.26, and S 1.04-1.16.");
+            "Remove dead air and begin the edit at 0.0 seconds. Use the Rule-of-Thirds negative space as information space without covering the product. Keep the Main Logo title-safe from 0-5 seconds, then the End Logo from 5-10 seconds. Correct exposure, contrast, and saturation in that order. Use B 0.94-1.02, C 1.14-1.26, and S 1.04-1.16.");
 
         SetPreviousContractText("ARTISAN\nFLOWER VASE",
             "PREVIOUS CONTRACT\n\n" +
@@ -257,27 +257,26 @@ public class ContractUIManager : MonoBehaviour
         SetContractText("LAMBORMINI",
             "CLIENT QUALIFICATIONS\n\n" +
             "VEHICLE - Place the Lambormini car on the stage\n" +
-            "CAST    - Hire and pose one actor beside the car\n" +
             "LIGHT   - Use the Level 3 Soft Light for clean reflections\n" +
             "CAMERA  - Create a premium automotive composition\n" +
             "EDIT    - 10-second premium automotive color grade\n\n" +
             "UPFRONT PAYMENT: 80,000 B-COINS");
 
-        SetQualificationSummary("STAGE: Lambormini car + one posed actor     CAMERA: Premium automotive frame\nLIGHT: Level 3 Soft Light     EDIT: 10-second premium grade");
+        SetQualificationSummary("STAGE: Lambormini hero vehicle     CAMERA: Premium automotive frame\nLIGHT: Level 3 Soft Light at 65-85%     EDIT: 10-second premium grade");
 
         SetQualificationText("LAMBORMINI - SELECTED CONTRACT",
-            "ACTOR DIRECTION",
-            "The actor must support the vehicle instead of hiding it.\n\n" +
-            "- Hire an actor from the Director Terminal.\n" +
-            "- Place the actor beside the car.\n" +
-            "- Select the actor and choose a clear pose.\n" +
-            "- Keep the actor from blocking the car body.",
-            "AUTOMOTIVE LIGHTING",
+            "AUTOMOTIVE COMPOSITION",
+            "Present the vehicle as the only hero subject.\n\n" +
+            "- Place exactly one Lambormini car.\n" +
+            "- Show a readable front or side silhouette.\n" +
+            "- Use the Rule of Thirds grid to create intentional negative space.\n" +
+            "- Keep the stage clear of actors and unnecessary clutter.",
+            "SOFT REFLECTIVE LIGHTING",
             "Use the Level 3 Soft Light to shape the vehicle.\n\n" +
             "- Light the side and front of the car.\n" +
             "- Keep highlights clean across the body.\n" +
-            "- Start near 75% intensity and -10 degrees tilt.\n" +
-            "- Aim the beam so the actor and vehicle stay readable.\n" +
+            "- Use 65-85% intensity and -20 to 0 degrees tilt.\n" +
+            "- Aim the beam so the body shape stays readable.\n" +
             "- In the Editor use Contrast 1.15-1.45, Saturation 0.95-1.20, and Brightness 0.90-1.10.");
 
         SetPreviousContractText("GOKE COLA",
@@ -322,7 +321,7 @@ public class ContractUIManager : MonoBehaviour
 
         SetPreviousContractText("LAMBORMINI",
             "PREVIOUS CONTRACT\n\n" +
-            "Actor and vehicle staging\n" +
+            "Hero vehicle staging\n" +
             "Premium automotive composition\n" +
             "Soft reflective lighting\n" +
             "10-second commercial");
@@ -484,7 +483,7 @@ public class ContractUIManager : MonoBehaviour
             "STAGE   • RED backdrop and Cola away from the wall\n" +
             "CAMERA  • Rule of Thirds composition\n" +
             "LIGHT   • 3-Point Lighting\n" +
-            "EDIT    • 10 seconds, three title-safe graphics, balanced color\n\n" +
+            "EDIT    • 10 seconds, two title-safe graphics, balanced color\n\n" +
             "UPFRONT PAYMENT: 60,000 B-COINS",
             25, TextAlignmentOptions.TopLeft);
         SetStretchRect(contractDescription.rectTransform, Vector2.zero, Vector2.one, new Vector2(50f, 170f), new Vector2(-50f, -135f));
@@ -513,7 +512,7 @@ public class ContractUIManager : MonoBehaviour
         headingText.fontStyle = FontStyles.Bold;
 
         TextMeshProUGUI contractSummary = CreateText("Contract Summary", mainPanel.transform,
-            "STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 3 title-safe graphics + balanced color",
+            "STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 2 title-safe graphics + balanced color",
             21, TextAlignmentOptions.Center);
         SetRect(contractSummary.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -115f), new Vector2(1320f, 68f));
         contractSummary.color = new Color(1f, 0.82f, 0.35f);

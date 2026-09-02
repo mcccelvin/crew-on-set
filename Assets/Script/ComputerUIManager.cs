@@ -99,6 +99,14 @@ public class ComputerUIManager : MonoBehaviour
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ComputerStation")) return;
 
         if (pixelPlayer != null) pixelPlayer.StopTape();
+
+        if (physicalComputer == null) physicalComputer = FindObjectOfType<ComputerStation>();
+        if (physicalComputer != null)
+        {
+            physicalComputer.CloseComputerUI();
+            return;
+        }
+
         gameObject.SetActive(false);
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -185,20 +193,76 @@ public class ComputerUIManager : MonoBehaviour
 
         if (physicalComputer == null) physicalComputer = FindObjectOfType<ComputerStation>();
 
-        ProjectDataManager.Instance.ClearProject();
-        if (physicalComputer != null)
+        List<FootageData> files = physicalComputer != null ? physicalComputer.GetInsertedFiles() : null;
+        List<FootageData> usableFiles = GetUsableTapeFiles(files);
+        if (usableFiles.Count == 0)
         {
-            List<FootageData> files = physicalComputer.GetInsertedFiles();
-            if (files != null)
-            {
-                foreach (FootageData data in files) ProjectDataManager.Instance.compiledFootage.Add(data);
-            }
+            const string warningMessage = "Insert at least one recorded SD Card before opening the Editor.";
+            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowTimedWarning(warningMessage, 3f);
+            else Debug.LogWarning(warningMessage);
+            return;
+        }
+
+        ProjectDataManager.Instance.ClearProject();
+        foreach (FootageData data in usableFiles)
+        {
+            ProjectDataManager.Instance.compiledFootage.Add(data);
         }
 
         EvaluateStagePreProduction();
 
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnEditorConfirmed();
         UnityEngine.SceneManagement.SceneManager.LoadScene("Editor");
+    }
+
+    private List<FootageData> GetUsableTapeFiles(List<FootageData> files)
+    {
+        List<FootageData> usableFiles = new List<FootageData>();
+        if (files == null) return usableFiles;
+
+        foreach (FootageData data in files)
+        {
+            if (IsTapeFileUsable(data)) usableFiles.Add(data);
+        }
+
+        return usableFiles;
+    }
+
+    private bool IsTapeFileUsable(FootageData data)
+    {
+        if (data == null || string.IsNullOrEmpty(data.fileName)) return false;
+
+        if (!string.Equals(Path.GetExtension(data.fileName), ".tape", System.StringComparison.OrdinalIgnoreCase)) return false;
+
+        string fullPath = Path.Combine(Application.persistentDataPath, data.fileName);
+        if (!File.Exists(fullPath)) return false;
+
+        try
+        {
+            using (BinaryReader reader = new BinaryReader(new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read)))
+            {
+                if (reader.BaseStream.Length < sizeof(int)) return false;
+
+                int frameCount = reader.ReadInt32();
+                if (frameCount <= 0) return false;
+
+                for (int i = 0; i < frameCount; i++)
+                {
+                    if (reader.BaseStream.Position + sizeof(int) > reader.BaseStream.Length) return false;
+
+                    int frameSize = reader.ReadInt32();
+                    if (frameSize <= 0 || reader.BaseStream.Position + frameSize > reader.BaseStream.Length) return false;
+                    reader.BaseStream.Seek(frameSize, SeekOrigin.Current);
+                }
+
+                return true;
+            }
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogWarning("Skipped unreadable tape " + data.fileName + ": " + exception.Message);
+            return false;
+        }
     }
 
     private void EvaluateStagePreProduction()
@@ -346,12 +410,11 @@ public class ComputerUIManager : MonoBehaviour
     private void GradeLevel3Stage(ref float score, ref string feedback)
     {
         CubeVehicle[] vehicles = FindObjectsOfType<CubeVehicle>();
-        CubeActor[] actors = FindObjectsOfType<CubeActor>();
         FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
 
         if (vehicles.Length == 1)
         {
-            score += 25f;
+            score += 35f;
             feedback += "<color=green>+ Lambormini vehicle placed.</color>\n";
         }
         else
@@ -360,40 +423,7 @@ public class ComputerUIManager : MonoBehaviour
             feedback += $"<color=red>- Place exactly one Lambormini vehicle. Found {vehicles.Length}.</color>\n";
         }
 
-        if (actors.Length == 1)
-        {
-            score += 20f;
-            feedback += "<color=green>+ One actor hired.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += $"<color=red>- Hire exactly one actor. Found {actors.Length}.</color>\n";
-        }
-
-        if (actors.Length == 1 && actors[0].GetPoseName() != "Neutral")
-        {
-            score += 15f;
-            feedback += "<color=green>+ Actor pose selected.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += "<color=yellow>- Select the actor and use POSE ACTOR before recording.</color>\n";
-        }
-
-        if (actors.Length == 1 && vehicles.Length == 1 && AreSubjectsBesideEachOther(actors[0].gameObject, vehicles[0].gameObject))
-        {
-            score += 20f;
-            feedback += "<color=green>+ Actor is positioned beside the vehicle.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += "<color=yellow>- Place the actor beside the vehicle without blocking it.</color>\n";
-        }
-
-        bool hasSoftLight = false;
+        FilmLightItem softLight = null;
         Vector3 vehicleCenter = vehicles.Length == 1 ? vehicles[0].transform.position : Vector3.zero;
         if (vehicles.Length == 1 && TryGetObjectBounds(vehicles[0].gameObject, out Bounds vehicleBounds)) vehicleCenter = vehicleBounds.center;
 
@@ -403,15 +433,35 @@ public class ComputerUIManager : MonoBehaviour
                 (light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight) &&
                 Vector3.Distance(light.transform.position, vehicleCenter) <= 12f)
             {
-                hasSoftLight = true;
+                softLight = light;
                 break;
             }
         }
 
-        if (hasSoftLight)
+        if (softLight != null)
         {
-            score += 20f;
+            score += 35f;
             feedback += "<color=green>+ Level 3 Soft Light is positioned on the set.</color>\n";
+
+            if (softLight.intensityPercent >= 65f && softLight.intensityPercent <= 85f)
+            {
+                score += 15f;
+                feedback += "<color=green>+ Soft Light intensity preserves reflective detail.</color>\n";
+            }
+            else
+            {
+                feedback += "<color=yellow>- Set the Soft Light between 65% and 85% for controlled highlights.</color>\n";
+            }
+
+            if (softLight.GetCurrentTilt() >= -20f && softLight.GetCurrentTilt() <= 0f)
+            {
+                score += 15f;
+                feedback += "<color=green>+ Soft Light tilt shapes the vehicle cleanly.</color>\n";
+            }
+            else
+            {
+                feedback += "<color=yellow>- Keep Soft Light tilt between -20 and 0 degrees.</color>\n";
+            }
         }
         else
         {

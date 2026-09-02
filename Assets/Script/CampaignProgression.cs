@@ -29,12 +29,14 @@ public static class CampaignProgression
             currentLevel = Mathf.Clamp(tutorialProgress, 2, MaximumLevel);
         }
 
+        if (currentLevel == 1 && PlayerPrefs.GetInt("FlowerContractGraded", 0) == 1) currentLevel = 2;
         if (currentLevel == 2 && PlayerPrefs.GetInt("GokeContractGraded", 0) == 1) currentLevel = 3;
         if (currentLevel == 3 && PlayerPrefs.GetInt("LamborminiContractGraded", 0) == 1) currentLevel = 4;
         if (currentLevel == 4 && PlayerPrefs.GetInt("KapeKulturaContractGraded", 0) == 1) currentLevel = 5;
 
         currentLevel = Mathf.Clamp(currentLevel, MinimumLevel, MaximumLevel);
         PlayerPrefs.SetInt("CurrentLevel", currentLevel);
+        if (currentLevel >= 2 && tutorialProgress < currentLevel) PlayerPrefs.SetInt("TutorialProgress", currentLevel);
         return currentLevel;
     }
 
@@ -57,6 +59,20 @@ public static class CampaignProgression
 
         if (cheatLevel >= 2) PlayerPrefs.SetInt(levelCheatIntroductionKey, cheatLevel);
         else PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
+
+        PlayerPrefs.Save();
+    }
+
+    public static void SetRetryLevel(int level)
+    {
+        int retryLevel = Mathf.Clamp(level, MinimumLevel, MaximumLevel);
+        PlayerPrefs.SetInt(levelCheatOverrideKey, retryLevel);
+        PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
+        PlayerPrefs.SetInt("CurrentLevel", retryLevel);
+        PlayerPrefs.SetInt("TutorialProgress", retryLevel == 1 ? 1 : retryLevel);
+
+        if (retryLevel == 1) PlayerPrefs.SetInt("Level1RetryActive", 1);
+        else PlayerPrefs.DeleteKey("Level1RetryActive");
 
         PlayerPrefs.Save();
     }
@@ -122,8 +138,8 @@ public static class CampaignProgression
         if (level == 1)
         {
             PlayerPrefs.DeleteKey("Level1RetryActive");
-            PlayerPrefs.SetInt("TutorialProgress", 1);
-            PlayerPrefs.SetInt("CurrentLevel", 1);
+            PlayerPrefs.SetInt("TutorialProgress", 2);
+            PlayerPrefs.SetInt("CurrentLevel", 2);
         }
         else if (level < MaximumLevel)
         {

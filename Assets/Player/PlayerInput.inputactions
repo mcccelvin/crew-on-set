@@ -484,6 +484,24 @@
                     "initialStateCheck": true
                 },
                 {
+                    "name": "Light Temperature",
+                    "type": "Value",
+                    "id": "40000000-0000-0000-0000-000000000001",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Light Diffusion",
+                    "type": "Value",
+                    "id": "40000000-0000-0000-0000-000000000002",
+                    "expectedControlType": "Axis",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
                     "name": "Hotbar 1",
                     "type": "Button",
                     "id": "30000000-0000-0000-0000-000000000004",
@@ -648,6 +666,72 @@
                     "processors": "",
                     "groups": "",
                     "action": "Light Tilt",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "Temperature",
+                    "id": "40000000-0000-0000-0000-000000000003",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Temperature",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "40000000-0000-0000-0000-000000000004",
+                    "path": "<Keyboard>/z",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Temperature",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "40000000-0000-0000-0000-000000000005",
+                    "path": "<Keyboard>/x",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Temperature",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "Diffusion",
+                    "id": "40000000-0000-0000-0000-000000000006",
+                    "path": "1DAxis",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Diffusion",
+                    "isComposite": true,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "negative",
+                    "id": "40000000-0000-0000-0000-000000000007",
+                    "path": "<Keyboard>/v",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Diffusion",
+                    "isComposite": false,
+                    "isPartOfComposite": true
+                },
+                {
+                    "name": "positive",
+                    "id": "40000000-0000-0000-0000-000000000008",
+                    "path": "<Keyboard>/b",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": "",
+                    "action": "Light Diffusion",
                     "isComposite": false,
                     "isPartOfComposite": true
                 },

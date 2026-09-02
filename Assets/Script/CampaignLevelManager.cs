@@ -8,6 +8,11 @@ public class CampaignLevelManager : MonoBehaviour
     {
         PreviousResults,
         Introduction,
+        IntroduceActor,
+        PracticeActor,
+        ActorPlaced,
+        ActorPosed,
+        ActorPracticeComplete,
         IntroduceContract,
         OfferContract,
         ContractAccepted,
@@ -107,6 +112,98 @@ public class CampaignLevelManager : MonoBehaviour
         return currentStep == CampaignLevelStep.LevelActive;
     }
 
+    public bool IsActorIntroductionActive()
+    {
+        return activeLevel == 4 &&
+               (currentStep == CampaignLevelStep.PracticeActor ||
+                currentStep == CampaignLevelStep.ActorPlaced ||
+                currentStep == CampaignLevelStep.ActorPosed);
+    }
+
+    public void OnDirectorTerminalOpened()
+    {
+        if (!IsActorIntroductionActive()) return;
+
+        if (TutorialUIManager.Instance != null)
+        {
+            if (currentStep == CampaignLevelStep.ActorPlaced)
+            {
+                TutorialUIManager.Instance.SetupTasks(new string[]
+                {
+                    "- Select the placed actor",
+                    "- Click POSE ACTOR to choose a performance"
+                });
+            }
+            else if (currentStep == CampaignLevelStep.ActorPosed)
+            {
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Close the Director Terminal" });
+            }
+            else
+            {
+                TutorialUIManager.Instance.SetupTasks(new string[]
+                {
+                    "- Click one Actor card",
+                    "- Move the actor onto the stage and click to place"
+                });
+            }
+        }
+    }
+
+    public void OnActorPlaced(GameObject actor)
+    {
+        if (activeLevel != 4 || currentStep != CampaignLevelStep.PracticeActor || actor == null) return;
+
+        currentStep = CampaignLevelStep.ActorPlaced;
+
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.SetupTasks(new string[]
+            {
+                "- Select the placed actor",
+                "- Click POSE ACTOR to choose a performance"
+            });
+        }
+    }
+
+    public void OnActorPosed(CubeActor actor)
+    {
+        if (activeLevel != 4 || actor == null) return;
+        if (currentStep != CampaignLevelStep.PracticeActor && currentStep != CampaignLevelStep.ActorPlaced) return;
+
+        currentStep = CampaignLevelStep.ActorPosed;
+
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.SetupTasks(new string[]
+            {
+                "- <color=#55FF88>Actor pose selected: " + actor.GetPoseName() + "</color>",
+                "- Close the Director Terminal"
+            });
+        }
+    }
+
+    public void OnDirectorTerminalClosed()
+    {
+        if (activeLevel != 4) return;
+
+        if (currentStep == CampaignLevelStep.ActorPosed)
+        {
+            ShowActorPracticeComplete();
+            return;
+        }
+
+        if (currentStep != CampaignLevelStep.PracticeActor && currentStep != CampaignLevelStep.ActorPlaced) return;
+
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.SetupTasks(new string[]
+            {
+                "- Open the Director Terminal",
+                "- Place one actor and choose a pose"
+            });
+        }
+    }
+
     public void CloseBriefing()
     {
         AdvanceDialogue();
@@ -123,6 +220,19 @@ public class CampaignLevelManager : MonoBehaviour
         }
 
         if (currentStep == CampaignLevelStep.Introduction)
+        {
+            if (activeLevel == 4) ShowActorIntroduction();
+            else ShowContractIntroduction();
+            return;
+        }
+
+        if (currentStep == CampaignLevelStep.IntroduceActor)
+        {
+            StartActorPractice();
+            return;
+        }
+
+        if (currentStep == CampaignLevelStep.ActorPracticeComplete)
         {
             ShowContractIntroduction();
             return;
@@ -205,7 +315,7 @@ public class CampaignLevelManager : MonoBehaviour
         {
             if (activeLevel == 4)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Good. The Almanac explains shot coverage, continuity, soft natural lighting, and the warm grade required for Kape Kultura. Use those guides while you plan each shot.", TutorialUIManager.Instance.poseHappy, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Good. The Almanac explains actor blocking and posing, shot coverage, continuity, soft natural lighting, and the warm grade required for Kape Kultura. Use those guides while you plan each shot.", TutorialUIManager.Instance.poseHappy, true, false);
             }
             else
             {
@@ -252,7 +362,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Excellent work on Lambormini! The client approved your automotive commercial with a <color=yellow>" + previousGrade + "</color> grade. You successfully balanced an actor, a vehicle, and soft lighting in one premium frame.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Excellent work on Lambormini! The client approved your automotive commercial with a <color=yellow>" + previousGrade + "</color> grade. You shaped a reflective vehicle with the Level 3 Soft Light and delivered a clean premium frame.", TutorialUIManager.Instance.poseHappy, true, false);
         }
         else
         {
@@ -268,11 +378,60 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 4</color>. A single hero shot is no longer enough. This production must tell a short, believable story using several matching camera angles while keeping the actor, product, lighting, and screen direction continuous.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 4</color>. Products will no longer work alone. This level introduces <color=yellow>Actors</color>, blocking, performance poses, shot coverage, and continuity so you can build a believable lifestyle commercial.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
             TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 5</color>, your final campaign. This time I will not give you a fixed recipe. You must combine production design, actor direction, composition, lighting, coverage, branding, and color into one consistent client pitch.", TutorialUIManager.Instance.poseBoss, true, false);
+        }
+    }
+
+    private void ShowActorIntroduction()
+    {
+        currentStep = CampaignLevelStep.IntroduceActor;
+        isBriefingOpen = true;
+
+        if (AlmanacManager.Instance != null) AlmanacManager.Instance.UnlockKnowledge("hiring_and_posing_actors");
+
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.ShowBossDialogue("Before the next contract, practice directing talent. Open the <color=yellow>Director Terminal</color>, click one Actor card to attach the cube actor to your cursor, click the stage to place them, then select <color=yellow>POSE ACTOR</color>. In Level 4, the actor must support the product without hiding it.", TutorialUIManager.Instance.poseOpenHand, true, false);
+        }
+    }
+
+    private void StartActorPractice()
+    {
+        currentStep = CampaignLevelStep.PracticeActor;
+        isBriefingOpen = false;
+
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.HideBossDialogue();
+            TutorialUIManager.Instance.SetupTasks(new string[]
+            {
+                "- Open the Director Terminal",
+                "- Place one actor on the stage",
+                "- Select a non-neutral pose"
+            });
+            TutorialUIManager.Instance.SetDynamicGlow("director", true);
+        }
+
+        if (tutorialManager != null)
+        {
+            tutorialManager.PointLineAt("director");
+            tutorialManager.UnfreezePlayerMovement();
+        }
+    }
+
+    private void ShowActorPracticeComplete()
+    {
+        currentStep = CampaignLevelStep.ActorPracticeComplete;
+        isBriefingOpen = true;
+
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.SetDynamicGlow("director", false);
+            TutorialUIManager.Instance.ShowBossDialogue("Good. You completed the basic actor workflow: <color=yellow>hire, block, and pose</color>. For the real contract, keep the actor close enough to connect with the product, but leave the product silhouette clear. Across multiple shots, preserve the same pose and screen side for continuity.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -370,7 +529,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Press <color=red>[P]</color> after this message. Read the Shot Coverage, Continuity, and Soft Natural Lighting guides. You can return to them at any time during the contract.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Press <color=red>[P]</color> after this message. Read Hiring, Blocking & Posing Actors, Shot Coverage, Continuity, and Soft Natural Lighting. You can return to them at any time during the contract.", TutorialUIManager.Instance.posePoint, true, false);
         }
         else
         {
@@ -407,6 +566,7 @@ public class CampaignLevelManager : MonoBehaviour
         {
             return new string[]
             {
+                "- Review Hiring, Blocking & Posing Actors",
                 "- Review Shot Coverage & Continuity",
                 "- Review Soft Natural Lighting",
                 "- Review the Warm Commercial Grade",

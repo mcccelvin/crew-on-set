@@ -35,9 +35,10 @@ public class ContractGrader : MonoBehaviour
         }
 
         GradeBrandingQuality(2, "Artisan Flower Vase", ref post, ref feedback);
+        GradePlayerCreatedFinish(true, ref post, ref feedback);
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (grading != null)
+        if (HasColorControls(grading))
         {
             GradeColorRange(grading.brightnessSlider.value, 0.94f, 1.02f, 16f, "Exposure", "Use 0.94 to 1.02 so the white flower keeps highlight detail.", ref post, ref feedback);
             GradeColorRange(grading.contrastSlider.value, 1.06f, 1.18f, 16f, "Contrast", "Use 1.06 to 1.18 for shape without crushing the pink set.", ref post, ref feedback);
@@ -68,10 +69,11 @@ public class ContractGrader : MonoBehaviour
             feedback += $"<color=red>- Timing: Deliver 10.0 seconds within a 0.75-second tolerance. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
-        GradeBrandingQuality(3, "Goke", ref post, ref feedback);
+        GradeBrandingQuality(2, "Goke", ref post, ref feedback);
+        GradePlayerCreatedFinish(true, ref post, ref feedback);
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (grading != null)
+        if (HasColorControls(grading))
         {
             GradeColorRange(grading.brightnessSlider.value, 0.94f, 1.02f, 20f, "Exposure", "Use 0.94 to 1.02 so the can and logo retain highlight detail.", ref post, ref feedback);
             GradeColorRange(grading.contrastSlider.value, 1.14f, 1.26f, 20f, "Contrast", "Use 1.14 to 1.26 for separation without crushing the red set.", ref post, ref feedback);
@@ -102,8 +104,10 @@ public class ContractGrader : MonoBehaviour
             feedback += $"<color=red>- Timing: Target 10.0 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
+        GradePlayerCreatedFinish(false, ref post, ref feedback);
+
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (grading != null)
+        if (HasColorControls(grading))
         {
             if (grading.contrastSlider.value >= 1.15f && grading.contrastSlider.value <= 1.45f)
                 feedback += "<color=green>+ Vehicle shape has premium contrast.</color>\n";
@@ -128,6 +132,11 @@ public class ContractGrader : MonoBehaviour
                 post -= 15f;
                 feedback += "<color=yellow>- Brightness: Keep reflections between 0.90 and 1.10.</color>\n";
             }
+        }
+        else
+        {
+            post -= 35f;
+            feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
         return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 80000, IsRequiredSetupComplete());
@@ -212,7 +221,7 @@ public class ContractGrader : MonoBehaviour
         }
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (grading != null)
+        if (HasColorControls(grading))
         {
             GradeColorRange(grading.brightnessSlider.value, 0.95f, 1.15f, 10f, "Brightness", "Keep the café scene warm without losing highlight detail.", ref post, ref feedback);
             GradeColorRange(grading.contrastSlider.value, 1.05f, 1.3f, 10f, "Contrast", "Use 1.05 to 1.30 for a natural daily-story image.", ref post, ref feedback);
@@ -306,7 +315,7 @@ public class ContractGrader : MonoBehaviour
         }
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (grading != null)
+        if (HasColorControls(grading))
         {
             GradeColorRange(grading.brightnessSlider.value, 0.95f, 1.1f, 10f, "Brightness", "Keep final exposure between 0.95 and 1.10.", ref post, ref feedback);
             GradeColorRange(grading.contrastSlider.value, 1.1f, 1.4f, 10f, "Contrast", "Use 1.10 to 1.40 for a polished campaign finish.", ref post, ref feedback);
@@ -363,7 +372,7 @@ public class ContractGrader : MonoBehaviour
         }
         else if (level == GameLevel.Level3)
         {
-            feedback += "<color=white>Tip: Keep the actor and car fully visible with low overlap. Use the Soft Light near 75%, about -10 degrees tilt, aimed at both subjects.</color>\n\n";
+            feedback += "<color=white>Tip: Keep the Lambormini silhouette clear and leave intentional negative space. Use the Soft Light near 75%, about -10 degrees tilt, aimed across the vehicle body.</color>\n\n";
         }
         else if (level == GameLevel.Level4)
         {
@@ -528,6 +537,59 @@ public class ContractGrader : MonoBehaviour
         }
     }
 
+    private void GradePlayerCreatedFinish(bool requiresGraphicAnimation, ref float post, ref string feedback)
+    {
+        PlayerEditTools tools = PlayerEditTools.Instance;
+        if (tools == null)
+        {
+            post -= requiresGraphicAnimation ? 48f : 32f;
+            feedback += "<color=red>- Editorial finish data is missing. Use the player-controlled tools in Branding before export.</color>\n";
+            return;
+        }
+
+        if (tools.selectedCameraMotion != PlayerEditTools.CameraMotionMode.None)
+        {
+            feedback += "<color=green>+ You selected a deliberate camera movement for the final edit.</color>\n";
+        }
+        else
+        {
+            post -= 16f;
+            feedback += "<color=yellow>- Camera motion: Choose a motivated Push In or Pan in the Branding tools.</color>\n";
+        }
+
+        if (tools.selectedMusic != PlayerEditTools.MusicMode.None)
+        {
+            feedback += "<color=green>+ You selected a soundtrack to support the commercial's pacing.</color>\n";
+        }
+        else
+        {
+            post -= 16f;
+            feedback += "<color=yellow>- Soundtrack: Select music in the Branding tools instead of submitting silent footage.</color>\n";
+        }
+
+        if (tools.selectedTransition != PlayerEditTools.TransitionMode.Cut)
+        {
+            feedback += "<color=green>+ You selected an opening and closing transition for a finished delivery.</color>\n";
+        }
+        else
+        {
+            post -= 12f;
+            feedback += "<color=yellow>- Transition: Choose Fade In / Out or Dip To Black before export.</color>\n";
+        }
+
+        if (!requiresGraphicAnimation) return;
+
+        if (tools.selectedGraphicAnimation != PlayerEditTools.GraphicAnimationMode.Cut)
+        {
+            feedback += "<color=green>+ Your placed graphics use a player-selected entrance animation.</color>\n";
+        }
+        else
+        {
+            post -= 16f;
+            feedback += "<color=yellow>- Graphic animation: Choose Fade or Slide Up for the graphics you placed.</color>\n";
+        }
+    }
+
     private void GradeColorRange(float value, float minimum, float maximum, float deduction, string label, string correction, ref float post, ref string feedback)
     {
         if (value >= minimum && value <= maximum)
@@ -539,6 +601,11 @@ public class ContractGrader : MonoBehaviour
             post -= deduction;
             feedback += "<color=yellow>- " + label + ": " + correction + "</color>\n";
         }
+    }
+
+    private bool HasColorControls(ColorGradingManager grading)
+    {
+        return grading != null && grading.brightnessSlider != null && grading.contrastSlider != null && grading.saturationSlider != null;
     }
 
     private ProductionGrades CompileFinalGrade(float pre, float prod, float post, float avgCam, float avgLight, string feedback, int maxPayout, bool contractRequirementsMet = true)

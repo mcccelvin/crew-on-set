@@ -30,11 +30,22 @@ public class TimelineManager : MonoBehaviour
     {
         if (scrollContent == null || timestampContainer == null) return;
 
-        float windowWidth = scrollContent.parent.GetComponent<RectTransform>().rect.width;
-        if (pixelsPerSecond <= 0) pixelsPerSecond = windowWidth / minSeconds;
+        Canvas.ForceUpdateCanvases();
+
+        RectTransform viewport = scrollContent.parent as RectTransform;
+        if (viewport == null) return;
+
+        float safeMinSeconds = Mathf.Max(1f, minSeconds);
+        float windowWidth = viewport.rect.width;
+        if (windowWidth <= 1f) windowWidth = scrollContent.rect.width;
+        if (windowWidth <= 1f) windowWidth = safeMinSeconds * 40f;
+
+        if (pixelsPerSecond <= 0f) pixelsPerSecond = windowWidth / safeMinSeconds;
+        pixelsPerSecond = Mathf.Max(1f, pixelsPerSecond);
 
         float maxRightPixel = 0f;
         DraggableClip[] clips = scrollContent.GetComponentsInChildren<DraggableClip>();
+        BrandingClip[] bClips = scrollContent.GetComponentsInChildren<BrandingClip>();
 
         foreach (var clip in clips)
         {
@@ -43,15 +54,25 @@ public class TimelineManager : MonoBehaviour
             if (rightEdge > maxRightPixel) maxRightPixel = rightEdge;
         }
 
-        float currentContentSeconds = maxRightPixel / pixelsPerSecond;
-        float requiredSeconds = currentContentSeconds / (1f - freeSpacePercentage);
-        float finalSeconds = Mathf.Max(minSeconds, requiredSeconds);
+        foreach (var bClip in bClips)
+        {
+            RectTransform rt = bClip.GetComponent<RectTransform>();
+            float rightEdge = rt.anchoredPosition.x + (rt.rect.width * (1f - rt.pivot.x));
+            if (rightEdge > maxRightPixel) maxRightPixel = rightEdge;
+        }
 
-        float newPixelsPerSecond = windowWidth / finalSeconds;
+        float currentContentSeconds = maxRightPixel / pixelsPerSecond;
+        float usablePercentage = Mathf.Clamp(1f - freeSpacePercentage, 0.1f, 1f);
+        float requiredSeconds = currentContentSeconds / usablePercentage;
+        float finalSeconds = Mathf.Max(safeMinSeconds, requiredSeconds);
+
+        float newPixelsPerSecond = Mathf.Max(1f, windowWidth / finalSeconds);
 
         if (Mathf.Abs(newPixelsPerSecond - pixelsPerSecond) > 0.01f)
         {
             float zoomRatio = newPixelsPerSecond / pixelsPerSecond;
+            pixelsPerSecond = newPixelsPerSecond;
+
             foreach (var clip in clips)
             {
                 clip.AdjustToNewZoom(zoomRatio);
@@ -60,13 +81,10 @@ public class TimelineManager : MonoBehaviour
             // ========================================================
             // --- THE FIX: ADDED BRANDING CLIPS TO THE ZOOM LOGIC ---
             // ========================================================
-            BrandingClip[] bClips = scrollContent.GetComponentsInChildren<BrandingClip>();
             foreach (var bClip in bClips)
             {
                 bClip.AdjustToNewZoom(zoomRatio);
             }
-
-            pixelsPerSecond = newPixelsPerSecond;
         }
 
         scrollContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, windowWidth);

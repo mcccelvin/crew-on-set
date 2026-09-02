@@ -111,6 +111,7 @@ public class CareerManager : MonoBehaviour
             if (keyboard.digit1Key.wasPressedThisFrame) { SwitchLevelCheat(1); return; }
             if (keyboard.digit2Key.wasPressedThisFrame) { SwitchLevelCheat(2); return; }
             if (keyboard.digit3Key.wasPressedThisFrame) { SwitchLevelCheat(3); return; }
+            if (keyboard.digit4Key.wasPressedThisFrame) { SwitchLevelCheat(4); return; }
         }
 
         // Press F10 to instantly add 1000 B-Coins

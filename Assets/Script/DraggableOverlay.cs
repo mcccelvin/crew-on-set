@@ -18,6 +18,11 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     private Vector2 origAnchorMax;
     private Vector2 origPivot;
 
+    private Vector2 commercialPosition;
+    private Vector3 commercialScale;
+    private Transform commercialParent;
+    private bool commercialTransformCached = false;
+
     public int startFrame = 0;
     public int endFrame = 48;
     public bool isOnTimeline = false;
@@ -35,6 +40,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public void ReturnToBin()
     {
         isOnTimeline = false;
+        commercialTransformCached = false;
 
         if (canvasGroup != null)
         {
@@ -154,6 +160,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         if (isOnTimeline)
         {
             ClampToParent();
+            CacheCommercialTransform(true);
             return;
         }
 
@@ -270,6 +277,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
         AddReadabilityOutline();
         KeepInsideTitleSafeArea();
+        CacheCommercialTransform(true);
     }
 
     private void AddReadabilityOutline()
@@ -341,28 +349,57 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     {
         if (!isOnTimeline || canvasGroup == null) return;
 
+        CacheCommercialTransform(false);
+
         if (!isPlaying && currentFrame == 0)
         {
             canvasGroup.alpha = 1f;
             canvasGroup.blocksRaycasts = true;
+            RestoreCommercialTransform();
             return;
         }
 
         if (currentFrame >= startFrame && currentFrame <= endFrame)
         {
             float targetAlpha = 1f;
-            if (fadeFrames > 0)
+            PlayerEditTools.GraphicAnimationMode animationMode = PlayerEditTools.Instance != null ? PlayerEditTools.Instance.selectedGraphicAnimation : PlayerEditTools.GraphicAnimationMode.Cut;
+            int animationFrames = Mathf.Max(2, Mathf.RoundToInt(TapeSettings.framesPerSecond * 0.55f));
+
+            if (animationMode != PlayerEditTools.GraphicAnimationMode.Cut)
             {
-                if (currentFrame < startFrame + fadeFrames)
+                if (currentFrame < startFrame + animationFrames)
                 {
-                    targetAlpha = Mathf.Clamp01((float)(currentFrame - startFrame) / fadeFrames);
+                    targetAlpha = Mathf.Clamp01((float)(currentFrame - startFrame) / animationFrames);
                 }
-                else if (currentFrame > endFrame - fadeFrames)
+                else if (currentFrame > endFrame - animationFrames)
                 {
-                    targetAlpha = Mathf.Clamp01((float)(endFrame - currentFrame) / fadeFrames);
+                    targetAlpha = Mathf.Clamp01((float)(endFrame - currentFrame) / animationFrames);
                 }
             }
             canvasGroup.alpha = targetAlpha;
+
+            if (animationMode == PlayerEditTools.GraphicAnimationMode.SlideUp)
+            {
+                float entranceProgress = Mathf.Clamp01((float)(currentFrame - startFrame) / animationFrames);
+                float entranceEase = Mathf.SmoothStep(0f, 1f, entranceProgress);
+                RectTransform previewRect = transform.parent as RectTransform;
+                float travelDistance = previewRect != null ? previewRect.rect.height * 0.09f : 48f;
+                rectTransform.localScale = commercialScale * Mathf.Lerp(0.86f, 1f, entranceEase);
+                rectTransform.anchoredPosition = commercialPosition + new Vector2(0f, Mathf.Lerp(-travelDistance, 0f, entranceEase));
+            }
+            else if (animationMode == PlayerEditTools.GraphicAnimationMode.Pop)
+            {
+                float entranceProgress = Mathf.Clamp01((float)(currentFrame - startFrame) / animationFrames);
+                float shiftedProgress = entranceProgress - 1f;
+                float backEase = 1f + (2.70158f * shiftedProgress * shiftedProgress * shiftedProgress) +
+                                 (1.70158f * shiftedProgress * shiftedProgress);
+                rectTransform.anchoredPosition = commercialPosition;
+                rectTransform.localScale = commercialScale * Mathf.LerpUnclamped(0.7f, 1f, backEase);
+            }
+            else
+            {
+                RestoreCommercialTransform();
+            }
 
             canvasGroup.blocksRaycasts = (targetAlpha > 0f);
         }
@@ -370,6 +407,27 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         {
             canvasGroup.alpha = 0f;
             canvasGroup.blocksRaycasts = false;
+            RestoreCommercialTransform();
         }
+    }
+
+    private void CacheCommercialTransform(bool forceRefresh)
+    {
+        if (rectTransform == null) rectTransform = GetComponent<RectTransform>();
+        if (rectTransform == null) return;
+        if (!forceRefresh && commercialTransformCached && commercialParent == transform.parent) return;
+
+        commercialPosition = rectTransform.anchoredPosition;
+        commercialScale = rectTransform.localScale;
+        commercialParent = transform.parent;
+        commercialTransformCached = true;
+    }
+
+    private void RestoreCommercialTransform()
+    {
+        if (!commercialTransformCached || rectTransform == null) return;
+
+        rectTransform.anchoredPosition = commercialPosition;
+        rectTransform.localScale = commercialScale;
     }
 }

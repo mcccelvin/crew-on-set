@@ -23,9 +23,6 @@ public class ColorGradingManager : MonoBehaviour
     public Toggle fadeInToggle;
 
     private TextMeshProUGUI qualityText;
-    private float lastB = 1f;
-    private float lastC = 1f;
-    private float lastS = 1f;
     private float appliedB = float.NaN;
     private float appliedC = float.NaN;
     private float appliedS = float.NaN;
@@ -64,9 +61,10 @@ public class ColorGradingManager : MonoBehaviour
 
     void Update()
     {
-        if (gradingMat == null || brightnessSlider == null || contrastSlider == null || saturationSlider == null) return;
+        if (brightnessSlider == null || contrastSlider == null || saturationSlider == null) return;
 
         ProcessTutorialTarget();
+        ReconcileTutorialTarget();
 
         if (!Mathf.Approximately(brightnessSlider.value, appliedB) ||
             !Mathf.Approximately(contrastSlider.value, appliedC) ||
@@ -76,32 +74,14 @@ public class ColorGradingManager : MonoBehaviour
             appliedC = contrastSlider.value;
             appliedS = saturationSlider.value;
 
-            gradingMat.SetFloat("_Brightness", appliedB);
-            gradingMat.SetFloat("_Contrast", appliedC);
-            gradingMat.SetFloat("_Saturation", appliedS);
+            if (gradingMat != null)
+            {
+                gradingMat.SetFloat("_Brightness", appliedB);
+                gradingMat.SetFloat("_Contrast", appliedC);
+                gradingMat.SetFloat("_Saturation", appliedS);
+            }
 
             UpdateReadouts();
-        }
-
-        if (EditorTutorialManager.Instance != null)
-        {
-            if (!Mathf.Approximately(brightnessSlider.value, lastB))
-            {
-                if (Mathf.Abs(brightnessSlider.value - targetBrightness) <= 0.01f) EditorTutorialManager.Instance.OnBrightnessAdjusted();
-                lastB = brightnessSlider.value;
-            }
-
-            if (!Mathf.Approximately(contrastSlider.value, lastC))
-            {
-                if (Mathf.Abs(contrastSlider.value - targetContrast) <= 0.01f) EditorTutorialManager.Instance.OnContrastAdjusted();
-                lastC = contrastSlider.value;
-            }
-
-            if (!Mathf.Approximately(saturationSlider.value, lastS))
-            {
-                if (Mathf.Abs(saturationSlider.value - targetSaturation) <= 0.01f) EditorTutorialManager.Instance.OnSaturationAdjusted();
-                lastS = saturationSlider.value;
-            }
         }
     }
 
@@ -247,6 +227,24 @@ public class ColorGradingManager : MonoBehaviour
         else if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustSaturation && Mathf.Abs(saturationSlider.value - targetSaturation) <= 0.015f)
         {
             saturationSlider.value = targetSaturation;
+        }
+    }
+
+    private void ReconcileTutorialTarget()
+    {
+        if (EditorTutorialManager.Instance == null || !EditorTutorialManager.Instance.gameObject.activeInHierarchy || !EditorTutorialManager.Instance.isTaskPhaseActive) return;
+
+        if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness && Mathf.Abs(brightnessSlider.value - targetBrightness) <= 0.01f)
+        {
+            EditorTutorialManager.Instance.OnBrightnessAdjusted();
+        }
+        else if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustContrast && Mathf.Abs(contrastSlider.value - targetContrast) <= 0.01f)
+        {
+            EditorTutorialManager.Instance.OnContrastAdjusted();
+        }
+        else if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustSaturation && Mathf.Abs(saturationSlider.value - targetSaturation) <= 0.01f)
+        {
+            EditorTutorialManager.Instance.OnSaturationAdjusted();
         }
     }
 

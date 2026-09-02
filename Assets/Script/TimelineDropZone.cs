@@ -20,12 +20,6 @@ public class TimelineDropZone : MonoBehaviour, IDropHandler
 
                 // 2. Tell the clip it's on the timeline so it can update the TV and expand the container
                 droppedClip.OnPlacedOnTimeline();
-
-                // 3. Notify the Tutorial system
-                if (EditorTutorialManager.Instance != null)
-                {
-                    EditorTutorialManager.Instance.OnVideoDropped();
-                }
             }
         }
     }

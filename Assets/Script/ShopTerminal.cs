@@ -438,6 +438,9 @@ public class ShopTerminal : MonoBehaviour
         if (GokeLevelManager.Instance != null &&
             GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
             !GokeLevelManager.Instance.CanConfirmPurchase()) return;
+        if (Level3Manager.Instance != null &&
+            Level3Manager.Instance.IsEquipmentIntroductionActive() &&
+            !Level3Manager.Instance.CanConfirmPurchase()) return;
 
         if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(currentTotalCost))
         {
@@ -458,6 +461,9 @@ public class ShopTerminal : MonoBehaviour
         if (GokeLevelManager.Instance != null &&
             GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
             !GokeLevelManager.Instance.CanCancelPurchase()) return;
+        if (Level3Manager.Instance != null &&
+            Level3Manager.Instance.IsEquipmentIntroductionActive() &&
+            !Level3Manager.Instance.CanCancelPurchase()) return;
 
         // Prevents emptying the cart while mid-tutorial!
         if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep < TutorialManager.TutorialStep.OfferLevel1)
@@ -529,7 +535,9 @@ public class ShopTerminal : MonoBehaviour
         if (equipment != null)
         {
             equipment.EquipmentName = "Level 3 Soft Light";
-            equipment.EquipmentControls = "[LMB] Power  |  [SCROLL] Intensity  |  [UP/DOWN] Tilt  |  [G] Drop";
+            equipment.EquipmentControls = "[LMB] Power  |  [SCROLL] Intensity  |  [UP/DOWN] Tilt  |  [Z/X] Kelvin  |  [V/B] Diffusion  |  [G] Drop";
+            equipment.HoldPositionOffset = new Vector3(0.45f, -0.35f, 1.05f);
+            equipment.HoldRotationOffset = new Vector3(0f, -90f, 0f);
         }
 
         Player.Equipment.FilmLightItem filmLight = spawnedItem.GetComponent<Player.Equipment.FilmLightItem>();
@@ -538,7 +546,10 @@ public class ShopTerminal : MonoBehaviour
             filmLight.maxLux = 40f;
             filmLight.isFixedKelvin = false;
             filmLight.forcesHardLight = false;
+            filmLight.colorTemperature = 4300f;
+            filmLight.diffusionPercent = 50f;
             if (filmLight.spotlight != null) filmLight.spotlight.shadows = LightShadows.Soft;
+            filmLight.RefreshAdvancedFeatures();
         }
 
         if (useLevel3LightPlaceholder) CreateLevel3LightPlaceholder(spawnedItem);
@@ -552,16 +563,37 @@ public class ShopTerminal : MonoBehaviour
             itemRenderer.enabled = false;
         }
 
-        GameObject lightBlock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        lightBlock.name = "Level 3 Light Block";
-        lightBlock.layer = spawnedItem.layer;
-        lightBlock.transform.SetParent(spawnedItem.transform);
-        lightBlock.transform.localPosition = new Vector3(0f, 1.25f, 0f);
-        lightBlock.transform.localRotation = Quaternion.identity;
-        lightBlock.transform.localScale = new Vector3(0.7f, 2.5f, 0.7f);
+        Collider[] itemColliders = spawnedItem.GetComponentsInChildren<Collider>(true);
+        foreach (Collider itemCollider in itemColliders)
+        {
+            if (itemCollider != null) Destroy(itemCollider);
+        }
 
-        Renderer blockRenderer = lightBlock.GetComponent<Renderer>();
-        if (blockRenderer != null) blockRenderer.material.color = new Color(0.12f, 0.14f, 0.18f, 1f);
+        Color frameColor = new Color(0.08f, 0.1f, 0.13f, 1f);
+        Color panelColor = new Color(0.22f, 0.72f, 0.85f, 1f);
+
+        CreateLevel3LightPart(spawnedItem, "Thin Light Panel", new Vector3(0f, 1.15f, 0f), new Vector3(0.12f, 0.42f, 0.82f), panelColor);
+        CreateLevel3LightPart(spawnedItem, "Thin Light Stand", new Vector3(0f, 0.55f, 0f), new Vector3(0.08f, 0.95f, 0.08f), frameColor);
+        CreateLevel3LightPart(spawnedItem, "Thin Light Base", new Vector3(0f, 0.06f, 0f), new Vector3(0.32f, 0.1f, 0.52f), frameColor);
+    }
+
+    private void CreateLevel3LightPart(GameObject lightRoot, string partName, Vector3 localPosition, Vector3 localScale, Color partColor)
+    {
+        GameObject lightPart = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        lightPart.name = partName;
+        lightPart.layer = lightRoot.layer;
+        lightPart.transform.SetParent(lightRoot.transform);
+        lightPart.transform.localPosition = localPosition;
+        lightPart.transform.localRotation = Quaternion.identity;
+        lightPart.transform.localScale = localScale;
+
+        Renderer partRenderer = lightPart.GetComponent<Renderer>();
+        if (partRenderer != null)
+        {
+            partRenderer.material.color = partColor;
+            partRenderer.material.EnableKeyword("_EMISSION");
+            partRenderer.material.SetColor("_EmissionColor", partColor * 0.2f);
+        }
     }
 
     private void UpdateTotalUI()
@@ -594,6 +626,9 @@ public class ShopTerminal : MonoBehaviour
         if (GokeLevelManager.Instance != null &&
             GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
             !GokeLevelManager.Instance.CanCancelPurchase()) return;
+        if (Level3Manager.Instance != null &&
+            Level3Manager.Instance.IsEquipmentIntroductionActive() &&
+            !Level3Manager.Instance.CanCancelPurchase()) return;
 
         isTerminalActive = false;
         if (playerController != null) playerController.enabled = true;

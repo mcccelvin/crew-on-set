@@ -74,9 +74,11 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 if (inspector != null)
                 {
                     if (ClipInspector.Instance == null) ClipInspector.Instance = inspector;
-                    inspector.OpenInspector(this);
-                    try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnVideoDoubleClicked(); }
-                    catch (System.Exception e) { Debug.LogException(e, this); }
+                    if (inspector.OpenInspector(this))
+                    {
+                        try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnVideoDoubleClicked(); }
+                        catch (System.Exception e) { Debug.LogException(e, this); }
+                    }
                 }
             }
             lastLeftClickTime = Time.time;
@@ -336,7 +338,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
         if (isNewDrop)
         {
-            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) { EditorTutorialManager.Instance.OnVideoDropped(); EditorTutorialManager.Instance.OnBrandDroppedToScreen(); } }
+            try { if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy) EditorTutorialManager.Instance.OnVideoDropped(); }
             catch (System.Exception e) { Debug.LogException(e, this); }
 
             rectTransform.localPosition = new Vector3(rectTransform.localPosition.x, 0f, 0f);
