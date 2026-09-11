@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
 {
     [HideInInspector] public Transform originalParent;
     private int originalSiblingIndex;
@@ -17,11 +17,14 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     private Vector2 origAnchorMin;
     private Vector2 origAnchorMax;
     private Vector2 origPivot;
+    private Vector2 origPosition;
 
     private Vector2 commercialPosition;
     private Vector3 commercialScale;
     private Transform commercialParent;
     private bool commercialTransformCached = false;
+    private const float SafeMargin = 0.06f;
+    private const float MaximumCoverage = 0.22f;
 
     public int startFrame = 0;
     public int endFrame = 48;
@@ -41,6 +44,13 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     {
         isOnTimeline = false;
         commercialTransformCached = false;
+        foreach (BrandingClip clip in FindObjectsOfType<BrandingClip>(true))
+        {
+            if (clip.linkedOverlay != this) continue;
+            clip.linkedOverlay = null;
+            clip.gameObject.SetActive(false);
+            Destroy(clip.gameObject);
+        }
 
         if (canvasGroup != null)
         {
@@ -60,8 +70,10 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 rectTransform.anchorMin = origAnchorMin;
                 rectTransform.anchorMax = origAnchorMax;
                 rectTransform.pivot = origPivot;
-                rectTransform.anchoredPosition = Vector2.zero;
+                rectTransform.anchoredPosition = origPosition;
             }
+            if (originalParent is RectTransform bankRect)
+                LayoutRebuilder.ForceRebuildLayoutImmediate(bankRect);
         }
 
         // --- THE FIX: Revert the highlight back to the bin if dropped in the wrong spot! ---
@@ -75,11 +87,15 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        originalParent = transform.parent;
-        originalSiblingIndex = transform.GetSiblingIndex();
+        if (eventData.button != PointerEventData.InputButton.Left) return;
+        if (isOnTimeline) RestoreCommercialTransform();
 
         if (!isOnTimeline)
         {
+            // Remember the bank only; moving an already placed logo must not
+            // replace its return destination with the preview screen.
+            originalParent = transform.parent;
+            originalSiblingIndex = transform.GetSiblingIndex();
             if (rectTransform != null)
             {
                 origSizeDelta = rectTransform.sizeDelta;
@@ -87,6 +103,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 origAnchorMin = rectTransform.anchorMin;
                 origAnchorMax = rectTransform.anchorMax;
                 origPivot = rectTransform.pivot;
+                origPosition = rectTransform.anchoredPosition;
             }
 
             if (parentCanvas != null)
@@ -112,6 +129,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnDrag(PointerEventData eventData)
     {
+        if (eventData.button != PointerEventData.InputButton.Left) return;
         if (parentCanvas != null && rectTransform != null)
         {
             rectTransform.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
@@ -146,11 +164,13 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             if (minPos.y <= maxPos.y) clampedPos.y = Mathf.Clamp(clampedPos.y, minPos.y, maxPos.y);
 
             rectTransform.localPosition = clampedPos;
+            KeepInsideTitleSafeArea();
         }
     }
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        if (eventData.button != PointerEventData.InputButton.Left) return;
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 1f;
@@ -259,21 +279,30 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         ReturnToBin();
     }
 
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (eventData.button == PointerEventData.InputButton.Right && isOnTimeline)
+            ReturnToBin();
+    }
+
     private void PrepareForCommercialOutput()
     {
         RectTransform previewRect = transform.parent as RectTransform;
         if (rectTransform == null || previewRect == null) return;
 
-        float visibleWidth = rectTransform.rect.width * Mathf.Abs(rectTransform.localScale.x);
-        float visibleHeight = rectTransform.rect.height * Mathf.Abs(rectTransform.localScale.y);
-        float maximumWidth = previewRect.rect.width * 0.34f;
-        float maximumHeight = previewRect.rect.height * 0.22f;
-
-        float scaleAmount = 1f;
-        if (visibleWidth > maximumWidth) scaleAmount = Mathf.Min(scaleAmount, maximumWidth / visibleWidth);
-        if (visibleHeight > maximumHeight) scaleAmount = Mathf.Min(scaleAmount, maximumHeight / visibleHeight);
-
-        if (scaleAmount < 1f) rectTransform.localScale *= scaleAmount;
+        // Bank layout dimensions are thumbnails, not the commercial's graphic size.
+        Image graphic = GetComponent<Image>();
+        float aspect = graphic != null && graphic.sprite != null
+            ? graphic.sprite.rect.width / Mathf.Max(1f, graphic.sprite.rect.height) : 1f;
+        float width = Mathf.Min(previewRect.rect.width * 0.48f, previewRect.rect.height * 0.65f * aspect);
+        // Default sizing must meet the same coverage limit used by grading.
+        float areaLimit = previewRect.rect.width * previewRect.rect.height * 0.20f;
+        width = Mathf.Min(width, Mathf.Sqrt(Mathf.Max(0f, areaLimit * aspect)));
+        Vector3 position = rectTransform.localPosition;
+        rectTransform.anchorMin = rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+        rectTransform.localScale = Vector3.one;
+        rectTransform.sizeDelta = new Vector2(width, width / aspect);
+        rectTransform.localPosition = position;
 
         AddReadabilityOutline();
         KeepInsideTitleSafeArea();
@@ -304,8 +333,8 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         Vector3 localBottomLeft = previewRect.InverseTransformPoint(overlayCorners[0]);
         Vector3 localTopRight = previewRect.InverseTransformPoint(overlayCorners[2]);
 
-        float horizontalMargin = previewRect.rect.width * 0.06f;
-        float verticalMargin = previewRect.rect.height * 0.06f;
+        float horizontalMargin = previewRect.rect.width * SafeMargin;
+        float verticalMargin = previewRect.rect.height * SafeMargin;
         float safeLeft = previewRect.rect.xMin + horizontalMargin;
         float safeRight = previewRect.rect.xMax - horizontalMargin;
         float safeBottom = previewRect.rect.yMin + verticalMargin;
@@ -322,12 +351,34 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public bool IsProfessionalPlacement()
     {
-        RectTransform previewRect = transform.parent as RectTransform;
-        if (rectTransform == null || previewRect == null || !isOnTimeline) return false;
+        return GetPlacementIssue() == null;
+    }
 
-        rectTransform.GetWorldCorners(overlayCorners);
-        Vector3 localBottomLeft = previewRect.InverseTransformPoint(overlayCorners[0]);
-        Vector3 localTopRight = previewRect.InverseTransformPoint(overlayCorners[2]);
+    public string GetPlacementIssue()
+    {
+        if (rectTransform == null) rectTransform = GetComponent<RectTransform>();
+        RectTransform previewRect = transform.parent as RectTransform;
+        if (rectTransform == null || previewRect == null || !isOnTimeline) return "Place this graphic on the program monitor.";
+
+        // Grade the player's settled placement, not a Slide/Pop animation frame.
+        Vector3 position = rectTransform.localPosition;
+        Vector3 scale = rectTransform.localScale;
+        if (commercialTransformCached && commercialParent == transform.parent)
+        {
+            Vector2 offset = commercialPosition - rectTransform.anchoredPosition;
+            position += new Vector3(offset.x, offset.y, 0f);
+            scale = commercialScale;
+        }
+        var matrix = Matrix4x4.TRS(position, rectTransform.localRotation, scale);
+        rectTransform.GetLocalCorners(overlayCorners);
+        Vector3 localBottomLeft = Vector3.positiveInfinity;
+        Vector3 localTopRight = Vector3.negativeInfinity;
+        foreach (Vector3 corner in overlayCorners)
+        {
+            Vector3 point = matrix.MultiplyPoint3x4(corner);
+            localBottomLeft = Vector3.Min(localBottomLeft, point);
+            localTopRight = Vector3.Max(localTopRight, point);
+        }
 
         float horizontalMargin = previewRect.rect.width * 0.05f;
         float verticalMargin = previewRect.rect.height * 0.05f;
@@ -339,10 +390,13 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         float overlayArea = Mathf.Abs((localTopRight.x - localBottomLeft.x) * (localTopRight.y - localBottomLeft.y));
         float previewArea = Mathf.Max(1f, previewRect.rect.width * previewRect.rect.height);
         float coverage = overlayArea / previewArea;
-        bool readableScale = coverage >= 0.0025f && coverage <= 0.22f;
         bool usefulDuration = endFrame - startFrame >= Mathf.RoundToInt(TapeSettings.framesPerSecond * 2f);
 
-        return insideSafeArea && readableScale && usefulDuration;
+        if (!insideSafeArea) return "Move the graphic inside the title-safe guide.";
+        if (coverage > MaximumCoverage + 0.0001f) return $"Reduce the graphic size: it covers {coverage:P0} of the screen (maximum 22%).";
+        if (coverage < 0.0025f) return "Enlarge the graphic so it is readable.";
+        if (!usefulDuration) return "Keep the graphic visible for at least 2 seconds.";
+        return null;
     }
 
     public void EvaluateVisibility(int currentFrame, bool isPlaying)

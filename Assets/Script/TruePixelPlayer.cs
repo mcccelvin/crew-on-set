@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
@@ -463,7 +463,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         float progress = Mathf.Clamp01((float)currentFrameIndex / (preloadedFrames.Count - 1));
         float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
-        float crop = 0.075f;
+        float crop = CampaignProgression.GetCurrentLevel() == 3 && motionMode == PlayerEditTools.CameraMotionMode.SlowPullOut ? 0.22f : 0.075f;
         float pan = 0f;
 
         if (motionMode == PlayerEditTools.CameraMotionMode.SlowPushIn)

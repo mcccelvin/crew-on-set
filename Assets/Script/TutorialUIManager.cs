@@ -2,7 +2,10 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 
 [System.Serializable]
 public class TaskUIRow
@@ -23,6 +26,16 @@ public class TutorialUIManager : MonoBehaviour
     public Image bossPortraitDisplay;
     public GameObject okButton;
     public GameObject skipButton;
+
+    [Header("Boss Dialogue Pacing")]
+    [Tooltip("How quickly dialogue characters appear. Lower values give new players more time to read.")]
+    [SerializeField] private float dialogueCharactersPerSecond = 72f;
+    [Tooltip("Extra pause after the last character appears before Space can continue.")]
+    [SerializeField] private float dialogueReadingPause = 0.45f;
+    [Tooltip("Prevents very long messages from locking the player for too long.")]
+    [SerializeField] private float maximumDialogueRevealTime = 3.25f;
+    [Tooltip("Replaces the harsh yellow emphasis used by older dialogue with the contract-style brown accent.")]
+    [SerializeField] private string bossEmphasisColor = "#7A3E12";
 
     [Header("Boss 2D Poses")]
     public Sprite poseBoss;
@@ -59,13 +72,31 @@ public class TutorialUIManager : MonoBehaviour
     private bool isTaskUIExpanded = false;
     private Coroutine notificationCoroutine;
     private Coroutine taskRevealCoroutine;
+    private Coroutine bossRevealCoroutine;
     private Player.Manager.InputManager inputManager;
     private bool[] completedTaskRows;
+    private CanvasGroup bossCanvasGroup;
+    private Vector2 bossTextBasePosition;
+    private Vector3 bossPortraitBaseScale = Vector3.one;
+    private float bossDialogueReadyAt;
+    private float currentDialogueRevealDuration;
+    private int currentDialogueVisibleCharacters;
+    private readonly Dictionary<GameObject, Vector2> taskRowBasePositions = new Dictionary<GameObject, Vector2>();
+    private readonly Dictionary<GameObject, Vector3> taskRowBaseScales = new Dictionary<GameObject, Vector3>();
 
     private void Awake()
     {
         Instance = this;
         RecoverTaskPanel();
+
+        if (bossHUDCanvas != null)
+        {
+            bossCanvasGroup = bossHUDCanvas.GetComponent<CanvasGroup>();
+            if (bossCanvasGroup == null) bossCanvasGroup = bossHUDCanvas.AddComponent<CanvasGroup>();
+        }
+
+        if (bossText != null) bossTextBasePosition = bossText.rectTransform.anchoredPosition;
+        if (bossPortraitDisplay != null) bossPortraitBaseScale = bossPortraitDisplay.rectTransform.localScale;
     }
 
     private void OnDestroy()
@@ -92,22 +123,58 @@ public class TutorialUIManager : MonoBehaviour
             if (taskOpenView != null) taskOpenView.SetActive(isTaskUIExpanded);
             if (taskClosedView != null) taskClosedView.SetActive(!isTaskUIExpanded);
             if (isTaskUIExpanded && newTaskNotification != null) newTaskNotification.SetActive(false);
+
+            GameObject revealedView = isTaskUIExpanded ? taskOpenView : taskClosedView;
+            if (revealedView != null) StartCoroutine(AnimateQuickReveal(revealedView));
         }
     }
 
     public void ShowBossDialogue(string message, Sprite pose, bool showOk, bool showSkip)
     {
+        if (DevTutorialBypass.Disabled) { HideBossDialogue(); return; }
         RecoverTaskPanel();
+
+        if (!string.IsNullOrEmpty(message) && !string.IsNullOrEmpty(bossEmphasisColor))
+        {
+            message = message.Replace("<color=yellow>", "<color=" + bossEmphasisColor + ">");
+        }
+
+        if (bossRevealCoroutine != null)
+        {
+            StopCoroutine(bossRevealCoroutine);
+            bossRevealCoroutine = null;
+        }
+
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
         if (taskPanel != null) taskPanel.SetActive(false);
-        if (bossText != null) bossText.text = message;
+        if (bossText != null)
+        {
+            bossText.text = message;
+            bossText.maxVisibleCharacters = 0;
+        }
+        currentDialogueVisibleCharacters = CountVisibleCharacters(message);
+        currentDialogueRevealDuration = Mathf.Clamp(
+            currentDialogueVisibleCharacters / Mathf.Max(1f, dialogueCharactersPerSecond),
+            0.65f,
+            Mathf.Max(0.65f, maximumDialogueRevealTime));
+        bossDialogueReadyAt = Time.unscaledTime + currentDialogueRevealDuration + Mathf.Max(0f, dialogueReadingPause);
         if (bossPortraitDisplay != null) bossPortraitDisplay.sprite = pose;
         if (okButton != null) okButton.SetActive(showOk);
         if (skipButton != null) skipButton.SetActive(showSkip);
+
+        bossRevealCoroutine = StartCoroutine(AnimateBossDialogueIn());
     }
 
     public void HideBossDialogue()
     {
+        if (bossRevealCoroutine != null)
+        {
+            StopCoroutine(bossRevealCoroutine);
+            bossRevealCoroutine = null;
+        }
+
+        ResetBossAnimationState();
+        bossDialogueReadyAt = 0f;
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
     }
 
@@ -116,8 +183,20 @@ public class TutorialUIManager : MonoBehaviour
         return bossHUDCanvas != null && bossHUDCanvas.activeSelf;
     }
 
+    public bool CanAdvanceBossDialogue()
+    {
+        return !IsBossDialogueOpen() || Time.unscaledTime >= bossDialogueReadyAt;
+    }
+
+    public float GetBossDialogueReadyDelay()
+    {
+        if (!IsBossDialogueOpen()) return 0f;
+        return Mathf.Max(0f, bossDialogueReadyAt - Time.unscaledTime);
+    }
+
     public void SetupTasks(string[] tasks)
     {
+        if (DevTutorialBypass.Disabled) { HideTasks(); return; }
         if (tasks == null || tasks.Length == 0)
         {
             HideTasks();
@@ -173,7 +252,8 @@ public class TutorialUIManager : MonoBehaviour
                 ApplyTaskState(i);
 
                 taskRows[i].rowContainer.SetActive(true);
-                yield return new WaitForSecondsRealtime(0.4f);
+                yield return AnimateTaskRowIn(taskRows[i]);
+                yield return new WaitForSecondsRealtime(0.08f);
             }
         }
 
@@ -262,7 +342,11 @@ public class TutorialUIManager : MonoBehaviour
         }
 
         completedTaskRows[index] = true;
-        if (taskRows[index].rowContainer != null && taskRows[index].rowContainer.activeSelf) ApplyTaskState(index);
+        if (taskRows[index].rowContainer != null && taskRows[index].rowContainer.activeSelf)
+        {
+            ApplyTaskState(index);
+            StartCoroutine(AnimateTaskCompleted(taskRows[index]));
+        }
     }
 
     private void ApplyTaskState(int index)
@@ -290,12 +374,207 @@ public class TutorialUIManager : MonoBehaviour
     {
         if (newTaskNotification != null)
         {
+            CanvasGroup notificationGroup = newTaskNotification.GetComponent<CanvasGroup>();
+            if (notificationGroup == null) notificationGroup = newTaskNotification.AddComponent<CanvasGroup>();
+
             newTaskNotification.SetActive(true);
-            yield return new WaitForSecondsRealtime(4f);
+            notificationGroup.alpha = 0f;
+            float elapsed = 0f;
+            while (elapsed < 0.2f)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                notificationGroup.alpha = EaseOutCubic(Mathf.Clamp01(elapsed / 0.2f));
+                yield return null;
+            }
+
+            notificationGroup.alpha = 1f;
+            yield return new WaitForSecondsRealtime(3.4f);
+
+            elapsed = 0f;
+            while (elapsed < 0.25f)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                notificationGroup.alpha = 1f - Mathf.Clamp01(elapsed / 0.25f);
+                yield return null;
+            }
+
+            notificationGroup.alpha = 1f;
             if (newTaskNotification != null) newTaskNotification.SetActive(false);
         }
 
         notificationCoroutine = null;
+    }
+
+    private IEnumerator AnimateBossDialogueIn()
+    {
+        if (bossCanvasGroup == null && bossHUDCanvas != null)
+        {
+            bossCanvasGroup = bossHUDCanvas.GetComponent<CanvasGroup>();
+            if (bossCanvasGroup == null) bossCanvasGroup = bossHUDCanvas.AddComponent<CanvasGroup>();
+        }
+
+        RectTransform textRect = bossText != null ? bossText.rectTransform : null;
+        RectTransform portraitRect = bossPortraitDisplay != null ? bossPortraitDisplay.rectTransform : null;
+
+        if (bossCanvasGroup != null) bossCanvasGroup.alpha = 0f;
+        if (textRect != null) textRect.anchoredPosition = bossTextBasePosition + new Vector2(0f, -16f);
+        if (portraitRect != null) portraitRect.localScale = bossPortraitBaseScale * 0.93f;
+
+        float elapsed = 0f;
+        const float panelAnimationDuration = 0.28f;
+        float revealDuration = Mathf.Max(panelAnimationDuration, currentDialogueRevealDuration);
+        while (elapsed < revealDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float panelT = EaseOutCubic(Mathf.Clamp01(elapsed / panelAnimationDuration));
+            float textT = Mathf.Clamp01(elapsed / Mathf.Max(0.01f, currentDialogueRevealDuration));
+
+            if (bossCanvasGroup != null) bossCanvasGroup.alpha = panelT;
+            if (textRect != null) textRect.anchoredPosition = Vector2.LerpUnclamped(bossTextBasePosition + new Vector2(0f, -16f), bossTextBasePosition, panelT);
+            if (bossText != null) bossText.maxVisibleCharacters = Mathf.CeilToInt(currentDialogueVisibleCharacters * textT);
+            if (portraitRect != null)
+            {
+                float portraitT = EaseOutBack(Mathf.Clamp01(elapsed / panelAnimationDuration));
+                portraitRect.localScale = Vector3.LerpUnclamped(bossPortraitBaseScale * 0.93f, bossPortraitBaseScale, portraitT);
+            }
+
+            yield return null;
+        }
+
+        ResetBossAnimationState();
+        bossRevealCoroutine = null;
+    }
+
+    private void ResetBossAnimationState()
+    {
+        if (bossCanvasGroup != null) bossCanvasGroup.alpha = 1f;
+        if (bossText != null)
+        {
+            bossText.rectTransform.anchoredPosition = bossTextBasePosition;
+            bossText.maxVisibleCharacters = int.MaxValue;
+        }
+        if (bossPortraitDisplay != null) bossPortraitDisplay.rectTransform.localScale = bossPortraitBaseScale;
+    }
+
+    private static int CountVisibleCharacters(string message)
+    {
+        if (string.IsNullOrEmpty(message)) return 0;
+
+        int count = 0;
+        bool insideTag = false;
+        for (int i = 0; i < message.Length; i++)
+        {
+            char character = message[i];
+            if (character == '<')
+            {
+                insideTag = true;
+                continue;
+            }
+            if (character == '>' && insideTag)
+            {
+                insideTag = false;
+                continue;
+            }
+            if (!insideTag) count++;
+        }
+
+        return count;
+    }
+
+    private IEnumerator AnimateTaskRowIn(TaskUIRow row)
+    {
+        if (row == null || row.rowContainer == null) yield break;
+
+        RectTransform rect = row.rowContainer.GetComponent<RectTransform>();
+        CanvasGroup group = row.rowContainer.GetComponent<CanvasGroup>();
+        if (group == null) group = row.rowContainer.AddComponent<CanvasGroup>();
+
+        CacheTaskRowTransform(row.rowContainer, rect);
+        Vector2 basePosition = rect != null ? taskRowBasePositions[row.rowContainer] : Vector2.zero;
+        Vector3 baseScale = taskRowBaseScales[row.rowContainer];
+
+        group.alpha = 0f;
+        if (rect != null) rect.anchoredPosition = basePosition + new Vector2(-22f, 0f);
+        row.rowContainer.transform.localScale = baseScale * 0.98f;
+
+        float elapsed = 0f;
+        const float duration = 0.22f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = EaseOutCubic(Mathf.Clamp01(elapsed / duration));
+            group.alpha = t;
+            if (rect != null) rect.anchoredPosition = Vector2.LerpUnclamped(basePosition + new Vector2(-22f, 0f), basePosition, t);
+            row.rowContainer.transform.localScale = Vector3.LerpUnclamped(baseScale * 0.98f, baseScale, t);
+            yield return null;
+        }
+
+        group.alpha = 1f;
+        if (rect != null) rect.anchoredPosition = basePosition;
+        row.rowContainer.transform.localScale = baseScale;
+    }
+
+    private IEnumerator AnimateTaskCompleted(TaskUIRow row)
+    {
+        if (row == null || row.rowContainer == null) yield break;
+
+        CacheTaskRowTransform(row.rowContainer, row.rowContainer.GetComponent<RectTransform>());
+        Vector3 baseScale = taskRowBaseScales[row.rowContainer];
+        float elapsed = 0f;
+        const float duration = 0.3f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float normalized = Mathf.Clamp01(elapsed / duration);
+            float pulse = normalized < 0.45f
+                ? Mathf.Lerp(1f, 1.075f, EaseOutCubic(normalized / 0.45f))
+                : Mathf.Lerp(1.075f, 1f, EaseOutCubic((normalized - 0.45f) / 0.55f));
+            row.rowContainer.transform.localScale = baseScale * pulse;
+            yield return null;
+        }
+
+        row.rowContainer.transform.localScale = baseScale;
+    }
+
+    private IEnumerator AnimateQuickReveal(GameObject target)
+    {
+        if (target == null) yield break;
+
+        CanvasGroup group = target.GetComponent<CanvasGroup>();
+        if (group == null) group = target.AddComponent<CanvasGroup>();
+        group.alpha = 0f;
+
+        float elapsed = 0f;
+        const float duration = 0.18f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            group.alpha = EaseOutCubic(Mathf.Clamp01(elapsed / duration));
+            yield return null;
+        }
+
+        group.alpha = 1f;
+    }
+
+    private void CacheTaskRowTransform(GameObject rowObject, RectTransform rect)
+    {
+        if (!taskRowBasePositions.ContainsKey(rowObject) && rect != null) taskRowBasePositions[rowObject] = rect.anchoredPosition;
+        if (!taskRowBaseScales.ContainsKey(rowObject)) taskRowBaseScales[rowObject] = rowObject.transform.localScale;
+    }
+
+    private float EaseOutCubic(float t)
+    {
+        float inverse = 1f - t;
+        return 1f - inverse * inverse * inverse;
+    }
+
+    private float EaseOutBack(float t)
+    {
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        float shifted = t - 1f;
+        return 1f + c3 * shifted * shifted * shifted + c1 * shifted * shifted;
     }
 
     public void SetDynamicGlow(string keyword, bool state)
@@ -357,5 +636,127 @@ public class TutorialUIManager : MonoBehaviour
         {
             if (glow != null) glow.StopGlowing();
         }
+    }
+}
+
+/// <summary>
+/// Adds consistent, lightweight interaction feedback to scene and runtime-created
+/// UI buttons without requiring every prefab to be edited by hand.
+/// </summary>
+public sealed class UIPolishBootstrap : MonoBehaviour
+{
+    private static UIPolishBootstrap instance;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void Create()
+    {
+        if (instance != null) return;
+
+        GameObject bootstrapObject = new GameObject("UI Polish System");
+        instance = bootstrapObject.AddComponent<UIPolishBootstrap>();
+        DontDestroyOnLoad(bootstrapObject);
+    }
+
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += OnSceneLoaded;
+        StartCoroutine(ScanForNewButtons());
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        PolishButtons();
+    }
+
+    private IEnumerator ScanForNewButtons()
+    {
+        while (true)
+        {
+            PolishButtons();
+            yield return new WaitForSecondsRealtime(0.75f);
+        }
+    }
+
+    private void PolishButtons()
+    {
+        Button[] buttons = FindObjectsOfType<Button>(true);
+        foreach (Button button in buttons)
+        {
+            if (button == null || button.GetComponent<UIButtonPolish>() != null) continue;
+            button.gameObject.AddComponent<UIButtonPolish>();
+        }
+    }
+}
+
+[DisallowMultipleComponent]
+public sealed class UIButtonPolish : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler,
+    IPointerDownHandler, IPointerUpHandler, IPointerClickHandler, ISelectHandler, IDeselectHandler
+{
+    private const float hoverScale = 1.035f;
+    private const float selectedScale = 1.02f;
+    private const float pressedScale = 0.965f;
+
+    private Button button;
+    private Vector3 baseScale;
+    private bool hovered;
+    private bool pressed;
+    private bool selected;
+    private float clickPulse = 1f;
+
+    private void Awake()
+    {
+        button = GetComponent<Button>();
+        baseScale = transform.localScale;
+    }
+
+    private void Update()
+    {
+        bool canInteract = button != null && button.IsInteractable();
+        float stateScale = 1f;
+
+        if (canInteract)
+        {
+            if (pressed) stateScale = pressedScale;
+            else if (hovered) stateScale = hoverScale;
+            else if (selected) stateScale = selectedScale;
+        }
+
+        clickPulse = Mathf.MoveTowards(clickPulse, 1f, Time.unscaledDeltaTime * 0.65f);
+        Vector3 targetScale = baseScale * stateScale * clickPulse;
+        float blend = 1f - Mathf.Exp(-20f * Time.unscaledDeltaTime);
+        transform.localScale = Vector3.Lerp(transform.localScale, targetScale, blend);
+    }
+
+    private void OnDisable()
+    {
+        hovered = false;
+        pressed = false;
+        selected = false;
+        clickPulse = 1f;
+        transform.localScale = baseScale;
+    }
+
+    public void OnPointerEnter(PointerEventData eventData) { hovered = true; }
+    public void OnPointerExit(PointerEventData eventData) { hovered = false; pressed = false; }
+    public void OnPointerDown(PointerEventData eventData) { if (IsPrimary(eventData)) pressed = true; }
+    public void OnPointerUp(PointerEventData eventData) { if (IsPrimary(eventData)) pressed = false; }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (!IsPrimary(eventData) || button == null || !button.IsInteractable()) return;
+        clickPulse = 1.075f;
+    }
+
+    public void OnSelect(BaseEventData eventData) { selected = true; }
+    public void OnDeselect(BaseEventData eventData) { selected = false; pressed = false; }
+
+    private bool IsPrimary(PointerEventData eventData)
+    {
+        return eventData == null || eventData.button == PointerEventData.InputButton.Left;
     }
 }

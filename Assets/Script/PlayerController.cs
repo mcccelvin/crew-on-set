@@ -14,7 +14,7 @@ namespace Player.PlayerController
         [SerializeField] private float UpperLimit = -40f;
         [SerializeField] private float LowerLimit = 70f;
         [SerializeField] private float MouseSensitivity = 21.9f;
-        [SerializeField, Range(10, 500)] private float JumpFactor = 260f;
+        [SerializeField, Min(0.1f)] private float JumpHeight = 1.2f;
         [SerializeField] private float JumpBufferTime = 0.15f;
         [SerializeField] private float CoyoteTime = 0.1f;
         [SerializeField] private float AirResistance = 0.8f;
@@ -33,20 +33,36 @@ namespace Player.PlayerController
         private bool hasAnimator;
         private int xVelHash, yVelHash, zVelHash, jumpHash, groundHash, fallingHash;
         private float xRotation;
+        private float targetYaw;
+        private float cameraYaw;
+        private float cameraPitch;
+        private float yawVelocity;
+        private float pitchVelocity;
+        private bool lookInitialized;
         private float jumpBufferCounter;
         private float coyoteCounter;
+        private Collider bodyCollider;
+        private readonly RaycastHit[] groundHits = new RaycastHit[16];
+        private bool MovementAllowed => canMove && inputManager != null && inputManager.isActiveAndEnabled && inputManager.CanReadGameplayAction();
 
-        private const float walkSpeed = 2f;
-        private const float runSpeed = 6f;
+        private const float walkSpeed = 5f;
+        private const float runSpeed = 8f;
         private Vector2 currentVelocity;
 
-        private void Start()
+        private void OnEnable()
         {
             hasAnimator = TryGetComponent<Animator>(out animator);
+            // Physics owns locomotion; animation must never overwrite body motion.
+            if (hasAnimator) animator.applyRootMotion = false;
             playerRigidbody = GetComponent<Rigidbody>();
             inputManager = GetComponent<InputManager>();
+            bodyCollider = GetComponent<Collider>();
 
-            if (playerRigidbody != null) playerRigidbody.freezeRotation = true;
+            if (playerRigidbody != null)
+            {
+                playerRigidbody.freezeRotation = true;
+                playerRigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            }
 
             xVelHash = Animator.StringToHash("x_velocity");
             yVelHash = Animator.StringToHash("y_velocity");
@@ -58,6 +74,9 @@ namespace Player.PlayerController
 
         private void FixedUpdate()
         {
+            if (PauseManager.isPaused || playerRigidbody == null) return;
+            if (lookInitialized && canLook && playerRigidbody != null)
+                playerRigidbody.MoveRotation(Quaternion.Euler(0f, cameraYaw, 0f));
             SampleGround();
             HandleJump();
             Move();
@@ -66,61 +85,79 @@ namespace Player.PlayerController
         private void Update()
         {
             if (inputManager == null) return;
+            if (!MovementAllowed)
+            {
+                jumpBufferCounter = 0f;
+                inputManager.ConsumeJump();
+                return;
+            }
 
             if (inputManager.ConsumeJump())
             {
-                jumpBufferCounter = canMove ? JumpBufferTime : 0f;
+                jumpBufferCounter = Mathf.Max(Time.fixedDeltaTime, JumpBufferTime);
             }
         }
 
         private void LateUpdate()
         {
+            if (PauseManager.isPaused) return;
             CamMovement();
         }
 
         private void Move()
         {
-            if (!hasAnimator) return;
-
-            // --- THE FIX: If we can't move, force input to zero so we smoothly stop ---
-            Vector2 currentInput = canMove ? inputManager.Move : Vector2.zero;
-
-            float targetSpeed = inputManager.Run ? runSpeed : walkSpeed;
-            if (currentInput == Vector2.zero) targetSpeed = 0f;
-
-            if (grounded)
+            bool allowed = MovementAllowed;
+            Vector2 currentInput = allowed ? Vector2.ClampMagnitude(inputManager.Move, 1f) : Vector2.zero;
+            float targetSpeed = allowed && inputManager.Run ? runSpeed : walkSpeed;
+            Vector3 desiredVelocity = playerRigidbody.rotation * new Vector3(currentInput.x * targetSpeed, 0f, currentInput.y * targetSpeed);
+            Vector3 horizontalVelocity = Vector3.ProjectOnPlane(playerRigidbody.velocity, Vector3.up);
+            float response = Mathf.Max(0f, AnimBlendSpeed) * (grounded ? 1f : Mathf.Clamp01(AirResistance));
+            horizontalVelocity = allowed
+                ? (grounded ? desiredVelocity : Vector3.Lerp(horizontalVelocity, desiredVelocity, 1f - Mathf.Exp(-response * Time.fixedDeltaTime)))
+                : Vector3.zero;
+            playerRigidbody.velocity = horizontalVelocity + Vector3.up * playerRigidbody.velocity.y;
+            Vector3 localVelocity = Quaternion.Inverse(playerRigidbody.rotation) * horizontalVelocity;
+            currentVelocity = new Vector2(localVelocity.x, localVelocity.z);
+            if (hasAnimator)
             {
-                currentVelocity.x = Mathf.Lerp(currentVelocity.x, currentInput.x * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
-                currentVelocity.y = Mathf.Lerp(currentVelocity.y, currentInput.y * targetSpeed, AnimBlendSpeed * Time.fixedDeltaTime);
-
-                var xVelDifference = currentVelocity.x - playerRigidbody.velocity.x;
-                var zVelDifference = currentVelocity.y - playerRigidbody.velocity.z;
-
-                playerRigidbody.AddForce(transform.TransformVector(new Vector3(xVelDifference, 0, zVelDifference)), ForceMode.VelocityChange);
+                animator.SetFloat(xVelHash, currentVelocity.x);
+                animator.SetFloat(yVelHash, currentVelocity.y);
             }
-            else
-            {
-                playerRigidbody.AddForce(transform.TransformVector(new Vector3(currentVelocity.x * AirResistance, 0, currentVelocity.y * AirResistance)), ForceMode.VelocityChange);
-            }
-
-            animator.SetFloat(xVelHash, currentVelocity.x);
-            animator.SetFloat(yVelHash, currentVelocity.y);
         }
 
         private void CamMovement()
         {
+            if (inputManager == null) inputManager = GetComponent<InputManager>();
+            if (playerRigidbody == null) playerRigidbody = GetComponent<Rigidbody>();
             bool isTutorialRecordingLocked = TutorialManager.Instance != null && TutorialManager.Instance.IsTutorialRecordingLookLocked();
-            if (!hasAnimator || !canLook || isTutorialRecordingLocked) return;
+            if (inputManager == null || playerRigidbody == null || Camera == null || CameraRoot == null) return;
+            if (!canLook || isTutorialRecordingLocked)
+            {
+                lookInitialized = false;
+                yawVelocity = pitchVelocity = 0f;
+                return;
+            }
+            if (!lookInitialized)
+            {
+                targetYaw = cameraYaw = transform.eulerAngles.y;
+                xRotation = cameraPitch = Mathf.Clamp(Mathf.DeltaAngle(0f, Camera.eulerAngles.x), UpperLimit, LowerLimit);
+                lookInitialized = true;
+            }
 
             var MouseX = inputManager.Look.x;
             var MouseY = inputManager.Look.y;
             Camera.position = CameraRoot.position;
 
-            xRotation -= MouseY * MouseSensitivity * Time.smoothDeltaTime;
+            // Mouse delta already measures movement per frame; only sticks need delta time.
+            float lookScale = MouseSensitivity * (inputManager.IsPointerLook ? GameOptions.MouseSensitivityMultiplier / 60f : Time.deltaTime);
+            xRotation -= MouseY * lookScale;
             xRotation = Mathf.Clamp(xRotation, UpperLimit, LowerLimit);
+            targetYaw += MouseX * lookScale;
 
-            Camera.localRotation = Quaternion.Euler(xRotation, 0, 0);
-            playerRigidbody.MoveRotation(playerRigidbody.rotation * Quaternion.Euler(0, MouseX * MouseSensitivity * Time.smoothDeltaTime, 0));
+            cameraYaw = Mathf.SmoothDampAngle(cameraYaw, targetYaw, ref yawVelocity, 0.045f);
+            cameraPitch = Mathf.SmoothDampAngle(cameraPitch, xRotation, ref pitchVelocity, 0.045f);
+            // Render the view independently of the body's fixed-step rotation.
+            Camera.rotation = Quaternion.Euler(cameraPitch, cameraYaw, 0f);
         }
 
         private void HandleJump()
@@ -128,14 +165,18 @@ namespace Player.PlayerController
             if (grounded) coyoteCounter = CoyoteTime;
             else coyoteCounter = Mathf.Max(0f, coyoteCounter - Time.fixedDeltaTime);
 
-            jumpBufferCounter = Mathf.Max(0f, jumpBufferCounter - Time.fixedDeltaTime);
+            if (!MovementAllowed) { jumpBufferCounter = 0f; return; }
+            if (jumpBufferCounter <= 0f || (!grounded && coyoteCounter <= 0f))
+            {
+                jumpBufferCounter = Mathf.Max(0f, jumpBufferCounter - Time.fixedDeltaTime);
+                return;
+            }
 
-            if (!hasAnimator || !canMove) return;
-            if (jumpBufferCounter <= 0f || coyoteCounter <= 0f) return;
-
-            playerRigidbody.AddForce(-playerRigidbody.velocity.y * Vector3.up, ForceMode.VelocityChange);
-            playerRigidbody.AddForce(Vector3.up * JumpFactor, ForceMode.Impulse);
-            animator.SetTrigger(jumpHash);
+            float jumpSpeed = Mathf.Sqrt(2f * Mathf.Abs(Physics.gravity.y) * Mathf.Max(0.1f, JumpHeight));
+            Vector3 velocity = playerRigidbody.velocity;
+            velocity.y = jumpSpeed;
+            playerRigidbody.velocity = velocity;
+            if (hasAnimator) animator.SetTrigger(jumpHash);
 
             grounded = false;
             jumpBufferCounter = 0f;
@@ -146,22 +187,38 @@ namespace Player.PlayerController
         {
             // The jump force is applied immediately in FixedUpdate().
             // This animation event now only cleans up the visual trigger.
-            animator.ResetTrigger(jumpHash);
+            if (hasAnimator) animator.ResetTrigger(jumpHash);
         }
 
         private void SampleGround()
         {
-            if (!hasAnimator) return;
-
-            float rayLength = 0.25f;
             int groundMask = GroundCheck.value == 0 ? Physics.DefaultRaycastLayers : GroundCheck.value;
-            Vector3 rayOrigin = transform.position + Vector3.up * 0.1f;
-            bool groundHit = Physics.Raycast(rayOrigin, Vector3.down, rayLength, groundMask, QueryTriggerInteraction.Ignore);
-            grounded = groundHit && playerRigidbody.velocity.y <= 0.1f;
+            Bounds bounds = bodyCollider != null ? bodyCollider.bounds : new Bounds(transform.position + Vector3.up, new Vector3(0.5f, 2f, 0.5f));
+            float radius = Mathf.Max(0.02f, Mathf.Min(bounds.extents.x, bounds.extents.z) * 0.8f);
+            Vector3 origin = new Vector3(bounds.center.x, bounds.min.y + radius + 0.05f, bounds.center.z);
+            int count = Physics.SphereCastNonAlloc(origin, radius, Vector3.down, groundHits, 0.15f, groundMask, QueryTriggerInteraction.Ignore);
+            grounded = false;
+            for (int i = 0; i < count && playerRigidbody.velocity.y <= 0.1f; i++)
+            {
+                if (groundHits[i].collider.attachedRigidbody == playerRigidbody) continue;
+                if (Vector3.Dot(groundHits[i].normal, Vector3.up) < 0.65f) continue;
+                grounded = true;
+                break;
+            }
+            if (hasAnimator)
+            {
+                animator.SetFloat(zVelHash, playerRigidbody.velocity.y);
+                animator.SetBool(fallingHash, !grounded && playerRigidbody.velocity.y < -0.1f);
+                animator.SetBool(groundHash, grounded);
+            }
+        }
 
-            animator.SetFloat(zVelHash, playerRigidbody.velocity.y);
-            animator.SetBool(fallingHash, !grounded && playerRigidbody.velocity.y < -0.1f);
-            animator.SetBool(groundHash, grounded);
+        private void OnDisable()
+        {
+            jumpBufferCounter = coyoteCounter = 0f;
+            currentVelocity = Vector2.zero;
+            if (playerRigidbody != null)
+                playerRigidbody.velocity = Vector3.up * playerRigidbody.velocity.y;
         }
 
         private void SetAnimationGrounding()

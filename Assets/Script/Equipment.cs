@@ -21,6 +21,12 @@ namespace Player.Equipment
         protected Rigidbody itemRigidbody;
         protected Collider[] itemColliders;
         protected Rigidbody[] allRigidbodies;
+        private bool[] colliderStates;
+        private bool[] kinematicStates;
+        private bool[] gravityStates;
+        private bool[] collisionStates;
+        private Vector3 worldScaleBeforePickup;
+        private bool hasPickupState;
 
         protected virtual void Awake()
         {
@@ -30,22 +36,41 @@ namespace Player.Equipment
 
         public virtual void OnPickedUp(Transform holdPoint)
         {
+            if (holdPoint == null || hasPickupState) return;
+            worldScaleBeforePickup = transform.lossyScale;
+            hasPickupState = true;
             itemColliders = GetComponentsInChildren<Collider>(true);
             allRigidbodies = GetComponentsInChildren<Rigidbody>(true);
+            colliderStates = new bool[itemColliders.Length];
+            kinematicStates = new bool[allRigidbodies.Length];
+            gravityStates = new bool[allRigidbodies.Length];
+            collisionStates = new bool[allRigidbodies.Length];
 
-            foreach (Rigidbody rb in allRigidbodies)
+            for (int i = 0; i < allRigidbodies.Length; i++)
             {
+                Rigidbody rb = allRigidbodies[i];
                 if (rb != null)
                 {
+                    kinematicStates[i] = rb.isKinematic;
+                    gravityStates[i] = rb.useGravity;
+                    collisionStates[i] = rb.detectCollisions;
+                    if (!rb.isKinematic)
+                    {
+                        rb.velocity = Vector3.zero;
+                        rb.angularVelocity = Vector3.zero;
+                    }
                     rb.isKinematic = true;
                     rb.useGravity = false;
                     rb.detectCollisions = false;
                 }
             }
 
-            foreach (Collider col in itemColliders)
+            for (int i = 0; i < itemColliders.Length; i++)
             {
-                if (col != null) col.enabled = false;
+                Collider col = itemColliders[i];
+                if (col == null) continue;
+                colliderStates[i] = col.enabled;
+                col.enabled = false;
             }
 
             transform.SetParent(holdPoint);
@@ -55,25 +80,28 @@ namespace Player.Equipment
 
         public virtual void OnDropped(Camera playerCamera)
         {
+            transform.SetParent(null, true);
+            if (!hasPickupState) return;
+            transform.localScale = worldScaleBeforePickup;
+            hasPickupState = false;
             if (allRigidbodies != null)
             {
-                foreach (Rigidbody rb in allRigidbodies)
+                for (int i = 0; i < allRigidbodies.Length; i++)
                 {
+                    Rigidbody rb = allRigidbodies[i];
                     if (rb != null)
                     {
-                        rb.isKinematic = false;
-                        rb.useGravity = true;
-                        rb.detectCollisions = true;
+                        rb.isKinematic = kinematicStates[i];
+                        rb.useGravity = gravityStates[i];
+                        rb.detectCollisions = collisionStates[i];
                     }
                 }
             }
 
-            foreach (Collider col in itemColliders)
+            for (int i = 0; i < itemColliders.Length; i++)
             {
-                if (col != null) col.enabled = true;
+                if (itemColliders[i] != null) itemColliders[i].enabled = colliderStates[i];
             }
-
-            transform.SetParent(null);
         }
 
         public abstract void OnUse(Camera playerCamera);

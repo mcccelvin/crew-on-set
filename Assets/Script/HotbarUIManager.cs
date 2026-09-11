@@ -13,11 +13,19 @@ public class HotbarUIManager : MonoBehaviour
     public Color activeColor = new Color(1f, 1f, 1f, 0.8f);
     public Color inactiveColor = new Color(0f, 0f, 0f, 0.4f);
 
-    // --- NEW: The Text element that will show the controls! ---
     [Header("Equipment Guide")]
     public TextMeshProUGUI equipmentGuideText;
 
-    private string currentGuideText = "";
+    private string currentGuideText;
+    private bool isInteractionPrompt;
+    private GameObject directorPromptRoot;
+    private RectTransform directorPromptRect;
+    private CanvasGroup directorPromptGroup;
+    private Image directorPromptAccent;
+    private TextMeshProUGUI directorPromptKeyText;
+    private TextMeshProUGUI directorPromptTitleText;
+    private TextMeshProUGUI directorPromptActionText;
+    private float directorPromptVisibility;
 
     private void Start()
     {
@@ -28,8 +36,28 @@ public class HotbarUIManager : MonoBehaviour
             if (slotIcons[i] != null) slotIcons[i].gameObject.SetActive(false);
         }
 
-        // Clear the guide text when the game starts
+        CreateDirectorTabletPrompt();
+
         UpdateGuideText("");
+    }
+
+    private void Update()
+    {
+        if (directorPromptGroup == null || directorPromptRect == null) return;
+
+        float target = isInteractionPrompt ? 1f : 0f;
+        directorPromptVisibility = Mathf.MoveTowards(directorPromptVisibility, target, Time.unscaledDeltaTime * 7f);
+        float eased = 1f - Mathf.Pow(1f - directorPromptVisibility, 3f);
+        directorPromptGroup.alpha = eased;
+        directorPromptRect.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, eased);
+
+        if (directorPromptAccent != null && isInteractionPrompt)
+        {
+            float pulse = (Mathf.Sin(Time.unscaledTime * 4.5f) + 1f) * 0.5f;
+            directorPromptAccent.color = Color.Lerp(
+                new Color(0.55f, 0.35f, 0.13f, 1f),
+                new Color(0.92f, 0.68f, 0.28f, 1f), pulse);
+        }
     }
 
     public void HighlightSlot(int activeIndex)
@@ -65,15 +93,197 @@ public class HotbarUIManager : MonoBehaviour
         }
     }
 
-    // --- NEW: Function to change the guide text ---
     public void UpdateGuideText(string newText)
     {
+        newText = newText ?? "";
         if (currentGuideText == newText) return;
         currentGuideText = newText;
+        isInteractionPrompt = TryBuildInteractionPrompt(newText, out string key, out string title, out string action);
+
+        if (isInteractionPrompt)
+        {
+            if (directorPromptKeyText != null) directorPromptKeyText.text = key;
+            if (directorPromptTitleText != null) directorPromptTitleText.text = title;
+            if (directorPromptActionText != null) directorPromptActionText.text = action;
+        }
 
         if (equipmentGuideText != null)
         {
-            equipmentGuideText.text = newText;
+            equipmentGuideText.text = isInteractionPrompt ? "" : newText;
         }
+    }
+
+    private static bool TryBuildInteractionPrompt(string source, out string key, out string title, out string action)
+    {
+        key = "E";
+        title = "INTERACT";
+        action = "PRESS E TO INTERACT";
+
+        if (string.IsNullOrWhiteSpace(source)) return false;
+
+        if (source.Contains("ENTER DIRECTOR TABLET"))
+        {
+            title = "DIRECTOR TABLET";
+            action = "PRESS E TO ENTER  •  BUILD  •  COLOR  •  PLACE";
+            return true;
+        }
+
+        string trimmed = source.Trim();
+        if (trimmed.Length < 4 || trimmed[0] != '[' || trimmed[2] != ']') return false;
+
+        key = char.ToUpperInvariant(trimmed[1]).ToString();
+        string command = trimmed.Substring(3).Trim();
+        string primaryCommand = command.Split('|')[0].Trim();
+
+        if (primaryCommand.StartsWith("Pick Up ", System.StringComparison.OrdinalIgnoreCase))
+        {
+            title = primaryCommand.ToUpperInvariant();
+            action = "PRESS " + key + " TO PICK UP";
+        }
+        else if (primaryCommand.IndexOf("Shop Terminal", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            title = "EQUIPMENT SHOP";
+            action = "PRESS " + key + " TO OPEN";
+        }
+        else if (primaryCommand.IndexOf("Computer Menu", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            title = "COMPUTER TERMINAL";
+            action = "PRESS " + key + " TO OPEN";
+        }
+        else if (primaryCommand.IndexOf("Insert SD Card", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            title = "COMPUTER TERMINAL";
+            action = command.Replace("[", "").Replace("]", "").Replace("|", " • ").ToUpperInvariant();
+        }
+        else
+        {
+            title = primaryCommand.ToUpperInvariant();
+            action = "PRESS " + key + " TO INTERACT";
+        }
+
+        return true;
+    }
+
+    private void CreateDirectorTabletPrompt()
+    {
+        if (equipmentGuideText == null) return;
+
+        Transform parent = equipmentGuideText.transform.parent;
+        Transform existing = parent.Find("DirectorTabletPrompt");
+        if (existing != null) Destroy(existing.gameObject);
+
+        directorPromptRoot = new GameObject("DirectorTabletPrompt", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(CanvasGroup));
+        directorPromptRoot.transform.SetParent(parent, false);
+        directorPromptRect = directorPromptRoot.GetComponent<RectTransform>();
+
+        RectTransform sourceRect = equipmentGuideText.rectTransform;
+        directorPromptRect.anchorMin = sourceRect.anchorMin;
+        directorPromptRect.anchorMax = sourceRect.anchorMax;
+        directorPromptRect.pivot = sourceRect.pivot;
+        directorPromptRect.anchoredPosition = sourceRect.anchoredPosition;
+        directorPromptRect.sizeDelta = new Vector2(440f, 82f);
+
+        Image background = directorPromptRoot.GetComponent<Image>();
+        background.color = new Color(0.20f, 0.125f, 0.055f, 0.97f);
+        background.raycastTarget = false;
+
+        Outline outline = directorPromptRoot.AddComponent<Outline>();
+        outline.effectColor = new Color(0.10f, 0.055f, 0.02f, 0.98f);
+        outline.effectDistance = new Vector2(3f, -3f);
+
+        Shadow shadow = directorPromptRoot.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.55f);
+        shadow.effectDistance = new Vector2(7f, -7f);
+
+        directorPromptGroup = directorPromptRoot.GetComponent<CanvasGroup>();
+        directorPromptGroup.alpha = 0f;
+        directorPromptGroup.interactable = false;
+        directorPromptGroup.blocksRaycasts = false;
+
+        GameObject accentObject = CreateImage("ContractAccent", directorPromptRoot.transform,
+            new Color(0.72f, 0.46f, 0.16f, 1f));
+        RectTransform accentRect = accentObject.GetComponent<RectTransform>();
+        accentRect.anchorMin = new Vector2(0f, 0f);
+        accentRect.anchorMax = new Vector2(0f, 1f);
+        accentRect.pivot = new Vector2(0f, 0.5f);
+        accentRect.anchoredPosition = Vector2.zero;
+        accentRect.sizeDelta = new Vector2(7f, 0f);
+        directorPromptAccent = accentObject.GetComponent<Image>();
+
+        GameObject keyObject = CreateImage("Keycap", directorPromptRoot.transform,
+            new Color(0.48f, 0.29f, 0.105f, 1f));
+        RectTransform keyRect = keyObject.GetComponent<RectTransform>();
+        SetRect(keyRect, new Vector2(21f, -12f), new Vector2(58f, 58f), new Vector2(0f, 1f));
+
+        Outline keyOutline = keyObject.AddComponent<Outline>();
+        keyOutline.effectColor = new Color(0.96f, 0.72f, 0.30f, 1f);
+        keyOutline.effectDistance = new Vector2(2f, -2f);
+
+        directorPromptKeyText = CreatePromptText("Key", keyObject.transform, "E", 30f, TextAlignmentOptions.Center);
+        directorPromptKeyText.fontStyle = FontStyles.Bold;
+        Stretch(directorPromptKeyText.rectTransform, 0f, 0f, 0f, 0f);
+
+        directorPromptTitleText = CreatePromptText("Title", directorPromptRoot.transform,
+            "DIRECTOR TABLET", 23f, TextAlignmentOptions.Left);
+        directorPromptTitleText.fontStyle = FontStyles.Bold;
+        directorPromptTitleText.color = new Color(1f, 0.91f, 0.70f, 1f);
+        directorPromptTitleText.characterSpacing = 1.5f;
+        directorPromptTitleText.enableAutoSizing = true;
+        directorPromptTitleText.fontSizeMin = 14f;
+        directorPromptTitleText.fontSizeMax = 23f;
+        SetRect(directorPromptTitleText.rectTransform, new Vector2(99f, -13f), new Vector2(320f, 30f), new Vector2(0f, 1f));
+
+        directorPromptActionText = CreatePromptText("Action", directorPromptRoot.transform,
+            "PRESS E TO ENTER  •  BUILD  •  COLOR  •  PLACE", 11f, TextAlignmentOptions.Left);
+        directorPromptActionText.color = new Color(0.88f, 0.74f, 0.49f, 1f);
+        directorPromptActionText.fontStyle = FontStyles.Bold;
+        directorPromptActionText.enableAutoSizing = true;
+        directorPromptActionText.fontSizeMin = 8f;
+        directorPromptActionText.fontSizeMax = 11f;
+        SetRect(directorPromptActionText.rectTransform, new Vector2(100f, -49f), new Vector2(320f, 20f), new Vector2(0f, 1f));
+
+        directorPromptRoot.transform.SetAsLastSibling();
+    }
+
+    private GameObject CreateImage(string objectName, Transform parent, Color color)
+    {
+        GameObject result = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        result.transform.SetParent(parent, false);
+        Image image = result.GetComponent<Image>();
+        image.color = color;
+        image.raycastTarget = false;
+        return result;
+    }
+
+    private TextMeshProUGUI CreatePromptText(string objectName, Transform parent, string value, float size, TextAlignmentOptions alignment)
+    {
+        GameObject result = new GameObject(objectName, typeof(RectTransform));
+        result.transform.SetParent(parent, false);
+        TextMeshProUGUI text = result.AddComponent<TextMeshProUGUI>();
+        text.text = value;
+        text.font = equipmentGuideText.font;
+        text.fontSize = size;
+        text.color = Color.white;
+        text.alignment = alignment;
+        text.raycastTarget = false;
+        text.enableWordWrapping = false;
+        return text;
+    }
+
+    private static void SetRect(RectTransform rect, Vector2 position, Vector2 size, Vector2 pivot)
+    {
+        rect.anchorMin = pivot;
+        rect.anchorMax = pivot;
+        rect.pivot = pivot;
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+    }
+
+    private static void Stretch(RectTransform rect, float left, float top, float right, float bottom)
+    {
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = new Vector2(left, bottom);
+        rect.offsetMax = new Vector2(-right, -top);
     }
 }

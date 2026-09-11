@@ -2,10 +2,13 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
+public enum ProvidedClipRole { None, GokeIntro, GokeOutro }
+
 public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
     [Header("Clip Data")]
     public string clipFilePath;
+    [HideInInspector] public ProvidedClipRole providedRole;
     public int totalFrames;
     public int startFrame;
     public int endFrame;

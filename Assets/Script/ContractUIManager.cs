@@ -216,31 +216,38 @@ public class ContractUIManager : MonoBehaviour
     {
         SetContractText("GOKE COLA",
             "CLIENT QUALIFICATIONS\n\n" +
-            "STAGE   - RED backdrop and Cola away from the wall\n" +
-            "CAMERA  - Rule of Thirds composition\n" +
-            "LIGHT   - 3-Point Lighting\n" +
-            "EDIT    - 10 seconds, 2 title-safe graphics, balanced red commercial grade\n" +
-            "GRADE   - Brightness 0.94-1.02, Contrast 1.14-1.26, Saturation 1.04-1.16\n\n" +
+            "STAGE   - Red backdrop; Goke at least 1.5 units from the wall\n" +
+            "CAMERA  - Rule of Thirds; choose any grid intersection\n" +
+            "LIGHT   - Key, softer opposite Fill, and Back; choose intensities\n" +
+            "EDIT    - 10 seconds: INTRO 0-2s, your footage 2-8s, OUTRO 8-10s\n" +
+            "OVERLAYS - Use exactly two; choose their timing and duration\n" +
+            "CLIPS   - Intro/outro supplied; effects and color changes optional\n\n" +
             "UPFRONT PAYMENT: 60,000 B-COINS");
 
-        SetQualificationSummary("STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 2 title-safe graphics + balanced color");
+        SetQualificationSummary("STAGE: Red backdrop + depth     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 10s with intro/outro + 2 freely timed overlays");
 
         SetQualificationText("GOKE COLA - SELECTED CONTRACT",
-            "RULE OF THIRDS",
-            "Divide the frame into a 3 x 3 grid.\n\n" +
-            "- Place the Cola near a grid intersection.\n" +
-            "- Keep the main visual interest near the upper line.\n" +
-            "- Leave intentional negative space.\n" +
-            "- Do not use the tutorial's default center framing.",
-            "3-POINT LIGHTING",
-            "Build the shot using three lighting roles.\n\n" +
-            "- KEY: strongest light, about 45 degrees from the subject.\n" +
-            "- FILL: softer opposite light controlling shadows.\n" +
-            "- BACK: light behind the subject for separation.\n" +
-            "- Recommended starting point: Key 75%, Fill 40%, Back 60%.\n" +
-            "- Aim every beam at the product and keep the key dominant.\n\n" +
-            "POST-PRODUCTION\n" +
-            "Remove dead air and begin the edit at 0.0 seconds. Use the Rule-of-Thirds negative space as information space without covering the product. Keep the Main Logo title-safe from 0-5 seconds, then the End Logo from 5-10 seconds. Correct exposure, contrast, and saturation in that order. Use B 0.94-1.02, C 1.14-1.26, and S 1.04-1.16.");
+            "STAGE & COMPOSITION",
+            "STAGE\nRed backdrop. Place Goke at least 1.5 units away from the wall for depth. Choose its position and camera angle.\n\n" +
+            "RULE OF THIRDS\nPlace the full can near any of the four grid intersections. Left or right, upper or lower: your choice. Keep it visible and leave room for graphics.",
+            "LIGHTING & EDIT",
+            "KEY shapes the can. FILL softens shadows from the opposite side. BACK separates it from the backdrop. Power and aim all three; keep Fill softer than Key. Choose intensities, not fixed percentages.\n\n" +
+            "EDIT\n10s: supplied intro 2s + footage 6s + supplied outro 2s, joined without gaps.\n\n" +
+            "Use two overlays: logo + tagline. Any timing or duration during the ad; together or separately. Choose placement and animation. Effects, music and color changes are optional.");
+
+        if (qualificationsPanel != null)
+        {
+            foreach (string path in new[] { "Qualifications Book/Rule of Thirds/Description", "Qualifications Book/Three Point Lighting/Description" })
+            {
+                Transform body = qualificationsPanel.transform.Find(path);
+                if (body == null) continue;
+                var text = body.GetComponent<TextMeshProUGUI>();
+                if (text == null) continue;
+                text.enableAutoSizing = true;
+                text.fontSizeMin = 18f;
+                text.fontSizeMax = 25f;
+            }
+        }
 
         SetPreviousContractText("ARTISAN\nFLOWER VASE",
             "PREVIOUS CONTRACT\n\n" +
@@ -256,28 +263,30 @@ public class ContractUIManager : MonoBehaviour
     {
         SetContractText("LAMBORMINI",
             "CLIENT QUALIFICATIONS\n\n" +
-            "VEHICLE - Place the Lambormini car on the stage\n" +
+            "SET - ADD WALL; choose a dark backdrop and place one orange Lambormini\n" +
             "LIGHT   - Use the Level 3 Soft Light for clean reflections\n" +
-            "CAMERA  - Create a premium automotive composition\n" +
-            "EDIT    - 10-second premium automotive color grade\n\n" +
+            "CAMERA  - Reveal a detail into a low front-quarter hero view\n" +
+            "EDIT    - 8-12 seconds; choose your own motion and finish\n\n" +
             "UPFRONT PAYMENT: 80,000 B-COINS");
 
-        SetQualificationSummary("STAGE: Lambormini hero vehicle     CAMERA: Premium automotive frame\nLIGHT: Level 3 Soft Light at 65-85%     EDIT: 10-second premium grade");
+        SetQualificationSummary("STAGE: Dark backdrop + orange Lambormini     CAMERA: Detail to hero reveal\nLIGHT: Soft, aimed highlights     EDIT: 8-12 seconds; creative finish");
 
         SetQualificationText("LAMBORMINI - SELECTED CONTRACT",
             "AUTOMOTIVE COMPOSITION",
             "Present the vehicle as the only hero subject.\n\n" +
             "- Place exactly one Lambormini car.\n" +
-            "- Show a readable front or side silhouette.\n" +
-            "- Use the Rule of Thirds grid to create intentional negative space.\n" +
-            "- Keep the stage clear of actors and unnecessary clutter.",
+            "- Open with a headlight or wheel detail, then reveal the front and side.\n" +
+            "- Centered and Rule of Thirds framing both work; detail shots may crop the car.\n" +
+            "- Keep the camera low and avoid obstructing the vehicle.",
             "SOFT REFLECTIVE LIGHTING",
             "Use the Level 3 Soft Light to shape the vehicle.\n\n" +
             "- Light the side and front of the car.\n" +
             "- Keep highlights clean across the body.\n" +
-            "- Use 65-85% intensity and -20 to 0 degrees tilt.\n" +
-            "- Aim the beam so the body shape stays readable.\n" +
-            "- In the Editor use Contrast 1.15-1.45, Saturation 0.95-1.20, and Brightness 0.90-1.10.");
+            "- Optional: place a LIGHT STRIP behind the car for a rim; try a cool color against the orange paint. F adjusts strip power.\n" +
+            "- Start near 75% output and -10 degrees tilt, then refine.\n" +
+            "- Use at least 30% output and 50% diffusion; aim the beam at the car.\n\n" +
+            "POST-PRODUCTION\n" +
+            "Use your recorded Level 3 footage with soft lighting in an 8-12 second cut. Slow Pull Out reveals a steady hero take; separate detail and hero takes also work. Cinematic music is suggested. Music, transitions, overlays and intro/outro cards are optional. Use Contrast 1.05-1.45, Saturation 0.95-1.30, Brightness 0.85-1.15.");
 
         SetPreviousContractText("GOKE COLA",
             "PREVIOUS CONTRACT\n\n" +
@@ -297,7 +306,7 @@ public class ContractUIManager : MonoBehaviour
             "CAST    - Keep the same non-neutral pose across every clip\n" +
             "CAMERA  - At least 3 clips: Wide, Medium, and Close-Up\n" +
             "LIGHT   - Level 3 Soft Light in every selected clip\n" +
-            "EDIT    - 15 seconds, 2 graphics, warm color grade\n\n" +
+            "EDIT    - 15 seconds, 2 animated graphics, player-selected motion, transition, music, and warm grade\n\n" +
             "UPFRONT PAYMENT: 100,000 B-COINS");
 
         SetQualificationSummary("STAGE: Brown set + 1 product + 1 posed actor     CAMERA: Wide, Medium & Close-Up\nLIGHT: Soft Light every clip     EDIT: 15 seconds + 2 graphics");
@@ -316,7 +325,9 @@ public class ContractUIManager : MonoBehaviour
             "- Use a warm brown backdrop.\n" +
             "- Use the Soft Light in every selected clip without flattening the actor.\n" +
             "- Keep face and product detail readable.\n" +
-            "- Use exactly 2 graphics.\n" +
+            "- Use exactly 2 graphics and choose their entrance animation.\n" +
+            "- Choose camera motion, an opening/closing transition, and music in Branding.\n" +
+            "- Preview the complete 15-second story before export.\n" +
             "- Grade within Brightness 0.95-1.15, Contrast 1.05-1.30, and Saturation 1.05-1.30.");
 
         SetPreviousContractText("LAMBORMINI",
@@ -512,7 +523,7 @@ public class ContractUIManager : MonoBehaviour
         headingText.fontStyle = FontStyles.Bold;
 
         TextMeshProUGUI contractSummary = CreateText("Contract Summary", mainPanel.transform,
-            "STAGE: Red backdrop + product away from wall     CAMERA: Rule of Thirds\nLIGHT: Key, Fill & Back     EDIT: 10s + 2 title-safe graphics + balanced color",
+            "STAGE: Red backdrop + depth     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 10s with intro/outro + 2 freely timed overlays",
             21, TextAlignmentOptions.Center);
         SetRect(contractSummary.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -115f), new Vector2(1320f, 68f));
         contractSummary.color = new Color(1f, 0.82f, 0.35f);
@@ -529,7 +540,7 @@ public class ContractUIManager : MonoBehaviour
         TextMeshProUGUI thirdsDescription = CreateText("Description", thirdsCard.transform,
             "Divide the frame into a 3 × 3 grid.\n\n" +
             "• Place the Cola near a grid intersection.\n" +
-            "• Keep the main visual interest near the upper line.\n" +
+            "• Choose any intersection: upper or lower, left or right.\n" +
             "• Leave intentional negative space.\n" +
             "• Do not use the tutorial's default center framing.",
             25, TextAlignmentOptions.TopLeft);

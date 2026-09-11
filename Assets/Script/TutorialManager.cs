@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using UnityEngine;
 using TMPro;
@@ -15,6 +16,9 @@ public struct TutorialTarget
 public class TutorialManager : MonoBehaviour
 {
     public static TutorialManager Instance;
+
+    public const float TutorialBlueTarget = 150f;
+    private const float TutorialBlueSnapTolerance = 10f;
 
     [Header("Spawning Setup")]
     public Transform stageSpawnPoint;
@@ -119,6 +123,8 @@ public class TutorialManager : MonoBehaviour
     private bool cubeSpawned = false, cubeMoved = false, cubePainted = false;
     private bool propSpawned = false, flowerOnCube = false;
     private bool cameraViewEntered = false, cameraZoomed = false, cameraPedestalMoved = false, subjectFramed = false;
+    private float cameraPracticeElapsed, cameraPracticeIdle;
+    private bool practicedPositive, practicedNegative;
 
     private float spacebarCooldown = 0f;
     private bool wasJumpHeld = false;
@@ -127,9 +133,9 @@ public class TutorialManager : MonoBehaviour
     [Header("Game Explanation Dialogue")]
     private string[] explanationPages = new string[]
     {
-        "Here is how things work. Your job is to produce <color=red>top-tier video commercials.</color>",
-        "You will accept a <color=red>contract</color> from the client. This contract serves as your primary guide, containing all the specific details and requirements you must <color=red>follow</color> for the project.",
-        "It is crucial to follow these instructions precisely. Your success and the <color=red>final payout</color> depend entirely on how accurately you execute the client's specific criteria."
+        "We make short commercials here. You'll build the set, shoot the product, then bring the footage together in the edit.",
+        "Before we touch any gear, we read the <color=red>contract</color>. That's our brief: what the client wants, and what we need to deliver.",
+        "Keep that brief close. Meeting it earns your grade and payment, and I'll walk you through this first job."
     };
     private int currentExplanationPage = 0;
     private bool isLevel1Retry = false;
@@ -207,6 +213,38 @@ public class TutorialManager : MonoBehaviour
         StartCoroutine(StartTutorialWithDelay());
     }
 
+    public void DisableForDevTesting()
+    {
+        StopAllCoroutines();
+        currentStep = TutorialStep.Level1Accepted;
+        isTaskPhaseActive = false;
+        isTransitioning = false;
+        isTutorialRecordingLookLocked = false;
+        if (firstContractPanel != null) firstContractPanel.SetActive(false);
+        if (spacePromptText != null) spacePromptText.gameObject.SetActive(false);
+        if (preProductionTitleCard != null) preProductionTitleCard.gameObject.SetActive(false);
+        if (productionTitleCard != null) productionTitleCard.gameObject.SetActive(false);
+        if (stageWalkTriggerCircle != null) stageWalkTriggerCircle.SetActive(false);
+        if (cameraWalkTriggerCircle != null) cameraWalkTriggerCircle.SetActive(false);
+        if (cubePlacementTarget != null) cubePlacementTarget.SetActive(false);
+        PointLineAt("");
+        if (TutorialUIManager.Instance != null)
+        {
+            TutorialUIManager.Instance.HideBossDialogue();
+            TutorialUIManager.Instance.HideTasks();
+            TutorialUIManager.Instance.ClearDynamicGlows();
+        }
+        if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+        if ((PauseManager.isPaused || Cursor.lockState == CursorLockMode.Locked) &&
+            (AlmanacManager.Instance == null || !AlmanacManager.Instance.IsOpen()) &&
+            (ContractUIManager.Instance == null || !ContractUIManager.Instance.IsContractUIOpen()))
+        {
+            UnfreezePlayerMovement();
+            if (!PauseManager.isPaused) Cursor.visible = false;
+        }
+        enabled = false;
+    }
+
     private void Update()
     {// --- ADD THIS TO FIX THE POINT C CAMERA TRIGGER ---
         Keyboard keyboard = Keyboard.current;
@@ -262,31 +300,20 @@ public class TutorialManager : MonoBehaviour
         if (objectiveLine != null && objectiveLine.enabled && lineTarget != null && playerTransform != null)
         {
             // Point 0: The Player
-            objectiveLine.SetPosition(0, playerTransform.position + (Vector3.up * lineHeightOffset));
+            objectiveLine.SetPosition(0, GuidedPracticeLesson.GuideEndpoint(playerTransform, true));
 
             // Point 1: The Target Objective
-            objectiveLine.SetPosition(1, lineTarget.position + (Vector3.up * lineHeightOffset));
+            objectiveLine.SetPosition(1, GuidedPracticeLesson.GuideEndpoint(lineTarget, false));
         }
         // -----------------------------------------------
         UpdatePlacementChecks();
 
-        if (keyboard != null && keyboard.f12Key.wasPressedThisFrame)
-        {
-            PlayerPrefs.DeleteAll();
-            PlayerPrefs.Save();
-            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
-        }
-
-        if (keyboard != null && keyboard.f9Key.wasPressedThisFrame)
-        {
-            SpawnCheatSDCard();
-        }
-
         bool canAdvanceCampaignDialogue = CanAdvanceCampaignDialogue();
+        bool bossDialogueReady = TutorialUIManager.Instance == null || TutorialUIManager.Instance.CanAdvanceBossDialogue();
 
         if (spacePromptText != null)
         {
-            bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.unscaledTime >= spacebarCooldown) && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
+            bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.unscaledTime >= spacebarCooldown) && bossDialogueReady && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
             spacePromptText.gameObject.SetActive(canShowPrompt);
         }
 
@@ -297,7 +324,7 @@ public class TutorialManager : MonoBehaviour
 
         if (jumpJustPressed && !isTransitioning)
         {
-            if (Time.unscaledTime >= spacebarCooldown)
+            if (Time.unscaledTime >= spacebarCooldown && bossDialogueReady)
             {
                 if (currentStep == TutorialStep.GameExplanation || currentStep == TutorialStep.ExplainComputerEditor)
                 {
@@ -364,12 +391,13 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.PracticeCameraZoom && isTaskPhaseActive && !cameraZoomed)
         {
-            if (mouse != null && mouse.scroll.ReadValue().y != 0) { cameraZoomed = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraPedestal, true)); }
+            float scroll = mouse != null ? mouse.scroll.ReadValue().y : 0f;
+            if (CameraPracticeReady(scroll > 0, scroll < 0)) { cameraZoomed = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.PracticeCameraPedestal, true)); }
         }
 
         if (currentStep == TutorialStep.PracticeCameraPedestal && isTaskPhaseActive && !cameraPedestalMoved)
         {
-            if (keyboard != null && (keyboard.qKey.isPressed || keyboard.eKey.isPressed)) { cameraPedestalMoved = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.FrameSubject, true)); }
+            if (CameraPracticeReady(keyboard != null && keyboard.qKey.isPressed, keyboard != null && keyboard.eKey.isPressed)) { cameraPedestalMoved = true; TutorialUIManager.Instance.MarkTaskComplete(0); StartCoroutine(TransitionToNextStep(TutorialStep.FrameSubject, true)); }
         }
 
         if (currentStep == TutorialStep.WalkToStageWithLight && isTaskPhaseActive)
@@ -538,7 +566,7 @@ public class TutorialManager : MonoBehaviour
                 Vector3 targetPos = cubePlacementTarget.transform.position;
                 float hDist = Vector2.Distance(new Vector2(cubePos.x, cubePos.z), new Vector2(targetPos.x, targetPos.z));
 
-                if (hDist <= 3.5f)
+                if (IsCubeOnMarker(tutorialCube))
                 {
                     cubeMoved = true;
                     cubePlacementTarget.SetActive(false);
@@ -568,7 +596,7 @@ public class TutorialManager : MonoBehaviour
                 float hDist = Vector2.Distance(new Vector2(flowerPos.x, flowerPos.z), new Vector2(cubePos.x, cubePos.z));
                 float vDist = Mathf.Abs(flowerPos.y - cubePos.y);
 
-                if (hDist <= 4.0f && vDist <= 6.0f)
+                if (IsCubeOnMarker(tutorialCube) && IsFlowerOnCube(tutorialFlower))
                 {
                     flowerOnCube = true;
                     TutorialUIManager.Instance.SetDynamicGlow("pointB", false);
@@ -580,6 +608,24 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
+    private bool CameraPracticeReady(bool positive, bool negative)
+    {
+        var interactor = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
+        var camera = interactor != null ? interactor.GetHeldItem() as Player.Equipment.FilmCameraItem : null;
+        if (camera == null || !camera.IsCameraViewActive()) return false;
+        cameraPracticeElapsed += Time.deltaTime;
+        practicedPositive |= positive;
+        practicedNegative |= negative;
+        cameraPracticeIdle = positive || negative ? 0f : cameraPracticeIdle + Time.deltaTime;
+        return practicedPositive && practicedNegative && cameraPracticeElapsed >= 10f && cameraPracticeIdle >= 1.5f;
+    }
+
+    private void ResetCameraPractice()
+    {
+        cameraPracticeElapsed = cameraPracticeIdle = 0f;
+        practicedPositive = practicedNegative = false;
+    }
+
     public void OnPropPlaced(GameObject placedObject)
     {
         if (placedObject == null) return;
@@ -587,6 +633,53 @@ public class TutorialManager : MonoBehaviour
         string propName = placedObject.name.ToLower();
         if (propName.Contains("cube")) tutorialCube = placedObject;
         else if (propName.Contains("flower") || propName.Contains("floral")) tutorialFlower = placedObject;
+    }
+
+    private bool TryPropBounds(GameObject prop, out Bounds bounds)
+    {
+        bounds = default;
+        if (prop == null) return false;
+        Renderer[] renderers = prop.GetComponentsInChildren<Renderer>();
+        bool found = false;
+        foreach (Renderer renderer in renderers)
+        {
+            if (!renderer.enabled || renderer is LineRenderer) continue;
+            if (!found) { bounds = renderer.bounds; found = true; }
+            else bounds.Encapsulate(renderer.bounds);
+        }
+        return found;
+    }
+
+    private bool IsCubeOnMarker(GameObject cube)
+    {
+        if (cubePlacementTarget == null || !TryPropBounds(cube, out Bounds bounds)) return false;
+        Vector3 target = cubePlacementTarget.transform.position;
+        return Vector2.Distance(new Vector2(bounds.center.x, bounds.center.z), new Vector2(target.x, target.z)) <= 0.6f
+            && Mathf.Abs(bounds.min.y - target.y) <= 0.35f;
+    }
+
+    private bool IsFlowerOnCube(GameObject flower)
+    {
+        if (!TryPropBounds(tutorialCube, out Bounds cube) || !TryPropBounds(flower, out Bounds item)) return false;
+        return item.center.x >= cube.min.x && item.center.x <= cube.max.x
+            && item.center.z >= cube.min.z && item.center.z <= cube.max.z
+            && Mathf.Abs(item.min.y - cube.max.y) <= 0.25f;
+    }
+
+    public bool CanPlaceTutorialProp(GameObject prop)
+    {
+        if (currentStep < TutorialStep.Tablet_MoveCube || currentStep > TutorialStep.TabletPracticeFinished) return true;
+        if (prop == tutorialCube && !IsCubeOnMarker(prop))
+        {
+            ShowWarning("Move the cube onto the center marker, then click to place it.");
+            return false;
+        }
+        if (prop == tutorialFlower && (!IsCubeOnMarker(tutorialCube) || !IsFlowerOnCube(prop)))
+        {
+            ShowWarning("Place the flower on top of the cube, then click.");
+            return false;
+        }
+        return true;
     }
 
     public void OnPropPickedFromUI(GameObject pickedObject)
@@ -635,6 +728,17 @@ public class TutorialManager : MonoBehaviour
     }
 
     public void PointLineAt(string targetIdentifier)
+    {
+        PointLineAtIdentifier(targetIdentifier);
+    }
+
+    public void PointLineAtTransform(Transform target)
+    {
+        lineTarget = target;
+        if (objectiveLine != null) { objectiveLine.useWorldSpace = true; objectiveLine.positionCount = 2; objectiveLine.enabled = target != null; }
+    }
+
+    private void PointLineAtIdentifier(string targetIdentifier)
     {
         if (objectiveLine == null) return;
 
@@ -853,7 +957,8 @@ public class TutorialManager : MonoBehaviour
     private IEnumerator ShowBossWarning(string warningMessage)
     {
         TutorialUIManager.Instance.ShowBossDialogue(warningMessage, TutorialUIManager.Instance.poseBoss, false, false);
-        yield return new WaitForSecondsRealtime(1.5f);
+        float readableDuration = TutorialUIManager.Instance.GetBossDialogueReadyDelay() + 0.5f;
+        yield return new WaitForSecondsRealtime(Mathf.Max(1.5f, readableDuration));
         TutorialUIManager.Instance.HideBossDialogue();
         RestoreTaskPanelAfterWarning();
         warningCoroutine = null;
@@ -862,7 +967,8 @@ public class TutorialManager : MonoBehaviour
     private IEnumerator ShowTimedBossWarning(string warningMessage, float duration)
     {
         TutorialUIManager.Instance.ShowBossDialogue(warningMessage, TutorialUIManager.Instance.poseBoss, false, false);
-        yield return new WaitForSecondsRealtime(duration);
+        float readableDuration = TutorialUIManager.Instance.GetBossDialogueReadyDelay() + 0.35f;
+        yield return new WaitForSecondsRealtime(Mathf.Max(duration, readableDuration));
         TutorialUIManager.Instance.HideBossDialogue();
         RestoreTaskPanelAfterWarning();
         warningCoroutine = null;
@@ -1067,7 +1173,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.Tablet_PaintWall:
                 TutorialUIManager.Instance.SetDynamicGlow("director", true);
                 TutorialUIManager.Instance.SetDynamicGlow("stage", false);
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 0", "Set <color=blue>Blue</color> to ~150" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 0", "Set <color=blue>Blue</color> to 150" });
                 wallColorChanged = false;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(redColorSliderRect);
                 break;
@@ -1089,7 +1195,7 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.Tablet_PaintCube:
                 TutorialUIManager.Instance.SetDynamicGlow("pointB", false);
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 0", "Set <color=blue>Blue</color> to ~150" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 0", "Set <color=blue>Blue</color> to 150" });
                 cubePainted = false;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(redColorSliderRect);
                 break;
@@ -1129,7 +1235,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.BuyLight_CloseShop:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Press <color=red>[E]</color> or <color=red>[ESC]</color> to close the terminal" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Press <color=red>[E]</color> to close the terminal" });
                 break;
 
             case TutorialStep.PickUpLight:
@@ -1195,7 +1301,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.BuyCamera_CloseShop:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[E]</color> or <color=red>[ESC]</color> to close the terminal" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[E]</color> to close the terminal" });
                 break;
 
             case TutorialStep.PickUpCamera:
@@ -1228,8 +1334,8 @@ public class TutorialManager : MonoBehaviour
                 cameraViewEntered = false;
                 break;
 
-            case TutorialStep.PracticeCameraZoom: TutorialUIManager.Instance.SetupTasks(new string[] { "- Use <color=red>[Scroll Wheel]</color> to zoom the lens in and out" }); cameraZoomed = false; break;
-            case TutorialStep.PracticeCameraPedestal: TutorialUIManager.Instance.SetupTasks(new string[] { "- Hold <color=red>[Q]</color> or <color=red>[E]</color> to shift the camera height" }); cameraPedestalMoved = false; break;
+            case TutorialStep.PracticeCameraZoom: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try zooming both in and out with <color=red>[Scroll]</color>", "- Take a moment to explore, then release the controls" }); cameraZoomed = false; ResetCameraPractice(); break;
+            case TutorialStep.PracticeCameraPedestal: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try both <color=red>[Q]</color> and <color=red>[E]</color> to change camera height", "- Explore high and low angles, then release the controls" }); cameraPedestalMoved = false; ResetCameraPractice(); break;
             case TutorialStep.FrameSubject: TutorialUIManager.Instance.SetupTasks(new string[] { "- Aim at the prop until HUD says [SUBJECT DETECTED]" }); subjectFramed = false; break;
 
             case TutorialStep.RecordVideo:
@@ -1399,11 +1505,27 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
+    public Color SnapTutorialPaintColor(Color color, bool isWall)
+    {
+        if (!isActiveAndEnabled || !isTaskPhaseActive) return color;
+
+        TutorialStep paintStep = isWall ? TutorialStep.Tablet_PaintWall : TutorialStep.Tablet_PaintCube;
+        if (currentStep != paintStep) return color;
+
+        // Help the player land on 150 without changing unrelated colors or
+        // completing the lesson until the Director Terminal sees mouse release.
+        float blueValue = color.b * 255f;
+        if (Mathf.Abs(blueValue - TutorialBlueTarget) <= TutorialBlueSnapTolerance + 0.001f)
+            color.b = TutorialBlueTarget / 255f;
+
+        return color;
+    }
+
     public void CheckWallColor(float rValue, float gValue, float bValue)
     {
         if (currentStep == TutorialStep.Tablet_PaintWall && isTaskPhaseActive && !wallColorChanged)
         {
-            if (rValue >= 245f && rValue <= 255f && gValue <= 10f && bValue >= 140f && bValue <= 160f)
+            if (rValue >= 245f && rValue <= 255f && gValue <= 10f && Mathf.Approximately(bValue, TutorialBlueTarget))
             {
                 wallColorChanged = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1423,7 +1545,7 @@ public class TutorialManager : MonoBehaviour
     {
         if (currentStep == TutorialStep.Tablet_PaintCube && isTaskPhaseActive && !cubePainted)
         {
-            if (rValue >= 245f && rValue <= 255f && gValue <= 10f && bValue >= 140f && bValue <= 160f)
+            if (rValue >= 245f && rValue <= 255f && gValue <= 10f && Mathf.Approximately(bValue, TutorialBlueTarget))
             {
                 cubePainted = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1855,16 +1977,16 @@ public class TutorialManager : MonoBehaviour
 
         switch (currentStep)
         {
-            case TutorialStep.Intro: ui.ShowBossDialogue("Welcome to Crew On Set Studio. I'm your Boss, and I am going to teach you the absolute pure basics of video commercial production.", ui.poseHappy, true, true); break;
-            case TutorialStep.WaitForPrompt: ui.ShowBossDialogue("Do you need a walkthrough of the basics?\n<color=red>[SPACE]</color> to learn, or <color=red>[TAB]</color> to skip", ui.posePoint, true, true); break;
-            case TutorialStep.LearnMovement: ui.ShowBossDialogue("Use <color=red>[W, A, S, D]</color> to walk, <color=red>[Space]</color> to jump, and <color=red>[SHIFT]</color> to sprint. Getting comfortable moving around your set is crucial for finding the best camera angles later!", ui.posePoint, true, false); break;
+            case TutorialStep.Intro: ui.ShowBossDialogue("Hey, welcome to Crew-On-Set! I run the studio, but you can call me Boss. I'll be here to guide you through your first commercial.", ui.poseHappy, true, true); break;
+            case TutorialStep.WaitForPrompt: ui.ShowBossDialogue("First day on set? Let me show you around.\n<color=red>[SPACE]</color> Show me the ropes   <color=red>[TAB]</color> Skip the tutorial", ui.posePoint, true, true); break;
+            case TutorialStep.LearnMovement: ui.ShowBossDialogue("Take a look around. Use <color=red>[WASD]</color> to walk, <color=red>[SPACE]</color> to jump, and <color=red>[SHIFT]</color> to sprint. Give each a try.", ui.posePoint, true, false); break;
             case TutorialStep.GameExplanation: ui.ShowBossDialogue(explanationPages[currentExplanationPage], ui.poseBoss, true, true); break;
-            case TutorialStep.OfferFirstContract: ui.ShowBossDialogue("Here is the Artisan Flower Vase brief. Build a Pink set, center and fully frame the flower, use one controlled Stage Light, and deliver a precise 10-second edit with two title-safe graphics. Finish with a balanced grade that preserves detail instead of crushing shadows or oversaturating the Pink palette. Review the contract, then click ACCEPT.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.OfferFirstContract: ui.ShowBossDialogue("Here's our first job: an Artisan Flower Vase commercial. Have a look at the brief, then click <color=red>ACCEPT</color> when you're ready.", ui.poseOpenHand, true, false); break;
             case TutorialStep.SetTrainingObjectAndMoney:
                 if (isLevel1Retry)
-                    ui.ShowBossDialogue("The first submission missed the client's requirements, but the contract is still active. I restored your working budget up to <color=yellow>10000 B-Coins</color>. Rebuild the set, record a stronger take, and use the grading feedback to fix every mistake.", ui.poseBoss, true, false);
+                    ui.ShowBossDialogue("The client needs a few changes. Have a look at the feedback; I've topped your budget back up to <color=yellow>10,000 B-Coins</color> for another take.", ui.poseBoss, true, false);
                 else
-                    ui.ShowBossDialogue("Great. Here's your 10000 B-Coins. I've also unlocked the Floral Vase prop for your first commercial. Follow the production steps carefully and finish the contract first.", ui.poseSmile, true, true);
+                    ui.ShowBossDialogue("All right, we're on the job. You've got <color=yellow>10,000 B-Coins</color> to work with, and the Floral Vase is ready. Let's build its set.", ui.poseSmile, true, true);
                 break;
 
             case TutorialStep.ShowPreProductionTitle:
@@ -1873,46 +1995,46 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.ExplainPreProduction:
-                ui.ShowBossDialogue("Pre-Production is all about preparation. Before we even touch a camera, we must build the physical set and arrange our props.", ui.poseBoss, true, true);
+                ui.ShowBossDialogue("Before we roll, we get the set ready. That's pre-production. Let's start with a backdrop and a place for our vase.", ui.poseBoss, true, true);
                 break;
 
-            case TutorialStep.BuildStageWall: ui.ShowBossDialogue("As a Director, you use the Director's Tablet to instantly spawn and paint walls, saving hours of physical labor. Press <color=red>[E]</color> on the tablet to open it.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.BuildStageWall: ui.ShowBossDialogue("Let's start at the Director Tablet. Walk up to it and press <color=red>[E]</color> when the prompt appears.", ui.poseOpenHand, true, false); break;
 
-            case TutorialStep.ExplainDirectorTablet: ui.ShowBossDialogue("Our goal is an S-Rank video. The client wants a Floral arrangement in front of a Pink background.", ui.posePointUp, true, true); break;
+            case TutorialStep.ExplainDirectorTablet: ui.ShowBossDialogue("The client asked for a pink backdrop. Let's give that vase a set of its own.", ui.posePointUp, true, true); break;
 
-            case TutorialStep.Tablet_AddWall: ui.ShowBossDialogue("First, let's build the physical set. Click the <color=red>'ADD WALL'</color> button on your tablet to spawn the stage backdrop.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.Tablet_AddWall: ui.ShowBossDialogue("We'll need a backdrop behind the vase. Click <color=red>ADD WALL</color> to put one on the stage.", ui.poseOpenHand, true, false); break;
 
-            case TutorialStep.Tablet_SelectWall: ui.ShowBossDialogue("Before we can paint the wall, you must select it. Click directly on the stage backdrop to select it.", ui.posePoint, true, false); break;
+            case TutorialStep.Tablet_SelectWall: ui.ShowBossDialogue("Click the wall to select it. That tells the color sliders which object we're painting.", ui.posePoint, true, false); break;
 
-            case TutorialStep.Tablet_PaintWall: ui.ShowBossDialogue("Good. Now we need to match the client's brand guidelines. Adjust the color sliders until the wall is a vibrant <color=red>Pink</color>. Max out Red, drop Green to 0, and bring Blue to around 150.", ui.posePointUp, true, false); break;
+            case TutorialStep.Tablet_PaintWall: ui.ShowBossDialogue("Let's give the backdrop that pink the client asked for. Set Red to 255, Green to 0, and Blue to 150.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.Tablet_SpawnCube: ui.ShowBossDialogue("Next, we need a surface for the flower. Spawn a Cube to act as our table top.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.Tablet_MoveCube: ui.ShowBossDialogue("Pick up the cube and drag it to the placement marker on the stage.", ui.posePoint, true, false); break;
+            case TutorialStep.Tablet_SpawnCube: ui.ShowBossDialogue("The vase needs a little height. Click the <color=red>Cube</color> card to pick up a display stand with your cursor.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.Tablet_MoveCube: ui.ShowBossDialogue("Bring the cube over to the stage marker, then <color=red>[Left Click]</color> to set it down.", ui.posePoint, true, false); break;
 
-            case TutorialStep.Tablet_PaintCube: ui.ShowBossDialogue("Now Paint the cube to match the Pink wall. Set <color=red>Red</color> to ~255, <color=green>Green</color> to 0, and <color=blue>Blue</color> to ~150.", ui.posePointUp, true, false); break;
+            case TutorialStep.Tablet_PaintCube: ui.ShowBossDialogue("Let's match the stand to our backdrop. Select the cube and use the same pink: Red 255, Green 0, Blue 150.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.Tablet_SpawnProp: ui.ShowBossDialogue("Now click the 'Prop' button to spawn the Floral arrangement.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.Tablet_MovePropToCube: ui.ShowBossDialogue("Proper staging is everything. Move the flower over the pink cube, then click to place it directly ON TOP.", ui.poseBoss, true, false); break;
+            case TutorialStep.Tablet_SpawnProp: ui.ShowBossDialogue("Now for the star of the shot. Click the <color=red>Floral Vase</color> card to pick it up with your cursor.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.Tablet_MovePropToCube: ui.ShowBossDialogue("Move the vase onto the cube, then <color=red>[Left Click]</color> to place it. Leave the whole vase in view.", ui.poseBoss, true, false); break;
 
-            case TutorialStep.TabletPracticeFinished: ui.ShowBossDialogue("Perfect set design. Take your time arranging it. You can move props you've already placed by selecting them and pressing <color=red>[T]</color>. When you are happy with the background, close the tablet so we can move on to the one of the most important part of filming: Lighting.", ui.poseChill, true, true); break;
+            case TutorialStep.TabletPracticeFinished: ui.ShowBossDialogue("That's our set! Need to reposition anything? Select it and press <color=red>[T]</color>. When you're done, close the tablet with <color=red>[E]</color> or <color=red>[ESC]</color>.", ui.poseChill, true, true); break;
 
-            case TutorialStep.BuyLight_WalkToShop: ui.ShowBossDialogue("Let's light the set. Walk to the Equipments Shop and press <color=red>[E]</color> to interact.", ui.posePoint, true, false); break;
-            case TutorialStep.BuyLight_AddToCart: ui.ShowBossDialogue("Find the Stage Light in the shop menu and click the 'ADD TO CART’ button.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.BuyLight_Checkout: ui.ShowBossDialogue("Good. Now click the CONFIRM button to process the transaction and get your gear.", ui.poseSmile, true, false); break;
-            case TutorialStep.BuyLight_CloseShop: ui.ShowBossDialogue("Purchase complete! The item is at the delivery zone. Press <color=red>[E]</color> or <color=red>[ESC]</color> to close the terminal.", ui.poseHappy, true, false); break;
+            case TutorialStep.BuyLight_WalkToShop: ui.ShowBossDialogue("Let's give the flower some light. Head to the Equipment Shop and press <color=red>[E]</color>; we're buying one Stage Light.", ui.posePoint, true, false); break;
+            case TutorialStep.BuyLight_AddToCart: ui.ShowBossDialogue("One Stage Light will do for this shot. Find it and click <color=red>ADD TO CART</color>.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.BuyLight_Checkout: ui.ShowBossDialogue("That's the one. Click <color=red>CONFIRM</color> to place the order.", ui.poseSmile, true, false); break;
+            case TutorialStep.BuyLight_CloseShop: ui.ShowBossDialogue("Your light's here! Press <color=red>[SPACE]</color> to finish our chat, then <color=red>[E]</color> to leave the shop. Let's collect it.", ui.poseHappy, true, false); break;
 
-            case TutorialStep.PickUpLight: ui.ShowBossDialogue("The shop delivered your light to the table. Walk over and press <color=red>[E]</color> to pick it up.", ui.posePoint, true, false); break;
+            case TutorialStep.PickUpLight: ui.ShowBossDialogue("There's your light on the delivery table. Look at it and press <color=red>[E]</color> to pick it up.", ui.posePoint, true, false); break;
 
-            case TutorialStep.WalkToStageWithLight: ui.ShowBossDialogue("Now carry that light over to the Pink Stage you built.", ui.posePointUp, true, false); break;
+            case TutorialStep.WalkToStageWithLight: ui.ShowBossDialogue("Bring it over to the marker on the pink stage. We'll aim it from there.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.TurnOnLight: ui.ShowBossDialogue("Place it facing the flower, and click <color=red>[Left Mouse Button]</color> to turn it on.", ui.posePointUp, true, false); break;
+            case TutorialStep.TurnOnLight: ui.ShowBossDialogue("Point it toward the flower and click <color=red>[Left Click]</color> once to switch it on.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.PracticeLight_Intensity: ui.ShowBossDialogue("Basic Lighting: First, use the <color=red>[Scroll Wheel]</color> to play around with the brightness. Give it a try!", ui.poseSmile, true, false); break;
-            case TutorialStep.AdjustLight_Intensity: ui.ShowBossDialogue("Alright, enough playing. The client requested exactly 45% brightness. Use the <color=red>[Scroll Wheel]</color> to set your light intensity to 45%.", ui.posePointUp, true, false); break;
-            case TutorialStep.PracticeLight_Tilt: ui.ShowBossDialogue("Now for the tilt. Use the <color=red>[Up/Down Arrows]</color> to tilt the light stand up and down. Try it out.", ui.poseBoss, true, false); break;
-            case TutorialStep.AdjustLight_Tilt: ui.ShowBossDialogue("The client wants a slight upward angle. Use your <color=red>[Up/Down Arrows]</color> to set the tilt to exactly -5°.", ui.poseBoss, true, false); break;
+            case TutorialStep.PracticeLight_Intensity: ui.ShowBossDialogue("Try the <color=red>[Scroll Wheel]</color>. See how the brightness changes? Watch the petals; we don't want to lose their detail.", ui.poseSmile, true, false); break;
+            case TutorialStep.AdjustLight_Intensity: ui.ShowBossDialogue("Let's settle on 45% for this shot. Use the <color=red>[Scroll Wheel]</color> to dial it in.", ui.posePointUp, true, false); break;
+            case TutorialStep.PracticeLight_Tilt: ui.ShowBossDialogue("Try tilting the light with the <color=red>[Up/Down Arrows]</color>. Follow the bright patch as it moves across the set.", ui.poseBoss, true, false); break;
+            case TutorialStep.AdjustLight_Tilt: ui.ShowBossDialogue("Let's aim a little higher. Use the <color=red>[Up/Down Arrows]</color> to bring the tilt to -5°.", ui.poseBoss, true, false); break;
 
-            case TutorialStep.DropLight: ui.ShowBossDialogue("Perfect. We don't need to carry the light anymore. Press <color=red>[G]</color> to drop it on the floor.", ui.poseHappy, true, false); break;
+            case TutorialStep.DropLight: ui.ShowBossDialogue("There we go. Press <color=red>[G]</color> to set the light down and keep that aim.", ui.poseHappy, true, false); break;
 
             case TutorialStep.ShowProductionTitle:
                 if (productionTitleCard != null) StartCoroutine(FadeTitleCardSequence(productionTitleCard, TutorialStep.ExplainProduction));
@@ -1920,61 +2042,61 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.ExplainProduction:
-                ui.ShowBossDialogue("Now we enter the Production phase. The stage is set and lit. This is where we break out the camera, frame our shot, and actually record the footage.", ui.poseBoss, true, true);
+                ui.ShowBossDialogue("The set's built and the light's in place. Now we're into production: getting our shot on camera.", ui.poseBoss, true, true);
                 break;
 
-            case TutorialStep.BuyCamera_WalkToShop: ui.ShowBossDialogue("Go back to the Equipment Shop. We need to buy a Camera to actually record this scene.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.BuyCamera_AddToCart: ui.ShowBossDialogue("First, let's grab a camera. Click 'Add to Cart' under the Film Camera.", ui.posePoint, true, false); break;
-            case TutorialStep.BuySDCard_AddToCart: ui.ShowBossDialogue("A camera is useless without memory to record on. Click 'Add to Cart' under the SD Card.", ui.poseBoss, true, false); break;
-            case TutorialStep.BuyCamera_Checkout: ui.ShowBossDialogue("Perfect. Now click CONFIRM to finalize your purchase.", ui.poseSmile, true, false); break;
-            case TutorialStep.BuyCamera_CloseShop: ui.ShowBossDialogue("Gear delivered! Press <color=red>[E]</color> or <color=red>[ESC]</color> to close the shop.", ui.poseHappy, true, false); break;
+            case TutorialStep.BuyCamera_WalkToShop: ui.ShowBossDialogue("Time to get a camera on this set. Head back to the shop and press <color=red>[E]</color>; we'll need a Film Camera and an SD Card.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.BuyCamera_AddToCart: ui.ShowBossDialogue("Find the Film Camera and click <color=red>ADD TO CART</color>. That's our next tool.", ui.posePoint, true, false); break;
+            case TutorialStep.BuySDCard_AddToCart: ui.ShowBossDialogue("Don't forget something to record onto. Click <color=red>ADD TO CART</color> under the SD Card.", ui.poseBoss, true, false); break;
+            case TutorialStep.BuyCamera_Checkout: ui.ShowBossDialogue("Camera and card? We're set. Click <color=red>CONFIRM</color> to order them.", ui.poseSmile, true, false); break;
+            case TutorialStep.BuyCamera_CloseShop: ui.ShowBossDialogue("Our gear's at the delivery table. Press <color=red>[SPACE]</color> to finish here, then <color=red>[E]</color> to close the shop.", ui.poseHappy, true, false); break;
 
-            case TutorialStep.PickUpCamera: ui.ShowBossDialogue("The shop delivered your gear. Grab the Film Camera from the table first.", ui.posePoint, true, false); break;
-            case TutorialStep.PickUpSDCard: ui.ShowBossDialogue("Good. Now grab the SD Card. A camera without memory is just an expensive brick.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.InsertSDCard: ui.ShowBossDialogue("While holding your camera, press <color=red>[C]</color> to insert the SD card so we can save our video files.", ui.poseBoss, true, false); break;
-            case TutorialStep.WalkToStageWithCamera: ui.ShowBossDialogue("Perfect. Now walk over to Point C, the Director's mark, so we can frame our shot.", ui.posePointUp, true, false); break;
+            case TutorialStep.PickUpCamera: ui.ShowBossDialogue("Let's grab the camera first. Look at it on the delivery table and press <color=red>[E]</color>.", ui.posePoint, true, false); break;
+            case TutorialStep.PickUpSDCard: ui.ShowBossDialogue("Grab the SD Card with <color=red>[E]</color> too. It'll fit in another hotbar slot.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.InsertSDCard: ui.ShowBossDialogue("Select the camera in your hotbar, then press <color=red>[C]</color> to pop the SD Card in.", ui.poseBoss, true, false); break;
+            case TutorialStep.WalkToStageWithCamera: ui.ShowBossDialogue("Head over to Point C, the Director's mark. Let's see how our set looks through the camera.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.EquipCameraView: ui.ShowBossDialogue("Hold the camera and click <color=red>[Left Mouse Button]</color> to look through the Director's Viewfinder. This frames the world exactly how the audience will see it.", ui.poseHappy, true, false); break;
+            case TutorialStep.EquipCameraView: ui.ShowBossDialogue("With the camera selected, click <color=red>[Left Click]</color> to look through the viewfinder. This is what your audience will see.", ui.poseHappy, true, false); break;
 
-            case TutorialStep.PracticeCameraZoom: ui.ShowBossDialogue("Use the <color=red>[Scroll Wheel]</color> to zoom your lens. Zooming in compresses the background and focuses the audience's attention entirely on the flower.", ui.posePointUp, true, false); break;
-            case TutorialStep.PracticeCameraPedestal: ui.ShowBossDialogue("Hold <color=red>[Q]</color> or <color=red>[E]</color> to shift the camera up and down. Changing the camera height completely changes the psychology of the shot.", ui.posePoint, true, false); break;
-            case TutorialStep.FrameSubject: ui.ShowBossDialogue("For this test, I want you to keep the flower perfectly dead-center in the frame.", ui.posePointUp, true, false); break;
+            case TutorialStep.PracticeCameraZoom: ui.ShowBossDialogue("Try zooming with the <color=red>[Scroll Wheel]</color>. Get a closer look, but leave room for the whole vase.", ui.posePointUp, true, false); break;
+            case TutorialStep.PracticeCameraPedestal: ui.ShowBossDialogue("Let's try a different height. Hold <color=red>[Q]</color> or <color=red>[E]</color> to raise or lower the camera, and try both directions.", ui.posePoint, true, false); break;
+            case TutorialStep.FrameSubject: ui.ShowBossDialogue("For our first shot, put the flower right in the center. Give it enough room so nothing gets cut off.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.RecordVideo: ui.ShowBossDialogue("Press <color=red>[R]</color> to record. You MUST record for exactly 10 seconds, and KEEP the subject perfectly centered the entire time. Do NOT move the camera!", ui.poseBoss, true, false); break;
+            case TutorialStep.RecordVideo: ui.ShowBossDialogue("Ready? Press <color=red>[R]</color> to roll. Hold that centered shot for 10 seconds, then press <color=red>[R]</color> again to cut.", ui.poseBoss, true, false); break;
 
-            case TutorialStep.PickUpUsedSDCard: ui.ShowBossDialogue("That's a wrap! The camera automatically ejected your tape. Press <color=red>[E]</color> to pick up the used SD card.", ui.poseHappy, true, false); break;
-            case TutorialStep.InsertToComputer: ui.ShowBossDialogue("Walk over to the editing bay. Hold the SD card in your hand and press <color=red>[F]</color> on the computer tower to insert it.", ui.posePoint, true, false); break;
-            case TutorialStep.OpenComputer: ui.ShowBossDialogue("Tape inserted successfully. Now press <color=red>[E]</color> on the monitor to log into the computer.", ui.poseBoss, true, false); break;
+            case TutorialStep.PickUpUsedSDCard: ui.ShowBossDialogue("And cut! Your take is on the card the camera just ejected. Look at it and press <color=red>[E]</color> to collect it.", ui.poseHappy, true, false); break;
+            case TutorialStep.InsertToComputer: ui.ShowBossDialogue("Let's take that footage to the editing bay. Hold the SD Card, look at the computer tower, and press <color=red>[F]</color> to insert it.", ui.posePoint, true, false); break;
+            case TutorialStep.OpenComputer: ui.ShowBossDialogue("The card's in. Look at the monitor and press <color=red>[E]</color>; let's see what we shot.", ui.poseBoss, true, false); break;
 
-            case TutorialStep.ExplainComputerEditor: ui.ShowBossDialogue("Welcome to the Editing Bay. This computer is used to review the tapes we just ingested to make sure the lighting and framing were actually good.", ui.poseOpenHand, true, true); break;
+            case TutorialStep.ExplainComputerEditor: ui.ShowBossDialogue("Before we edit, let's watch the take. We're checking the framing, the light, and whether we recorded enough footage.", ui.poseOpenHand, true, true); break;
 
-            case TutorialStep.OpenRecordingsFolder: ui.ShowBossDialogue("Click the 'Recordings' folder to open the file browser and see the footage you just ingested.", ui.posePoint, true, false); break;
-            case TutorialStep.ClickVideoClip: ui.ShowBossDialogue("Click the raw video clip you just recorded so we can review the take.", ui.poseBoss, true, false); break;
-            case TutorialStep.PlayVideoClip: ui.ShowBossDialogue("Now click Play. Notice how the center framing and 10-second duration make the shot look professional.", ui.poseSmile, true, false); break;
-            case TutorialStep.ClickBack: ui.ShowBossDialogue("Good review. We know the footage is safe. Now click the 'Close' or 'Back' button to return to the main menu.", ui.posePointUp, true, false); break;
-            case TutorialStep.ClickEditorApp: ui.ShowBossDialogue("Now that we have verified the footage, click the 'Editor' application to proceed.", ui.poseBoss, true, false); break;
-            case TutorialStep.ClickConfirmEditor: ui.ShowBossDialogue("Click 'Confirm' to send this footage to Post-Production. Be warned: Once you confirm, you leave the Studio and you CANNOT go back!", ui.poseOpenHand, true, false); break;
+            case TutorialStep.OpenRecordingsFolder: ui.ShowBossDialogue("Open the <color=red>Recordings</color> folder. Your new take should be in there.", ui.posePoint, true, false); break;
+            case TutorialStep.ClickVideoClip: ui.ShowBossDialogue("There's our take. Click the video clip so we can have a look.", ui.poseBoss, true, false); break;
+            case TutorialStep.PlayVideoClip: ui.ShowBossDialogue("Hit <color=red>PLAY</color>. Watch the vase throughout the take: can you see it clearly, centered and evenly lit?", ui.poseSmile, true, false); break;
+            case TutorialStep.ClickBack: ui.ShowBossDialogue("All right, let's get to the edit. Click <color=red>Close</color> or <color=red>Back</color> to return to the computer's main menu.", ui.posePointUp, true, false); break;
+            case TutorialStep.ClickEditorApp: ui.ShowBossDialogue("Open the <color=red>Editor</color> app. This is where we'll put the commercial together.", ui.poseBoss, true, false); break;
+            case TutorialStep.ClickConfirmEditor: ui.ShowBossDialogue("Happy with your footage? Click <color=red>CONFIRM</color> to head into editing. This commits the take; we can't return to the studio afterward.", ui.poseOpenHand, true, false); break;
 
-            case TutorialStep.Complete: ui.ShowBossDialogue("Raw footage submitted! Loading the Editor...", ui.poseEndWave, false, false); break;
+            case TutorialStep.Complete: ui.ShowBossDialogue("That's a wrap on the shoot. Let's head into the edit!", ui.poseEndWave, false, false); break;
 
-            case TutorialStep.PostEditComplete: ui.ShowBossDialogue("Video successfully rendered! You finished your first commercial and unlocked the <color=yellow>Production Almanac</color>. Press <color=red>[P]</color> whenever you want to review equipment features, controls, and every production technique you have learned.", ui.poseHappy, true, true); break;
+            case TutorialStep.PostEditComplete: ui.ShowBossDialogue("Your first commercial! You took it all the way from an empty stage. I've unlocked the <color=yellow>Production Almanac</color>; press <color=red>[P]</color> whenever you need a refresher.", ui.poseHappy, true, true); break;
 
-            case TutorialStep.OfferLevel1: ui.ShowBossDialogue("Your first commercial is complete, and I've got your next challenge ready. Want to hear what's next?", ui.poseHappy, true, true); break;
+            case TutorialStep.OfferLevel1: ui.ShowBossDialogue("One commercial down. I've got another brief on my desk; ready to hear about it?", ui.poseHappy, true, true); break;
 
         }
     }
 
-    private void SpawnCheatSDCard()
+    public void SpawnCheatSDCard()
     {
         if (sdCardPrefab == null)
         {
-            ShowWarning("Cheat Failed: SD Card Prefab is missing in TutorialManager!");
+            GameFeedback.Show("CHEAT FAILED: SD card prefab is missing.", true);
             return;
         }
 
         if (playerTransform == null)
         {
-            ShowWarning("Cheat Failed: Cannot find player to spawn card in front of!");
+            GameFeedback.Show("CHEAT FAILED: Cannot find the player.", true);
             return;
         }
 
@@ -1985,7 +2107,8 @@ public class TutorialManager : MonoBehaviour
         {
             using (System.IO.BinaryWriter writer = new System.IO.BinaryWriter(new System.IO.FileStream(fullPath, System.IO.FileMode.Create)))
             {
-                writer.Write((int)1);
+                int frameCount = Mathf.Max(1, Mathf.RoundToInt(10f * TapeSettings.framesPerSecond));
+                writer.Write(frameCount);
 
                 Texture2D tex = new Texture2D(16, 16, TextureFormat.RGB24, false);
                 Color[] pixels = new Color[16 * 16];
@@ -1994,8 +2117,11 @@ public class TutorialManager : MonoBehaviour
                 tex.Apply();
 
                 byte[] bytes = tex.EncodeToJPG(50);
-                writer.Write((int)bytes.Length);
-                writer.Write(bytes);
+                for (int frame = 0; frame < frameCount; frame++)
+                {
+                    writer.Write(bytes.Length);
+                    writer.Write(bytes);
+                }
                 Destroy(tex);
             }
         }
@@ -2035,7 +2161,7 @@ public class TutorialManager : MonoBehaviour
             r.material.color = Color.red;
         }
 
-        ShowWarning("CHEAT ACTIVATED: Spawned a completed 10s SD Card!");
+        GameFeedback.Show("CHEAT ACTIVATED\nSpawned a completed 10-second SD card");
 
         if (currentStep < TutorialStep.InsertToComputer)
         {
@@ -2073,16 +2199,16 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep >= TutorialStep.OfferLevel1) return true;
 
-        if (currentStep < TutorialStep.BuyLight_WalkToShop) { ShowWarning("Follow your tasks first!"); return false; }
+        if (currentStep < TutorialStep.BuyLight_WalkToShop) { ShowWarning("Let's finish this step together. Your current task is on the left."); return false; }
 
-        if (currentStep >= TutorialStep.BuyLight_WalkToShop && currentStep <= TutorialStep.BuyLight_CloseShop && itemIndex != 1) { ShowWarning("Only add the Stage Light to your cart right now."); return false; }
+        if (currentStep >= TutorialStep.BuyLight_WalkToShop && currentStep <= TutorialStep.BuyLight_CloseShop && itemIndex != 1) { ShowWarning("Let's start with just the Stage Light. We'll shop for the rest later."); return false; }
 
-        if (currentStep >= TutorialStep.PickUpLight && currentStep <= TutorialStep.DropLight) { ShowWarning("Learn to use the light and drop it before buying more gear."); return false; }
+        if (currentStep >= TutorialStep.PickUpLight && currentStep <= TutorialStep.DropLight) { ShowWarning("Let's get that light set up and placed first. Then we'll get the camera."); return false; }
 
-        if (currentStep == TutorialStep.BuyCamera_WalkToShop) { ShowWarning("Follow your tasks first!"); return false; }
-        if (currentStep == TutorialStep.BuyCamera_AddToCart && itemIndex != 0) { ShowWarning("Add the Camera to your cart first!"); return false; }
-        if (currentStep == TutorialStep.BuySDCard_AddToCart && itemIndex != 2) { ShowWarning("Now add the SD Card to your cart!"); return false; }
-        if (currentStep == TutorialStep.BuyCamera_Checkout) { ShowWarning("You have everything you need. Click Checkout!"); return false; }
+        if (currentStep == TutorialStep.BuyCamera_WalkToShop) { ShowWarning("Let's finish this step together. Your current task is on the left."); return false; }
+        if (currentStep == TutorialStep.BuyCamera_AddToCart && itemIndex != 0) { ShowWarning("Let's add the Film Camera first."); return false; }
+        if (currentStep == TutorialStep.BuySDCard_AddToCart && itemIndex != 2) { ShowWarning("We'll need an SD Card to record onto. Add one to the cart."); return false; }
+        if (currentStep == TutorialStep.BuyCamera_Checkout) { ShowWarning("That's everything we need. Click CONFIRM to place the order."); return false; }
 
         return true;
     }
@@ -2100,7 +2226,7 @@ public class TutorialManager : MonoBehaviour
     public bool CanRecord()
     {
         if (currentStep >= TutorialStep.OfferLevel1) return true;
-        if (currentStep < TutorialStep.RecordVideo) { ShowWarning("Don't start recording yet! Finish setting up the shot first."); return false; }
+        if (currentStep < TutorialStep.RecordVideo) { ShowWarning("Let's finish framing the shot before we roll."); return false; }
         return true;
     }
 
@@ -2120,25 +2246,25 @@ public class TutorialManager : MonoBehaviour
 
         if (uiType == "DirectorTerminal")
         {
-            if (currentStep == TutorialStep.Tablet_AddWall) { ShowWarning("Add the wall to the stage before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_SelectWall) { ShowWarning("Click the wall to select it before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_PaintWall) { ShowWarning("Paint the background pink before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_SpawnCube) { ShowWarning("Spawn the Cube before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_MoveCube) { ShowWarning("Place the Cube on the center marker before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_PaintCube) { ShowWarning("Paint the Cube pink before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_SpawnProp) { ShowWarning("Spawn the Floral arrangement before closing!"); return false; }
-            if (currentStep == TutorialStep.Tablet_MovePropToCube) { ShowWarning("Place the flower ON TOP of the cube before closing!"); return false; }
+            if (currentStep == TutorialStep.Tablet_AddWall) { ShowWarning("Let's add our backdrop before we leave the tablet."); return false; }
+            if (currentStep == TutorialStep.Tablet_SelectWall) { ShowWarning("Click the wall first. We still need to give it some color."); return false; }
+            if (currentStep == TutorialStep.Tablet_PaintWall) { ShowWarning("We still need the pink backdrop. Let's finish its color first."); return false; }
+            if (currentStep == TutorialStep.Tablet_SpawnCube) { ShowWarning("Let's add the Cube first; the vase needs a display stand."); return false; }
+            if (currentStep == TutorialStep.Tablet_MoveCube) { ShowWarning("Bring the cube over to the center marker and click to place it."); return false; }
+            if (currentStep == TutorialStep.Tablet_PaintCube) { ShowWarning("Let's give the cube the same pink as our backdrop before we leave."); return false; }
+            if (currentStep == TutorialStep.Tablet_SpawnProp) { ShowWarning("Our set's missing its product. Choose the Floral Vase card first."); return false; }
+            if (currentStep == TutorialStep.Tablet_MovePropToCube) { ShowWarning("Let's put the vase on top of the cube before we close the tablet."); return false; }
         }
         else if (uiType == "ShopTerminal")
         {
             if (currentStep == TutorialStep.BuyLight_WalkToShop || currentStep == TutorialStep.BuyLight_AddToCart || currentStep == TutorialStep.BuyLight_Checkout)
             {
-                ShowWarning("Don't leave yet! Finish buying the Stage Light first.");
+                ShowWarning("We still need to order the Stage Light. Let's finish that purchase.");
                 return false;
             }
             if (currentStep == TutorialStep.BuyCamera_WalkToShop || currentStep == TutorialStep.BuyCamera_AddToCart || currentStep == TutorialStep.BuySDCard_AddToCart || currentStep == TutorialStep.BuyCamera_Checkout)
             {
-                ShowWarning("Don't leave yet! Finish buying your camera gear first.");
+                ShowWarning("Let's finish the camera and SD Card order before we head out.");
                 return false;
             }
         }
@@ -2151,7 +2277,7 @@ public class TutorialManager : MonoBehaviour
                 currentStep == TutorialStep.ClickEditorApp ||
                 currentStep == TutorialStep.ClickConfirmEditor)
             {
-                ShowWarning("Follow the on-screen tasks! Do not close the computer yet.");
+                ShowWarning("We're not quite done at the computer. Check the task on the left for our next step.");
                 return false;
             }
         }
@@ -2167,13 +2293,13 @@ public class TutorialManager : MonoBehaviour
 
         if (featureName == "ClearStage")
         {
-            ShowWarning("Don't clear the stage! We need this setup.");
+            ShowWarning("Let's keep this set for the shoot. We're still using it.");
             return false;
         }
 
         if (featureName == "AddWall" && currentStep != TutorialStep.Tablet_AddWall)
         {
-            ShowWarning("Please follow the tasks! You don't need to do that right now.");
+            ShowWarning("We'll get to that. For now, let's finish the step on the left.");
             return false;
         }
 
@@ -2192,7 +2318,7 @@ public class TutorialManager : MonoBehaviour
             }
             else
             {
-                ShowWarning("Please select the Cube prop like the task says!");
+                ShowWarning("Choose the Cube card first; that's our display stand.");
                 return false;
             }
         }
@@ -2206,7 +2332,7 @@ public class TutorialManager : MonoBehaviour
             }
             else
             {
-                ShowWarning("Please select the Flower prop like the task says!");
+                ShowWarning("Choose the Floral Vase card. That's the product for this job.");
                 return false;
             }
         }
@@ -2220,37 +2346,37 @@ public class TutorialManager : MonoBehaviour
 
         if (featureName == "RecordingsFolder" && currentStep != TutorialStep.OpenRecordingsFolder)
         {
-            ShowWarning("Please click the 'Recordings' folder as instructed.");
+            ShowWarning("Open Recordings first. That's where we'll find your take.");
             return false;
         }
 
         if (featureName == "VideoClip" && currentStep != TutorialStep.ClickVideoClip)
         {
-            ShowWarning("Please click the video clip to review it.");
+            ShowWarning("Click your recorded clip so we can take a look.");
             return false;
         }
 
         if (featureName == "PlayVideo" && currentStep != TutorialStep.PlayVideoClip)
         {
-            ShowWarning("Please click the Play button to review the footage.");
+            ShowWarning("Hit PLAY so we can watch the take.");
             return false;
         }
 
         if (featureName == "BackButton" && currentStep != TutorialStep.ClickBack)
         {
-            ShowWarning("Please finish reviewing your video first!");
+            ShowWarning("Let's finish watching this take before we move on.");
             return false;
         }
 
         if (featureName == "EditorApp" && currentStep != TutorialStep.ClickEditorApp)
         {
-            ShowWarning("Please click the 'Editor' app to proceed.");
+            ShowWarning("We're ready for the Editor app. Open it to start the edit.");
             return false;
         }
 
         if (featureName == "ConfirmEditor" && currentStep != TutorialStep.ClickConfirmEditor)
         {
-            ShowWarning("Please click 'Confirm' to leave the studio.");
+            ShowWarning("Click CONFIRM when you're ready to take this footage into editing.");
             return false;
         }
 

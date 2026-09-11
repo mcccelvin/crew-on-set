@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using UnityEngine;
 
 public class CampaignLevelManager : MonoBehaviour
@@ -28,9 +29,24 @@ public class CampaignLevelManager : MonoBehaviour
 
     private bool isLevelStarted = false;
     private bool isBriefingOpen = false;
+    private GuidedPracticeLesson practiceLesson;
+    private GameObject directorPracticeMarker;
     private int activeLevel = 4;
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
+
+    public void DisableForDevTesting()
+    {
+        if (!isLevelStarted) return;
+        StopAllCoroutines();
+        practiceLesson?.Release();
+        practiceLesson = null;
+        if (directorPracticeMarker != null) directorPracticeMarker.SetActive(false);
+        currentStep = CampaignLevelStep.LevelActive;
+        isBriefingOpen = false;
+        enabled = false;
+        if (PlayerPrefs.GetInt(CampaignProgression.GetAcceptedKey(activeLevel), 0) == 0) OfferContract();
+    }
 
     private void Awake()
     {
@@ -42,8 +58,14 @@ public class CampaignLevelManager : MonoBehaviour
         }
     }
 
+    private void LateUpdate()
+    {
+        practiceLesson?.Tick();
+    }
+
     private void OnDestroy()
     {
+        RemoveDirectorPracticeMarker();
         if (Instance == this) Instance = null;
     }
 
@@ -104,7 +126,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     public bool IsBriefingActive()
     {
-        return isBriefingOpen;
+        return isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining);
     }
 
     public bool IsLevelActive()
@@ -114,7 +136,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     public bool IsActorIntroductionActive()
     {
-        return activeLevel == 4 &&
+        return activeLevel >= 4 &&
                (currentStep == CampaignLevelStep.PracticeActor ||
                 currentStep == CampaignLevelStep.ActorPlaced ||
                 currentStep == CampaignLevelStep.ActorPosed);
@@ -122,7 +144,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void OnDirectorTerminalOpened()
     {
-        if (!IsActorIntroductionActive()) return;
+        if (!IsActorIntroductionActive() || practiceLesson != null) return;
 
         if (TutorialUIManager.Instance != null)
         {
@@ -151,9 +173,10 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void OnActorPlaced(GameObject actor)
     {
-        if (activeLevel != 4 || currentStep != CampaignLevelStep.PracticeActor || actor == null) return;
+        if (activeLevel < 4 || currentStep != CampaignLevelStep.PracticeActor || actor == null) return;
 
         currentStep = CampaignLevelStep.ActorPlaced;
+        if (practiceLesson != null) return;
 
         if (TutorialUIManager.Instance != null)
         {
@@ -167,10 +190,11 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void OnActorPosed(CubeActor actor)
     {
-        if (activeLevel != 4 || actor == null) return;
+        if (activeLevel < 4 || actor == null) return;
         if (currentStep != CampaignLevelStep.PracticeActor && currentStep != CampaignLevelStep.ActorPlaced) return;
 
         currentStep = CampaignLevelStep.ActorPosed;
+        if (practiceLesson != null) return;
 
         if (TutorialUIManager.Instance != null)
         {
@@ -184,7 +208,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void OnDirectorTerminalClosed()
     {
-        if (activeLevel != 4) return;
+        if (activeLevel < 4 || practiceLesson != null) return;
 
         if (currentStep == CampaignLevelStep.ActorPosed)
         {
@@ -211,6 +235,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void AdvanceDialogue()
     {
+        if (practiceLesson != null) { practiceLesson.Continue(); return; }
         if (!isBriefingOpen) return;
 
         if (currentStep == CampaignLevelStep.PreviousResults)
@@ -221,8 +246,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (currentStep == CampaignLevelStep.Introduction)
         {
-            if (activeLevel == 4) ShowActorIntroduction();
-            else ShowContractIntroduction();
+            ShowActorIntroduction();
             return;
         }
 
@@ -315,11 +339,11 @@ public class CampaignLevelManager : MonoBehaviour
         {
             if (activeLevel == 4)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Good. The Almanac explains actor blocking and posing, shot coverage, continuity, soft natural lighting, and the warm grade required for Kape Kultura. Use those guides while you plan each shot.", TutorialUIManager.Instance.poseHappy, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Those guides are there whenever you need them. Press <color=red>[P]</color> for a reminder on posing, matching shots, or soft natural light.", TutorialUIManager.Instance.poseHappy, true, false);
             }
             else
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Good. The Almanac now contains the complete campaign workflow. For Haraya, every decision must support the same audience, brand message, and polished visual identity.", TutorialUIManager.Instance.poseHappy, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("You've got the whole toolkit in the Almanac now. For Haraya, the trick is making all those choices serve the same idea.", TutorialUIManager.Instance.poseHappy, true, false);
             }
         }
     }
@@ -362,11 +386,11 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Excellent work on Lambormini! The client approved your automotive commercial with a <color=yellow>" + previousGrade + "</color> grade. You shaped a reflective vehicle with the Level 3 Soft Light and delivered a clean premium frame.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Lambormini's signed off on your commercial: <color=yellow>" + previousGrade + "</color>! You've had a go at shaping a car with light. Let's put someone in front of the camera next.", TutorialUIManager.Instance.poseHappy, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Kape Kultura approved your story-driven commercial with a <color=yellow>" + previousGrade + "</color> grade. Your wide, medium, and close-up shots worked together as one continuous scene.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Kape Kultura's happy! Your commercial earned a <color=yellow>" + previousGrade + "</color>. Getting those different shots to feel like one scene takes care.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -378,11 +402,11 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 4</color>. Products will no longer work alone. This level introduces <color=yellow>Actors</color>, blocking, performance poses, shot coverage, and continuity so you can build a believable lifestyle commercial.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Time to bring someone onto our set. In <color=yellow>Level 4</color>, we'll pose an Actor and tell a little more of the story with wide, medium, and close-up shots.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 5</color>, your final campaign. This time I will not give you a fixed recipe. You must combine production design, actor direction, composition, lighting, coverage, branding, and color into one consistent client pitch.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("One last brief: <color=yellow>Level 5</color>. This one's going to bring your skills together. Take it a shot at a time; the contract is our guide.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -395,7 +419,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Before the next contract, practice directing talent. Open the <color=yellow>Director Terminal</color>, click one Actor card to attach the cube actor to your cursor, click the stage to place them, then select <color=yellow>POSE ACTOR</color>. In Level 4, the actor must support the product without hiding it.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's give our scene a performance. We'll walk to the tablet, place an Actor, and choose a pose together. I'll guide each step.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -403,24 +427,69 @@ public class CampaignLevelManager : MonoBehaviour
     {
         currentStep = CampaignLevelStep.PracticeActor;
         isBriefingOpen = false;
+        var director = FindObjectOfType<DirectorTerminal>();
+        Transform target = null;
+        if (tutorialManager != null && tutorialManager.availableTargets != null)
+            foreach (var candidate in tutorialManager.availableTargets)
+                if (string.Equals(candidate.targetName, "director", System.StringComparison.OrdinalIgnoreCase))
+                    target = candidate.targetTransform;
 
-        if (TutorialUIManager.Instance != null)
+        var player = FindObjectOfType<Player.PlayerController.PlayerController>();
+        if (target != null && player != null)
         {
-            TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[]
-            {
-                "- Open the Director Terminal",
-                "- Place one actor on the stage",
-                "- Select a non-neutral pose"
-            });
-            TutorialUIManager.Instance.SetDynamicGlow("director", true);
+            Vector3 towardPlayer = player.transform.position - target.position;
+            towardPlayer.y = 0f;
+            if (towardPlayer.sqrMagnitude < 0.01f) towardPlayer = Vector3.forward;
+            Vector3 position = target.position + towardPlayer.normalized * 1.2f;
+            position.y = player.transform.position.y;
+            if (Physics.Raycast(position + Vector3.up * 0.5f, Vector3.down, out RaycastHit floor, 4f))
+                position.y = floor.point.y;
+            directorPracticeMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            directorPracticeMarker.name = "Director Practice Standing Circle";
+            directorPracticeMarker.transform.position = position + Vector3.up * 0.03f;
+            directorPracticeMarker.transform.localScale = new Vector3(0.9f, 0.02f, 0.9f);
+            Destroy(directorPracticeMarker.GetComponent<Collider>());
+            directorPracticeMarker.GetComponent<Renderer>().material.color = new Color(1f, 0.76f, 0.08f);
         }
 
-        if (tutorialManager != null)
+        var steps = new System.Collections.Generic.List<GuidedPracticeLesson.Step>();
+        if (directorPracticeMarker != null)
+            steps.Add(new GuidedPracticeLesson.Step(
+                "Walk onto the circle beside the Director Tablet. This is where we'll prepare the performance.",
+                "Walk onto the circle beside the Director Tablet",
+                () => GuidedPracticeLesson.AtMarker(directorPracticeMarker.transform)));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Look at the Director Tablet and press <color=red>[E]</color> to open it.",
+            "[E] Open the Director Tablet",
+            () => director != null && director.IsTerminalActive()));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Choose one Actor card. Move the Actor onto the stage and click to place them. Leave space for the product.",
+            "Choose one Actor card, then click the stage to place them",
+            () => currentStep == CampaignLevelStep.ActorPlaced || currentStep == CampaignLevelStep.ActorPosed));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Select your Actor and click <color=yellow>POSE ACTOR</color>. Choose a performance that suits the scene; keep the product visible.",
+            "Select the Actor and click POSE ACTOR",
+            () => currentStep == CampaignLevelStep.ActorPosed));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Good. Close the tablet with <color=red>[E]</color> and look at the pose from the studio. Keep that pose consistent when you change camera angles.",
+            "[E] Close the Director Tablet",
+            () => director != null && !director.IsTerminalActive()));
+        if (tutorialManager != null) tutorialManager.PointLineAt("director");
+        practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
         {
-            tutorialManager.PointLineAt("director");
-            tutorialManager.UnfreezePlayerMovement();
-        }
+            practiceLesson = null;
+            RemoveDirectorPracticeMarker();
+            if (tutorialManager != null) tutorialManager.PointLineAt("");
+            ShowActorPracticeComplete();
+        });
+    }
+
+    private void RemoveDirectorPracticeMarker()
+    {
+        if (directorPracticeMarker == null) return;
+        Destroy(directorPracticeMarker.GetComponent<Renderer>().sharedMaterial);
+        Destroy(directorPracticeMarker);
+        directorPracticeMarker = null;
     }
 
     private void ShowActorPracticeComplete()
@@ -431,7 +500,7 @@ public class CampaignLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.SetDynamicGlow("director", false);
-            TutorialUIManager.Instance.ShowBossDialogue("Good. You completed the basic actor workflow: <color=yellow>hire, block, and pose</color>. For the real contract, keep the actor close enough to connect with the product, but leave the product silhouette clear. Across multiple shots, preserve the same pose and screen side for continuity.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Now our scene has someone in it. Leave the product visible, and keep the Actor's pose and screen side consistent when you change shots.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -443,11 +512,11 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("A new contract has arrived from <color=yellow>Kape Kultura</color>. The client wants a warm everyday coffee story: a brown set, a clearly posed actor interacting with the coffee product, soft natural light, and wide, medium, and close-up coverage that cuts together smoothly.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("We've got a coffee brief from <color=yellow>Kape Kultura</color>: a brown set, coffee, an Actor, and soft light. They want three shot sizes that feel like one scene.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Your final client is <color=yellow>Haraya</color>, a Filipino lifestyle brand preparing a major launch. The brief requires a teal set, an actor, a hero product, a vehicle, at least four shots, complete 3-Point Lighting, and a polished 20-second edit.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Our final client is <color=yellow>Haraya</color>. Their brief brings an Actor, a product, and a vehicle onto a teal set, with three-point lighting. Four shots, one 20-second commercial.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -478,7 +547,7 @@ public class CampaignLevelManager : MonoBehaviour
             if (TutorialUIManager.Instance != null)
             {
                 int payment = activeLevel == 4 ? 100000 : 150000;
-                TutorialUIManager.Instance.ShowBossDialogue(CampaignProgression.GetContractName(activeLevel) + " is offering " + payment.ToString("N0") + " B-Coins upfront. Press Space to accept the contract.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue(CampaignProgression.GetContractName(activeLevel) + " is putting up " + payment.ToString("N0") + " B-Coins upfront. Shall we take the job? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -507,17 +576,18 @@ public class CampaignLevelManager : MonoBehaviour
         UnlockCampaignKnowledge();
 
         currentStep = CampaignLevelStep.ContractAccepted;
+        if (DevTutorialBypass.Disabled) { StartContract(); return; }
         isBriefingOpen = true;
 
         if (TutorialUIManager.Instance == null) return;
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted. Your next lesson is coverage and continuity. The Almanac has been updated with the exact techniques you need. After this message, press <color=red>[P]</color> and review them before building the set.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("We're on the coffee job. Before we build, open the Almanac with <color=red>[P]</color>. Let's look at how different shots can fit together.", TutorialUIManager.Instance.posePointUp, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Final contract accepted. Your Almanac now contains the Haraya campaign workflow and final quality-control checklist. Review them before you commit B-Coins or begin the set.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Haraya's counting on us. Before you spend the budget, open <color=red>[P]</color> and look through the workflow and quality checklist. A little planning will help here.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -529,11 +599,11 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Press <color=red>[P]</color> after this message. Read Hiring, Blocking & Posing Actors, Shot Coverage, Continuity, and Soft Natural Lighting. You can return to them at any time during the contract.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Open <color=red>[P]</color> when we finish chatting. Actor Blocking, Shot Coverage, Continuity, and Soft Natural Lighting will help you plan this scene.", TutorialUIManager.Instance.posePoint, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Press <color=red>[P]</color> after this message. Review Creative Brief Planning, Integrated Production, and Final Delivery. This is your reference, but the creative decisions are yours.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Take a look in <color=red>[P]</color> after our chat. Creative Brief Planning, Integrated Production, and Final Delivery will help you break this bigger job down.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -592,11 +662,11 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Build the warm brown set first. Stage exactly one coffee product with one clearly posed actor, then record at least three clips: a wide shot, a medium shot, and a close-up. Keep the same pose, keep the actor on the same side of the product, and use the Level 3 Soft Light in every clip. Finish with a warm 15-second edit. Press Space when ready.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's make that coffee scene: brown set, product, and posed Actor. Keep the action consistent across wide, medium, and close-up shots. Press <color=red>[SPACE]</color> when you're ready.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Read the Haraya brief, then plan the complete production. The teal set, actor, product, vehicle, four-shot coverage, three shot sizes, 3-Point Lighting, and polished 20-second edit must feel like one campaign. Press Space when ready.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Give the Haraya brief another look before you buy. Plan four shots with a shared set, lighting style, and message. Ready to make it yours? Press <color=red>[SPACE]</color>.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -677,7 +747,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("You completed the Haraya launch and finished all five Crew-On-Set contracts. You can now revisit the studio, review the complete Production Almanac, and improve any commercial that did not earn your target grade.", TutorialUIManager.Instance.poseEndWave, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Five jobs, from your first vase shoot to Haraya. You've come a long way. Take a bow! The Almanac's on <color=red>[P]</color> if you fancy another run.", TutorialUIManager.Instance.poseEndWave, true, false);
         }
     }
 

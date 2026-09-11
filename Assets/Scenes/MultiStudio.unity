@@ -7796,7 +7796,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 64
   dragHeight: 0
-  wallPrefab: {fileID: 1072388305161484609, guid: 412e8c6ab6b0b6e44a8c7f166b74b17d, type: 3}
+  wallPrefab: {fileID: 8037089808322600759, guid: e5b74aba6cfe3584186e4889d65f7c89, type: 3}
   spawnPoint: {fileID: 1398813954}
   spawnWallButton: {fileID: 1356130731}
   colorControlPanel: {fileID: 830070632}

@@ -1,7 +1,5 @@
 using PlayFab;
 using PlayFab.ClientModels;
-using System.Collections;
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -56,11 +54,32 @@ public class AccountManager : MonoBehaviour
 
     private void Start()
     {
-        if (username == null) return;
+        RefreshProfileName();
+    }
 
-        PlayerPrefs.SetString("PlayerName", "Guest");
+    private void RefreshProfileName()
+    {
+        if (username == null) return;
+        string savedName = PlayerPrefs.GetString("PlayerName", "").Trim();
+        username.richText = false;
+        username.text = string.IsNullOrEmpty(savedName) || savedName == "Guest"
+            ? "Guest Profile" : savedName;
+    }
+
+    private string SaveLoginProfile(LoginResult result, string email)
+    {
+        var payload = result?.InfoResultPayload;
+        string displayName = payload?.PlayerProfile?.DisplayName;
+        if (string.IsNullOrWhiteSpace(displayName)) displayName = payload?.AccountInfo?.TitleInfo?.DisplayName;
+        if (string.IsNullOrWhiteSpace(displayName)) displayName = payload?.AccountInfo?.Username;
+        // A successful login is never a guest, even for a legacy unnamed account.
+        // Do not reuse another account's saved name or expose the login email.
+        displayName = string.IsNullOrWhiteSpace(displayName) ? "Player" : displayName.Trim();
+        PlayerPrefs.SetString(LAST_EMAIL_KEY, email);
+        PlayerPrefs.SetString("PlayerName", displayName);
         PlayerPrefs.Save();
-        username.text = "Guest Profile";
+        RefreshProfileName();
+        return displayName;
     }
 
     public void OnLoginPressed()
@@ -76,22 +95,17 @@ public class AccountManager : MonoBehaviour
             Password = password,
             InfoRequestParameters = new GetPlayerCombinedInfoRequestParams
             {
-                GetPlayerProfile = true
+                GetPlayerProfile = true,
+                GetUserAccountInfo = true,
+                ProfileConstraints = new PlayerProfileViewConstraints { ShowDisplayName = true }
             }
         },
         successfulResult =>
         {
-            var displayName = successfulResult?.InfoResultPayload?.PlayerProfile?.DisplayName;
-            if (string.IsNullOrEmpty(displayName))
-                displayName = "Guest";
-            PlayerPrefs.SetString(LAST_EMAIL_KEY, email);
-            PlayerPrefs.SetString("PlayerName", displayName);
+            string displayName = SaveLoginProfile(successfulResult, email);
+            GameSaveManager.Ensure().SetAccount(successfulResult.PlayFabId);
             if (messageText != null) messageText.text = "Login successful! Welcome " + displayName;
-            if (username != null) username.text = displayName;
-
-            Debug.Log("Login successful! Welcome " + PlayerPrefs.GetString("PlayerName"));
-
-            SceneManager.LoadScene(3);
+            SceneManager.LoadScene("Account");
         },
         PlayfabFailure);
     }

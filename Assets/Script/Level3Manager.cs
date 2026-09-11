@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using System.Collections.Generic;
 using Player.Equipment;
@@ -39,6 +40,7 @@ public class Level3Manager : MonoBehaviour
     private ContractUIManager contractUIManager;
     private int level3LightItemIndex = -1;
     private FilmLightItem practiceLight;
+    private GuidedPracticeLesson practiceLesson;
     private GameObject lightingPracticeRoot;
     private GameObject lightingPracticeWall;
     private DirectorTerminal lightingPracticeDirector;
@@ -58,12 +60,28 @@ public class Level3Manager : MonoBehaviour
 
     private void OnDestroy()
     {
+        practiceLesson?.Release();
         CleanUpLightingPractice();
         if (Instance == this) Instance = null;
     }
 
+    public void DisableForDevTesting()
+    {
+        if (!isLevelStarted) return;
+        StopAllCoroutines();
+        practiceLesson?.Release();
+        practiceLesson = null;
+        CleanUpLightingPractice();
+        currentStep = Level3Step.LevelActive;
+        isBriefingOpen = false;
+        enabled = false;
+        if (PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 0) OfferContract();
+    }
+
     private void LateUpdate()
     {
+        practiceLesson?.Tick();
+        CampaignGuidance.Update(tutorialManager, isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining) ? "" : currentStep.ToString(), 3);
         Camera mainCamera = Camera.main;
         if (mainCamera == null) return;
 
@@ -121,12 +139,13 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Excellent work on the Goke Cola contract! The client approved your production with a <color=yellow>" + gokeGrade + "</color> grade. You proved that you can handle Rule of Thirds composition, 3-Point Lighting, and a more demanding commercial edit.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Goke's happy with the commercial! You earned a <color=yellow>" + gokeGrade + "</color>. That lighting and two-graphic edit were a step up from our first job.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
     public void CloseBriefing()
     {
+        if (practiceLesson != null) { practiceLesson.Continue(); return; }
         if (!isBriefingOpen) return;
 
         if (currentStep == Level3Step.GokeResults)
@@ -197,7 +216,7 @@ public class Level3Manager : MonoBehaviour
 
     public bool IsBriefingActive()
     {
-        return isBriefingOpen;
+        return isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining);
     }
 
     public bool IsEquipmentIntroductionActive()
@@ -224,7 +243,7 @@ public class Level3Manager : MonoBehaviour
         {
             if (itemIndex != level3LightItemIndex)
             {
-                if (tutorialManager != null) tutorialManager.ShowWarning("Buy the Level 3 Soft Light first!");
+                if (tutorialManager != null) tutorialManager.ShowWarning("Let's buy the Level 3 Soft Light first. That's the tool we're trying today.");
                 return false;
             }
 
@@ -240,7 +259,7 @@ public class Level3Manager : MonoBehaviour
 
         if (currentStep == Level3Step.LightCheckout)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("The Soft Light is already in your cart. Confirm the purchase!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("You've got the Soft Light in your cart. Click CONFIRM to order it.");
             return false;
         }
 
@@ -253,7 +272,7 @@ public class Level3Manager : MonoBehaviour
 
         if (currentStep == Level3Step.BuyLight)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Add the Level 3 Soft Light before checkout!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("We're still missing the Level 3 Soft Light. Add it to the cart first.");
             return false;
         }
 
@@ -264,7 +283,7 @@ public class Level3Manager : MonoBehaviour
     {
         if (currentStep != Level3Step.BuyLight && currentStep != Level3Step.LightCheckout) return true;
 
-        if (tutorialManager != null) tutorialManager.ShowWarning("Complete the Soft Light purchase so the lesson can continue!");
+        if (tutorialManager != null) tutorialManager.ShowWarning("Let's finish ordering the Soft Light before we head to the stage.");
         return false;
     }
 
@@ -306,7 +325,7 @@ public class Level3Manager : MonoBehaviour
 
         if (light.EquipmentName != "Level 3 Soft Light")
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Pick up the Level 3 Soft Light from the delivery table!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Grab the Level 3 Soft Light from delivery with [E]. We'll try it on the stage.");
             return;
         }
 
@@ -318,7 +337,7 @@ public class Level3Manager : MonoBehaviour
     {
         if (currentStep != Level3Step.ObserveSoftLight || light == null || light != practiceLight) return true;
 
-        if (tutorialManager != null) tutorialManager.ShowWarning("Keep the Soft Light in position while you study the result.");
+        if (tutorialManager != null) tutorialManager.ShowWarning("Leave the light there for a moment. Take a look at what it does to the surface.");
         return false;
     }
 
@@ -346,12 +365,14 @@ public class Level3Manager : MonoBehaviour
     {
         if (currentStep != Level3Step.PlaceSoftLight || light == null || light != practiceLight || softLightPlacementMarker == null) return;
 
-        Vector3 lightPosition = light.transform.position;
-        Vector3 markerPosition = softLightPlacementMarker.position;
-        lightPosition.y = 0f;
-        markerPosition.y = 0f;
+        if (practiceLesson != null && (!practiceLesson.ReadyToPlace || !GuidedPracticeLesson.AtMarker(softLightPlacementMarker)))
+        {
+            if (tutorialManager != null) tutorialManager.ShowWarning("Pick the light up with [E] and finish the current step on the circle first.");
+            return;
+        }
 
-        bool isNearMarker = Vector3.Distance(lightPosition, markerPosition) <= 1.5f;
+        // Use the same player-position check as entry into the guided lesson.
+        bool isNearMarker = GuidedPracticeLesson.AtMarker(softLightPlacementMarker);
         bool hasCorrectIntensity = Mathf.Abs(light.intensityPercent - 75f) <= 2.5f;
         bool hasCorrectTilt = Mathf.Abs(light.GetCurrentTilt() + 10f) <= 2.5f;
         bool hasCorrectTemperature = Mathf.Abs(light.GetColorTemperature() - 5400f) <= 250f;
@@ -372,12 +393,14 @@ public class Level3Manager : MonoBehaviour
                                 : !hasCorrectDiffusion
                                     ? "Set diffusion to 75% with V and B."
                                     : "Stand on the SOFT KEY marker before pressing G.";
-                tutorialManager.ShowWarning("Pick the light back up. " + correction);
+                tutorialManager.ShowWarning("Let's adjust that a little. Pick the light up again. " + correction);
             }
             return;
         }
 
-        light.transform.position = softLightPlacementMarker.position + Vector3.up * 0.05f;
+        practiceLesson?.Release();
+        practiceLesson = null;
+        light.PlaceOnSurface(softLightPlacementMarker.position);
         ConfigurePracticeLight(light);
 
         Rigidbody[] lightBodies = light.GetComponentsInChildren<Rigidbody>(true);
@@ -438,7 +461,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Good. Level 3 is about controlling a larger, softer source. Use it to reveal shape and reflections without flattening the subject. The Almanac now keeps that setup available whenever you need to review it.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("That guide's yours to keep. If the Soft Light controls slip your mind, press <color=red>[P]</color> and take another look.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -448,7 +471,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 3</color>. This level focuses on one professional upgrade: learning how a larger <color=yellow>Soft Light</color> creates broad highlights, smooth shadow transitions, and cleaner reflections on premium products.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("For <color=yellow>Level 3</color>, create an orange supercar reveal in a dark showroom. Begin with a headlight detail, then reveal a low front-quarter hero view. Soft highlights describe the curves; the dark background separates the orange paint.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -508,7 +531,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Meet the <color=yellow>Level 3 Soft Light</color>. It has twice the output of the 160 LED Panel, adjustable <color=yellow>color temperature</color>, and controllable <color=yellow>diffusion</color> for smoother shadow edges. Before taking a client job, you will buy it and complete a guided setup on the stage.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("The <color=yellow>Level 3 Soft Light</color> lets us warm or cool the light and soften its shadows. Let's buy one first; open the shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -550,7 +573,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("The Soft Light is waiting at the <color=yellow>delivery table</color>. Pick it up, then bring it to the stage. I prepared a reflective practice surface and a marked professional Key Light position.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Your Soft Light's arrived. Pick it up from the delivery table with <color=red>[E]</color> and bring it to the stage marker.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -576,7 +599,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Stand on the <color=yellow>SOFT KEY marker</color>. Turn the light ON, set intensity to <color=yellow>75%</color>, tilt to <color=yellow>-10 degrees</color>, color temperature to <color=yellow>5400K</color> with Z and X, and diffusion to <color=yellow>75%</color> with V and B. This creates neutral product color, a broad highlight, and a controlled soft shadow. Press <color=red>[G]</color> when finished.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's try the Soft Light on our practice set. I'll walk you through each control, one at a time.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -586,9 +609,9 @@ public class Level3Manager : MonoBehaviour
         isBriefingOpen = false;
 
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
-        ShowCurrentLightingTasks();
-
-        if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
+        practiceLesson = GuidedPracticeLesson.Light(tutorialManager, softLightPlacementMarker,
+            () => practiceLight != null && practiceLight.gameObject.activeInHierarchy && practiceLight.GetComponentInParent<Player.PlayerController.PlayerController>() != null ? practiceLight : null,
+            "Soft Key", 75f, true);
     }
 
     private IEnumerator ObserveLightingSetup()
@@ -622,7 +645,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Soft Light practice complete. A larger source does not mean lighting everything evenly. Your 75% side Key created a clean reflection, the -10 degree tilt aimed the beam through the subject, and the remaining shadow kept the form three-dimensional. I will return the light to delivery after this message.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("See how the reflection spreads across the surface? The softer edge reveals the shape without losing all the shadow. I'll send the light back to delivery now.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -641,7 +664,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("The <color=yellow>Production Almanac</color> now includes the Level 3 Soft Light, reflective-surface lighting, and automotive staging. Press <color=red>[P]</color> after this message and review the same setup you just practiced.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("I've added our Soft Light lesson to the Almanac. Press <color=red>[P]</color> after this and have a look at the controls and reflective-product guide.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -676,7 +699,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("A new automotive contract just arrived from <color=yellow>Lambormini</color>. This Level 3 assignment is a product-lighting test: stage the vehicle by itself, reveal its body shape with the Soft Light, and create a premium composition. Actors will be introduced in Level 4, where performance and continuity become part of the brief.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("<color=yellow>Lambormini</color> wants an 8-12 second reveal. Build a dark set with ADD WALL. Try <color=yellow>rim lighting</color>: put a LIGHT STRIP behind and beside the car to draw a bright edge along the roof and body. Keep the Soft Light in front at an angle for readable paint.\n\nTry a cool cyan rim against the warm orange car. Move the strip closer for a stronger edge; select it and press [F] to compare OFF, LOW, MEDIUM and HIGH. Keep some shadows for depth. Lower the camera for a front-quarter hero view. These are creative choices, not extra grading requirements.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -704,7 +727,7 @@ public class Level3Manager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Lambormini is offering an 80,000 B-Coin contract requiring the vehicle, the Level 3 Soft Light, and a premium automotive composition. Press Space to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Lambormini's putting up 80,000 B-Coins. A vehicle, soft lighting, and a carefully composed shot. Sound good? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -728,17 +751,18 @@ public class Level3Manager : MonoBehaviour
         if (contractUIManager != null) contractUIManager.UnlockQualifications();
 
         currentStep = Level3Step.ContractAccepted;
+        if (DevTutorialBypass.Disabled) { currentStep = Level3Step.LevelActive; isBriefingOpen = false; return; }
         isBriefingOpen = true;
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted. The Lambormini car is available in the Director Terminal. Start with the Level 3 Soft Light at 75%, -10 degrees, 5400K, and 75% diffusion. Then refine its distance and angle until the body shape reads clearly. Press <color=red>[TAB]</color> whenever you need to review the qualifications.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("We've got the job. Place the car with the tablet and try our Soft Light settings: 75%, -10°, 5400K, and 75% diffusion. The brief's on <color=red>[TAB]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
     private void ShowCurrentLightingTasks()
     {
-        if (TutorialUIManager.Instance == null || practiceLight == null) return;
+        if (practiceLesson != null || TutorialUIManager.Instance == null || practiceLight == null) return;
 
         string powerTask = practiceLight.IsPoweredOn() ? "<color=#55FF88>ON</color>" : "OFF";
         string intensityTask = Mathf.RoundToInt(practiceLight.intensityPercent) + "% / 75%";
@@ -760,7 +784,7 @@ public class Level3Manager : MonoBehaviour
         if (light == null || light.spotlight == null || lightingPracticeTarget == null) return;
 
         Light practiceSpotlight = light.spotlight;
-        practiceSpotlight.range = 12f;
+        practiceSpotlight.range = Mathf.Max(40f, light.advancedRange);
         practiceSpotlight.spotAngle = 38f;
         practiceSpotlight.innerSpotAngle = 30f;
         practiceSpotlight.shadows = LightShadows.Soft;
@@ -905,16 +929,16 @@ public class Level3Manager : MonoBehaviour
         markerRoot.transform.SetParent(lightingPracticeRoot.transform);
         markerRoot.transform.position = markerPosition;
 
-        GameObject markerDisc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        GameObject markerDisc = GuidedPracticeLesson.CreateGreenMarker(markerRoot.transform);
         markerDisc.name = "Placement Point";
         markerDisc.transform.SetParent(markerRoot.transform);
         markerDisc.transform.localPosition = Vector3.zero;
-        markerDisc.transform.localScale = new Vector3(0.85f, 0.025f, 0.85f);
+        // Marker size and floor clearance match the first tutorial.
 
         Collider markerCollider = markerDisc.GetComponent<Collider>();
         if (markerCollider != null) Destroy(markerCollider);
 
-        Color markerColor = new Color(1f, 0.76f, 0.08f, 1f);
+        Color markerColor = Color.green;
         Renderer markerRenderer = markerDisc.GetComponent<Renderer>();
         if (markerRenderer != null)
         {
@@ -955,9 +979,322 @@ public class Level3Manager : MonoBehaviour
         practiceMarkerLabels.Clear();
     }
 
+
     private void ShowLevelTasks()
     {
         if (TutorialUIManager.Instance == null) return;
         TutorialUIManager.Instance.HideTasks();
+    }
+}
+
+
+
+ // Small action-by-action lesson shared by the existing level managers.
+internal sealed class GuidedPracticeLesson
+{
+    internal sealed class Step
+    {
+        public string message;
+        public string task;
+        public System.Func<bool> done;
+        public Step(string message, string task, System.Func<bool> done)
+        { this.message = message; this.task = task; this.done = done; }
+    }
+
+    private readonly TutorialManager tutorial;
+    private readonly List<Step> steps;
+    private readonly System.Action complete;
+    private int index;
+    private float stableSince = -1f;
+    private readonly Transform station;
+    private Player.PlayerController.PlayerController stationPlayer;
+    private LineRenderer guideLine;
+    private bool stationLocked;
+    private bool released;
+    public bool IsExplaining { get; private set; }
+    public bool ReadyToPlace => index == steps.Count - 1 && !IsExplaining;
+
+    public GuidedPracticeLesson(TutorialManager tutorial, List<Step> steps, System.Action complete = null, Transform station = null)
+    {
+        this.tutorial = tutorial;
+        this.steps = steps;
+        this.complete = complete;
+        this.station = station;
+        stationPlayer = Object.FindObjectOfType<Player.PlayerController.PlayerController>();
+        if (station != null && tutorial != null && tutorial.objectiveLine != null)
+        {
+            GameObject lineObject = new GameObject("Practice Objective Line");
+            lineObject.transform.SetParent(station, false);
+            guideLine = lineObject.AddComponent<LineRenderer>();
+            guideLine.sharedMaterial = tutorial.objectiveLine.sharedMaterial;
+            guideLine.widthCurve = tutorial.objectiveLine.widthCurve;
+            guideLine.widthMultiplier = tutorial.objectiveLine.widthMultiplier;
+            guideLine.colorGradient = tutorial.objectiveLine.colorGradient;
+            guideLine.useWorldSpace = true; guideLine.positionCount = 2;
+            guideLine.enabled = false;
+        }
+        Explain();
+    }
+
+    private void Explain()
+    {
+        IsExplaining = true;
+        stableSince = -1f;
+        if (tutorial != null) tutorial.FreezePlayerMovement();
+        var ui = TutorialUIManager.Instance;
+        if (ui != null) ui.ShowBossDialogue(steps[index].message, ui.posePoint, true, false);
+        if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+    }
+
+    public void Continue()
+    {
+        var ui = TutorialUIManager.Instance;
+        if (!IsExplaining || (ui != null && !ui.CanAdvanceBossDialogue())) return;
+        IsExplaining = false;
+        if (ui != null)
+        {
+            ui.HideBossDialogue();
+            ui.SetupTasks(new[] { steps[index].task });
+        }
+        if (tutorial != null) tutorial.UnfreezePlayerMovement();
+        if (stationLocked && stationPlayer != null) stationPlayer.canMove = false;
+    }
+
+    public void Tick()
+    {
+        if (released) return;
+        if (stationLocked && stationPlayer != null) stationPlayer.canMove = false;
+        if (guideLine != null && stationPlayer != null && station != null)
+        {
+            guideLine.enabled = !stationLocked && !IsExplaining;
+            float height = tutorial != null ? tutorial.lineHeightOffset : .5f;
+            guideLine.SetPosition(0, GuideEndpoint(stationPlayer.transform, true));
+            guideLine.SetPosition(1, GuideEndpoint(station, true));
+        }
+        if (IsExplaining || index >= steps.Count || PauseManager.isPaused) return;
+        CampaignGuidance.HighlightPracticeControl(steps[index].task);
+        if (steps[index].done == null || !steps[index].done())
+        { stableSince = -1f; return; }
+        if (stableSince < 0f) stableSince = Time.time;
+        if (Time.time - stableSince < 0.5f) return;
+        if (index == 0 && station != null && stationPlayer != null)
+        {
+            stationLocked = true;
+            stationPlayer.canMove = false;
+            CharacterController controller = stationPlayer.GetComponent<CharacterController>();
+            bool wasEnabled = controller != null && controller.enabled;
+            if (wasEnabled) controller.enabled = false;
+            Vector3 position = stationPlayer.transform.position;
+            stationPlayer.transform.position = new Vector3(station.position.x, position.y, station.position.z);
+            if (wasEnabled) controller.enabled = true;
+            if (guideLine != null) guideLine.enabled = false;
+            foreach (Renderer visual in station.GetComponentsInChildren<Renderer>())
+                if (!(visual is LineRenderer)) visual.enabled = false;
+        }
+        index++;
+        if (index < steps.Count) Explain();
+        else { Release(); complete?.Invoke(); }
+    }
+
+    public void Release()
+    {
+        if (released) return;
+        released = true;
+        if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+        if (stationLocked && stationPlayer != null) stationPlayer.canMove = true;
+        stationLocked = false;
+        if (guideLine != null) Object.Destroy(guideLine.gameObject);
+    }
+
+    public static bool AtMarker(Transform marker)
+    {
+        return IsPlayerAtMarker(marker);
+    }
+
+    public static Vector3 GuideEndpoint(Transform target, bool floor)
+    {
+        if (target == null) return Vector3.zero;
+        Vector3 point = target.position;
+        if (!floor)
+        {
+            Collider collider = target.GetComponentInChildren<Collider>();
+            if (collider != null && collider.enabled) return collider.bounds.center;
+            Renderer mesh = target.GetComponentInChildren<MeshRenderer>();
+            if (mesh != null) return mesh.bounds.center;
+        }
+        Vector3 grounded = point;
+        float closest = float.MaxValue;
+        foreach (RaycastHit hit in Physics.RaycastAll(point + Vector3.up * .2f, Vector3.down, 8f, ~0, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.transform == target || hit.transform.IsChildOf(target)) continue;
+            if (hit.normal.y < .5f) continue;
+            if (hit.point.y <= point.y + .1f && hit.point.y > point.y - 4f && hit.distance < closest)
+            { closest = hit.distance; grounded = hit.point; }
+        }
+        return grounded + Vector3.up * .035f;
+    }
+
+    private static bool IsPlayerAtMarker(Transform marker)
+    {
+        var player = Object.FindObjectOfType<Player.PlayerController.PlayerController>();
+        if (marker == null || player == null) return false;
+        Vector3 offset = player.transform.position - marker.position;
+        return new Vector2(offset.x, offset.z).magnitude <= 1.25f;
+    }
+
+    public static GameObject CreateGreenMarker(Transform parent)
+    {
+        TutorialManager tutorial = Object.FindObjectOfType<TutorialManager>(true);
+        GameObject source = tutorial != null ? tutorial.stageWalkTriggerCircle : null;
+        GameObject visual;
+        if (source != null)
+        {
+            visual = Object.Instantiate(source, parent);
+            visual.transform.rotation = source.transform.rotation;
+            visual.transform.localScale = source.transform.lossyScale;
+            visual.SetActive(true);
+        }
+        else
+        {
+            visual = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            visual.transform.SetParent(parent, false);
+            visual.transform.localScale = new Vector3(1.4f, .02f, 1.4f);
+        }
+        foreach (Collider collider in visual.GetComponentsInChildren<Collider>(true))
+            Object.Destroy(collider);
+        Renderer renderer = visual.GetComponentInChildren<Renderer>();
+        if (renderer != null)
+        {
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+        }
+        return visual;
+    }
+
+
+    public static GuidedPracticeLesson Light(TutorialManager tutorial, Transform marker,
+        System.Func<FilmLightItem> heldLight, string role, float intensity, bool advanced)
+    {
+        var steps = new List<Step>
+        {
+            new Step("Bring your light to the green " + role + " circle. We'll work through the controls once you're standing there.",
+                "Equip the light and walk onto the green " + role + " circle",
+                () => heldLight() != null && AtMarker(marker)),
+            new Step("Good spot. Press <color=red>[Left Click]</color> to switch the light on. Watch where the light falls.",
+                "[Left Click] Turn the light ON",
+                () => heldLight() != null && heldLight().IsPoweredOn()),
+            new Step("Use <color=red>[Scroll]</color> to set brightness to " + intensity + "%. " +
+                (role.Contains("Fill") ? "A weaker fill keeps some shadow so the product still has shape." :
+                role.Contains("Back") ? "This light catches the edge and separates the product from the background." :
+                "This is our main light; it gives the subject its shape."),
+                "[Scroll] Set brightness to " + intensity + "%",
+                () => heldLight() != null && Mathf.Abs(heldLight().intensityPercent - intensity) <= 2.5f)
+        };
+        if (advanced)
+        {
+            steps.Add(new Step("Tilt the head down to -10 degrees with <color=red>[Up/Down]</color>. Aim the light onto the subject.",
+                "[Up/Down] Set tilt to -10 degrees",
+                () => heldLight() != null && Mathf.Abs(heldLight().GetCurrentTilt() + 10f) <= 2.5f));
+            steps.Add(new Step("Now try <color=red>[Z/X]</color>. Set 5400K for a daylight look. Lower numbers look warmer; higher numbers look cooler.",
+                "[Z/X] Set temperature to 5400K",
+                () => heldLight() != null && Mathf.Abs(heldLight().GetColorTemperature() - 5400f) <= 250f));
+            steps.Add(new Step("Use <color=red>[V/B]</color> to set diffusion to 75%. Diffusion softens shadow edges and spreads the reflection.",
+                "[V/B] Set diffusion to 75%",
+                () => heldLight() != null && Mathf.Abs(heldLight().GetDiffusionPercent() - 75f) <= 2.5f));
+        }
+        steps.Add(new Step("Everything is set. Stand on the " + role + " circle and press <color=red>[G]</color> to place the light.",
+            "Stand on the " + role + " circle, then [G] place the light", null));
+        return new GuidedPracticeLesson(tutorial, steps, null, marker);
+    }
+}
+
+internal static class CampaignGuidance
+{
+    private static float nextControlRefresh;
+    public static void HighlightPracticeControl(string task)
+    {
+        if (Time.unscaledTime < nextControlRefresh || TutorialHighlighter.Instance == null) return;
+        nextControlRefresh = Time.unscaledTime + .2f;
+        DirectorTerminal director = Object.FindObjectOfType<DirectorTerminal>();
+        if (director == null || !director.IsTerminalActive()) return;
+        string caption = task.Contains("POSE ACTOR") ? "POSE ACTOR" : task.Contains("Actor card") ? "ACTOR" : null;
+        if (caption == null) return;
+        foreach (TMP_Text text in director.GetComponentsInChildren<TMP_Text>(false))
+        {
+            if (!string.Equals(text.text.Trim(), caption, System.StringComparison.OrdinalIgnoreCase)) continue;
+            var button = text.GetComponentInParent<UnityEngine.UI.Button>();
+            RectTransform rect = button != null ? button.transform as RectTransform : text.transform.parent as RectTransform;
+            if (rect != null) TutorialHighlighter.Instance.HighlightElement(rect);
+            return;
+        }
+    }
+    private static RectTransform highlighted;
+    private static Transform pickup;
+    private static string previousStep;
+    private static float nextRefresh;
+    private static bool ownsLine;
+
+    public static void Update(TutorialManager tutorial, string step, int level)
+    {
+        if (tutorial == null || PauseManager.isPaused) return;
+        if (previousStep == step && Time.unscaledTime < nextRefresh) return;
+        bool changed = previousStep != step;
+        previousStep = step;
+        nextRefresh = Time.unscaledTime + .2f;
+        RectTransform target = null;
+        bool wantsShop = step == "BuyCamera" || step == "BuySDCard" || step == "BuyLights" || step == "BuyLight" || step == "Checkout" || step == "LightCheckout";
+        if (wantsShop)
+        {
+            ShopTerminal shop = Object.FindObjectOfType<ShopTerminal>();
+            if (shop != null && shop.IsTerminalActive())
+            {
+                if (step == "Checkout" || step == "LightCheckout") target = tutorial.shopCheckoutBtnRect;
+                else target = shop.GetTutorialCartTarget(step == "BuyCamera" ? "LEVEL 2 CAMERA" :
+                    step == "BuySDCard" ? "SD CARD" : level == 3 ? "LEVEL 3 SOFT LIGHT" : "160 LED PANEL");
+                if (ownsLine) { tutorial.PointLineAtTransform(null); ownsLine = false; }
+            }
+            else { tutorial.PointLineAt("shop"); ownsLine = true; }
+        }
+        else if (step == "PickUpCamera" || step == "PickUpSDCard" || step == "PickUpLights" || step == "PickUpLight")
+        {
+            if (changed || pickup == null || !pickup.gameObject.activeInHierarchy ||
+                pickup.GetComponentInParent<Player.PlayerController.PlayerController>() != null)
+            {
+                pickup = null;
+                float best = float.MaxValue;
+                var player = Object.FindObjectOfType<Player.PlayerController.PlayerController>();
+                foreach (Player.Equipment.Equipment item in Object.FindObjectsOfType<Player.Equipment.Equipment>())
+                {
+                    if (item.GetComponentInParent<Player.PlayerController.PlayerController>() != null) continue;
+                    bool matches = step == "PickUpCamera" ? item is Player.Equipment.FilmCameraItem :
+                        step == "PickUpSDCard" ? item is Player.Equipment.SDCardItem card && !card.isUsedCard :
+                        item is Player.Equipment.FilmLightItem;
+                    if (!matches) continue;
+                    if (level == 3 && (!(item is Player.Equipment.FilmLightItem softLight) || !softLight.HasAdvancedFeatures())) continue;
+                    float distance = player != null ? Vector3.Distance(player.transform.position, item.transform.position) : 0;
+                    if (distance < best) { pickup = item.transform; best = distance; }
+                }
+            }
+            tutorial.PointLineAtTransform(pickup); ownsLine = true;
+        }
+        else
+        {
+            if (ownsLine) { tutorial.PointLineAtTransform(null); ownsLine = false; }
+            if (step == "OfferContract") target = tutorial.acceptContractButtonRect;
+            AlmanacManager book = AlmanacManager.Instance;
+            if (book != null && book.IsOpen())
+            {
+                if (step == "CloseAlmanac" || step == "CloseEquipmentAlmanac" || step == "CloseTechniquesAlmanac" || step == "ReviewAlmanac")
+                    target = book.knowledgeTabBtn != null && book.knowledgeTabBtn.interactable ? book.knowledgeTabBtn.transform as RectTransform : null;
+            }
+        }
+        if (target != null && !target.gameObject.activeInHierarchy) target = null;
+        if (highlighted == target) return;
+        if (TutorialHighlighter.Instance != null)
+        {
+            if (target != null) TutorialHighlighter.Instance.HighlightElement(target);
+            else if (highlighted != null) TutorialHighlighter.Instance.HideHighlight();
+        }
+        highlighted = target;
     }
 }

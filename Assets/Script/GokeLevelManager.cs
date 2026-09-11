@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using System.Collections.Generic;
 using Player.Equipment;
@@ -65,6 +66,9 @@ public class GokeLevelManager : MonoBehaviour
 
     private bool isLevelStarted = false;
     private bool isBriefingOpen = false;
+    private GuidedPracticeLesson practiceLesson;
+    private Transform cameraPracticeMarker;
+    private bool cameraPracticeViewOpen;
     private GokeLevelStep currentStep;
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
@@ -86,6 +90,7 @@ public class GokeLevelManager : MonoBehaviour
     private Transform backPlacementMarker;
     private List<TextMeshPro> practiceMarkerLabels = new List<TextMeshPro>();
     private bool hasCompletedRuleOfThirdsPractice = false;
+    private bool awaitingFramingAcknowledgement;
     private float ruleOfThirdsPracticeTimer = 0f;
 
     private void Awake()
@@ -100,12 +105,29 @@ public class GokeLevelManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        practiceLesson?.Release();
         CleanUpLightingPractice();
         if (Instance == this) Instance = null;
     }
 
+    public void DisableForDevTesting()
+    {
+        if (!isLevelStarted) return;
+        StopAllCoroutines();
+        practiceLesson?.Release();
+        practiceLesson = null;
+        awaitingFramingAcknowledgement = false;
+        if (cameraPracticeMarker != null) cameraPracticeMarker.gameObject.SetActive(false);
+        CleanUpLightingPractice();
+        StartContract();
+        enabled = false;
+        if (PlayerPrefs.GetInt("GokeContractAccepted", 0) == 0) OfferContract();
+    }
+
     private void LateUpdate()
     {
+        practiceLesson?.Tick();
+        CampaignGuidance.Update(tutorialManager, isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining) ? "" : currentStep.ToString(), 2);
         Camera mainCamera = Camera.main;
         if (mainCamera == null) return;
 
@@ -160,7 +182,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Congratulations! You finished the tutorial and completed your first commercial from pre-production through post-production. You built the set, arranged the props, shaped the lighting, recorded the shot, and delivered the final edit.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("You did it! Your first commercial, from the empty stage to the final cut. Take a breath; we've got a new client coming in.", TutorialUIManager.Instance.poseHappy, true, false);
         }
 
         Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
@@ -169,6 +191,22 @@ public class GokeLevelManager : MonoBehaviour
 
     public void CloseBriefing()
     {
+        if (awaitingFramingAcknowledgement)
+        {
+            var ui = TutorialUIManager.Instance;
+            if (ui != null && !ui.CanAdvanceBossDialogue()) return;
+            awaitingFramingAcknowledgement = false;
+            isBriefingOpen = false;
+            if (ui != null)
+            {
+                ui.HideBossDialogue();
+                ui.SetupTasks(new[] { "[Left Click] Leave the viewfinder" });
+            }
+            if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
+            if (!cameraPracticeViewOpen) OnCameraViewExited("Level 2 Camera");
+            return;
+        }
+        if (practiceLesson != null) { practiceLesson.Continue(); return; }
         if (!isBriefingOpen) return;
 
         if (currentStep == GokeLevelStep.Recap)
@@ -317,7 +355,7 @@ public class GokeLevelManager : MonoBehaviour
 
     public bool IsBriefingActive()
     {
-        return isBriefingOpen;
+        return isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining);
     }
 
     public bool IsEquipmentIntroductionActive()
@@ -357,7 +395,7 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (itemIndex != lightItemIndex)
             {
-                if (tutorialManager != null) tutorialManager.ShowWarning("Add the 160 LED Panel shown in the LIGHTS category!");
+                if (tutorialManager != null) tutorialManager.ShowWarning("Choose the 160 LED Panel under LIGHTS. That's the one for our setup.");
                 return false;
             }
 
@@ -383,7 +421,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.LightCheckout)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("You have all three lights. Confirm the purchase!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Three lights in the cart. Click CONFIRM and we'll collect them.");
             return false;
         }
 
@@ -391,7 +429,7 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (itemIndex != level2CameraItemIndex)
             {
-                if (tutorialManager != null) tutorialManager.ShowWarning("Add the Level 2 Camera first!");
+                if (tutorialManager != null) tutorialManager.ShowWarning("Let's get the Level 2 Camera into the cart first.");
                 return false;
             }
 
@@ -409,7 +447,7 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (itemIndex != sdCardItemIndex)
             {
-                if (tutorialManager != null) tutorialManager.ShowWarning("Now add an SD Card to your cart!");
+                if (tutorialManager != null) tutorialManager.ShowWarning("Add a blank SD Card too. We'll need it for the camera test.");
                 return false;
             }
 
@@ -426,11 +464,11 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.Checkout)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("You have everything you need. Confirm the purchase!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("That's our gear sorted. Click CONFIRM to place the order.");
             return false;
         }
 
-        if (tutorialManager != null) tutorialManager.ShowWarning("Follow the current task first!");
+        if (tutorialManager != null) tutorialManager.ShowWarning("Let's finish the step on the left, then we'll carry on.");
         return false;
     }
 
@@ -440,19 +478,19 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.BuyLights)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Add three 160 LED Panels before checkout!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("We need three 160 LED Panels for this setup. Check the cart before confirming.");
             return false;
         }
 
         if (currentStep == GokeLevelStep.BuyCamera)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Add the Level 2 Camera before checkout!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("We're missing the Level 2 Camera. Add it before confirming.");
             return false;
         }
 
         if (currentStep == GokeLevelStep.BuySDCard)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Add an SD Card before checkout!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("There's no SD Card in the order yet. Add one so we can record.");
             return false;
         }
 
@@ -471,12 +509,12 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (currentStep == GokeLevelStep.BuyLights || currentStep == GokeLevelStep.LightCheckout)
             {
-                tutorialManager.ShowWarning("Keep all three lights in your cart, then confirm the purchase!");
+                tutorialManager.ShowWarning("We'll need all three lights. Keep them in the cart and click CONFIRM.");
             }
             else
             {
                 bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
-                tutorialManager.ShowWarning(alreadyOwnsCamera ? "Keep the SD Card in your cart, then confirm the purchase!" : "Keep the Camera and SD Card in your cart, then confirm the purchase!");
+                tutorialManager.ShowWarning(alreadyOwnsCamera ? "Keep that SD Card in the order and click CONFIRM." : "Keep the camera and card in the order, then click CONFIRM.");
             }
         }
         return false;
@@ -486,13 +524,13 @@ public class GokeLevelManager : MonoBehaviour
     {
         if (currentStep != GokeLevelStep.InsertSDCard)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Follow the current task first!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Let's finish the step on the left, then we'll carry on.");
             return false;
         }
 
         if (equipmentName != "Level 2 Camera")
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Insert the SD Card into the Level 2 Camera!");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Select the Level 2 Camera and press [C] to load the SD Card first.");
             return false;
         }
 
@@ -563,7 +601,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("The three lights are on the delivery table. Pick up all three <color=yellow>160 LED Panels</color>. They will occupy three hotbar slots, so you can switch between them while you build the practice setup.", TutorialUIManager.Instance.posePoint, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Our three 160 LED Panels have arrived. Pick each one up with <color=red>[E]</color>, then use <color=red>[1-5]</color> to choose which one you're holding.", TutorialUIManager.Instance.posePoint, true, false);
             }
             return;
         }
@@ -577,7 +615,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Purchase complete. The shop delivered both items to the delivery table. Pick up the <color=yellow>Level 2 Camera</color> first, then I will show you how to prepare it.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("There's our camera gear on the delivery table. Pick up the <color=yellow>Level 2 Camera</color> with <color=red>[E]</color> first; we'll get the card next.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -664,7 +702,7 @@ public class GokeLevelManager : MonoBehaviour
         {
             if ((currentStep == GokeLevelStep.IntroducePickup || currentStep == GokeLevelStep.PickUpCamera) && tutorialManager != null)
             {
-                tutorialManager.ShowWarning("Pick up the Level 2 Camera from the delivery table!");
+                tutorialManager.ShowWarning("The Level 2 Camera is waiting on the delivery table. Pick it up with [E].");
             }
             return;
         }
@@ -693,12 +731,13 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("The <color=yellow>Rule of Thirds</color> divides the frame into nine equal sections. The four line intersections are visual <color=yellow>power points</color>. Place the center of the product on one power point, keep the product fully visible, and preserve negative space for brand graphics. Open the viewfinder with <color=red>[Left Mouse Button]</color> and compose the shot yourself.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's try the Rule of Thirds. Click <color=red>[Left Click]</color> to open the viewfinder, put the product where two grid lines cross, and leave some breathing room beside it.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
     public void OnCameraViewEntered(string equipmentName)
     {
+        if (equipmentName == "Level 2 Camera") cameraPracticeViewOpen = true;
         if (currentStep != GokeLevelStep.IntroduceCameraView && currentStep != GokeLevelStep.OpenCameraView) return;
         if (equipmentName != "Level 2 Camera") return;
 
@@ -706,6 +745,7 @@ public class GokeLevelManager : MonoBehaviour
         isBriefingOpen = false;
         hasCompletedRuleOfThirdsPractice = false;
         ruleOfThirdsPracticeTimer = 0f;
+        if (practiceLesson != null) return;
 
         if (TutorialUIManager.Instance != null)
         {
@@ -723,7 +763,9 @@ public class GokeLevelManager : MonoBehaviour
 
     public void OnRuleOfThirdsPracticeUpdated(bool hasCorrectComposition)
     {
+        if (!cameraPracticeViewOpen) return;
         if (currentStep != GokeLevelStep.InspectCameraFeatures || hasCompletedRuleOfThirdsPractice) return;
+        if (practiceLesson != null && !practiceLesson.ReadyToPlace) return;
 
         if (!hasCorrectComposition)
         {
@@ -735,28 +777,37 @@ public class GokeLevelManager : MonoBehaviour
         if (ruleOfThirdsPracticeTimer < 2f) return;
 
         hasCompletedRuleOfThirdsPractice = true;
+        if (practiceLesson == null) ShowFramingSuccess();
+    }
 
-        if (TutorialUIManager.Instance != null)
+    private void ShowFramingSuccess()
+    {
+        if (awaitingFramingAcknowledgement) return;
+        awaitingFramingAcknowledgement = true;
+        isBriefingOpen = true;
+        if (tutorialManager != null) tutorialManager.FreezePlayerMovement();
+        var ui = TutorialUIManager.Instance;
+        if (ui != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[]
-            {
-                "- <color=#55FF88>Rule of Thirds frame achieved</color>",
-                "- Click <color=red>[Left Mouse Button]</color> to leave the viewfinder"
-            });
+            ui.HideTasks();
+            ui.ShowBossDialogue("That's the frame! The product sits on a thirds intersection, so your eye goes straight to it. That space beside it gives our message room without covering the product.", ui.poseHappy, true, false);
         }
     }
 
     public void OnCameraViewExited(string equipmentName)
     {
+        if (equipmentName == "Level 2 Camera") cameraPracticeViewOpen = false;
+        if (awaitingFramingAcknowledgement) return;
         if (currentStep != GokeLevelStep.InspectCameraFeatures) return;
         if (equipmentName != "Level 2 Camera") return;
 
+        if (practiceLesson != null) return;
         if (!hasCompletedRuleOfThirdsPractice)
         {
             currentStep = GokeLevelStep.OpenCameraView;
             isBriefingOpen = false;
 
-            if (tutorialManager != null) tutorialManager.ShowWarning("Place the practice product on a grid intersection and hold the frame for 2 seconds.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Line the product up where two grid lines cross, then hold that framing for 2 seconds.");
 
             if (TutorialUIManager.Instance != null)
             {
@@ -776,7 +827,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Good composition. You used a power point to create <color=yellow>visual hierarchy</color>: the product attracts attention first, while the open side provides <color=yellow>negative space</color> for a logo or price graphic. You have now tested the camera with the complete lighting setup, so I returned the three lights to the <color=yellow>delivery zone</color>. Remember that Rule of Thirds is a purposeful guide, not a rule that every subject must follow in every creative brief.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("That framing gives our product room to shine, with space beside it for a message. We're done with the demo; your three lights are back at delivery.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -808,8 +859,8 @@ public class GokeLevelManager : MonoBehaviour
         {
             bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
             string message = alreadyOwnsCamera
-                ? "Your lighting exercise is complete. Now look at the <color=yellow>Equipment Shop</color>. Your Level 2 Camera is still yours and has been returned to the delivery table. Buy one blank <color=yellow>SD Card</color> so you can practice Rule of Thirds with the same backdrop and product."
-                : "Your lighting exercise is complete. Now I can introduce the <color=yellow>Level 2 Camera</color>. It is available in the Equipment Shop for 10,000 B-Coins. Buy it with one blank <color=yellow>SD Card</color>, then use its grid to practice Rule of Thirds on the same practice set.";
+                ? "Let's see that lighting through a camera. Your Level 2 Camera is at delivery; pick up a blank <color=yellow>SD Card</color> from the shop for our test."
+                : "Let's put that lighting to the test. Open the shop with <color=red>[E]</color> and buy the <color=yellow>Level 2 Camera</color> plus one blank <color=yellow>SD Card</color>.";
             TutorialUIManager.Instance.ShowBossDialogue(message, TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
@@ -821,7 +872,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Are you ready for the next level? From this point forward, the contracts will introduce new equipment, more advanced production techniques, and stricter client qualifications. I will guide you through each new tool before your next job begins.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Ready for the next job? Level 2 asks a little more of us. We'll try the new gear together before you take on the brief.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -832,7 +883,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("First, let me introduce the <color=yellow>Production Almanac</color>. It is your permanent guide to every unlocked piece of equipment and every production technique you learn. It explains what each tool does, how to control it, and when a technique should be used. Press <color=red>[P]</color> after this message to open it.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("I've put what you've learned in the <color=yellow>Production Almanac</color>. No need to remember it all. Press <color=red>[P]</color> after we chat and have a look.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -849,6 +900,8 @@ public class GokeLevelManager : MonoBehaviour
         }
 
         currentStep = GokeLevelStep.OpenAlmanac;
+        // The lesson explicitly asks for the book, including direct level/cheat entry.
+        AlmanacManager.Instance.UnlockTutorialEquipment();
 
         if (TutorialUIManager.Instance != null)
         {
@@ -863,7 +916,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Good. You have tried the new camera yourself. Now open the <color=yellow>Production Almanac</color> again and review the Level 2 Camera entry. It records the camera's new grid, autofocus, tracking display, zoom, height, and recording controls whenever you need a reminder.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("How did that camera feel? I've added its controls to the Almanac. Open it with <color=red>[P]</color> and take a look at the Level 2 entry.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -910,7 +963,7 @@ public class GokeLevelManager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola is offering a 60,000 B-Coin contract requiring a RED stage, Rule of Thirds, 3-Point Lighting, two graphics, and a balanced high-contrast edit. Press Space to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola has 60,000 B-Coins for a red set, Rule of Thirds, three-point lighting, and two graphics. Ready to take it on? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -924,7 +977,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Now you have practiced both parts of the production setup: professional <color=yellow>3-Point Lighting</color> and <color=yellow>Rule of Thirds</color> composition with the Level 2 Camera. A new contract has arrived from <color=yellow>Goke Cola</color>. Let us review the offer.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("We've tried the lights and the camera. Now there's a brief from <color=yellow>Goke Cola</color> with your name on it. Let's take a look.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -935,7 +988,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Before I introduce your next camera, you need to understand the lighting it will capture. Go to the <color=yellow>Equipment Shop</color> and buy <color=yellow>three 160 LED Panels</color>: one Key Light, one Fill Light, and one Back Light. Add the same panel three times, then confirm the purchase.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's try a three-light setup before the job. Open the shop with <color=red>[E]</color>, add three 160 LED Panels, and click <color=red>CONFIRM</color>.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -1032,13 +1085,15 @@ public class GokeLevelManager : MonoBehaviour
         string lightRole = GetCurrentLightRole();
 
         if (placementMarker == null) return;
+        if (practiceLesson != null && (!practiceLesson.ReadyToPlace || !GuidedPracticeLesson.AtMarker(placementMarker)))
+        {
+            if (tutorialManager != null) tutorialManager.ShowWarning("Pick the light up with [E] and finish the current step on the circle first.");
+            return;
+        }
 
-        Vector3 lightPosition = light.transform.position;
-        Vector3 markerPosition = placementMarker.position;
-        lightPosition.y = 0f;
-        markerPosition.y = 0f;
-
-        bool isNearMarker = Vector3.Distance(lightPosition, markerPosition) <= 1.4f;
+        // OnDropped already settles the held model in front of the player.
+        // The lesson asks the PLAYER to stand on the circle, not the model's pivot.
+        bool isNearMarker = GuidedPracticeLesson.AtMarker(placementMarker);
         bool hasCorrectIntensity = Mathf.Abs(light.intensityPercent - requiredIntensity) <= 2.5f;
 
         if (!light.IsPoweredOn() || !hasCorrectIntensity || !isNearMarker)
@@ -1050,11 +1105,13 @@ public class GokeLevelManager : MonoBehaviour
                     : !hasCorrectIntensity
                         ? "Set the " + lightRole + " to " + requiredIntensity + "% with the mouse wheel."
                         : "Stand on the " + lightRole + " marker before pressing G.";
-                tutorialManager.ShowWarning("Pick the light back up. " + correction);
+                tutorialManager.ShowWarning("Let's make a small adjustment. Pick the light up again. " + correction);
             }
             return;
         }
 
+        practiceLesson?.Release();
+        practiceLesson = null;
         light.transform.position = placementMarker.position + Vector3.up * 0.05f;
         ConfigureProfessionalPracticeLight(light);
 
@@ -1090,7 +1147,7 @@ public class GokeLevelManager : MonoBehaviour
         if (light == null || light.spotlight == null || lightingPracticeTarget == null) return;
 
         Light practiceSpotlight = light.spotlight;
-        practiceSpotlight.range = 9f;
+        practiceSpotlight.range = Mathf.Max(30f, light.standardRange);
         practiceSpotlight.shadows = LightShadows.Soft;
         practiceSpotlight.shadowBias = 0.08f;
         practiceSpotlight.shadowNormalBias = 0.25f;
@@ -1100,20 +1157,20 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.PlaceKeyLight)
         {
-            practiceSpotlight.spotAngle = 23f;
-            practiceSpotlight.innerSpotAngle = 16f;
+            practiceSpotlight.spotAngle = 40f;
+            practiceSpotlight.innerSpotAngle = 8f;
             practiceSpotlight.shadowStrength = 0.7f;
         }
         else if (currentStep == GokeLevelStep.PlaceFillLight)
         {
-            practiceSpotlight.spotAngle = 30f;
-            practiceSpotlight.innerSpotAngle = 24f;
+            practiceSpotlight.spotAngle = 50f;
+            practiceSpotlight.innerSpotAngle = 10f;
             practiceSpotlight.shadowStrength = 0.25f;
         }
         else
         {
-            practiceSpotlight.spotAngle = 18f;
-            practiceSpotlight.innerSpotAngle = 12f;
+            practiceSpotlight.spotAngle = 34f;
+            practiceSpotlight.innerSpotAngle = 6f;
             practiceSpotlight.shadowStrength = 0.55f;
             targetHeight = 1.2f;
         }
@@ -1129,7 +1186,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("The colored points are your practice positions. Start with the <color=yellow>YELLOW KEY marker</color>. Equip one light, click Left Mouse Button to power it ON, use the mouse wheel to set it to <color=yellow>75%</color>, stand on the marker, and press <color=red>[G]</color> to place it.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Our Key does the main work. We'll set it up on the yellow circle first. Keep the other two lights for later.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -1139,7 +1196,7 @@ public class GokeLevelManager : MonoBehaviour
         isBriefingOpen = false;
 
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
-        ShowCurrentLightingPracticeTasks();
+        BeginGuidedLightPractice();
     }
 
     private void ShowLightingPlacementTutorial()
@@ -1149,7 +1206,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Good. The Key creates the main shape and strongest shadow. Now use another light for the <color=#55CCFF>BLUE FILL marker</color> on the opposite side. Turn it ON and lower it to <color=yellow>40%</color>. The weaker Fill softens the Key shadow without making the product look flat.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("See the shadow the Key makes? Let's soften it with our second light. The blue circle marks its position.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -1159,7 +1216,7 @@ public class GokeLevelManager : MonoBehaviour
         isBriefingOpen = false;
 
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
-        ShowCurrentLightingPracticeTasks();
+        BeginGuidedLightPractice();
     }
 
     private void ShowLightingSettingsTutorial()
@@ -1169,7 +1226,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("The front pair is complete. Use the last light for the <color=#FF66FF>MAGENTA BACK marker</color> behind the practice product. Turn it ON, set it to <color=yellow>60%</color>, and drop it on the marker. The Back Light separates the product edge from the backdrop.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Now let's separate the product from the background. We'll use the last light at the magenta circle.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -1179,7 +1236,7 @@ public class GokeLevelManager : MonoBehaviour
         isBriefingOpen = false;
 
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
-        ShowCurrentLightingPracticeTasks();
+        BeginGuidedLightPractice();
     }
 
     private IEnumerator ObserveLightingSetup()
@@ -1212,7 +1269,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Lighting practice complete. You built a real <color=yellow>3-Point Lighting</color> setup: a 75% Key for shape, a 40% Fill for shadow control, and a 60% Back Light for separation. Keep all three lights powered and in position. You will now test how this complete setup looks through the Level 2 Camera while practicing Rule of Thirds.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("There's our three-point setup. Key gives shape, Fill softens the shadows, and Back catches the edge. Leave them there; we'll use this set for the camera test.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -1281,13 +1338,25 @@ public class GokeLevelManager : MonoBehaviour
         return "Back Light";
     }
 
+    private void BeginGuidedLightPractice()
+    {
+        Transform marker = GetCurrentPlacementMarker();
+        if (keyPlacementMarker != null) keyPlacementMarker.gameObject.SetActive(marker == keyPlacementMarker);
+        if (fillPlacementMarker != null) fillPlacementMarker.gameObject.SetActive(marker == fillPlacementMarker);
+        if (backPlacementMarker != null) backPlacementMarker.gameObject.SetActive(marker == backPlacementMarker);
+        practiceLesson = GuidedPracticeLesson.Light(tutorialManager, marker,
+            () => practiceLights.Find(light => light != null && light.gameObject.activeInHierarchy && !placedPracticeLights.Contains(light.GetInstanceID()) &&
+                light.GetComponentInParent<Player.PlayerController.PlayerController>() != null),
+            GetCurrentLightRole(), GetCurrentRequiredIntensity(), false);
+    }
+
     private void ShowCurrentLightingPracticeTasks()
     {
-        if (TutorialUIManager.Instance == null) return;
+        if (practiceLesson != null || TutorialUIManager.Instance == null) return;
 
         string role = GetCurrentLightRole();
         int requiredIntensity = GetCurrentRequiredIntensity();
-        string markerColor = currentStep == GokeLevelStep.PlaceKeyLight ? "YELLOW" : currentStep == GokeLevelStep.PlaceFillLight ? "BLUE" : "MAGENTA";
+        string markerColor = "GREEN";
 
         TutorialUIManager.Instance.SetupTasks(new string[]
         {
@@ -1318,11 +1387,12 @@ public class GokeLevelManager : MonoBehaviour
         if (contractUIManager != null) contractUIManager.UnlockQualifications();
 
         currentStep = GokeLevelStep.IntroduceTechniques;
+        if (DevTutorialBypass.Disabled) { StartContract(); return; }
         isBriefingOpen = true;
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted. This production requires techniques that were not used in your tutorial: <color=yellow>Rule of Thirds</color>, <color=yellow>3-Point Lighting</color>, product separation, and commercial color grading. They are now unlocked in the Production Almanac. Open it with <color=red>[P]</color> and use those guides whenever you need help completing the contract.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("The Goke job is yours. If you need a hand, press <color=red>[P]</color>. The lighting, composition, and color guides are there whenever you need them.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -1411,7 +1481,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("That's the new camera. It still needs recording media, so pick up the <color=yellow>SD Card</color> from the delivery table next.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Camera in hand. Grab the SD Card from the delivery table with <color=red>[E]</color>, and we'll load it up.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -1422,7 +1492,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Now equip the Level 2 Camera and press <color=red>[C]</color> to insert the blank SD Card. The viewfinder and recording controls stay locked until the camera has media.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Select your Level 2 Camera and press <color=red>[C]</color> to insert the blank SD Card. We need that in before we can use the viewfinder or record.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -1443,11 +1513,31 @@ public class GokeLevelManager : MonoBehaviour
         isBriefingOpen = false;
         currentStep = GokeLevelStep.OpenCameraView;
 
-        if (TutorialUIManager.Instance != null)
+        var steps = new List<GuidedPracticeLesson.Step>();
+        if (lightingPracticeTarget != null && keyPlacementMarker != null && fillPlacementMarker != null)
         {
-            TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Click <color=red>[Left Mouse Button]</color> to open the Level 2 Camera viewfinder" });
+            Vector3 position = (keyPlacementMarker.position + fillPlacementMarker.position) * 0.5f;
+            cameraPracticeMarker = CreatePlacementMarker("Camera Practice Circle", position,
+                Color.green, "CAMERA");
+            steps.Add(new GuidedPracticeLesson.Step(
+                "Bring the camera to the green CAMERA circle. The lights can stay where they are while we try our framing.",
+                "Equip the Level 2 Camera and stand on the CAMERA circle",
+                () => GuidedPracticeLesson.AtMarker(cameraPracticeMarker)));
         }
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Click <color=red>[Left Click]</color> to open the viewfinder. Its grid divides the picture into thirds.",
+            "[Left Click] Open the Level 2 Camera viewfinder",
+            () => cameraPracticeViewOpen));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Place the product where two grid lines cross. Use <color=red>[Scroll]</color> for size and <color=red>[Q/E]</color> for height. Leave room beside it for a message.",
+            "Frame the product at a grid intersection and hold steady for 2 seconds",
+            () => hasCompletedRuleOfThirdsPractice));
+        practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
+        {
+            practiceLesson = null;
+            if (cameraPracticeMarker != null) cameraPracticeMarker.gameObject.SetActive(false);
+            ShowFramingSuccess();
+        }, cameraPracticeMarker);
     }
 
     private void StartProductionTutorial()
@@ -1457,7 +1547,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Now let's plan the Goke Cola shoot. First, open the Director Tablet, build a backdrop, and paint it <color=red>RED</color>. Spawn the Goke Cola prop, then drag it forward so it is clearly separated from the wall.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's build Goke's set. Open the Director Tablet with <color=red>[E]</color>, add a red wall, and place the can with some space between it and the backdrop.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -1467,7 +1557,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("For the contract shot, apply the composition exercise to Goke Cola. Place the product center near one of the four <color=yellow>power points</color>, keep the full product visible, and leave deliberate negative space for the required graphics. A centered frame will weaken the requested Rule of Thirds composition. Press <color=red>[TAB]</color> whenever you need to review the qualification sheet.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Give the whole can a spot on a Rule of Thirds intersection. Leave room beside it for graphics; <color=red>[TAB]</color> brings the brief back if you need it.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -1477,7 +1567,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Lighting reminder: place the <color=yellow>75% Key</color> and <color=yellow>40% Fill</color> in front on opposite sides of the camera, then place the <color=yellow>60% Back Light</color> behind the Cola. Aim every beam at the product and power all three lights before recording.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Use the three roles we practiced: Key shapes the can, a softer Fill controls shadows from the opposite side, and Back separates it from the set. Choose your own intensities; 75/40/60 was a practice example. Aim all three at the can and power them on.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -1487,7 +1577,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("After the set, camera, and lighting are ready, record your take and bring the SD Card to the editing computer. Goke Cola wants <color=yellow>two graphics</color>: place the first from 0-5 seconds and the second from 5-10 seconds. Keep both title-safe and preserve the bold red palette without crushing the shadows.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Roll a 10-second take with <color=red>[R]</color>, then take the card to the computer. We'll give Graphic 1 the first five seconds and Graphic 2 the last five.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -1497,7 +1587,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("That's the full production plan. I will keep the selected contract available through <color=red>[TAB]</color> so the screen stays clear while you work. Press Space when you are ready to begin.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("You've got the plan. Keep the brief handy with <color=red>[TAB]</color>, and take your time. Press <color=red>[SPACE]</color> when you're ready to get to work.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -1598,9 +1688,9 @@ public class GokeLevelManager : MonoBehaviour
         }
 
         lightingPracticeTarget = CreatePracticeTarget(targetPosition);
-        keyPlacementMarker = CreatePlacementMarker("Key Light Marker", keyPosition, new Color(1f, 0.78f, 0.05f, 1f), "KEY LIGHT\n75%");
-        fillPlacementMarker = CreatePlacementMarker("Fill Light Marker", fillPosition, new Color(0.15f, 0.65f, 1f, 1f), "FILL LIGHT\n40%");
-        backPlacementMarker = CreatePlacementMarker("Back Light Marker", backPosition, new Color(1f, 0.2f, 0.85f, 1f), "BACK LIGHT\n60%");
+        keyPlacementMarker = CreatePlacementMarker("Key Light Marker", keyPosition, Color.green, "KEY LIGHT\n75%");
+        fillPlacementMarker = CreatePlacementMarker("Fill Light Marker", fillPosition, Color.green, "FILL LIGHT\n40%");
+        backPlacementMarker = CreatePlacementMarker("Back Light Marker", backPosition, Color.green, "BACK LIGHT\n60%");
     }
 
     private Renderer FindStageRenderer()
@@ -1662,11 +1752,11 @@ public class GokeLevelManager : MonoBehaviour
         markerRoot.transform.SetParent(lightingPracticeRoot.transform);
         markerRoot.transform.position = markerPosition;
 
-        GameObject markerDisc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        GameObject markerDisc = GuidedPracticeLesson.CreateGreenMarker(markerRoot.transform);
         markerDisc.name = "Placement Point";
         markerDisc.transform.SetParent(markerRoot.transform);
         markerDisc.transform.localPosition = Vector3.zero;
-        markerDisc.transform.localScale = new Vector3(0.8f, 0.025f, 0.8f);
+        // Marker size and floor clearance match the first tutorial.
 
         Collider markerCollider = markerDisc.GetComponent<Collider>();
         if (markerCollider != null) Destroy(markerCollider);

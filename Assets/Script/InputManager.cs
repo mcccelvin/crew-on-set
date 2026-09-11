@@ -9,6 +9,7 @@ namespace Player.Manager
 
         public Vector2 Move { get; private set; }
         public Vector2 Look { get; private set; }
+        public bool IsPointerLook => lookAction != null && lookAction.activeControl != null && lookAction.activeControl.device is UnityEngine.InputSystem.Pointer;
         public bool Run { get; private set; }
         public bool Jump { get; private set; }
         public bool JumpPressedThisFrame { get; private set; }
@@ -61,6 +62,49 @@ namespace Player.Manager
         private InputAction continueAction;
         private Player.PlayerController.PlayerController playerController;
         private bool jumpPressed;
+        private bool windowFocused = true;
+        private bool hasCursorSnapshot;
+        private CursorLockMode focusedCursorMode;
+        private bool focusedCursorVisible;
+        private int restoreFocusFrame = -1;
+
+        private void OnApplicationFocus(bool focused)
+        {
+            windowFocused = focused;
+            Move = Look = Vector2.zero;
+            Run = Jump = jumpPressed = false;
+            EquipmentAdjust = CameraPedestal = 0f;
+            LateUpdateFlags();
+            // Restore after Unity/Input System finish handling the focus event.
+            restoreFocusFrame = focused && hasCursorSnapshot ? Time.frameCount + 1 : -1;
+        }
+
+        private void RestoreFocusCursor()
+        {
+            RestoreFocusCursorInternal();
+        }
+
+        public void CancelPendingFocusRestore()
+        {
+            restoreFocusFrame = -1;
+            focusedCursorMode = Cursor.lockState;
+            focusedCursorVisible = Cursor.visible;
+            hasCursorSnapshot = true;
+        }
+
+        private void RestoreFocusCursorInternal()
+        {
+            if (!windowFocused || restoreFocusFrame < 0 || Time.frameCount < restoreFocusFrame) return;
+            restoreFocusFrame = -1;
+            if (focusedCursorMode != CursorLockMode.Locked) return;
+            if (PauseManager.isPaused) return;
+            if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
+            if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) return;
+            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return;
+            Cursor.lockState = focusedCursorMode;
+            Cursor.visible = focusedCursorVisible;
+            // Do not change canMove/canLook or activate maps owned by menus/tutorials.
+        }
 
         private void Awake()
         {   
@@ -155,7 +199,12 @@ namespace Player.Manager
         private void onRecord(InputAction.CallbackContext context) { if (CanReadGameplayAction()) Record = true; }
         private void onPause(InputAction.CallbackContext context) { Pause = true; }
         private void onAlmanac(InputAction.CallbackContext context) { Almanac = true; }
-        private void onContextPanel(InputAction.CallbackContext context) { ContextPanel = true; }
+        private void onContextPanel(InputAction.CallbackContext context)
+        {
+            Keyboard keyboard = Keyboard.current;
+            if (!windowFocused || (keyboard != null && (keyboard.leftAltKey.isPressed || keyboard.rightAltKey.isPressed))) return;
+            ContextPanel = true;
+        }
         private void onContinue(InputAction.CallbackContext context) { Continue = true; }
         private void onEquipmentAdjust(InputAction.CallbackContext context) { EquipmentAdjust = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
         private void onCameraPedestal(InputAction.CallbackContext context) { CameraPedestal = CanReadGameplayAction() ? context.ReadValue<float>() : 0f; }
@@ -168,10 +217,13 @@ namespace Player.Manager
         private void onHotbar4(InputAction.CallbackContext context) { if (CanReadGameplayAction()) HotbarSlot = 3; }
         private void onHotbar5(InputAction.CallbackContext context) { if (CanReadGameplayAction()) HotbarSlot = 4; }
 
-        private bool CanReadGameplayAction()
+        public bool CanReadGameplayAction()
         {
+            if (!windowFocused) return false;
             if (PauseManager.isPaused) return false;
-            if (Cursor.visible || Cursor.lockState != CursorLockMode.Locked) return false;
+            // Locked + visible can persist after an Escape/Resume UI click.
+            // The lock mode and real modal states own input, not the visibility bit.
+            if (Cursor.lockState != CursorLockMode.Locked) return false;
             if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return false;
             if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return false;
             if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) return false;
@@ -212,10 +264,13 @@ namespace Player.Manager
 
         private void Update()
         {
+            RestoreFocusCursor();
+            if (!windowFocused) { Move = Look = Vector2.zero; Run = false; return; }
             if (playerMap == null) return;
 
             if (CanReadGameplayAction())
             {
+                Cursor.visible = false;
                 if (moveAction != null) Move = moveAction.ReadValue<Vector2>();
                 if (lookAction != null) Look = lookAction.ReadValue<Vector2>();
                 if (runAction != null) Run = runAction.IsPressed();
@@ -237,6 +292,17 @@ namespace Player.Manager
         // Clear one-frame flags here so other scripts can read them during Update()
         private void LateUpdate()
         {
+            if (windowFocused && restoreFocusFrame < 0)
+            {
+                focusedCursorMode = Cursor.lockState;
+                focusedCursorVisible = Cursor.visible;
+                hasCursorSnapshot = true;
+            }
+            LateUpdateFlags();
+        }
+
+        private void LateUpdateFlags()
+        {
             Interact = false;
             Drop = false;
             Equip = false;
@@ -256,7 +322,11 @@ namespace Player.Manager
 
         private void OnEnable()
         {
+            // Unity recreates managed input references after a Play Mode script reload,
+            // but does not call Awake again on the surviving player component.
+            if (playerMap == null) Awake();
             if (playerMap == null) return;
+            windowFocused = Application.isFocused;
 
             if (moveAction != null) { moveAction.performed += onMove; moveAction.canceled += onMove; }
             if (lookAction != null) { lookAction.performed += onLook; lookAction.canceled += onLook; }

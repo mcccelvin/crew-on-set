@@ -27,6 +27,8 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
         // Clear the error text when the menu opens
         if (errorText != null) errorText.text = "";
 
+        PhotonNetwork.AutomaticallySyncScene = true;
+
         // Connect to Photon in the background
         if (!PhotonNetwork.IsConnected)
         {
@@ -71,7 +73,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
         if (errorText != null) errorText.text = "";
 
         // Get the code the player typed and force it to uppercase
-        string codeToJoin = joinCodeInput.text.ToUpper();
+        string codeToJoin = joinCodeInput.text.Trim().ToUpperInvariant();
 
         if (string.IsNullOrEmpty(codeToJoin))
         {
@@ -94,7 +96,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         Debug.Log("Successfully connected to room!");
-        PhotonNetwork.LoadLevel(multiplayerScene);
+        if (PhotonNetwork.IsMasterClient) PhotonNetwork.LoadLevel(multiplayerScene);
     }
 
     // If Photon cannot find the room code, this runs automatically!

@@ -3850,8 +3850,8 @@ MonoBehaviour:
   level1Logos:
   - logoName: Goke Main Logo
     logoSprite: {fileID: 21300000, guid: dbbee7245e8a0c148b07c662088d4323, type: 3}
-  - logoName: Goke End Logo
-    logoSprite: {fileID: 21300000, guid: dbbee7245e8a0c148b07c662088d4323, type: 3}
+  - logoName: Goke Tagline - Thirst knows no season.
+    logoSprite: {fileID: 21300000, guid: 25b67e6e198a0dd4eae8163f5f96d22d, type: 3}
 --- !u!1 &618372493
 GameObject:
   m_ObjectHideFlags: 0

@@ -1,7 +1,10 @@
-﻿using UnityEngine;
+using PlayerPrefs = GameSavePrefs;
+using UnityEngine;
 
+using System.Collections;
 using UnityEngine.UI;
 using TMPro;
+using UnityEngine.SceneManagement;
 
 public class GradeManager : MonoBehaviour
 {
@@ -11,8 +14,13 @@ public class GradeManager : MonoBehaviour
     [Header("Failure Dialogue")]
     public GameObject bossDialoguePrefab;
 
+    [Header("Campaign Continuation")]
+    [Tooltip("How long a passing grade stays visible before the next level starts. Opening feedback pauses this timer.")]
+    [Min(0f)] public float successfulResultHoldSeconds = 5f;
+
     private GameObject failureDialogue;
     private bool isLoadingScene = false;
+    private Coroutine successfulContinuation;
 
     private void Start()
     {
@@ -37,10 +45,23 @@ public class GradeManager : MonoBehaviour
 
         if (!CrossSceneData.resultApplied)
         {
+            // Keep a personal best per brief so retries have visible progress.
+            string bestKey = "ContractBestScore_Level" + submittedLevel;
+            float score = Mathf.Clamp((grades.preProductionScore + grades.productionScore + grades.postProductionScore) / 3f, 0f, 100f);
+            bool hasBest = PlayerPrefs.HasKey(bestKey);
+            float previousBest = PlayerPrefs.GetFloat(bestKey, 0f);
+            if (!hasBest || score > previousBest)
+                PlayerPrefs.SetFloat(bestKey, score);
+            string progress = !hasBest ? $"First attempt: {score:F1}/100."
+                : score > previousBest ? $"New personal best: {score:F1}/100 (+{score - previousBest:F1})."
+                : $"Personal best: {previousBest:F1}/100. This attempt: {score:F1}/100.";
+            grades.feedback += "\n<color=white><b>YOUR PROGRESS</b></color>\n" + progress
+                + "\nAim to improve your weakest department. Mandatory contract requirements still apply.\n";
             if (grades.letterGrade != "F")
             {
                 string rewardKey = CampaignProgression.GetRewardKey(submittedLevel);
                 bool rewardClaimed = PlayerPrefs.GetInt(rewardKey, 0) == 1;
+                if (rewardClaimed) grades.earnedBCoins = 0;
 
                 if (!rewardClaimed)
                 {
@@ -51,7 +72,7 @@ public class GradeManager : MonoBehaviour
                     else if (grades.earnedBCoins > 0)
                     {
                         int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
-                        PlayerPrefs.SetInt("PlayerMoney", savedMoney + grades.earnedBCoins);
+                        PlayerPrefs.SetInt("PlayerMoney", (int)System.Math.Min(int.MaxValue, (long)Mathf.Max(0, savedMoney) + grades.earnedBCoins));
                     }
 
                     PlayerPrefs.SetInt(rewardKey, 1);
@@ -63,15 +84,41 @@ public class GradeManager : MonoBehaviour
             }
 
             CrossSceneData.resultApplied = true;
+            CrossSceneData.finalGrades = grades;
             PlayerPrefs.Save();
         }
 
         if (gradePanelUI != null)
         {
             gradePanelUI.DisplayResults(grades);
+            if (grades.letterGrade != "F") gradePanelUI.SetSuccessfulContinueLabel(submittedLevel);
         }
 
-        if (grades.letterGrade == "F") ShowFailureDialogue(submittedLevel);
+        if (grades.letterGrade == "F")
+        {
+            ShowFailureDialogue(submittedLevel);
+        }
+        // Results stay open until the player chooses Continue to Level.
+        // A reading timer must not skip the review or erase the current project.
+    }
+
+    private IEnumerator ContinueAfterSuccessfulResult()
+    {
+        float remaining = successfulResultHoldSeconds;
+
+        while (remaining > 0f && !isLoadingScene)
+        {
+            // Detailed feedback pauses the automatic handoff so it remains readable.
+            if (gradePanelUI == null || !gradePanelUI.IsFeedbackOpen)
+            {
+                remaining -= Time.unscaledDeltaTime;
+            }
+
+            yield return null;
+        }
+
+        successfulContinuation = null;
+        if (!isLoadingScene) ReturnToStudio();
     }
 
     private void ShowFailureDialogue(int submittedLevel)
@@ -114,7 +161,7 @@ public class GradeManager : MonoBehaviour
         if (dialogueText != null)
         {
             string contractName = CampaignProgression.GetContractName(submittedLevel);
-            dialogueText.text = "This commercial did not meet the client's requirements, but the contract is still active. Do you want to continue and replay <color=yellow>Level " + submittedLevel + ": " + contractName + "</color>?";
+            dialogueText.text = "The client needs a few changes. Have a look at the feedback; want another take on <color=#7A3E12>Level " + submittedLevel + ": " + contractName + "</color>?";
         }
 
         if (continueText != null) continueText.gameObject.SetActive(false);
@@ -181,6 +228,8 @@ public class GradeManager : MonoBehaviour
     {
         if (isLoadingScene) return;
 
+        StopSuccessfulContinuation();
+
         int submittedLevel = Mathf.Clamp(CrossSceneData.submittedLevel, CampaignProgression.MinimumLevel, CampaignProgression.MaximumLevel);
         CampaignProgression.SetRetryLevel(submittedLevel);
 
@@ -191,24 +240,56 @@ public class GradeManager : MonoBehaviour
         CrossSceneData.resultApplied = false;
 
         isLoadingScene = true;
-        UnityEngine.SceneManagement.SceneManager.LoadScene("SingleStudio");
+        PrepareForStudioLoad();
+        SceneManager.LoadScene("SingleStudio");
     }
 
 
     public void ReturnToStudio()
     {
+        if (isLoadingScene) return;
+
         if (CrossSceneData.finalGrades.letterGrade == "F")
         {
             RetryContract();
             return;
         }
 
-        if (CrossSceneData.submittedLevel == 1 && !string.IsNullOrEmpty(CrossSceneData.finalGrades.letterGrade) && CrossSceneData.finalGrades.letterGrade != "F")
+        int completedLevel = Mathf.Clamp(CrossSceneData.submittedLevel, CampaignProgression.MinimumLevel, CampaignProgression.MaximumLevel);
+        if (!string.IsNullOrEmpty(CrossSceneData.finalGrades.letterGrade))
         {
             int currentLevel = CampaignProgression.GetCurrentLevel();
-            if (currentLevel <= 1) CampaignProgression.SetCurrentLevel(2);
+            int expectedLevel = Mathf.Min(completedLevel + 1, CampaignProgression.MaximumLevel);
+
+            // Recover older saves/results whose grade was shown before the next
+            // campaign level had been persisted.
+            if (completedLevel < CampaignProgression.MaximumLevel && currentLevel < expectedLevel)
+            {
+                CampaignProgression.SetCurrentLevel(expectedLevel);
+            }
         }
 
-        UnityEngine.SceneManagement.SceneManager.LoadScene("SingleStudio");
+        StopSuccessfulContinuation();
+        if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
+
+        isLoadingScene = true;
+        PrepareForStudioLoad();
+        SceneManager.LoadScene("SingleStudio");
+    }
+
+    private void StopSuccessfulContinuation()
+    {
+        if (successfulContinuation == null) return;
+
+        StopCoroutine(successfulContinuation);
+        successfulContinuation = null;
+    }
+
+    private void PrepareForStudioLoad()
+    {
+        PauseManager.isPaused = false;
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
     }
 }

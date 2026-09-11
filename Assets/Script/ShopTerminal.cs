@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
@@ -338,6 +339,26 @@ public class ShopTerminal : MonoBehaviour
 
     private TextMeshProUGUI FindShopText(Canvas shopCanvas, string textToFind)
     {
+        return FindShopTextInternal(shopCanvas, textToFind);
+    }
+
+    public RectTransform GetTutorialCartTarget(string itemName)
+    {
+        Canvas canvas = screenSpaceCanvas != null && screenSpaceCanvas.gameObject.activeInHierarchy ? screenSpaceCanvas : worldSpaceCanvas;
+        TextMeshProUGUI title = FindShopText(canvas, itemName);
+        if (title == null) return null;
+        Transform node = title.transform.parent;
+        while (node != null && node != canvas.transform)
+        {
+            foreach (Button button in node.GetComponentsInChildren<Button>(true))
+                if (button.gameObject.activeInHierarchy && button.interactable) return button.transform as RectTransform;
+            node = node.parent;
+        }
+        return null;
+    }
+
+    private TextMeshProUGUI FindShopTextInternal(Canvas shopCanvas, string textToFind)
+    {
         if (shopCanvas == null) return null;
 
         TextMeshProUGUI[] shopTexts = shopCanvas.GetComponentsInChildren<TextMeshProUGUI>(true);
@@ -435,6 +456,19 @@ public class ShopTerminal : MonoBehaviour
     public void ConfirmPurchase()
     {
         if (shoppingCart.Count == 0) return;
+        if (deliveryZone == null || CareerManager.Instance == null)
+        {
+            Debug.LogWarning("Shop unavailable: missing delivery zone or budget manager.");
+            return;
+        }
+        long verifiedTotal = 0;
+        foreach (ShopItem item in shoppingCart)
+        {
+            if (item == null || item.prefabToSpawn == null || item.price < 0) return;
+            verifiedTotal += item.price;
+        }
+        if (verifiedTotal > int.MaxValue) return;
+        currentTotalCost = (int)verifiedTotal;
         if (GokeLevelManager.Instance != null &&
             GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
             !GokeLevelManager.Instance.CanConfirmPurchase()) return;
@@ -446,14 +480,7 @@ public class ShopTerminal : MonoBehaviour
         {
             SpawnItemsAndFinish();
         }
-        else if (CareerManager.Instance == null)
-        {
-            SpawnItemsAndFinish();
-        }
-        else if (TutorialManager.Instance != null)
-        {
-            TutorialManager.Instance.ShowWarning("Not enough B coins!");
-        }
+        // TrySpendMoney displays a notification even when tutorials are disabled.
     }
 
     public void CancelPurchase()
@@ -543,7 +570,7 @@ public class ShopTerminal : MonoBehaviour
         Player.Equipment.FilmLightItem filmLight = spawnedItem.GetComponent<Player.Equipment.FilmLightItem>();
         if (filmLight != null)
         {
-            filmLight.maxLux = 40f;
+            filmLight.maxLux = 6f;
             filmLight.isFixedKelvin = false;
             filmLight.forcesHardLight = false;
             filmLight.colorTemperature = 4300f;
@@ -552,7 +579,16 @@ public class ShopTerminal : MonoBehaviour
             filmLight.RefreshAdvancedFeatures();
         }
 
-        if (useLevel3LightPlaceholder) CreateLevel3LightPlaceholder(spawnedItem);
+        // Reuse the real LED head and stand. Do not hide them behind primitive blocks.
+        foreach (Renderer part in spawnedItem.GetComponentsInChildren<Renderer>(true))
+        {
+            if (part.gameObject.name != "Cube.001") continue;
+            MaterialPropertyBlock housingProperties = new MaterialPropertyBlock();
+            part.GetPropertyBlock(housingProperties);
+            housingProperties.SetColor("_Color", new Color(0.075f, 0.09f, 0.105f));
+            part.SetPropertyBlock(housingProperties);
+        }
+        if (filmLight != null) filmLight.RefreshAdvancedFeatures();
     }
 
     private void CreateLevel3LightPlaceholder(GameObject spawnedItem)

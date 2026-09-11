@@ -51,7 +51,7 @@ public class TruePixelRecorder : MonoBehaviour
             tapeWriter.Write(0); // Frame count is filled in when recording stops.
 
             recordedFrameCount = 0;
-            recordingStartTime = Time.unscaledTime;
+            recordingStartTime = Time.time;
             lastFrameData = null;
             captureTexture = new RenderTexture(captureWidth, captureHeight, 24);
             captureTexture.Create();
@@ -81,7 +81,7 @@ public class TruePixelRecorder : MonoBehaviour
             recordingCoroutine = null;
         }
 
-        FillMissingFrames(Time.unscaledTime - recordingStartTime);
+        FillMissingFrames(Time.time - recordingStartTime);
 
         string savedFileName = FinalizeTapeFile();
         CleanUpCaptureResources();
@@ -116,13 +116,14 @@ public class TruePixelRecorder : MonoBehaviour
     private IEnumerator RecordFramesCoroutine()
     {
         float frameInterval = 1f / Mathf.Max(1f, framesPerSecond);
-        float nextCaptureTime = Time.unscaledTime;
+        float nextCaptureTime = Time.time;
 
         while (isRecording)
         {
             yield return new WaitForEndOfFrame();
             if (!isRecording) break;
-            if (Time.unscaledTime < nextCaptureTime) continue;
+            if (Time.timeScale <= 0f) continue;
+            if (Time.time < nextCaptureTime) continue;
 
             nextCaptureTime += frameInterval;
 
@@ -147,7 +148,7 @@ public class TruePixelRecorder : MonoBehaviour
             byte[] frameData = screenShot.EncodeToJPG(Mathf.Clamp(jpgQuality, 10, 100));
             if (tapeWriter != null && frameData != null && frameData.Length > 0)
             {
-                int expectedFrameCount = Mathf.Max(recordedFrameCount + 1, Mathf.RoundToInt((Time.unscaledTime - recordingStartTime) * Mathf.Max(1f, framesPerSecond)));
+                int expectedFrameCount = Mathf.Max(recordedFrameCount + 1, Mathf.RoundToInt((Time.time - recordingStartTime) * Mathf.Max(1f, framesPerSecond)));
 
                 if (lastFrameData != null)
                 {

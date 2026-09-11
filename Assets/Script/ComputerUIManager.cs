@@ -443,24 +443,24 @@ public class ComputerUIManager : MonoBehaviour
             score += 35f;
             feedback += "<color=green>+ Level 3 Soft Light is positioned on the set.</color>\n";
 
-            if (softLight.intensityPercent >= 65f && softLight.intensityPercent <= 85f)
+            if (softLight.intensityPercent >= 30f)
             {
                 score += 15f;
                 feedback += "<color=green>+ Soft Light intensity preserves reflective detail.</color>\n";
             }
             else
             {
-                feedback += "<color=yellow>- Set the Soft Light between 65% and 85% for controlled highlights.</color>\n";
+                feedback += "<color=yellow>- Raise Soft Light output to at least 30% so the orange paint reads clearly.</color>\n";
             }
 
-            if (softLight.GetCurrentTilt() >= -20f && softLight.GetCurrentTilt() <= 0f)
+            if (softLight.spotlight != null && Vector3.Dot(softLight.spotlight.transform.forward, (vehicleCenter - softLight.spotlight.transform.position).normalized) >= 0.6f && softLight.GetDiffusionPercent() >= 50f)
             {
                 score += 15f;
                 feedback += "<color=green>+ Soft Light tilt shapes the vehicle cleanly.</color>\n";
             }
             else
             {
-                feedback += "<color=yellow>- Keep Soft Light tilt between -20 and 0 degrees.</color>\n";
+                feedback += "<color=yellow>- Aim the Soft Light toward the vehicle and use at least 50% diffusion for broad highlights.</color>\n";
             }
         }
         else

@@ -10,6 +10,10 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
 
     [Header("Movement")]
     public float walkSpeed = 5f;
+    public float runSpeed = 8f;
+    public float jumpHeight = 1.2f;
+    public float jumpBufferTime = 0.15f;
+    public float coyoteTime = 0.1f;
     public float gravity = -9.81f;
 
     [Header("Looking")]
@@ -19,6 +23,8 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
     private CharacterController cc;
     private float verticalRotation = 0f;
     private Vector3 velocity;
+    private float jumpBuffer;
+    private float coyoteCounter;
 
     void Start()
     {
@@ -44,12 +50,14 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
     {
         // Ignore everything if this isn't my character
         if (!photonView.IsMine) return;
+        bool controlsAllowed = Application.isFocused && !MultiplayerPauseManager.isPaused && Cursor.lockState == CursorLockMode.Locked;
+        if (!controlsAllowed) jumpBuffer = 0f;
 
         // --- 1. LOOK AROUND (MOUSE) ---
         Mouse mouse = Mouse.current;
-        Vector2 mouseDelta = mouse != null ? mouse.delta.ReadValue() * 0.1f : Vector2.zero;
-        float mouseX = mouseDelta.x * lookSensitivity;
-        float mouseY = mouseDelta.y * lookSensitivity;
+        Vector2 mouseDelta = controlsAllowed && mouse != null ? mouse.delta.ReadValue() * 0.1f : Vector2.zero;
+        float mouseX = mouseDelta.x * lookSensitivity * GameOptions.MouseSensitivityMultiplier;
+        float mouseY = mouseDelta.y * lookSensitivity * GameOptions.MouseSensitivityMultiplier;
 
         // Turn body left/right
         transform.Rotate(Vector3.up * mouseX);
@@ -67,7 +75,7 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
         Keyboard keyboard = Keyboard.current;
         Vector2 moveInput = Vector2.zero;
 
-        if (keyboard != null)
+        if (controlsAllowed && keyboard != null)
         {
             if (keyboard.aKey.isPressed || keyboard.leftArrowKey.isPressed) moveInput.x -= 1f;
             if (keyboard.dKey.isPressed || keyboard.rightArrowKey.isPressed) moveInput.x += 1f;
@@ -75,15 +83,34 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
             if (keyboard.wKey.isPressed || keyboard.upArrowKey.isPressed) moveInput.y += 1f;
         }
 
-        Vector3 move = transform.right * moveInput.x + transform.forward * moveInput.y;
-        cc.Move(move * walkSpeed * Time.deltaTime);
+        moveInput = Vector2.ClampMagnitude(moveInput, 1f);
+        bool running = controlsAllowed && keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
+        float speed = Mathf.Max(0f, running ? runSpeed : walkSpeed);
+        Vector3 move = (transform.right * moveInput.x + transform.forward * moveInput.y) * speed;
 
         // --- 3. GRAVITY ---
-        if (cc.isGrounded && velocity.y < 0)
+        bool grounded = cc.isGrounded && velocity.y <= 0f;
+        coyoteCounter = grounded ? Mathf.Max(0f, coyoteTime) : Mathf.Max(0f, coyoteCounter - Time.deltaTime);
+        if (controlsAllowed && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
+            jumpBuffer = Mathf.Max(Time.deltaTime, jumpBufferTime);
+        float downwardGravity = -Mathf.Max(0.01f, Mathf.Abs(gravity));
+        if (grounded)
         {
             velocity.y = -2f; // Keep us snapped to the floor
         }
-        velocity.y += gravity * Time.deltaTime;
-        cc.Move(velocity * Time.deltaTime);
+        if (controlsAllowed && jumpBuffer > 0f && (grounded || coyoteCounter > 0f))
+        {
+            velocity.y = Mathf.Sqrt(-2f * downwardGravity * Mathf.Max(0.1f, jumpHeight));
+            jumpBuffer = coyoteCounter = 0f;
+        }
+        else jumpBuffer = Mathf.Max(0f, jumpBuffer - Time.deltaTime);
+        velocity.y += downwardGravity * Time.deltaTime;
+        CollisionFlags collisions = cc.Move((move + velocity) * Time.deltaTime);
+        if ((collisions & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
+    }
+
+    private void OnDisable()
+    {
+        jumpBuffer = coyoteCounter = 0f;
     }
 }

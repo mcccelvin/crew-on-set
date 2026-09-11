@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using TMPro;
 using Player.Manager;
 using UnityEngine.Rendering.PostProcessing;
@@ -6,6 +6,7 @@ using UnityEngine.UI;
 
 namespace Player.Equipment
 {
+    [DefaultExecutionOrder(100)]
     public class FilmCameraItem : Equipment
     {
         [Header("Film Camera Settings")]
@@ -67,6 +68,24 @@ namespace Player.Equipment
         private float noiseOffset;
         private Vector3 originalLensRotation;
         private Vector3 originalLocalPos;
+        private Vector3 lensLocalPosition;
+        private Camera viewfinderAimCamera;
+        private Vector3 stableLensPosition;
+        private Vector3 lensPositionVelocity;
+        private bool viewfinderPoseInitialized;
+        private Coroutine viewTransition;
+        private Transform animationParent;
+        private Vector3 restingPosition;
+        private Quaternion restingRotation;
+        private bool hasAnimationPose;
+        private Renderer[] hiddenCameraRenderers;
+        private bool[] previousForceRenderingOff;
+        private int heldUpdateFrame = -1;
+        private bool lensControlsInitialized;
+        private float targetFOV;
+        private float zoomVelocity;
+        private float heightVelocity;
+        private float heightAcceleration;
 
         private float recordingStartTime = 0f;
         private float totalCameraScoreAccumulated = 0f;
@@ -156,7 +175,8 @@ namespace Player.Equipment
         protected override void Awake()
         {
             base.Awake();
-            pixelRecorder = FindObjectOfType<TruePixelRecorder>();
+            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert SD | [R] Record | [Scroll] Zoom | [Q/E] Height";
+            ResolvePixelRecorder();
             noiseOffset = Random.Range(0f, 1000f);
 
             if (filmCamera != null)
@@ -164,6 +184,7 @@ namespace Player.Equipment
                 filmCamera.gameObject.SetActive(false);
                 originalLensRotation = filmCamera.transform.localEulerAngles;
                 originalLocalPos = filmCamera.transform.localPosition;
+                lensLocalPosition = originalLocalPos;
             }
             if (filmUICanvas != null) filmUICanvas.SetActive(false);
 
@@ -171,6 +192,23 @@ namespace Player.Equipment
             if (focusText != null) focusText.text = "FOCUS: 5.0m";
 
             if (trackingSquare != null) trackingSquare.gameObject.SetActive(false);
+        }
+
+        private void ResolvePixelRecorder()
+        {
+            // Each camera owns its recorder, even while its viewfinder is inactive.
+            pixelRecorder = filmCamera != null ? filmCamera.GetComponent<TruePixelRecorder>() : null;
+            if (pixelRecorder == null && filmCamera != null)
+            {
+                foreach (TruePixelRecorder candidate in GetComponentsInChildren<TruePixelRecorder>(true))
+                {
+                    if (candidate.filmCamera != filmCamera) continue;
+                    pixelRecorder = candidate;
+                    break;
+                }
+            }
+
+            if (pixelRecorder != null) pixelRecorder.filmCamera = filmCamera;
         }
 
         private void CreateRuleOfThirdsGrid()
@@ -299,7 +337,7 @@ namespace Player.Equipment
             }
             else
             {
-                HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>();
+                HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>(true);
                 if (hotbar != null) hotbar.gameObject.SetActive(showUI);
 
                 if (CareerManager.Instance != null && CareerManager.Instance.moneyTextHUD != null)
@@ -311,6 +349,26 @@ namespace Player.Equipment
 
         public override void OnUse(Camera playerCamera)
         {
+            if (viewTransition != null) return;
+            if (isCameraActive)
+            {
+                // Keep the lens active if the tutorial still requires a longer take.
+                if (isRecording)
+                {
+                    ToggleRecording();
+                    if (isRecording) return;
+                }
+
+                BeginViewTransition(playerCamera, false);
+                return;
+            }
+
+            if (filmCamera == null)
+            {
+                Debug.LogWarning("This film camera is missing its lens camera reference.", this);
+                return;
+            }
+
             if (!isCameraActive && !isSDCardInserted)
             {
                 HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>();
@@ -322,7 +380,15 @@ namespace Player.Equipment
                 return;
             }
 
-            isCameraActive = !isCameraActive;
+            BeginViewTransition(playerCamera, true);
+        }
+
+        private void OpenViewfinder(Camera playerCamera)
+        {
+            HideCameraBody();
+            isCameraActive = true;
+            viewfinderAimCamera = playerCamera;
+            viewfinderPoseInitialized = false;
 
             if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(isCameraActive);
 
@@ -340,15 +406,50 @@ namespace Player.Equipment
             if (filmUICanvas != null) filmUICanvas.SetActive(isCameraActive);
 
             TogglePlayerUI(!isCameraActive);
+        }
 
-            if (!isCameraActive && isRecording) ToggleRecording();
+        private void CloseViewfinder()
+        {
+            CancelViewTransition();
+            RestoreCameraBody();
+            viewfinderPoseInitialized = false;
+            viewfinderAimCamera = null;
+            if (filmCamera != null)
+            {
+                filmCamera.transform.localPosition = lensLocalPosition;
+                filmCamera.transform.localRotation = Quaternion.Euler(originalLensRotation);
+            }
+            lensControlsInitialized = false;
+            bool ownedCameraView = isCameraActive;
+            isCameraActive = false;
+            if (filmCamera != null) filmCamera.gameObject.SetActive(false);
+            if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(false);
+
+            // Unequipping an idle camera must not hide another camera's shared HUD.
+            if (!ownedCameraView) return;
+            if (filmUICanvas != null) filmUICanvas.SetActive(false);
+            if (trackingSquare != null) trackingSquare.gameObject.SetActive(false);
+            if (TutorialManager.Instance != null) TutorialManager.Instance.OnCameraViewExited(EquipmentName);
+            TogglePlayerUI(true);
         }
 
         public override void OnHeldUpdate(InputManager input)
         {
+            if (viewTransition != null) return;
+            heldUpdateFrame = Time.frameCount;
             if (input.InsertCard) InsertSDCard();
 
-            if (!isCameraActive) return;
+            if (!isCameraActive || filmCamera == null)
+            {
+                lensControlsInitialized = false;
+                return;
+            }
+            if (!lensControlsInitialized)
+            {
+                targetFOV = filmCamera.fieldOfView;
+                zoomVelocity = heightVelocity = heightAcceleration = 0f;
+                lensControlsInitialized = true;
+            }
 
             if (input.Record)
             {
@@ -360,21 +461,35 @@ namespace Player.Equipment
             if (!isRecording)
             {
                 float scroll = input.EquipmentAdjust;
-                if (scroll > 0) filmCamera.fieldOfView -= zoomSpeed;
-                else if (scroll < 0) filmCamera.fieldOfView += zoomSpeed;
-                filmCamera.fieldOfView = Mathf.Clamp(filmCamera.fieldOfView, minFOV, maxFOV);
+                if (scroll > 0) targetFOV -= zoomSpeed;
+                else if (scroll < 0) targetFOV += zoomSpeed;
+                targetFOV = Mathf.Clamp(targetFOV, minFOV, maxFOV);
+                filmCamera.fieldOfView = Mathf.SmoothDamp(filmCamera.fieldOfView, targetFOV, ref zoomVelocity, 0.12f);
 
-                float pedestalShift = input.CameraPedestal * pedestalSpeed * Time.deltaTime;
+                heightVelocity = Mathf.SmoothDamp(heightVelocity, input.CameraPedestal * pedestalSpeed, ref heightAcceleration, 0.1f);
+                float pedestalShift = heightVelocity * Time.deltaTime;
                 if (pedestalShift != 0)
                 {
-                    Vector3 newPos = filmCamera.transform.localPosition;
+                    Vector3 newPos = lensLocalPosition;
                     newPos.y = Mathf.Clamp(newPos.y + pedestalShift, originalLocalPos.y + maxPedestalDown, originalLocalPos.y + maxPedestalUp);
-                    filmCamera.transform.localPosition = newPos;
+                    lensLocalPosition = newPos;
                 }
             }
+            else
+            {
+                targetFOV = filmCamera.fieldOfView;
+                zoomVelocity = heightVelocity = heightAcceleration = 0f;
+            }
 
+        }
+
+        private void LateUpdate()
+        {
+            if (!isCameraActive || filmCamera == null || PauseManager.isPaused) return;
+            UpdateStableViewfinderPose();
+            // Only advance lessons/recording checks when normal equipment input ran this frame.
+            if (heldUpdateFrame != Time.frameCount) return;
             HandleSmoothAutoFocus();
-            ApplyCameraSway();
             UpdateCameraHUD();
             UpdateTrackingSquare();
             UpdateRuleOfThirdsPractice();
@@ -530,12 +645,100 @@ namespace Player.Equipment
             }
         }
 
-        private void ApplyCameraSway()
+        private void BeginViewTransition(Camera playerCamera, bool opening)
         {
-            if (filmCamera == null) return;
-            float swayX = (Mathf.PerlinNoise(Time.time * swaySpeed + noiseOffset, 0f) * 2f - 1f) * swayIntensity;
-            float swayY = (Mathf.PerlinNoise(0f, Time.time * swaySpeed + noiseOffset) * 2f - 1f) * swayIntensity;
-            filmCamera.transform.localEulerAngles = originalLensRotation + new Vector3(swayX, swayY, 0f);
+            if (playerCamera == null || transform.parent == null)
+            {
+                if (opening) OpenViewfinder(playerCamera);
+                else CloseViewfinder();
+                return;
+            }
+            if (!opening) CloseViewfinder();
+            animationParent = transform.parent;
+            restingPosition = transform.localPosition;
+            restingRotation = transform.localRotation;
+            hasAnimationPose = true;
+            viewTransition = StartCoroutine(AnimateViewTransition(playerCamera, opening));
+        }
+
+        private System.Collections.IEnumerator AnimateViewTransition(Camera playerCamera, bool opening)
+        {
+            // Raise the held model toward the eye, without moving the player or recording lens.
+            Vector3 raisedPosition = animationParent.InverseTransformPoint(playerCamera.transform.position
+                + playerCamera.transform.forward * 0.32f - playerCamera.transform.up * 0.1f);
+            Quaternion raisedRotation = restingRotation * Quaternion.Euler(-6f, 0f, 0f);
+            float duration = opening ? 0.24f : 0.2f;
+            float elapsed = 0f;
+            while (elapsed < duration)
+            {
+                float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+                float amount = opening ? t : 1f - t;
+                transform.localPosition = Vector3.Lerp(restingPosition, raisedPosition, amount);
+                transform.localRotation = Quaternion.Slerp(restingRotation, raisedRotation, amount);
+                yield return null;
+                // Pause freezes the animation too; it must not finish behind the pause menu.
+                if (!PauseManager.isPaused) elapsed += Time.deltaTime;
+            }
+            RestoreHeldPose();
+            viewTransition = null;
+            if (opening) OpenViewfinder(playerCamera);
+        }
+
+        private void RestoreHeldPose()
+        {
+            if (hasAnimationPose && transform.parent == animationParent)
+            {
+                transform.localPosition = restingPosition;
+                transform.localRotation = restingRotation;
+            }
+            hasAnimationPose = false;
+        }
+
+        private void CancelViewTransition()
+        {
+            if (viewTransition != null) StopCoroutine(viewTransition);
+            viewTransition = null;
+            RestoreHeldPose();
+        }
+
+        private void HideCameraBody()
+        {
+            if (hiddenCameraRenderers != null) return;
+            hiddenCameraRenderers = GetComponentsInChildren<Renderer>(true);
+            previousForceRenderingOff = new bool[hiddenCameraRenderers.Length];
+            for (int i = 0; i < hiddenCameraRenderers.Length; i++)
+            {
+                previousForceRenderingOff[i] = hiddenCameraRenderers[i].forceRenderingOff;
+                hiddenCameraRenderers[i].forceRenderingOff = true;
+            }
+        }
+
+        private void RestoreCameraBody()
+        {
+            if (hiddenCameraRenderers == null) return;
+            for (int i = 0; i < hiddenCameraRenderers.Length; i++)
+                if (hiddenCameraRenderers[i] != null)
+                    hiddenCameraRenderers[i].forceRenderingOff = previousForceRenderingOff[i];
+            hiddenCameraRenderers = null;
+            previousForceRenderingOff = null;
+        }
+
+        private void UpdateStableViewfinderPose()
+        {
+            Transform lensParent = filmCamera.transform.parent;
+            Vector3 desiredPosition = lensParent != null ? lensParent.TransformPoint(lensLocalPosition) : lensLocalPosition;
+            if (!viewfinderPoseInitialized || Vector3.Distance(stableLensPosition, desiredPosition) > 2f)
+            {
+                stableLensPosition = desiredPosition;
+                lensPositionVelocity = Vector3.zero;
+                viewfinderPoseInitialized = true;
+            }
+            stableLensPosition = Vector3.SmoothDamp(stableLensPosition, desiredPosition, ref lensPositionVelocity, 0.06f);
+            Quaternion desiredRotation = viewfinderAimCamera != null
+                ? viewfinderAimCamera.transform.rotation
+                : (lensParent != null ? lensParent.rotation : Quaternion.identity) * Quaternion.Euler(originalLensRotation);
+            // Both preview and recorder use this same final pose, without artificial random sway.
+            filmCamera.transform.SetPositionAndRotation(stableLensPosition, desiredRotation);
         }
 
         private Vector3 GetSubjectCenter(RecordableSubject sub)
@@ -730,7 +933,7 @@ namespace Player.Equipment
 
             float framingScore = isLevel1 ? GradeCenterFraming(viewPos) : GradeRuleOfThirds(viewPos);
             float shotSizeScore = GradeSubjectSize(targetRenderers, 0.22f, 0.65f);
-            float lightingScore = isLevel1 ? GradeBasicLighting(targetCenter) : Grade3PointLighting(targetCenter);
+            float lightingScore = isLevel1 ? GradeBasicLighting(targetCenter) : Grade3PointLighting(targetCenter, currentLevel == 2);
 
             totalCameraScoreAccumulated += (framingScore + shotSizeScore);
             totalLightingScoreAccumulated += lightingScore;
@@ -808,20 +1011,21 @@ namespace Player.Equipment
             return Mathf.Clamp(bestScore, 0f, 30f);
         }
 
-        private float Grade3PointLighting(Vector3 targetCenter)
+        private float Grade3PointLighting(Vector3 targetCenter, bool creativeIntensity = false)
         {
             FilmLightItem[] lights = GetActiveLights();
             FindThreePointLights(targetCenter, lights, out FilmLightItem keyLight, out FilmLightItem fillLight, out FilmLightItem backLight);
 
-            float score = GradeThreePointRole(keyLight, targetCenter, 75f, 50f, false);
-            score += GradeThreePointRole(fillLight, targetCenter, 40f, 35f, false);
-            score += GradeThreePointRole(backLight, targetCenter, 60f, 45f, true);
+            float score = GradeThreePointRole(keyLight, targetCenter, 75f, 50f, false, creativeIntensity);
+            score += GradeThreePointRole(fillLight, targetCenter, 40f, 35f, false, creativeIntensity);
+            score += GradeThreePointRole(backLight, targetCenter, 60f, 45f, true, creativeIntensity);
 
             if (keyLight != null && fillLight != null)
             {
                 float keySide = Vector3.Dot((keyLight.spotlight.transform.position - targetCenter).normalized, filmCamera.transform.right);
                 float fillSide = Vector3.Dot((fillLight.spotlight.transform.position - targetCenter).normalized, filmCamera.transform.right);
                 if (keySide * fillSide >= -0.05f) score -= 4f;
+                if (creativeIntensity && fillLight.GetCurrentOutput() >= keyLight.GetCurrentOutput()) score -= 3f;
             }
 
             if (keyLight == null || fillLight == null || backLight == null) score = Mathf.Min(score, 7f);
@@ -893,7 +1097,7 @@ namespace Player.Equipment
             }
         }
 
-        private float GradeThreePointRole(FilmLightItem light, Vector3 targetCenter, float idealIntensity, float intensityTolerance, bool isBackLight)
+        private float GradeThreePointRole(FilmLightItem light, Vector3 targetCenter, float idealIntensity, float intensityTolerance, bool isBackLight, bool creativeIntensity = false)
         {
             if (light == null || light.spotlight == null) return 0f;
 
@@ -903,7 +1107,7 @@ namespace Player.Equipment
             Vector3 lightArrow = (lightPosition - targetCenter).normalized;
 
             float score = 1f;
-            score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - idealIntensity) / intensityTolerance);
+            score += creativeIntensity ? 3f : 3f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - idealIntensity) / intensityTolerance);
             score += 3f * Mathf.InverseLerp(0.5f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
             score += GradeRange(Vector3.Distance(lightPosition, targetCenter), 1.5f, 7f);
 
@@ -954,22 +1158,7 @@ namespace Player.Equipment
 
         private float GradeLevel3Composition(Vector4 vehicleViewport)
         {
-            float score = 0f;
-            score += 25f * GradeViewportVisibility(vehicleViewport, 0.05f);
-
-            float vehicleWidth = vehicleViewport.z - vehicleViewport.x;
-            float vehicleHeight = vehicleViewport.w - vehicleViewport.y;
-            float vehicleCoverage = Mathf.Max(vehicleWidth, vehicleHeight);
-            score += 20f * GradeRange(vehicleCoverage, 0.38f, 0.78f);
-
-            float vehicleCenterX = (vehicleViewport.x + vehicleViewport.z) * 0.5f;
-            float closestThird = Mathf.Min(Mathf.Abs(vehicleCenterX - 0.33f), Mathf.Abs(vehicleCenterX - 0.66f));
-            score += 15f * Mathf.Clamp01(1f - closestThird / 0.2f);
-
-            float vehicleCenterY = (vehicleViewport.y + vehicleViewport.w) * 0.5f;
-            score += 10f * Mathf.Clamp01(1f - Mathf.Abs(vehicleCenterY - 0.5f) / 0.3f);
-
-            return Mathf.Clamp(score, 0f, 70f);
+            return LamborminiBrief.Composition(vehicleViewport);
         }
 
         private float GradeLevel3Lighting(Vector3 targetCenter)
@@ -988,13 +1177,14 @@ namespace Player.Equipment
 
                 bool isSoftLight = light.EquipmentName == "Level 3 Soft Light" || !light.forcesHardLight;
                 float score = isSoftLight ? 3f : 0f;
-                score += 6f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 75f) / 45f);
-                score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 10f) / 25f);
+                bool creativeVehicleLight = recordingCampaignLevel == 3;
+                score += creativeVehicleLight ? 6f * Mathf.InverseLerp(5f, 30f, light.intensityPercent) : 6f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 75f) / 45f);
+                score += creativeVehicleLight ? 3f : 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 10f) / 25f);
                 score += 7f * Mathf.InverseLerp(0.45f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
                 score += 2f * Mathf.InverseLerp(-0.15f, 0.75f, Vector3.Dot(cameraArrow, lightArrow));
                 score += 2f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 2f, 8f);
                 score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetColorTemperature() - 5400f) / 2200f);
-                score += 4f * Mathf.Clamp01(1f - Mathf.Abs(light.GetDiffusionPercent() - 75f) / 50f);
+                score += creativeVehicleLight ? 4f * Mathf.InverseLerp(10f, 50f, light.GetDiffusionPercent()) : 4f * Mathf.Clamp01(1f - Mathf.Abs(light.GetDiffusionPercent() - 75f) / 50f);
 
                 if (!isSoftLight) score = Mathf.Min(score * 0.5f, 7f);
                 bestScore = Mathf.Max(bestScore, score);
@@ -1443,7 +1633,7 @@ namespace Player.Equipment
         {
             if (isRecording && forceCancel)
             {
-                if (pixelRecorder == null) pixelRecorder = FindObjectOfType<TruePixelRecorder>();
+                if (pixelRecorder == null) ResolvePixelRecorder();
                 if (pixelRecorder != null) pixelRecorder.CancelRecording();
                 isRecording = false;
 
@@ -1490,7 +1680,7 @@ namespace Player.Equipment
                 }
             }
 
-            if (pixelRecorder == null) pixelRecorder = FindObjectOfType<TruePixelRecorder>();
+            if (pixelRecorder == null) ResolvePixelRecorder();
             if (pixelRecorder == null)
             {
                 Debug.LogError("FilmCameraItem: TruePixelRecorder is missing from the camera!");
@@ -1554,26 +1744,20 @@ namespace Player.Equipment
         public override void OnDropped(Camera playerCamera)
         {
             if (isRecording) ToggleRecording(true);
-            if (isCameraActive)
-            {
-                isCameraActive = false;
-                if (filmCamera != null) filmCamera.gameObject.SetActive(false);
-                if (filmUICanvas != null) filmUICanvas.SetActive(false);
-                if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(false);
-                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCameraViewExited(EquipmentName);
-                TogglePlayerUI(true);
-            }
+            CloseViewfinder();
             base.OnDropped(playerCamera);
         }
 
         private void OnDisable()
         {
-            if (!isRecording) return;
+            if (isRecording) ToggleRecording(true);
+            CloseViewfinder();
+        }
 
-            if (pixelRecorder != null) pixelRecorder.CancelRecording();
-            isRecording = false;
-
-            if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
+        private void OnDestroy()
+        {
+            // The grid is parented to the shared HUD, not this equipment object.
+            if (ruleOfThirdsGrid != null) Destroy(ruleOfThirdsGrid);
         }
 
         private GameObject EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
@@ -1602,16 +1786,68 @@ namespace Player.Equipment
                     cardScript.MarkAsUsed();
                 }
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
-                if (renderer != null) renderer.material.color = Color.red;
+                if (renderer != null)
+                {
+                    MaterialPropertyBlock cardProperties = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(cardProperties);
+                    cardProperties.SetColor("_Color", Color.red);
+                    renderer.SetPropertyBlock(cardProperties);
+                }
 
-                Collider col = ejectedCard.GetComponent<Collider>();
-                if (col == null) col = ejectedCard.AddComponent<BoxCollider>();
+                // The authored SD-card collider lives on its mesh child.
+                Collider col = ejectedCard.GetComponentInChildren<Collider>(true);
+                if (col == null)
+                {
+                    MeshFilter cardMesh = ejectedCard.GetComponentInChildren<MeshFilter>(true);
+                    if (cardMesh != null && cardMesh.sharedMesh != null)
+                    {
+                        BoxCollider cardCollider = cardMesh.gameObject.AddComponent<BoxCollider>();
+                        cardCollider.center = cardMesh.sharedMesh.bounds.center;
+                        cardCollider.size = cardMesh.sharedMesh.bounds.size;
+                    }
+                    else
+                    {
+                        BoxCollider cardCollider = ejectedCard.AddComponent<BoxCollider>();
+                        cardCollider.size = new Vector3(0.08f, 0.095f, 0.005f);
+                    }
+                }
                 Rigidbody rb = ejectedCard.GetComponent<Rigidbody>();
                 if (rb == null) rb = ejectedCard.AddComponent<Rigidbody>();
 
-                rb.isKinematic = false;
-                rb.useGravity = true;
-                rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
+                // A tiny thrown card can tunnel through the set or land behind the camera.
+                // Rest it on a nearby surface, still requiring the player to pick it up.
+                var player = GetComponentInParent<Player.PlayerController.PlayerController>();
+                Vector3 origin = player != null ? player.transform.position : transform.position;
+                Vector3 forward = player != null ? player.transform.forward : transform.forward;
+                forward = Vector3.ProjectOnPlane(forward, Vector3.up).normalized;
+                Vector3 rayOrigin = origin + forward * 0.9f + Vector3.up * 1.2f;
+                Vector3 landing = origin + forward * 0.9f;
+                RaycastHit[] surfaces = Physics.RaycastAll(rayOrigin, Vector3.down, 5f, ~0, QueryTriggerInteraction.Ignore);
+                System.Array.Sort(surfaces, (a, b) => a.distance.CompareTo(b.distance));
+                foreach (RaycastHit surface in surfaces)
+                {
+                    if (surface.normal.y < 0.7f || surface.transform.IsChildOf(ejectedCard.transform) ||
+                        surface.transform.IsChildOf(transform) ||
+                        (player != null && surface.transform.IsChildOf(player.transform))) continue;
+                    landing = surface.point;
+                    break;
+                }
+                ejectedCard.SetActive(true);
+                ejectedCard.transform.rotation = Quaternion.identity;
+                ejectedCard.transform.position = landing;
+                Renderer[] cardRenderers = ejectedCard.GetComponentsInChildren<Renderer>();
+                if (cardRenderers.Length > 0)
+                {
+                    Bounds bounds = cardRenderers[0].bounds;
+                    foreach (Renderer part in cardRenderers) bounds.Encapsulate(part.bounds);
+                    ejectedCard.transform.position += Vector3.up * (landing.y - bounds.min.y + 0.03f);
+                }
+                foreach (Collider cardCollider in ejectedCard.GetComponentsInChildren<Collider>(true))
+                    cardCollider.enabled = true;
+                rb.velocity = Vector3.zero;
+                rb.angularVelocity = Vector3.zero;
+                rb.useGravity = false;
+                rb.isKinematic = true;
                 return ejectedCard;
             }
 

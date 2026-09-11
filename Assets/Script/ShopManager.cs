@@ -24,6 +24,7 @@ public class ShopManager : MonoBehaviour
         }
 
         int cost = equipmentCosts[itemIndex];
+        if (deliveryZone == null || equipmentPrefabs[itemIndex] == null || cost < 0) return;
 
         // 2. Check if the player has enough B coins in their CareerManager!
         if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(cost))

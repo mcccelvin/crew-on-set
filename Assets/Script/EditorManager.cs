@@ -51,6 +51,8 @@ public class EditorManager : MonoBehaviour
     private float pendingSec = 0f;
     private GameObject titleSafeGuide;
     private PlayerEditTools playerEditTools;
+    private Coroutine phaseRevealCoroutine;
+    private TMP_Text emptyPreviewMessage;
 
     private void Awake() { Instance = this; }
 
@@ -62,16 +64,38 @@ public class EditorManager : MonoBehaviour
         Cursor.visible = true;
 
         currentPhase = 0;
+        activeTabColor = EditorWorkspaceUI.Accent;
+        inactiveTabColor = EditorWorkspaceUI.Control;
         BuildProfessionalPreview();
         SetupPlayerEditTools();
+        // Keep the clip bank sprite, CLIPS heading, and typography authored in the scene.
+        EditorWorkspaceUI.Surface(brandingBinPanel != null ? brandingBinPanel.transform : null);
+        EditorWorkspaceUI.Surface(colorGradingBin != null ? colorGradingBin.transform : null);
         UpdatePhaseUI();
+        if (CampaignProgression.GetCurrentLevel() == 2) ConfigureGokeClipBank();
         LoadClipsFromBridge();
+        if (CampaignProgression.GetCurrentLevel() == 2)
+        {
+            AddProvidedGokeClip("GokeIntro", "GOKE INTRO", ProvidedClipRole.GokeIntro);
+            AddProvidedGokeClip("GokeOutro", "GOKE OUTRO", ProvidedClipRole.GokeOutro);
+            gameObject.AddComponent<GokeIntroOutroLesson>();
+        }
+        else if (CampaignProgression.GetCurrentLevel() == 3) gameObject.AddComponent<LamborminiEditLesson>();
     }
 
     private void Update()
     {
+        if (emptyPreviewMessage != null && gradingManager != null && gradingManager.computerScreen != null)
+        {
+            Texture texture = gradingManager.computerScreen.texture;
+            emptyPreviewMessage.gameObject.SetActive(texture == null || texture == Texture2D.blackTexture);
+        }
         Keyboard keyboard = Keyboard.current;
-        if (keyboard != null && keyboard.f11Key.wasPressedThisFrame) GenerateCheatClip();
+        if ((Application.isEditor || Debug.isDebugBuild) && keyboard != null && keyboard.f11Key.wasPressedThisFrame)
+        {
+            GenerateCheatClip();
+            GameFeedback.Show("CHEAT ACTIVATED\nTest clip added to the clip bank");
+        }
     }
 
     private void GenerateCheatClip()
@@ -170,6 +194,78 @@ public class EditorManager : MonoBehaviour
         }
     }
 
+    private void ConfigureGokeClipBank()
+    {
+        var content = clipBankContainer as RectTransform;
+        if (content == null || content.parent == null) return;
+        Canvas.ForceUpdateCanvases();
+        float minimumHeight = content.rect.height;
+        var viewportObject = new GameObject("Goke Clip Bank Viewport", typeof(RectTransform), typeof(RectMask2D), typeof(ScrollRect));
+        viewportObject.layer = content.gameObject.layer;
+        var viewport = (RectTransform)viewportObject.transform;
+        viewport.SetParent(content.parent, false);
+        viewport.SetSiblingIndex(content.GetSiblingIndex());
+        viewport.anchorMin = content.anchorMin;
+        viewport.anchorMax = content.anchorMax;
+        viewport.pivot = content.pivot;
+        viewport.sizeDelta = content.sizeDelta;
+        viewport.anchoredPosition = content.anchoredPosition;
+        content.SetParent(viewport, false);
+        content.anchorMin = new Vector2(0f, 1f);
+        content.anchorMax = Vector2.one;
+        content.pivot = new Vector2(.5f, 1f);
+        content.sizeDelta = new Vector2(0f, minimumHeight);
+        content.anchoredPosition = Vector2.zero;
+        var fitter = content.GetComponent<ContentSizeFitter>();
+        if (fitter == null) fitter = content.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        var layout = content.GetComponent<LayoutElement>();
+        if (layout == null) layout = content.gameObject.AddComponent<LayoutElement>();
+        layout.minHeight = minimumHeight;
+        var scroll = viewportObject.GetComponent<ScrollRect>();
+        scroll.viewport = viewport;
+        scroll.content = content;
+        scroll.horizontal = false;
+        scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 32f;
+    }
+
+    private void AddProvidedGokeClip(string resource, string label, ProvidedClipRole role)
+    {
+        if (clipPrefab == null || clipBankContainer == null) return;
+        TextAsset tape = Resources.Load<TextAsset>(resource);
+        if (tape == null)
+        {
+            ShowEditorWarning("The supplied Goke clip is missing: " + label);
+            return;
+        }
+        string folder = Path.Combine(Application.persistentDataPath, "ProvidedGoke");
+        string path = Path.Combine(folder, resource + ".tape");
+        try
+        {
+            Directory.CreateDirectory(folder);
+            File.WriteAllBytes(path, tape.bytes);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("Could not prepare " + label + ": " + e.Message);
+            return;
+        }
+        GameObject clip = Instantiate(clipPrefab, clipBankContainer);
+        clip.name = label;
+        DraggableClip data = clip.GetComponent<DraggableClip>();
+        data.clipFilePath = path;
+        data.campaignLevel = 2;
+        data.providedRole = role;
+        LoadThumbnail(path, clip, data, label, clip.GetComponentInChildren<TextMeshProUGUI>());
+        // Bank thumbnails remain readable; dropping uses the actual 2-second width.
+        var rect = (RectTransform)clip.transform;
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.Max(200f, rect.rect.width));
+        var layout = clip.GetComponent<LayoutElement>();
+        if (layout != null) layout.preferredWidth = rect.rect.width;
+    }
+
     private bool IsReadableTape(string path)
     {
         if (!File.Exists(path)) return false;
@@ -246,9 +342,18 @@ public class EditorManager : MonoBehaviour
         if (clipBankContainer != null) clipBankContainer.gameObject.SetActive(currentPhase == 0);
         if (brandingBinPanel != null) brandingBinPanel.SetActive(currentPhase == 1);
         if (colorGradingBin != null) colorGradingBin.SetActive(currentPhase == 2);
-        if (exportButton != null) exportButton.SetActive(currentPhase == 2);
+        if (exportButton != null) exportButton.SetActive(currentPhase == 2 || CampaignProgression.GetCurrentLevel() == 2);
         if (titleSafeGuide != null) titleSafeGuide.SetActive(currentPhase == 1 || currentPhase == 2);
         if (playerEditTools != null) playerEditTools.SetVisible(currentPhase == 1);
+
+        GameObject activePanel = currentPhase == 0
+            ? (clipBankContainer != null ? clipBankContainer.gameObject : null)
+            : currentPhase == 1 ? brandingBinPanel : colorGradingBin;
+        if (activePanel != null)
+        {
+            if (phaseRevealCoroutine != null) StopCoroutine(phaseRevealCoroutine);
+            phaseRevealCoroutine = StartCoroutine(AnimatePhasePanelIn(activePanel));
+        }
 
         if (tabButtonImages != null && tabButtonImages.Length > 0)
         {
@@ -256,10 +361,33 @@ public class EditorManager : MonoBehaviour
             {
                 if (tabButtonImages[i] != null)
                 {
-                    tabButtonImages[i].color = (i == currentPhase) ? new Color(0.12f, 0.62f, 0.92f, 1f) : new Color(0.09f, 0.12f, 0.16f, 1f);
+                    tabButtonImages[i].color = (i == currentPhase) ? EditorWorkspaceUI.Accent : EditorWorkspaceUI.Control;
                 }
             }
         }
+    }
+
+    private IEnumerator AnimatePhasePanelIn(GameObject panel)
+    {
+        if (panel == null) yield break;
+
+        CanvasGroup group = panel.GetComponent<CanvasGroup>();
+        if (group == null) group = panel.AddComponent<CanvasGroup>();
+        group.alpha = 0f;
+
+        float elapsed = 0f;
+        const float duration = 0.2f;
+        while (elapsed < duration && panel != null && panel.activeInHierarchy)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(elapsed / duration);
+            float inverse = 1f - t;
+            group.alpha = 1f - inverse * inverse * inverse;
+            yield return null;
+        }
+
+        if (group != null) group.alpha = 1f;
+        phaseRevealCoroutine = null;
     }
 
     private void BuildProfessionalPreview()
@@ -267,9 +395,20 @@ public class EditorManager : MonoBehaviour
         if (gradingManager == null || gradingManager.computerScreen == null) return;
 
         RectTransform screenRect = gradingManager.computerScreen.rectTransform;
+        if (gradingManager.computerScreen.texture == null)
+            gradingManager.computerScreen.texture = Texture2D.blackTexture;
+        var emptyObject = new GameObject("Empty Preview Message", typeof(RectTransform), typeof(TextMeshProUGUI));
+        emptyObject.transform.SetParent(screenRect, false);
+        emptyPreviewMessage = emptyObject.GetComponent<TextMeshProUGUI>();
+        emptyPreviewMessage.text = "NO FOOTAGE\n<size=65%>Record a take in the studio, then add a clip to the timeline.</size>";
+        emptyPreviewMessage.fontSize = 28;
+        emptyPreviewMessage.color = Color.white;
+        emptyPreviewMessage.alignment = TextAlignmentOptions.Center;
+        emptyPreviewMessage.raycastTarget = false;
+        StretchPreviewRect(emptyPreviewMessage.rectTransform, Vector2.zero, Vector2.one, new Vector2(25, 35), new Vector2(-25, -35));
         int currentLevel = CampaignProgression.GetCurrentLevel();
 
-        GameObject headerObject = CreatePreviewImage("Program Monitor Header", screenRect, new Color(0.02f, 0.035f, 0.055f, 0.92f));
+        GameObject headerObject = CreatePreviewImage("Program Monitor Header", screenRect, EditorWorkspaceUI.Control);
         RectTransform headerRect = headerObject.GetComponent<RectTransform>();
         headerRect.anchorMin = new Vector2(0f, 1f);
         headerRect.anchorMax = new Vector2(1f, 1f);
@@ -285,7 +424,7 @@ public class EditorManager : MonoBehaviour
         headerText.text = "<b>PROGRAM MONITOR</b>     LEVEL " + currentLevel + "     1920 × 1080     TITLE SAFE";
         headerText.fontSize = 19f;
         headerText.alignment = TextAlignmentOptions.Center;
-        headerText.color = new Color(0.78f, 0.88f, 0.96f);
+        headerText.color = Color.white;
         headerText.raycastTarget = false;
         StretchPreviewRect(headerText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12f, 2f), new Vector2(-12f, -2f));
 
@@ -347,7 +486,7 @@ public class EditorManager : MonoBehaviour
             return;
         }
 
-        float totalCam = 0, totalLight = 0, totalSeconds = 0;
+        float totalCam = 0, totalLight = 0, totalSeconds = 0, recordedSeconds = 0;
         DraggableClip[] clips = timelineContainer.GetComponentsInChildren<DraggableClip>();
         if (clips.Length == 0)
         {
@@ -365,8 +504,12 @@ public class EditorManager : MonoBehaviour
             if (clip == null || !IsReadableTape(clip.clipFilePath) || clip.endFrame <= clip.startFrame) continue;
 
             float clipSeconds = Mathf.Max(0f, (clip.endFrame - clip.startFrame) / TapeSettings.framesPerSecond);
-            totalCam += clip.cameraScore * clipSeconds;
-            totalLight += clip.lightScore * clipSeconds;
+            if (clip.providedRole == ProvidedClipRole.None)
+            {
+                totalCam += clip.cameraScore * clipSeconds;
+                totalLight += clip.lightScore * clipSeconds;
+                recordedSeconds += clipSeconds;
+            }
             totalSeconds += clipSeconds;
 
             RectTransform rt = clip.GetComponent<RectTransform>();
@@ -382,13 +525,13 @@ public class EditorManager : MonoBehaviour
             });
         }
 
-        if (totalSeconds > 0f)
+        if (recordedSeconds > 0f)
         {
-            totalCam /= totalSeconds;
-            totalLight /= totalSeconds;
+            totalCam /= recordedSeconds;
+            totalLight /= recordedSeconds;
         }
 
-        if (sequence.Count == 0 || totalSeconds <= 0f)
+        if (sequence.Count == 0 || recordedSeconds <= 0f)
         {
             ShowEditorWarning("The timeline does not contain readable footage. Return to the studio and record a new clip.");
             return;
@@ -429,6 +572,10 @@ public class EditorManager : MonoBehaviour
             {
                 if (exportMaterial != null) Destroy(exportMaterial);
                 exportMaterial = new Material(gradingManager.computerScreen.material);
+                // Before/After only changes the monitor, never the delivered grade.
+                if (gradingManager.brightnessSlider != null) exportMaterial.SetFloat("_Brightness", gradingManager.brightnessSlider.value);
+                if (gradingManager.contrastSlider != null) exportMaterial.SetFloat("_Contrast", gradingManager.contrastSlider.value);
+                if (gradingManager.saturationSlider != null) exportMaterial.SetFloat("_Saturation", gradingManager.saturationSlider.value);
                 exportPlayer.computerScreen.material = exportMaterial;
             }
 
@@ -557,25 +704,35 @@ public class PlayerEditTools : MonoBehaviour
         panelRect.anchorMax = new Vector2(1f, 0f);
         panelRect.pivot = new Vector2(0.5f, 0f);
         panelRect.anchoredPosition = new Vector2(0f, 12f);
-        panelRect.sizeDelta = new Vector2(-24f, 174f);
+        panelRect.sizeDelta = new Vector2(-24f, 230f);
 
         Image panelImage = toolsPanel.GetComponent<Image>();
-        panelImage.color = new Color(0.025f, 0.045f, 0.065f, 0.98f);
+        panelImage.color = new Color32(29, 29, 29, 255);
 
         Outline outline = toolsPanel.GetComponent<Outline>();
-        outline.effectColor = new Color(0.1f, 0.72f, 0.95f, 0.9f);
-        outline.effectDistance = new Vector2(2f, -2f);
+        outline.effectColor = Color.black;
+        outline.effectDistance = new Vector2(1f, -1f);
 
-        TextMeshProUGUI header = CreateText("PLAYER-CREATED FINISH — NOTHING IS AUTO-APPLIED", toolsPanel.transform, 19f, TextAlignmentOptions.Center);
+        TextMeshProUGUI header = CreateText("Effects & audio\n<size=75%>Choose a treatment · Click a control to change it</size>", toolsPanel.transform, 16f, TextAlignmentOptions.Center);
         SetRect(header.rectTransform, new Vector2(0f, 0.73f), new Vector2(1f, 1f), new Vector2(12f, 0f), new Vector2(-12f, 0f));
-        header.color = new Color(0.42f, 0.88f, 1f);
+        header.color = Color.white;
 
-        cameraMotionText = CreateToolButton("Camera Motion", toolsPanel.transform, new Vector2(0.01f, 0.08f), new Vector2(0.24f, 0.7f), CycleCameraMotion, out cameraMotionButtonRect);
-        graphicAnimationText = CreateToolButton("Graphic Animation", toolsPanel.transform, new Vector2(0.255f, 0.08f), new Vector2(0.485f, 0.7f), CycleGraphicAnimation, out graphicAnimationButtonRect);
-        transitionText = CreateToolButton("Transition", toolsPanel.transform, new Vector2(0.5f, 0.08f), new Vector2(0.73f, 0.7f), CycleTransition, out transitionButtonRect);
-        musicText = CreateToolButton("Music", toolsPanel.transform, new Vector2(0.745f, 0.08f), new Vector2(0.99f, 0.7f), CycleMusic, out musicButtonRect);
+        cameraMotionText = CreateToolButton("Camera Motion", toolsPanel.transform, new Vector2(0.02f, 0.39f), new Vector2(0.49f, 0.72f), CycleCameraMotion, out cameraMotionButtonRect);
+        graphicAnimationText = CreateToolButton("Graphic Animation", toolsPanel.transform, new Vector2(0.51f, 0.39f), new Vector2(0.98f, 0.72f), CycleGraphicAnimation, out graphicAnimationButtonRect);
+        transitionText = CreateToolButton("Transition", toolsPanel.transform, new Vector2(0.02f, 0.04f), new Vector2(0.49f, 0.37f), CycleTransition, out transitionButtonRect);
+        musicText = CreateToolButton("Music", toolsPanel.transform, new Vector2(0.51f, 0.04f), new Vector2(0.98f, 0.37f), CycleMusic, out musicButtonRect);
+
 
         RefreshLabels();
+    }
+
+    private string GetLevelFinishBrief()
+    {
+        int level = CampaignProgression.GetCurrentLevel();
+        if (level == 2) return "GOKE: INTRO 2s / FOOTAGE 6s / OUTRO 2s";
+        if (level == 3) return "LAMBORMINI TARGET: PUSH/PAN • DIP TO BLACK • CINEMATIC";
+        if (level == 4) return "KAPE TARGET: PULL OUT/PAN • FADE/SLIDE • FADE • CLEAN";
+        return "PRODUCT TARGET: PUSH IN • FADE/POP • FADE • CLEAN";
     }
 
     public void SetVisible(bool visible)
@@ -587,7 +744,6 @@ public class PlayerEditTools : MonoBehaviour
     public RectTransform GetGraphicAnimationButtonRect() { return graphicAnimationButtonRect; }
     public RectTransform GetTransitionButtonRect() { return transitionButtonRect; }
     public RectTransform GetMusicButtonRect() { return musicButtonRect; }
-
     public void CycleCameraMotion()
     {
         selectedCameraMotion = (CameraMotionMode)(((int)selectedCameraMotion + 1) % 5);
@@ -632,10 +788,10 @@ public class PlayerEditTools : MonoBehaviour
 
     private void RefreshLabels()
     {
-        if (cameraMotionText != null) cameraMotionText.text = "CAMERA MOTION\n<color=#66D9FF>" + GetCameraMotionName() + "</color>";
-        if (graphicAnimationText != null) graphicAnimationText.text = "GRAPHIC ANIMATION\n<color=#66D9FF>" + GetGraphicAnimationName() + "</color>";
-        if (transitionText != null) transitionText.text = "TRANSITION\n<color=#66D9FF>" + GetTransitionName() + "</color>";
-        if (musicText != null) musicText.text = "MUSIC\n<color=#66D9FF>" + selectedMusic.ToString().ToUpper() + "</color>";
+        if (cameraMotionText != null) cameraMotionText.text = "CAMERA MOTION\n<color=#E6B58D>" + GetCameraMotionName() + "</color>";
+        if (graphicAnimationText != null) graphicAnimationText.text = "GRAPHIC ANIMATION\n<color=#E6B58D>" + GetGraphicAnimationName() + "</color>";
+        if (transitionText != null) transitionText.text = "TRANSITION\n<color=#E6B58D>" + GetTransitionName() + "</color>";
+        if (musicText != null) musicText.text = "MUSIC\n<color=#E6B58D>" + selectedMusic.ToString().ToUpper() + "</color>";
     }
 
     private string GetCameraMotionName()
@@ -668,7 +824,7 @@ public class PlayerEditTools : MonoBehaviour
             if (child == null || child.transform == brandingPanel || child.name != "Assets") continue;
 
             Vector2 offsetMin = child.offsetMin;
-            offsetMin.y = Mathf.Max(offsetMin.y, 198f);
+            offsetMin.y = Mathf.Max(offsetMin.y, 254f);
             child.offsetMin = offsetMin;
             break;
         }
@@ -684,13 +840,14 @@ public class PlayerEditTools : MonoBehaviour
         SetRect(buttonRect, anchorMin, anchorMax, Vector2.zero, Vector2.zero);
 
         Image buttonImage = buttonObject.GetComponent<Image>();
-        buttonImage.color = new Color(0.07f, 0.12f, 0.17f, 1f);
+        buttonImage.color = Color.white;
 
         Button button = buttonObject.GetComponent<Button>();
         ColorBlock colors = button.colors;
-        colors.normalColor = new Color(0.07f, 0.12f, 0.17f, 1f);
-        colors.highlightedColor = new Color(0.12f, 0.3f, 0.42f, 1f);
-        colors.pressedColor = new Color(0.08f, 0.55f, 0.75f, 1f);
+        colors.normalColor = EditorWorkspaceUI.Control;
+        colors.highlightedColor = EditorWorkspaceUI.Hover;
+        colors.pressedColor = EditorWorkspaceUI.Accent;
+        colors.fadeDuration = 0.12f;
         colors.selectedColor = colors.highlightedColor;
         button.colors = colors;
         button.onClick.AddListener(action);
@@ -709,7 +866,10 @@ public class PlayerEditTools : MonoBehaviour
         TextMeshProUGUI text = textObject.GetComponent<TextMeshProUGUI>();
         text.font = TMP_Settings.defaultFontAsset;
         text.fontSize = fontSize;
-        text.fontStyle = FontStyles.Bold;
+        text.fontStyle = FontStyles.Normal;
+        text.enableAutoSizing = true;
+        text.fontSizeMin = 12f;
+        text.fontSizeMax = fontSize;
         text.alignment = alignment;
         text.color = Color.white;
         text.enableWordWrapping = true;
@@ -728,5 +888,54 @@ public class PlayerEditTools : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+    }
+}
+
+
+
+internal static class EditorWorkspaceUI
+{
+    // Tutorial palette shared by the editor and campaign interfaces.
+    public static readonly Color Panel = new Color32(224, 224, 224, 255);
+    public static readonly Color Control = new Color32(48, 48, 48, 255);
+    public static readonly Color Accent = new Color32(76, 163, 85, 255);
+    public static readonly Color Hover = new Color32(76, 76, 76, 255);
+    public static readonly Color Ink = new Color32(24, 24, 24, 255);
+    public static void Place(RectTransform rect, float x0, float y0, float x1, float y1)
+    {
+        rect.anchorMin = new Vector2(x0, y0); rect.anchorMax = new Vector2(x1, y1);
+        rect.offsetMin = new Vector2(8, 5); rect.offsetMax = new Vector2(-8, -5);
+        rect.localScale = Vector3.one;
+    }
+    public static void Surface(Transform root)
+    {
+        // Preserve scene-authored panel sprites, headings, fonts and colors.
+    }
+    public static TextMeshProUGUI Label(Transform root, string name, string value, float x0, float y0, float x1, float y1)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+        go.layer = root.gameObject.layer; go.transform.SetParent(root, false);
+        var text = go.GetComponent<TextMeshProUGUI>();
+        text.font = TMP_Settings.defaultFontAsset; text.text = value;
+        text.fontSize = 22; text.enableAutoSizing = true; text.fontSizeMin = 14; text.fontSizeMax = 22;
+        text.color = Color.white; text.raycastTarget = false;
+        text.alignment = TextAlignmentOptions.MidlineLeft;
+        Place(text.rectTransform, x0,y0,x1,y1);
+        return text;
+    }
+    public static Button Button(Transform root, string title, float x0, float y0, float x1, float y1, UnityEngine.Events.UnityAction action)
+    {
+        var go = new GameObject(title, typeof(RectTransform), typeof(Image), typeof(Button));
+        go.layer = root.gameObject.layer; go.transform.SetParent(root, false);
+        Place(go.GetComponent<RectTransform>(),x0,y0,x1,y1);
+        var image = go.GetComponent<Image>(); image.color = Color.white;
+        var button = go.GetComponent<Button>(); button.targetGraphic = image;
+        var colors = button.colors; colors.normalColor = Control;
+        colors.highlightedColor = Hover; colors.pressedColor = Accent;
+        colors.selectedColor = colors.highlightedColor; colors.fadeDuration = 0.12f; button.colors = colors;
+        button.onClick.AddListener(action);
+        var label = Label(go.transform,"Label",title,0,0,1,1);
+        label.alignment = TextAlignmentOptions.Center; label.color = Color.white;
+        return button;
     }
 }

@@ -1,0 +1,133 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+// Known keys from the pre-slot game, retained for one-time local-career migration.
+public static class LegacyGameSave
+{
+    public static bool HasProgress() => PlayerPrefs.HasKey("PlayerMoney") || PlayerPrefs.HasKey("TutorialProgress") || PlayerPrefs.HasKey("CurrentLevel");
+    public static List<GameSaveValue> Read(bool prepareCheckpoint = true)
+    {
+        var values = new List<GameSaveValue>();
+        if (PlayerPrefs.HasKey("AchivDone_advertising_post_production")) values.Add(new GameSaveValue { key = "AchivDone_advertising_post_production", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_advertising_post_production") });
+        if (PlayerPrefs.HasKey("AchivDone_automotive_staging")) values.Add(new GameSaveValue { key = "AchivDone_automotive_staging", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_automotive_staging") });
+        if (PlayerPrefs.HasKey("AchivDone_basic_product_lighting")) values.Add(new GameSaveValue { key = "AchivDone_basic_product_lighting", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_basic_product_lighting") });
+        if (PlayerPrefs.HasKey("AchivDone_center_framing")) values.Add(new GameSaveValue { key = "AchivDone_center_framing", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_center_framing") });
+        if (PlayerPrefs.HasKey("AchivDone_commercial_color_grading")) values.Add(new GameSaveValue { key = "AchivDone_commercial_color_grading", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_commercial_color_grading") });
+        if (PlayerPrefs.HasKey("AchivDone_creative_brief")) values.Add(new GameSaveValue { key = "AchivDone_creative_brief", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_creative_brief") });
+        if (PlayerPrefs.HasKey("AchivDone_director_tablet")) values.Add(new GameSaveValue { key = "AchivDone_director_tablet", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_director_tablet") });
+        if (PlayerPrefs.HasKey("AchivDone_hiring_and_posing_actors")) values.Add(new GameSaveValue { key = "AchivDone_hiring_and_posing_actors", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_hiring_and_posing_actors") });
+        if (PlayerPrefs.HasKey("AchivDone_led_panel")) values.Add(new GameSaveValue { key = "AchivDone_led_panel", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_led_panel") });
+        if (PlayerPrefs.HasKey("AchivDone_level_2_camera")) values.Add(new GameSaveValue { key = "AchivDone_level_2_camera", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_level_2_camera") });
+        if (PlayerPrefs.HasKey("AchivDone_level_3_soft_light")) values.Add(new GameSaveValue { key = "AchivDone_level_3_soft_light", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_level_3_soft_light") });
+        if (PlayerPrefs.HasKey("AchivDone_lifestyle_staging")) values.Add(new GameSaveValue { key = "AchivDone_lifestyle_staging", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_lifestyle_staging") });
+        if (PlayerPrefs.HasKey("AchivDone_motivated_lighting")) values.Add(new GameSaveValue { key = "AchivDone_motivated_lighting", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_motivated_lighting") });
+        if (PlayerPrefs.HasKey("AchivDone_nony_fx_camera")) values.Add(new GameSaveValue { key = "AchivDone_nony_fx_camera", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_nony_fx_camera") });
+        if (PlayerPrefs.HasKey("AchivDone_post_production_technique")) values.Add(new GameSaveValue { key = "AchivDone_post_production_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_post_production_technique") });
+        if (PlayerPrefs.HasKey("AchivDone_product_separation")) values.Add(new GameSaveValue { key = "AchivDone_product_separation", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_product_separation") });
+        if (PlayerPrefs.HasKey("AchivDone_quality_control")) values.Add(new GameSaveValue { key = "AchivDone_quality_control", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_quality_control") });
+        if (PlayerPrefs.HasKey("AchivDone_recording_technique")) values.Add(new GameSaveValue { key = "AchivDone_recording_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_recording_technique") });
+        if (PlayerPrefs.HasKey("AchivDone_rule_of_thirds")) values.Add(new GameSaveValue { key = "AchivDone_rule_of_thirds", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_rule_of_thirds") });
+        if (PlayerPrefs.HasKey("AchivDone_screen_continuity")) values.Add(new GameSaveValue { key = "AchivDone_screen_continuity", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_screen_continuity") });
+        if (PlayerPrefs.HasKey("AchivDone_sd_card")) values.Add(new GameSaveValue { key = "AchivDone_sd_card", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_sd_card") });
+        if (PlayerPrefs.HasKey("AchivDone_set_building_technique")) values.Add(new GameSaveValue { key = "AchivDone_set_building_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_set_building_technique") });
+        if (PlayerPrefs.HasKey("AchivDone_shot_coverage")) values.Add(new GameSaveValue { key = "AchivDone_shot_coverage", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_shot_coverage") });
+        if (PlayerPrefs.HasKey("AchivDone_soft_light_technique")) values.Add(new GameSaveValue { key = "AchivDone_soft_light_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_soft_light_technique") });
+        if (PlayerPrefs.HasKey("AchivDone_three_point_lighting")) values.Add(new GameSaveValue { key = "AchivDone_three_point_lighting", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_three_point_lighting") });
+        if (PlayerPrefs.HasKey("AchivDone_visual_hierarchy")) values.Add(new GameSaveValue { key = "AchivDone_visual_hierarchy", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_visual_hierarchy") });
+        if (PlayerPrefs.HasKey("AchivDone_warm_commercial_grade")) values.Add(new GameSaveValue { key = "AchivDone_warm_commercial_grade", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_warm_commercial_grade") });
+        if (PlayerPrefs.HasKey("AchivProg_advertising_post_production")) values.Add(new GameSaveValue { key = "AchivProg_advertising_post_production", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_advertising_post_production") });
+        if (PlayerPrefs.HasKey("AchivProg_automotive_staging")) values.Add(new GameSaveValue { key = "AchivProg_automotive_staging", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_automotive_staging") });
+        if (PlayerPrefs.HasKey("AchivProg_basic_product_lighting")) values.Add(new GameSaveValue { key = "AchivProg_basic_product_lighting", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_basic_product_lighting") });
+        if (PlayerPrefs.HasKey("AchivProg_center_framing")) values.Add(new GameSaveValue { key = "AchivProg_center_framing", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_center_framing") });
+        if (PlayerPrefs.HasKey("AchivProg_commercial_color_grading")) values.Add(new GameSaveValue { key = "AchivProg_commercial_color_grading", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_commercial_color_grading") });
+        if (PlayerPrefs.HasKey("AchivProg_creative_brief")) values.Add(new GameSaveValue { key = "AchivProg_creative_brief", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_creative_brief") });
+        if (PlayerPrefs.HasKey("AchivProg_director_tablet")) values.Add(new GameSaveValue { key = "AchivProg_director_tablet", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_director_tablet") });
+        if (PlayerPrefs.HasKey("AchivProg_hiring_and_posing_actors")) values.Add(new GameSaveValue { key = "AchivProg_hiring_and_posing_actors", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_hiring_and_posing_actors") });
+        if (PlayerPrefs.HasKey("AchivProg_led_panel")) values.Add(new GameSaveValue { key = "AchivProg_led_panel", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_led_panel") });
+        if (PlayerPrefs.HasKey("AchivProg_level_2_camera")) values.Add(new GameSaveValue { key = "AchivProg_level_2_camera", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_level_2_camera") });
+        if (PlayerPrefs.HasKey("AchivProg_level_3_soft_light")) values.Add(new GameSaveValue { key = "AchivProg_level_3_soft_light", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_level_3_soft_light") });
+        if (PlayerPrefs.HasKey("AchivProg_lifestyle_staging")) values.Add(new GameSaveValue { key = "AchivProg_lifestyle_staging", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_lifestyle_staging") });
+        if (PlayerPrefs.HasKey("AchivProg_motivated_lighting")) values.Add(new GameSaveValue { key = "AchivProg_motivated_lighting", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_motivated_lighting") });
+        if (PlayerPrefs.HasKey("AchivProg_nony_fx_camera")) values.Add(new GameSaveValue { key = "AchivProg_nony_fx_camera", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_nony_fx_camera") });
+        if (PlayerPrefs.HasKey("AchivProg_post_production_technique")) values.Add(new GameSaveValue { key = "AchivProg_post_production_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_post_production_technique") });
+        if (PlayerPrefs.HasKey("AchivProg_product_separation")) values.Add(new GameSaveValue { key = "AchivProg_product_separation", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_product_separation") });
+        if (PlayerPrefs.HasKey("AchivProg_quality_control")) values.Add(new GameSaveValue { key = "AchivProg_quality_control", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_quality_control") });
+        if (PlayerPrefs.HasKey("AchivProg_recording_technique")) values.Add(new GameSaveValue { key = "AchivProg_recording_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_recording_technique") });
+        if (PlayerPrefs.HasKey("AchivProg_rule_of_thirds")) values.Add(new GameSaveValue { key = "AchivProg_rule_of_thirds", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_rule_of_thirds") });
+        if (PlayerPrefs.HasKey("AchivProg_screen_continuity")) values.Add(new GameSaveValue { key = "AchivProg_screen_continuity", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_screen_continuity") });
+        if (PlayerPrefs.HasKey("AchivProg_sd_card")) values.Add(new GameSaveValue { key = "AchivProg_sd_card", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_sd_card") });
+        if (PlayerPrefs.HasKey("AchivProg_set_building_technique")) values.Add(new GameSaveValue { key = "AchivProg_set_building_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_set_building_technique") });
+        if (PlayerPrefs.HasKey("AchivProg_shot_coverage")) values.Add(new GameSaveValue { key = "AchivProg_shot_coverage", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_shot_coverage") });
+        if (PlayerPrefs.HasKey("AchivProg_soft_light_technique")) values.Add(new GameSaveValue { key = "AchivProg_soft_light_technique", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_soft_light_technique") });
+        if (PlayerPrefs.HasKey("AchivProg_three_point_lighting")) values.Add(new GameSaveValue { key = "AchivProg_three_point_lighting", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_three_point_lighting") });
+        if (PlayerPrefs.HasKey("AchivProg_visual_hierarchy")) values.Add(new GameSaveValue { key = "AchivProg_visual_hierarchy", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_visual_hierarchy") });
+        if (PlayerPrefs.HasKey("AchivProg_warm_commercial_grade")) values.Add(new GameSaveValue { key = "AchivProg_warm_commercial_grade", kind = 0, integer = PlayerPrefs.GetInt("AchivProg_warm_commercial_grade") });
+        if (PlayerPrefs.HasKey("AlmanacUnlocked")) values.Add(new GameSaveValue { key = "AlmanacUnlocked", kind = 0, integer = PlayerPrefs.GetInt("AlmanacUnlocked") });
+        if (PlayerPrefs.HasKey("CampaignCompleted")) values.Add(new GameSaveValue { key = "CampaignCompleted", kind = 0, integer = PlayerPrefs.GetInt("CampaignCompleted") });
+        if (PlayerPrefs.HasKey("CampaignLevelCheatIntroduction")) values.Add(new GameSaveValue { key = "CampaignLevelCheatIntroduction", kind = 0, integer = PlayerPrefs.GetInt("CampaignLevelCheatIntroduction") });
+        if (PlayerPrefs.HasKey("CampaignLevelCheatOverride")) values.Add(new GameSaveValue { key = "CampaignLevelCheatOverride", kind = 0, integer = PlayerPrefs.GetInt("CampaignLevelCheatOverride") });
+        if (PlayerPrefs.HasKey("ContractBestScore_Level1")) values.Add(new GameSaveValue { key = "ContractBestScore_Level1", kind = 1, number = PlayerPrefs.GetFloat("ContractBestScore_Level1") });
+        if (PlayerPrefs.HasKey("ContractBestScore_Level2")) values.Add(new GameSaveValue { key = "ContractBestScore_Level2", kind = 1, number = PlayerPrefs.GetFloat("ContractBestScore_Level2") });
+        if (PlayerPrefs.HasKey("ContractBestScore_Level3")) values.Add(new GameSaveValue { key = "ContractBestScore_Level3", kind = 1, number = PlayerPrefs.GetFloat("ContractBestScore_Level3") });
+        if (PlayerPrefs.HasKey("ContractBestScore_Level4")) values.Add(new GameSaveValue { key = "ContractBestScore_Level4", kind = 1, number = PlayerPrefs.GetFloat("ContractBestScore_Level4") });
+        if (PlayerPrefs.HasKey("ContractBestScore_Level5")) values.Add(new GameSaveValue { key = "ContractBestScore_Level5", kind = 1, number = PlayerPrefs.GetFloat("ContractBestScore_Level5") });
+        if (PlayerPrefs.HasKey("ContractRewardClaimed_Level1")) values.Add(new GameSaveValue { key = "ContractRewardClaimed_Level1", kind = 0, integer = PlayerPrefs.GetInt("ContractRewardClaimed_Level1") });
+        if (PlayerPrefs.HasKey("ContractRewardClaimed_Level2")) values.Add(new GameSaveValue { key = "ContractRewardClaimed_Level2", kind = 0, integer = PlayerPrefs.GetInt("ContractRewardClaimed_Level2") });
+        if (PlayerPrefs.HasKey("ContractRewardClaimed_Level3")) values.Add(new GameSaveValue { key = "ContractRewardClaimed_Level3", kind = 0, integer = PlayerPrefs.GetInt("ContractRewardClaimed_Level3") });
+        if (PlayerPrefs.HasKey("ContractRewardClaimed_Level4")) values.Add(new GameSaveValue { key = "ContractRewardClaimed_Level4", kind = 0, integer = PlayerPrefs.GetInt("ContractRewardClaimed_Level4") });
+        if (PlayerPrefs.HasKey("ContractRewardClaimed_Level5")) values.Add(new GameSaveValue { key = "ContractRewardClaimed_Level5", kind = 0, integer = PlayerPrefs.GetInt("ContractRewardClaimed_Level5") });
+        if (PlayerPrefs.HasKey("CurrentLevel")) values.Add(new GameSaveValue { key = "CurrentLevel", kind = 0, integer = PlayerPrefs.GetInt("CurrentLevel") });
+        if (PlayerPrefs.HasKey("FlowerContractAccepted")) values.Add(new GameSaveValue { key = "FlowerContractAccepted", kind = 0, integer = PlayerPrefs.GetInt("FlowerContractAccepted") });
+        if (PlayerPrefs.HasKey("FlowerContractGraded")) values.Add(new GameSaveValue { key = "FlowerContractGraded", kind = 0, integer = PlayerPrefs.GetInt("FlowerContractGraded") });
+        if (PlayerPrefs.HasKey("GokeContractAccepted")) values.Add(new GameSaveValue { key = "GokeContractAccepted", kind = 0, integer = PlayerPrefs.GetInt("GokeContractAccepted") });
+        if (PlayerPrefs.HasKey("GokeContractGraded")) values.Add(new GameSaveValue { key = "GokeContractGraded", kind = 0, integer = PlayerPrefs.GetInt("GokeContractGraded") });
+        if (PlayerPrefs.HasKey("HarayaContractAccepted")) values.Add(new GameSaveValue { key = "HarayaContractAccepted", kind = 0, integer = PlayerPrefs.GetInt("HarayaContractAccepted") });
+        if (PlayerPrefs.HasKey("HarayaContractGraded")) values.Add(new GameSaveValue { key = "HarayaContractGraded", kind = 0, integer = PlayerPrefs.GetInt("HarayaContractGraded") });
+        if (PlayerPrefs.HasKey("KapeKulturaContractAccepted")) values.Add(new GameSaveValue { key = "KapeKulturaContractAccepted", kind = 0, integer = PlayerPrefs.GetInt("KapeKulturaContractAccepted") });
+        if (PlayerPrefs.HasKey("KapeKulturaContractGraded")) values.Add(new GameSaveValue { key = "KapeKulturaContractGraded", kind = 0, integer = PlayerPrefs.GetInt("KapeKulturaContractGraded") });
+        if (PlayerPrefs.HasKey("Knowledge_advertising_post_production")) values.Add(new GameSaveValue { key = "Knowledge_advertising_post_production", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_advertising_post_production") });
+        if (PlayerPrefs.HasKey("Knowledge_automotive_staging")) values.Add(new GameSaveValue { key = "Knowledge_automotive_staging", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_automotive_staging") });
+        if (PlayerPrefs.HasKey("Knowledge_basic_product_lighting")) values.Add(new GameSaveValue { key = "Knowledge_basic_product_lighting", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_basic_product_lighting") });
+        if (PlayerPrefs.HasKey("Knowledge_center_framing")) values.Add(new GameSaveValue { key = "Knowledge_center_framing", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_center_framing") });
+        if (PlayerPrefs.HasKey("Knowledge_commercial_color_grading")) values.Add(new GameSaveValue { key = "Knowledge_commercial_color_grading", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_commercial_color_grading") });
+        if (PlayerPrefs.HasKey("Knowledge_creative_brief")) values.Add(new GameSaveValue { key = "Knowledge_creative_brief", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_creative_brief") });
+        if (PlayerPrefs.HasKey("Knowledge_director_tablet")) values.Add(new GameSaveValue { key = "Knowledge_director_tablet", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_director_tablet") });
+        if (PlayerPrefs.HasKey("Knowledge_hiring_and_posing_actors")) values.Add(new GameSaveValue { key = "Knowledge_hiring_and_posing_actors", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_hiring_and_posing_actors") });
+        if (PlayerPrefs.HasKey("Knowledge_led_panel")) values.Add(new GameSaveValue { key = "Knowledge_led_panel", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_led_panel") });
+        if (PlayerPrefs.HasKey("Knowledge_level_2_camera")) values.Add(new GameSaveValue { key = "Knowledge_level_2_camera", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_level_2_camera") });
+        if (PlayerPrefs.HasKey("Knowledge_level_3_soft_light")) values.Add(new GameSaveValue { key = "Knowledge_level_3_soft_light", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_level_3_soft_light") });
+        if (PlayerPrefs.HasKey("Knowledge_lifestyle_staging")) values.Add(new GameSaveValue { key = "Knowledge_lifestyle_staging", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_lifestyle_staging") });
+        if (PlayerPrefs.HasKey("Knowledge_motivated_lighting")) values.Add(new GameSaveValue { key = "Knowledge_motivated_lighting", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_motivated_lighting") });
+        if (PlayerPrefs.HasKey("Knowledge_nony_fx_camera")) values.Add(new GameSaveValue { key = "Knowledge_nony_fx_camera", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_nony_fx_camera") });
+        if (PlayerPrefs.HasKey("Knowledge_post_production_technique")) values.Add(new GameSaveValue { key = "Knowledge_post_production_technique", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_post_production_technique") });
+        if (PlayerPrefs.HasKey("Knowledge_product_separation")) values.Add(new GameSaveValue { key = "Knowledge_product_separation", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_product_separation") });
+        if (PlayerPrefs.HasKey("Knowledge_quality_control")) values.Add(new GameSaveValue { key = "Knowledge_quality_control", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_quality_control") });
+        if (PlayerPrefs.HasKey("Knowledge_recording_technique")) values.Add(new GameSaveValue { key = "Knowledge_recording_technique", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_recording_technique") });
+        if (PlayerPrefs.HasKey("Knowledge_rule_of_thirds")) values.Add(new GameSaveValue { key = "Knowledge_rule_of_thirds", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_rule_of_thirds") });
+        if (PlayerPrefs.HasKey("Knowledge_screen_continuity")) values.Add(new GameSaveValue { key = "Knowledge_screen_continuity", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_screen_continuity") });
+        if (PlayerPrefs.HasKey("Knowledge_sd_card")) values.Add(new GameSaveValue { key = "Knowledge_sd_card", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_sd_card") });
+        if (PlayerPrefs.HasKey("Knowledge_set_building_technique")) values.Add(new GameSaveValue { key = "Knowledge_set_building_technique", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_set_building_technique") });
+        if (PlayerPrefs.HasKey("Knowledge_shot_coverage")) values.Add(new GameSaveValue { key = "Knowledge_shot_coverage", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_shot_coverage") });
+        if (PlayerPrefs.HasKey("Knowledge_soft_light_technique")) values.Add(new GameSaveValue { key = "Knowledge_soft_light_technique", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_soft_light_technique") });
+        if (PlayerPrefs.HasKey("Knowledge_three_point_lighting")) values.Add(new GameSaveValue { key = "Knowledge_three_point_lighting", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_three_point_lighting") });
+        if (PlayerPrefs.HasKey("Knowledge_visual_hierarchy")) values.Add(new GameSaveValue { key = "Knowledge_visual_hierarchy", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_visual_hierarchy") });
+        if (PlayerPrefs.HasKey("Knowledge_warm_commercial_grade")) values.Add(new GameSaveValue { key = "Knowledge_warm_commercial_grade", kind = 0, integer = PlayerPrefs.GetInt("Knowledge_warm_commercial_grade") });
+        if (PlayerPrefs.HasKey("LamborminiContractAccepted")) values.Add(new GameSaveValue { key = "LamborminiContractAccepted", kind = 0, integer = PlayerPrefs.GetInt("LamborminiContractAccepted") });
+        if (PlayerPrefs.HasKey("LamborminiContractGraded")) values.Add(new GameSaveValue { key = "LamborminiContractGraded", kind = 0, integer = PlayerPrefs.GetInt("LamborminiContractGraded") });
+        if (PlayerPrefs.HasKey("Level1RetryActive")) values.Add(new GameSaveValue { key = "Level1RetryActive", kind = 0, integer = PlayerPrefs.GetInt("Level1RetryActive") });
+        if (PlayerPrefs.HasKey("Level1StartingBudgetGranted")) values.Add(new GameSaveValue { key = "Level1StartingBudgetGranted", kind = 0, integer = PlayerPrefs.GetInt("Level1StartingBudgetGranted") });
+        if (PlayerPrefs.HasKey("Level2CameraPurchased")) values.Add(new GameSaveValue { key = "Level2CameraPurchased", kind = 0, integer = PlayerPrefs.GetInt("Level2CameraPurchased") });
+        if (PlayerPrefs.HasKey("Level3LightPurchaseLessonCompleted")) values.Add(new GameSaveValue { key = "Level3LightPurchaseLessonCompleted", kind = 0, integer = PlayerPrefs.GetInt("Level3LightPurchaseLessonCompleted") });
+        if (PlayerPrefs.HasKey("Level3LightPurchased")) values.Add(new GameSaveValue { key = "Level3LightPurchased", kind = 0, integer = PlayerPrefs.GetInt("Level3LightPurchased") });
+        if (PlayerPrefs.HasKey("PlayerMoney")) values.Add(new GameSaveValue { key = "PlayerMoney", kind = 0, integer = PlayerPrefs.GetInt("PlayerMoney") });
+        if (PlayerPrefs.HasKey("TotalJobsCompleted")) values.Add(new GameSaveValue { key = "TotalJobsCompleted", kind = 0, integer = PlayerPrefs.GetInt("TotalJobsCompleted") });
+        if (PlayerPrefs.HasKey("TutorialProgress")) values.Add(new GameSaveValue { key = "TutorialProgress", kind = 0, integer = PlayerPrefs.GetInt("TutorialProgress") });
+        // An unfinished first commercial must resume its studio lesson, not the post-edit completion dialogue.
+        if (prepareCheckpoint && !values.Exists(v => v.key == "FlowerContractGraded" && v.integer == 1) && values.Exists(v => v.key == "Level1StartingBudgetGranted" && v.integer == 1))
+        {
+            values.RemoveAll(v => v.key == "Level1RetryActive" || v.key == "TutorialProgress");
+            values.Add(new GameSaveValue { key = "Level1RetryActive", integer = 1 });
+        }
+        return values;
+    }
+}

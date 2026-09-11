@@ -23,6 +23,7 @@ public class ClipInspector : MonoBehaviour
     [Header("Settings")]
     public float pixelsPerSecond = 40f;
 
+    private bool workspaceBuilt;
     private DraggableClip currentClip;
     private List<long> frameOffsets = new List<long>();
     private BinaryReader frameReader;
@@ -75,6 +76,7 @@ public class ClipInspector : MonoBehaviour
 
     private void OnEnable()
     {
+        BuildWorkspace();
         if (needsToLoad && currentClip != null)
         {
             needsToLoad = false;
@@ -122,12 +124,38 @@ public class ClipInspector : MonoBehaviour
         }
     }
 
+    private RectTransform keptRangeFill;
+
+    private void BuildWorkspace()
+    {
+        if (workspaceBuilt || trimTrack == null) return;
+        workspaceBuilt = true;
+        // Keep all scene-authored positions, artwork, preview and close button.
+        var fill = new GameObject("Kept Video Range", typeof(RectTransform), typeof(Image));
+        fill.transform.SetParent(trimTrack, false);
+        fill.transform.SetAsFirstSibling();
+        keptRangeFill = fill.GetComponent<RectTransform>();
+        keptRangeFill.anchorMin = Vector2.zero;
+        keptRangeFill.anchorMax = Vector2.one;
+        keptRangeFill.offsetMin = keptRangeFill.offsetMax = Vector2.zero;
+        Image image = fill.GetComponent<Image>();
+        image.color = new Color32(63, 143, 174, 255);
+        image.raycastTarget = false;
+        Image trackImage = trimTrack.GetComponent<Image>();
+        if (trackImage != null) trackImage.color = new Color32(45, 45, 45, 255);
+    }
     private void UpdateHandlePositions()
     {
         if (totalRawFrames <= 0 || currentClip == null || trimTrack == null || leftHandle == null || rightHandle == null) return;
         float trackWidth = trimTrack.rect.width;
         float leftPct = (float)currentClip.startFrame / totalRawFrames;
         float rightPct = (float)currentClip.endFrame / totalRawFrames;
+        if (keptRangeFill != null)
+        {
+            keptRangeFill.anchorMin = new Vector2(leftPct, 0f);
+            keptRangeFill.anchorMax = new Vector2(rightPct, 1f);
+            keptRangeFill.offsetMin = keptRangeFill.offsetMax = Vector2.zero;
+        }
 
         leftHandle.anchorMin = new Vector2(0, 0.5f);
         leftHandle.anchorMax = new Vector2(0, 0.5f);
@@ -163,7 +191,7 @@ public class ClipInspector : MonoBehaviour
         }
 
         UpdateHandlePositions();
-        ShowFrame(frame);
+        ShowFrame(isLeft ? currentClip.startFrame : currentClip.endFrame - 1);
         UpdateClipUI();
 
         if (EditorTutorialManager.Instance != null)

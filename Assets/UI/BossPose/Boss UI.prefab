@@ -424,7 +424,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: '[ PRESS SPACE TO CONTINUE] '
+  m_text: '[SPACE] CONTINUE'
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: dad3d12418327aa4ebbc22d1e12bbf09, type: 2}
   m_sharedMaterial: {fileID: -5895686667568858217, guid: dad3d12418327aa4ebbc22d1e12bbf09, type: 2}

@@ -15,14 +15,15 @@ namespace Player.Equipment
         [Tooltip("0 to 100% Intensity Slider")]
         public float intensityPercent = 100f;
 
-        [Tooltip("The maximum Lux output at 100%")]
+        [Tooltip("Unity light intensity at 100% (not a calibrated lux measurement).")]
         public float maxLux = 4f;
 
         [Header("Studio Beam Profile")]
-        public float standardRange = 15f;
-        public float advancedRange = 22f;
-        public Vector3 heldBeamPosition = new Vector3(0.35f, -0.15f, 0.9f);
-        public Vector3 heldBeamRotation = new Vector3(0f, 90f, 0f);
+        public float standardRange = 30f;
+        public float advancedRange = 40f;
+        [Tooltip("Panel centre in player-camera space, away from the crosshair.")]
+        public Vector3 heldPanelPosition = new Vector3(0.52f, -0.30f, 1.15f);
+        [Range(0.3f, 1f)] public float heldPresentationScale = 0.55f;
 
         [Header("Stand Tilt")]
         public float tiltStep = 5f;
@@ -67,8 +68,11 @@ namespace Player.Equipment
 
         private bool isLightOn = false;
         private float currentTilt = 0f;
-        private Vector3 startAngles;
-        private Vector3 originalSpotlightPosition;
+        private Transform headPivot;
+        private Quaternion neutralBeamRotation;
+        private Renderer diffuserRenderer;
+        private MaterialPropertyBlock diffuserProperties;
+        private Material diffuserMaterial;
         private Transform heldBeamReference;
 
         // Safety lock for Shop Prefabs!
@@ -80,8 +84,7 @@ namespace Player.Equipment
 
             if (spotlight != null)
             {
-                originalSpotlightPosition = spotlight.transform.localPosition;
-                ResetHeldBeamAim();
+                ConfigureLightHead();
                 spotlight.enabled = isLightOn;
                 UpdateLightOutput();
             }
@@ -109,11 +112,12 @@ namespace Player.Equipment
         // Triggered when you press E to pick it up off the shop table
         public override void OnPickedUp(Transform holdPoint)
         {
+            if (holdPoint == null || isHeld) return;
             base.OnPickedUp(holdPoint);
-            SetLevel3PlaceholderHeld(true);
             isHeld = true;
             heldBeamReference = FindHeldBeamReference(holdPoint);
-            ResetHeldBeamAim();
+            transform.localScale *= heldPresentationScale;
+            UpdateHeldBeamTransform();
             EnsureAdvancedFeatureUI();
             if (lightUICanvas != null) lightUICanvas.SetActive(true);
             UpdateLightUI();
@@ -122,19 +126,15 @@ namespace Player.Equipment
         // Triggered when you press G to drop it
         public override void OnDropped(Camera playerCamera)
         {
-            Quaternion beamRotation = spotlight != null ? spotlight.transform.rotation : Quaternion.identity;
-            Vector3 flatForward = Vector3.ProjectOnPlane(playerCamera.transform.forward, Vector3.up).normalized;
-
-            if (flatForward.sqrMagnitude <= 0.001f) flatForward = playerCamera.transform.forward;
-
-            Vector3 dropPosition = FindLightDropPosition(playerCamera, flatForward);
-            Quaternion dropRotation = Quaternion.LookRotation(flatForward, Vector3.up);
-
-            SetLevel3PlaceholderHeld(false);
+            // Keep the same heading and head tilt. Only lower the stand onto its surface.
+            Quaternion headRotation = headPivot != null ? headPivot.rotation : Quaternion.identity;
+            Vector3 dropPosition = transform.position;
             isHeld = false;
             heldBeamReference = null;
             base.OnDropped(playerCamera);
-            transform.SetPositionAndRotation(dropPosition, dropRotation);
+            transform.position = dropPosition;
+            if (headPivot != null) headPivot.rotation = headRotation;
+            SettleOnSurface(playerCamera);
 
             if (allRigidbodies != null)
             {
@@ -142,51 +142,44 @@ namespace Player.Equipment
                 {
                     if (lightRigidbody == null) continue;
 
-                    lightRigidbody.velocity = Vector3.zero;
-                    lightRigidbody.angularVelocity = Vector3.zero;
+                    if (!lightRigidbody.isKinematic)
+                    {
+                        lightRigidbody.velocity = Vector3.zero;
+                        lightRigidbody.angularVelocity = Vector3.zero;
+                    }
                 }
-            }
-
-            if (spotlight != null)
-            {
-                spotlight.transform.localPosition = originalSpotlightPosition;
-                spotlight.transform.rotation = beamRotation;
-                startAngles = spotlight.transform.localEulerAngles;
             }
 
             if (lightUICanvas != null) lightUICanvas.SetActive(false);
         }
 
-        private Vector3 FindLightDropPosition(Camera playerCamera, Vector3 flatForward)
+        private void SettleOnSurface(Camera playerCamera)
         {
-            Vector3 dropPosition = playerCamera.transform.position + flatForward * 1.75f;
-            Vector3 floorCheckPosition = dropPosition + Vector3.up * 2f;
-
-            if (Physics.Raycast(floorCheckPosition, Vector3.down, out RaycastHit floorHit, 5f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            float originHeight = playerCamera != null ? playerCamera.transform.position.y + 0.5f : transform.position.y + 2f;
+            Vector3 origin = new Vector3(transform.position.x, originHeight, transform.position.z);
+            RaycastHit[] hits = Physics.RaycastAll(origin, Vector3.down, 10f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            float nearest = float.PositiveInfinity;
+            Vector3 surface = transform.position;
+            foreach (RaycastHit hit in hits)
             {
-                float floorOffset = EquipmentName == "Level 3 Soft Light" ? 0.02f : 0.54f;
-                dropPosition = floorHit.point + Vector3.up * floorOffset;
+                if (hit.transform.IsChildOf(transform) || Vector3.Dot(hit.normal, Vector3.up) < 0.7f) continue;
+                if (playerCamera != null && hit.transform.IsChildOf(playerCamera.transform.root)) continue;
+                if (hit.distance >= nearest) continue;
+                nearest = hit.distance;
+                surface = hit.point;
             }
-
-            return dropPosition;
+            if (!float.IsPositiveInfinity(nearest)) PlaceOnSurface(surface);
         }
 
-        private void SetLevel3PlaceholderHeld(bool isBeingHeld)
+        public void PlaceOnSurface(Vector3 surface)
         {
-            if (EquipmentName != "Level 3 Soft Light") return;
-
-            Transform lightPanel = transform.Find("Thin Light Panel");
-            Transform lightStand = transform.Find("Thin Light Stand");
-            Transform lightBase = transform.Find("Thin Light Base");
-
-            if (lightPanel != null)
+            transform.position = new Vector3(surface.x, transform.position.y, surface.z);
+            float bottom = float.PositiveInfinity;
+            foreach (Renderer part in GetComponentsInChildren<Renderer>(true))
             {
-                lightPanel.localPosition = isBeingHeld ? Vector3.zero : new Vector3(0f, 1.15f, 0f);
-                lightPanel.localScale = isBeingHeld ? new Vector3(0.1f, 0.3f, 0.58f) : new Vector3(0.12f, 0.42f, 0.82f);
+                if (part is MeshRenderer && part.enabled) bottom = Mathf.Min(bottom, part.bounds.min.y);
             }
-
-            if (lightStand != null) lightStand.gameObject.SetActive(!isBeingHeld);
-            if (lightBase != null) lightBase.gameObject.SetActive(!isBeingHeld);
+            if (!float.IsPositiveInfinity(bottom)) transform.position += Vector3.up * (surface.y + 0.01f - bottom);
         }
 
         public override void OnUse(Camera playerCamera)
@@ -252,21 +245,19 @@ namespace Player.Equipment
 
         public void RefreshAdvancedFeatures()
         {
-            ApplyFeatureSettings();
+            UpdateLightOutput();
             EnsureAdvancedFeatureUI();
             UpdateLightUI();
         }
 
         public void AimAt(Vector3 targetPosition)
         {
-            if (spotlight == null) return;
+            if (spotlight == null || headPivot == null) return;
 
             Vector3 targetDirection = targetPosition - spotlight.transform.position;
             if (targetDirection.sqrMagnitude <= 0.001f) return;
 
-            spotlight.transform.rotation = Quaternion.LookRotation(targetDirection.normalized, Vector3.up);
-            startAngles = spotlight.transform.localEulerAngles;
-            currentTilt = 0f;
+            headPivot.rotation = Quaternion.LookRotation(targetDirection.normalized, Vector3.up) * Quaternion.Inverse(neutralBeamRotation);
             UpdateLightUI();
         }
 
@@ -284,23 +275,23 @@ namespace Player.Equipment
 
         private void UpdateLightTransform()
         {
-            if (spotlight == null) return;
-
-            if (isHeld && heldBeamReference != null)
-            {
-                UpdateHeldBeamTransform();
-                return;
-            }
-
-            spotlight.transform.localEulerAngles = new Vector3(startAngles.x + currentTilt, startAngles.y, startAngles.z);
+            UpdateHeldBeamTransform();
         }
 
         private void UpdateHeldBeamTransform()
         {
-            if (!isHeld || heldBeamReference == null || spotlight == null) return;
+            if (!isHeld || heldBeamReference == null || headPivot == null) return;
+            Vector3 heading = Vector3.ProjectOnPlane(heldBeamReference.forward, Vector3.up);
+            if (heading.sqrMagnitude > 0.001f) transform.rotation = Quaternion.LookRotation(heading, Vector3.up);
+            headPivot.rotation = heldBeamReference.rotation * Quaternion.Euler(currentTilt, 0f, 0f) * Quaternion.Inverse(neutralBeamRotation);
+            // Move the physical panel, not an invisible detached light source.
+            Vector3 panelPosition = heldBeamReference.position + heldBeamReference.rotation * heldPanelPosition;
+            transform.position += panelPosition - headPivot.position;
+        }
 
-            spotlight.transform.position = heldBeamReference.TransformPoint(heldBeamPosition);
-            spotlight.transform.rotation = heldBeamReference.rotation * Quaternion.Euler(currentTilt, 0f, 0f);
+        private void LateUpdate()
+        {
+            UpdateHeldBeamTransform();
         }
 
         private Transform FindHeldBeamReference(Transform holdPoint)
@@ -315,12 +306,73 @@ namespace Player.Equipment
             return holdPoint.parent != null ? holdPoint.parent : holdPoint;
         }
 
-        private void ResetHeldBeamAim()
+        private void ConfigureLightHead()
         {
-            if (spotlight == null) return;
+            if (spotlight == null || headPivot != null) return;
+            Transform housing = transform.Find("Light/Cube.001");
+            Renderer housingRenderer = housing != null ? housing.GetComponent<Renderer>() : null;
+            Vector3 beamForward = spotlight.transform.forward;
+            Vector3 centre = housingRenderer != null ? housingRenderer.bounds.center : spotlight.transform.position;
+            headPivot = new GameObject("Panel Tilt Pivot").transform;
+            headPivot.SetParent(transform, false);
+            headPivot.position = centre;
+            neutralBeamRotation = Quaternion.Inverse(headPivot.rotation) * spotlight.transform.rotation;
+            diffuserRenderer = spotlight.GetComponentInParent<MeshRenderer>();
+            if (housing != null) housing.SetParent(headPivot, true);
+            else spotlight.transform.SetParent(headPivot, true);
 
-            startAngles = heldBeamRotation;
-            UpdateLightTransform();
+            // Imported meshes have scaled/rotated pivots. Measure their real front face.
+            float front = 0f;
+            if (housingRenderer != null)
+            {
+                Bounds bounds = housingRenderer.localBounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = bounds.center + Vector3.Scale(bounds.extents,
+                        new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    front = Mathf.Max(front, Vector3.Dot(housing.TransformPoint(corner) - centre, beamForward));
+                }
+            }
+            if (diffuserRenderer != null)
+            {
+                float diffuserDepth = Vector3.Dot(diffuserRenderer.bounds.center - centre, beamForward);
+                diffuserRenderer.transform.position += beamForward * (front + 0.001f - diffuserDepth);
+                if (diffuserRenderer.sharedMaterial != null)
+                {
+                    diffuserMaterial = new Material(diffuserRenderer.sharedMaterial);
+                    diffuserMaterial.EnableKeyword("_EMISSION");
+                    diffuserMaterial.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+                    diffuserRenderer.sharedMaterial = diffuserMaterial;
+                }
+                diffuserProperties = new MaterialPropertyBlock();
+            }
+            // The diffuser has thickness too. Its centre is not its outer face.
+            if (diffuserRenderer != null)
+            {
+                Bounds diffuserBounds = diffuserRenderer.localBounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = diffuserBounds.center + Vector3.Scale(diffuserBounds.extents,
+                        new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    front = Mathf.Max(front, Vector3.Dot(diffuserRenderer.transform.TransformPoint(corner) - centre, beamForward));
+                }
+            }
+            // Keep the emitter out of the imported housing's non-uniform scale.
+            // The head still owns both the visible panel and its beam when tilted.
+            spotlight.transform.SetParent(headPivot, true);
+            spotlight.transform.localScale = Vector3.one;
+            spotlight.transform.position = centre + beamForward * (front + 0.06f);
+            spotlight.type = LightType.Spot;
+            spotlight.shadowNearPlane = 0.05f;
+            spotlight.shadowNormalBias = 0.1f;
+            EquipmentControls = "[LMB] Power | [Arrows] Tilt | [Scroll] Intensity | [G] Place";
+        }
+
+        private void OnDestroy()
+        {
+            if (diffuserMaterial == null) return;
+            if (Application.isPlaying) Destroy(diffuserMaterial);
+            else DestroyImmediate(diffuserMaterial);
         }
 
         private void AdjustIntensity(float amount)
@@ -368,21 +420,26 @@ namespace Player.Equipment
 
             spotlight.useColorTemperature = true;
             spotlight.colorTemperature = GetColorTemperature();
+            // Production lights must illuminate wall interiors, not just mesh vertices
+            // when the quality preset's automatic pixel-light budget is exhausted.
+            spotlight.renderMode = LightRenderMode.ForcePixel;
 
             if (!HasAdvancedFeatures())
             {
-                spotlight.range = standardRange;
-                spotlight.spotAngle = 48f;
-                spotlight.innerSpotAngle = 38f;
+                spotlight.range = Mathf.Max(30f, standardRange);
+                // A panel needs a broad feathered beam, not a flat circular pool.
+                // Beam falloff is separate from the equipment's shadow hardness.
+                spotlight.spotAngle = 72f;
+                spotlight.innerSpotAngle = 12f;
                 spotlight.shadows = LightShadows.Hard;
                 spotlight.shadowStrength = 0.72f;
                 return;
             }
 
             float diffusionAmount = diffusionPercent / 100f;
-            spotlight.range = advancedRange;
-            spotlight.spotAngle = Mathf.Lerp(48f, 75f, diffusionAmount);
-            spotlight.innerSpotAngle = Mathf.Lerp(42f, 32f, diffusionAmount);
+            spotlight.range = Mathf.Max(40f, advancedRange);
+            spotlight.spotAngle = Mathf.Lerp(68f, 90f, diffusionAmount);
+            spotlight.innerSpotAngle = Mathf.Lerp(18f, 8f, diffusionAmount);
             spotlight.shadows = LightShadows.Soft;
             spotlight.shadowStrength = Mathf.Lerp(0.8f, 0.45f, diffusionAmount);
         }
@@ -478,6 +535,13 @@ namespace Player.Equipment
         private void UpdateLightUI()
         {
             EnsureAdvancedFeatureUI();
+            if (diffuserRenderer != null && diffuserProperties != null)
+            {
+                diffuserRenderer.GetPropertyBlock(diffuserProperties);
+                Color lampColor = Mathf.CorrelatedColorTemperatureToRGB(GetColorTemperature());
+                diffuserProperties.SetColor("_EmissionColor", isLightOn ? lampColor * (0.25f + intensityPercent / 100f) : Color.black);
+                diffuserRenderer.SetPropertyBlock(diffuserProperties);
+            }
 
             // 1. Intensity Text Update
             if (intensityText != null)
@@ -489,7 +553,8 @@ namespace Player.Equipment
             // 2. Tilt Text Update
             if (tiltText != null)
             {
-                tiltText.text = $"{Mathf.RoundToInt(currentTilt)} degrees";
+                tiltText.text = $"{Mathf.RoundToInt(currentTilt)}\u00b0";
+                tiltText.enableWordWrapping = false;
                 tiltText.color = isLightOn ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
             }
 
@@ -502,7 +567,7 @@ namespace Player.Equipment
                 // The highest numerical value (45) must be the maxValue
                 tiltSlider.maxValue = maxTiltDown;
 
-                tiltSlider.value = currentTilt;
+                tiltSlider.SetValueWithoutNotify(currentTilt);
             }
 
             // 4. Intensity Slider Update
@@ -510,7 +575,7 @@ namespace Player.Equipment
             {
                 intensitySlider.minValue = 0f;
                 intensitySlider.maxValue = 100f;
-                intensitySlider.value = intensityPercent;
+                intensitySlider.SetValueWithoutNotify(intensityPercent);
             }
 
             // 5. Swap the Icons!
@@ -523,14 +588,14 @@ namespace Player.Equipment
             {
                 string temperatureName = colorTemperature <= 3600f ? "WARM" : colorTemperature >= 5200f ? "DAYLIGHT" : "NEUTRAL";
                 temperatureText.text = "COLOR TEMP     " + Mathf.RoundToInt(colorTemperature) + "K  " + temperatureName;
-                temperatureText.color = isLightOn ? new Color(1f, 0.82f, 0.52f, 1f) : new Color(0.5f, 0.5f, 0.5f, 1f);
+                temperatureText.color = isLightOn ? Color.white : Color.gray;
             }
 
             if (diffusionText != null)
             {
                 string diffusionName = diffusionPercent >= 75f ? "SOFT" : diffusionPercent >= 40f ? "MEDIUM" : "HARD";
                 diffusionText.text = "DIFFUSION       " + Mathf.RoundToInt(diffusionPercent) + "%  " + diffusionName;
-                diffusionText.color = isLightOn ? new Color(0.55f, 0.9f, 1f, 1f) : new Color(0.5f, 0.5f, 0.5f, 1f);
+                diffusionText.color = isLightOn ? Color.white : Color.gray;
             }
         }
     }

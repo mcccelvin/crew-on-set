@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using UnityEngine;
 
 public static class CampaignProgression
@@ -154,5 +155,6 @@ public static class CampaignProgression
         }
 
         PlayerPrefs.Save();
+        GameSaveManager.Instance?.SaveCheckpoint();
     }
 }

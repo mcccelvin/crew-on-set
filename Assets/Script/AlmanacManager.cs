@@ -1,3 +1,4 @@
+using PlayerPrefs = GameSavePrefs;
 using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
@@ -352,11 +353,11 @@ public class AlmanacManager : MonoBehaviour
     private bool previousCursorVisible = false;
     private bool hasCursorStateSnapshot = false;
 
-    private readonly Color backgroundColor = new Color(0.035f, 0.05f, 0.075f, 0.98f);
-    private readonly Color panelColor = new Color(0.09f, 0.12f, 0.16f, 1f);
-    private readonly Color headerColor = new Color(0.08f, 0.27f, 0.42f, 1f);
-    private readonly Color buttonColor = new Color(0.16f, 0.22f, 0.29f, 1f);
-    private readonly Color entryColor = new Color(0.13f, 0.17f, 0.22f, 1f);
+    private readonly Color backgroundColor = new Color(0.12f, 0.085f, 0.055f, 0.92f);
+    private readonly Color panelColor = new Color(0.94f, 0.87f, 0.71f, 1f);
+    private readonly Color headerColor = new Color32(88, 57, 36, 255);
+    private readonly Color buttonColor = new Color32(88, 57, 36, 255);
+    private readonly Color entryColor = new Color32(248, 240, 220, 255);
 
     private void Awake()
     {
@@ -479,9 +480,11 @@ public class AlmanacManager : MonoBehaviour
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
 
         Keyboard keyboard = Keyboard.current;
-        bool almanacPressed = inputManager != null ?
-                              inputManager.ConsumeAlmanac() :
-                              keyboard != null && keyboard.pKey.wasPressedThisFrame;
+        bool actionPressed = inputManager != null && inputManager.ConsumeAlmanac();
+        bool keyPressed = keyboard != null && keyboard.pKey.wasPressedThisFrame;
+        // Keep the global book shortcut available after menu/input-map transitions.
+        // A single OR prevents the action and keyboard paths toggling twice.
+        bool almanacPressed = Application.isFocused && (actionPressed || keyPressed);
 
         if (almanacPressed)
         {
@@ -506,13 +509,26 @@ public class AlmanacManager : MonoBehaviour
     public void ToggleAlmanac()
     {
         if (almanacCanvas == null) RebindSceneCanvas(SceneManager.GetActiveScene());
-        if (!isAlmanacOpen && PlayerPrefs.GetInt("AlmanacUnlocked", 0) == 0) return;
+        if (!DevTutorialBypass.Disabled && !isAlmanacOpen && PlayerPrefs.GetInt("AlmanacUnlocked", 0) == 0) return;
         if (!isAlmanacOpen && PauseManager.isPaused) return;
-        if (!isAlmanacOpen && (Cursor.visible || Cursor.lockState != CursorLockMode.Locked)) return;
-        if (!isAlmanacOpen && ContractUIManager.Instance != null && ContractUIManager.Instance.IsQualificationsOpen()) return;
-        if (!isAlmanacOpen && GokeLevelManager.Instance != null && !GokeLevelManager.Instance.CanOpenAlmanac()) return;
-        if (!isAlmanacOpen && Level3Manager.Instance != null && !Level3Manager.Instance.CanOpenAlmanac()) return;
-        if (!isAlmanacOpen && CampaignLevelManager.Instance != null && !CampaignLevelManager.Instance.CanOpenAlmanac()) return;
+        if (!isAlmanacOpen)
+        {
+            // Cursor state is not menu state: Resume/focus can leave it unlocked.
+            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return;
+            if (ContractUIManager.Instance != null &&
+                (ContractUIManager.Instance.IsQualificationsOpen() || ContractUIManager.Instance.IsContractUIOpen())) return;
+            DirectorTerminal director = FindObjectOfType<DirectorTerminal>();
+            if (director != null && director.IsTerminalActive()) return;
+            ShopTerminal shop = FindObjectOfType<ShopTerminal>();
+            if (shop != null && shop.IsTerminalActive()) return;
+            ComputerStation computer = FindObjectOfType<ComputerStation>();
+            if (computer != null && computer.computerUICanvas != null && computer.computerUICanvas.activeInHierarchy) return;
+
+            int level = CampaignProgression.GetCurrentLevel();
+            if (level == 2 && GokeLevelManager.Instance != null && !GokeLevelManager.Instance.CanOpenAlmanac()) return;
+            if (level == 3 && Level3Manager.Instance != null && !Level3Manager.Instance.CanOpenAlmanac()) return;
+            if (level >= 4 && CampaignLevelManager.Instance != null && !CampaignLevelManager.Instance.CanOpenAlmanac()) return;
+        }
         if (almanacCanvas == null) return;
 
         isAlmanacOpen = !isAlmanacOpen;
@@ -521,6 +537,9 @@ public class AlmanacManager : MonoBehaviour
         if (isAlmanacOpen)
         {
             CaptureInputState();
+            // Opening from gameplay must return to gameplay, not a stale Resume cursor.
+            previousCursorLockState = CursorLockMode.Locked;
+            previousCursorVisible = false;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             RefreshAllUI();
@@ -603,6 +622,7 @@ public class AlmanacManager : MonoBehaviour
         UnlockKnowledge("level_3_soft_light");
         UnlockKnowledge("automotive_staging");
         UnlockKnowledge("soft_light_technique");
+        UnlockKnowledge("vehicle_rim_lighting");
         PlayerPrefs.Save();
     }
 
@@ -728,6 +748,9 @@ public class AlmanacManager : MonoBehaviour
         if (playerInfoPanel != null) playerInfoPanel.SetActive(tabIndex == 0);
         if (knowledgePanel != null) knowledgePanel.SetActive(tabIndex == 1);
         if (achievementsPanel != null) achievementsPanel.SetActive(tabIndex == 2);
+        if (playerInfoTabBtn != null) playerInfoTabBtn.interactable = tabIndex != 0;
+        if (knowledgeTabBtn != null) knowledgeTabBtn.interactable = tabIndex != 1;
+        if (achievementsTabBtn != null) achievementsTabBtn.interactable = tabIndex != 2;
     }
 
     private void OpenPlayerInfoTab() { OpenTab(0); }
@@ -816,8 +839,8 @@ public class AlmanacManager : MonoBehaviour
     {
         AddKnowledgeEntry("level_2_camera", "LEVEL 2 - ADVANCED CAMERA", "Advanced camera built for professional client work.\n\n- The 3 x 3 grid supports Rule of Thirds composition.\n- Continuous autofocus and the tracking frame help keep the product readable.\n- The HUD displays focus distance, recording time, camera score, and lighting score.\n- [C] inserts an SD Card, [LMB] opens the viewfinder, [R] records, [Scroll] zooms, and [Q/E] changes height.\n- Finalize the framing before recording because look, zoom, and height adjustments lock during the take.", 2, 0);
         AddKnowledgeEntry("rule_of_thirds", "LEVEL 2 - RULE OF THIRDS", "Use the camera's 3 x 3 grid to create deliberate off-center composition.\n\n- Place the product near the left or right vertical grid line.\n- Put the most important detail close to a grid intersection.\n- Leave open space in the direction a subject faces or a vehicle points.\n- Do not center the product when the client specifically requests Rule of Thirds.\n- Check the tracking frame and product visibility before recording.", 2, 10);
-        AddKnowledgeEntry("three_point_lighting", "LEVEL 2 - 3-POINT LIGHTING", "Three lights create shape and separation by performing different jobs.\n\n- KEY: strongest light, placed about 45 degrees to one side. Start near 75% intensity.\n- FILL: softer light on the opposite side. Start near 40% intensity.\n- BACK: behind the subject for separation. Start near 60% intensity.\n- Aim every beam at the product and adjust tilt until it reaches the subject.\n- Inspect the camera view for depth, readable highlights, and controlled shadows.", 2, 20);
-        AddKnowledgeEntry("level_2_workflow", "LEVEL 2 - PRODUCT COMMERCIAL WORKFLOW", "Use this plan for contracts such as Goke Cola.\n\n1. Build and color the requested backdrop.\n2. Place the approved product away from the wall.\n3. Build a Key, Fill, and Back Light arrangement.\n4. Use the Level 2 Camera grid to place the product on the requested third.\n5. Record a clean take and ingest its SD Card.\n6. In the Editor, match the requested duration, graphic count, contrast, and saturation.\n7. Press [TAB] whenever you need the active contract's exact qualifications.", 2, 30);
+        AddKnowledgeEntry("three_point_lighting", "LEVEL 2 - 3-POINT LIGHTING", "Three lights create shape and separation by performing different jobs.\n\n- KEY: strongest light, placed about 45 degrees to one side. Start near 75% intensity.\n- FILL: softer light on the opposite side. Start near 40% intensity.\n- BACK: behind the subject for separation. Start near 60% intensity; these percentages are examples, not Goke grading targets.\n- Aim every beam at the product and adjust tilt until it reaches the subject.\n- Inspect the camera view for depth, readable highlights, and controlled shadows.", 2, 20);
+        AddKnowledgeEntry("level_2_workflow", "LEVEL 2 - PRODUCT COMMERCIAL WORKFLOW", "Use this plan for contracts such as Goke Cola.\n\n1. Build and color the requested backdrop.\n2. Place the approved product away from the wall.\n3. Build a Key, Fill, and Back Light arrangement.\n4. Use the Level 2 Camera grid to place the product on the requested third.\n5. Record a clean take and ingest its SD Card.\n6. In CLIPS, find the supplied GOKE INTRO and GOKE OUTRO. Build INTRO 2s > your footage 6s > OUTRO 2s with no gaps. Add the logo and tagline overlays at any times, together or separately.\n7. Press [TAB] whenever you need the active contract's exact qualifications.", 2, 30);
         AddKnowledgeEntry("grading_and_feedback", "LEVEL 2 - GRADING & CLIENT FEEDBACK", "Your final grade combines three production areas.\n\n- PRE-PRODUCTION checks the stage, backdrop, approved props, and placement.\n- PRODUCTION checks composition and equipment settings throughout the recorded take.\n- POST-PRODUCTION checks duration, branding count, and color grade.\n- S requires 90+ overall, Camera 60/70, and Lighting 25/30.\n- A requires 80+ overall, Camera 50/70, and Lighting 20/30. B and C also require both departments to pass.\n- Required lighting roles and equipment must be present; editing cannot replace missing production work.", 2, 40);
     }
 
@@ -826,12 +849,13 @@ public class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("level_3_soft_light", "LEVEL 3 - SOFT LIGHT", "Higher-output light designed for cleaner subject and vehicle lighting.\n\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Softer shadows create smoother transitions across reflective body panels.\n- For Lambormini, start near 75% intensity and -10 degrees tilt.\n- [LMB] toggles power, [Scroll] changes intensity, [Up/Down Arrows] adjust tilt, and [G] drops it.\n- Aim it across the vehicle, then check that the silhouette and highlight detail remain readable through the camera.", 3, 0);
         AddKnowledgeEntry("hiring_and_posing_actors", "LEVEL 4 - HIRING & POSING ACTORS", "Actors are hired and staged through the Director Terminal.\n\n- Click an Actor card to attach the actor to the cursor, then click the stage to place them.\n- Each actor hire costs 500 B-Coins.\n- Select the placed actor to enable the POSE ACTOR button.\n- The button cycles between Neutral, Wave, and Action poses.\n- Press [T] while the actor is selected to reposition them.\n- Keep the actor clear of the main product so both remain readable.", 4, 0);
         AddKnowledgeEntry("automotive_staging", "LEVEL 3 - AUTOMOTIVE STAGING", "Vehicle commercials require a readable silhouette, controlled reflections, and deliberate negative space.\n\n- Click the approved car card, move it over the stage, then click to place it.\n- Leave open space around the vehicle and show its important front or side shape.\n- Use the Soft Light across body panels to reveal their form.\n- Use the Level 2 Camera grid to place the vehicle deliberately instead of crowding the frame.\n- Press [TAB] during the active contract to review its exact qualifications.", 3, 10);
-        AddKnowledgeEntry("level_3_workflow", "LEVEL 3 - VEHICLE LIGHTING WORKFLOW", "Use this plan for the Lambormini production.\n\n1. Get the Level 3 Soft Light from the delivery area.\n2. Open the Director Terminal and place the approved vehicle.\n3. Position the Soft Light to reveal the front and side body shape.\n4. Start near 75% intensity and -10 degrees tilt, then refine distance and aim.\n5. Frame the vehicle clearly with the Level 2 Camera grid.\n6. Record and complete the premium automotive grade.\n7. Use [P] for techniques and [TAB] for exact contract qualifications.", 3, 20);
+        AddKnowledgeEntry("vehicle_rim_lighting", "TECHNIQUE - RIM LIGHTING & COLOR CONTRAST", "Separate the car from a dark backdrop with a bright outline.\n\n1. Keep your Soft Light in front and off to one side. Its broad highlight reveals the paint.\n2. Add a LIGHT STRIP from the Director Tablet. Place it behind and beside the car, close enough for its light to reach the body.\n3. Look through the camera: move the strip until a narrow highlight runs along the roof or far side. Avoid washing out the whole car.\n4. Try cyan (#66CCFF) against orange paint for warm/cool contrast. Leave the opposite side darker to preserve depth.\n5. Select the strip: F cycles MEDIUM, HIGH, OFF, LOW; R tilts; Q/E turns. RGB or HEX changes both the glowing bar and its real light. Compare OFF and ON from the same camera angle.\n6. Experiment with one or two strips. Stronger is not always better. Accent lighting is optional and does not replace the required Soft Light.", "Technique", 3, 35);
+        AddKnowledgeEntry("level_3_workflow", "LEVEL 3 - VEHICLE LIGHTING WORKFLOW", "Use this plan for the Lambormini production.\n\n1. Use ADD WALL in the Director Tablet, choose a dark backdrop color, then place one orange Lambormini. Arrange the set yourself. Optional LIGHT STRIP props add bright accents: R tilts; Q/E turns; RGB or HEX changes their color.\n2. Aim the Soft Light across the body. Start at 75% output; use at least 30% output and 50% diffusion.\n3. Frame a low front-quarter hero view, centered or on thirds.\n4. A headlight detail creates curiosity; revealing the car gives it context.\n5. Record a steady hero take and choose SLOW PULL OUT in Branding, or edit separate detail and hero takes.\n6. Make an 8-12 second cut. Brightness 0.85-1.15, Contrast 1.05-1.45, Saturation 0.95-1.30.\n7. Music, overlays and intro/outro are optional. Use [TAB] for the brief.", 3, 20);
     }
 
     private void EnsureEquipmentAndTechniqueEntries()
     {
-        AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- Use ADD WALL, select the wall, then adjust the RGB sliders.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
+        AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- Use ADD WALL, select the wall, then adjust the RGB sliders, type 0-255 in the number fields, or enter a HEX color such as #FF6600. Press Enter to apply.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
         AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 100 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
         AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "LEVEL 1 EQUIPMENT - 4,000 B-COINS\n\nFEATURES\n- Production camera with a 15-60 degree zoom range.\n- Continuous autofocus and a subject-tracking viewfinder HUD.\n- Displays focus distance, REC status, recording time, and subject position.\n- Supports zoom and pedestal-height adjustment.\n\nHOW TO USE\n- Pick it up with [E] and press [C] to insert a blank SD Card.\n- Press [LMB] to open or close the viewfinder.\n- Use [Scroll] to zoom and [Q/E] to change camera height.\n- Press [R] to start or stop recording.\n- Press [G] to drop it. Camera adjustments lock during recording.", "Equipment", 1, 20);
         AddKnowledgeEntry("sd_card", "EQUIPMENT - SD CARD", "LEVEL 1 EQUIPMENT - 50 B-COINS\n\nFEATURES\n- Blank cards provide recording storage for every camera.\n- Used cards store the footage filename, duration, camera score, lighting score, and total score.\n\nHOW TO USE\n- Keep a blank card in the hotbar and press [C] while holding a camera.\n- Stop the recording to eject the used card.\n- Pick it up with [E].\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E] to review the recording.", "Equipment", 1, 30);
@@ -844,10 +868,10 @@ public class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("recording_technique", "TECHNIQUE - STABLE 10-SECOND RECORDING", "LEVEL 1 TECHNIQUE\n\n- Insert a blank SD Card and finish the composition before pressing [R].\n- Keep the camera stable and the subject correctly framed throughout the take.\n- Record for the duration requested by the contract; the training and Goke contracts use 10 seconds.\n- Press [R] again to stop and generate the used SD Card.\n- Review the ingested clip before opening the Editor.", "Technique", 1, 30);
         AddKnowledgeEntry("post_production_technique", "TECHNIQUE - TRIMMING, BRANDING & COLOR", "LEVEL 1 TECHNIQUE\n\n- Drag the clip to the Video Track, trim it to 10.0 seconds, and move it to 0.0 seconds.\n- Keep Logo 1 on screen from 0-5 seconds and Logo 2 from 5-10 seconds without blocking the product.\n- Use brightness for exposure, contrast for separation, and saturation for color strength.\n- The Flower Vase target grade is Brightness 0.95, Contrast 1.15, and Saturation 1.10.\n- Export, review the final render, then submit it.", "Technique", 1, 40);
         AddKnowledgeEntry("rule_of_thirds", "TECHNIQUE - RULE OF THIRDS", "LEVEL 2 TECHNIQUE\n\n- Divide the frame with the Level 2 Camera's 3 x 3 grid.\n- Place the product near the left or right vertical line instead of the center.\n- Put the most important detail close to a grid intersection.\n- Leave visual space in front of the direction a person faces or a vehicle points.\n- For Goke Cola, the product must sit clearly on the left or right third.", "Technique", 2, 0);
-        AddKnowledgeEntry("three_point_lighting", "TECHNIQUE - 3-POINT LIGHTING", "LEVEL 2 TECHNIQUE\n\n- KEY LIGHT: strongest, about 45 degrees to one side. Start near 75% intensity.\n- FILL LIGHT: opposite side controlling shadow depth. Start near 40%.\n- BACK LIGHT: behind the product for separation. Start near 60%.\n- Aim every beam at the product and adjust tilt until the light reaches it.\n- Check the camera image for depth, readable highlights, and controlled shadows.", "Technique", 2, 10);
+        AddKnowledgeEntry("three_point_lighting", "TECHNIQUE - 3-POINT LIGHTING", "LEVEL 2 TECHNIQUE\n\n- KEY LIGHT: strongest, about 45 degrees to one side. Start near 75% intensity.\n- FILL LIGHT: opposite side controlling shadow depth. Start near 40%.\n- BACK LIGHT: behind the product for separation. Start near 60%; these percentages are examples, not Goke grading targets.\n- Aim every beam at the product and adjust tilt until the light reaches it.\n- Check the camera image for depth, readable highlights, and controlled shadows.", "Technique", 2, 10);
         AddKnowledgeEntry("product_separation", "TECHNIQUE - PRODUCT & BACKDROP SEPARATION", "LEVEL 2 TECHNIQUE\n\n- Pull the product forward instead of leaving it against the backdrop.\n- Physical distance creates depth and gives the Back Light room to work.\n- Keep the product silhouette clear from props with similar colors.\n- For Goke Cola, use a red backdrop and keep the can at least 1.5 units away from the wall.\n- Use lighting and color contrast to guide attention toward the product.", "Technique", 2, 20);
-        AddKnowledgeEntry("commercial_color_grading", "TECHNIQUE - COMMERCIAL COLOR GRADING", "LEVEL 2 TECHNIQUE\n\n- Brightness controls overall exposure, contrast separates light and dark areas, and saturation controls color strength.\n- Avoid excessive contrast that removes shadow detail.\n- For Goke Cola, deliver 10 seconds within a 0.75-second tolerance and use exactly 2 graphics.\n- Keep both graphics title-safe and visible for at least 2 seconds. A clear sequence is Graphic 1 from 0-5 seconds and Graphic 2 from 5-10 seconds.\n- Use Brightness 0.94-1.02, Contrast 1.14-1.26, and Saturation 1.04-1.16.\n- Match the grade to the contract instead of applying the same settings to every commercial.", "Technique", 2, 30);
-        AddKnowledgeEntry("advertising_post_production", "TECHNIQUE - ADVERTISING EDITING & VISUAL HIERARCHY", "LEVEL 2 TECHNIQUE\n\n- Editorial pacing controls how quickly the audience receives information. Remove dead air and begin the message at 0.0 seconds.\n- Use Rule-of-Thirds negative space as information space for graphics.\n- Preserve visual hierarchy: product first, brand second. Keep every graphic title-safe and away from the product silhouette.\n- Sequence the Goke Main Logo from 0-5 seconds and the Goke End Logo from 5-10 seconds instead of making both messages compete.\n- Perform primary correction in order: exposure first, contrast second, saturation last.\n- Review the exported master for timing, readability, safe margins, and controlled brand color before submission.", "Technique", 2, 40);
+        AddKnowledgeEntry("commercial_color_grading", "TECHNIQUE - COMMERCIAL COLOR GRADING", "OPTIONAL GOKE FINISH\n\nBrightness controls exposure, contrast separates light and dark areas, and saturation controls color strength. Preserve highlight and shadow detail. For this contract these controls are optional; the lesson focuses on intro/outro placement. The contract also requires two overlays, with timing and duration chosen by you.", "Technique", 2, 30);
+        AddKnowledgeEntry("advertising_post_production", "TECHNIQUE - INTRO & OUTRO", "GOKE POST-PRODUCTION\n\nINTRO: Introduces the brand and sets the tone, helping viewers understand whose commercial they are watching.\n\nOUTRO: Reinforces the brand and leaves a memorable closing message. 'Make it a Goke' invites the viewer to choose the product.\n\nBoth clips are supplied in CLIPS. Drag the full 2-second intro to 0s, place 6 seconds of your recorded product footage after it, and finish with the full 2-second outro at 8s. Join all clips without gaps or overlaps. Double-click footage to trim; right-click a clip to return it to the bank. Use both the Goke logo and tagline overlays. Choose when and how long they appear; no fixed order or minimum hold is required. Preview the complete 10-second commercial before export.", "Technique", 2, 40);
         AddKnowledgeEntry("hiring_and_posing_actors", "TECHNIQUE - HIRING, BLOCKING & POSING ACTORS", "LEVEL 4 TECHNIQUE\n\n- Click an Actor card, move the actor over the stage, then click again to place them. Each hire costs 500 B-Coins.\n- Select the actor to enable POSE ACTOR.\n- Cycle between Neutral, Wave, and Action poses to match the commercial.\n- Select the actor and press [T] to reposition them.\n- Block the actor beside the product without hiding its important shape.\n- Preserve the same pose and screen side across matching shots.", "Technique", 4, 0);
         AddKnowledgeEntry("automotive_staging", "TECHNIQUE - AUTOMOTIVE STAGING & COMPOSITION", "LEVEL 3 TECHNIQUE\n\n- Show a readable front or side silhouette of the vehicle.\n- Leave open space around the body instead of crowding it with props.\n- Use the Rule of Thirds grid to balance the vehicle with intentional negative space.\n- Aim the Soft Light across the body to reveal form without clipping reflections.\n- Check that the vehicle direction and empty space guide the viewer through the frame.", "Technique", 3, 10);
         AddKnowledgeEntry("soft_light_technique", "TECHNIQUE - SOFT LIGHTING FOR REFLECTIVE SURFACES", "LEVEL 3 TECHNIQUE\n\n- Move the Level 3 Soft Light across the front or side of the vehicle to reveal body shape.\n- Start near 75% intensity and -10 degrees tilt, then aim the beam across the car.\n- Change distance and intensity together: farther placement widens coverage but reduces brightness.\n- Keep enough shadow to preserve depth instead of lighting every surface equally.\n- In post use Contrast 1.15-1.45, Saturation 0.95-1.20, and Brightness 0.90-1.10.", "Technique", 3, 20);
@@ -954,9 +978,17 @@ public class AlmanacManager : MonoBehaviour
         }
     }
 
+    private void RefreshDirectorName()
+    {
+        if (playerNameText == null) return;
+        string playerName = PlayerPrefs.GetString("PlayerName", "").Trim();
+        playerNameText.richText = false;
+        playerNameText.text = "Director: " + (string.IsNullOrEmpty(playerName) ? "Guest" : playerName);
+    }
+
     private void RefreshAllUI()
     {
-        if (playerNameText != null) playerNameText.text = "Director: Guest";
+        RefreshDirectorName();
 
         if (CareerManager.Instance != null && playerMoneyText != null)
             playerMoneyText.text = "Bank: " + CareerManager.Instance.playerMoney + " B-Coins";
@@ -1040,6 +1072,15 @@ public class AlmanacManager : MonoBehaviour
 
             LayoutElement layoutElement = child.GetComponent<LayoutElement>();
             float childHeight = layoutElement != null ? layoutElement.preferredHeight : 100f;
+            Transform description = child.Find("Description");
+            if (description != null)
+            {
+                TMP_Text article = description.GetComponent<TMP_Text>();
+                float width = Mathf.Max(240f, contentRect.rect.width - 100f);
+                bool hasGuide = child.Find("Watch Rule of Thirds Guide") != null;
+                childHeight = Mathf.Max(240f, article.GetPreferredValues(article.text, width, Mathf.Infinity).y + (hasGuide ? 190f : 130f));
+                if (layoutElement != null) layoutElement.preferredHeight = childHeight;
+            }
 
             childRect.anchorMin = new Vector2(0f, 1f);
             childRect.anchorMax = new Vector2(1f, 1f);
@@ -1099,13 +1140,17 @@ public class AlmanacManager : MonoBehaviour
         bool hasVideoGuide = entry.id == "rule_of_thirds" && entry.category == "Technique";
         layoutElement.preferredHeight = Mathf.Clamp(190f + entry.description.Length * 0.3f, 250f, hasVideoGuide ? 450f : 390f);
 
-        TextMeshProUGUI titleText = CreateText("Title", entryObject.transform, entry.title, 30, TextAlignmentOptions.Left);
+        GameObject rule = CreatePanel("Chapter Rule", entryObject.transform, new Color32(88, 57, 36, 255));
+        SetStretchRect(rule.GetComponent<RectTransform>(), new Vector2(0, 1), Vector2.one, new Vector2(25, -8), new Vector2(-25, -5));
+        rule.GetComponent<Image>().raycastTarget = false;
+        TextMeshProUGUI titleText = CreateText("Title", entryObject.transform, entry.title.Replace("TECHNIQUE - ", "").Replace("EQUIPMENT - ", ""), 28, TextAlignmentOptions.Left);
         SetStretchRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(25f, -75f), new Vector2(-25f, -25f));
         titleText.fontStyle = FontStyles.Bold;
-        if (entry.category == "Equipment") titleText.color = new Color(0.35f, 0.8f, 1f);
-        else titleText.color = new Color(1f, 0.7f, 0.3f);
+        if (entry.category == "Equipment") titleText.color = EditorWorkspaceUI.Ink;
+        else titleText.color = EditorWorkspaceUI.Ink;
 
-        TextMeshProUGUI descriptionText = CreateText("Description", entryObject.transform, entry.description, 20, TextAlignmentOptions.TopLeft);
+        TextMeshProUGUI descriptionText = CreateText("Description", entryObject.transform, entry.description, 24, TextAlignmentOptions.TopLeft);
+        descriptionText.lineSpacing = 6;
         SetStretchRect(descriptionText.rectTransform, Vector2.zero, Vector2.one, new Vector2(25f, hasVideoGuide ? 85f : 20f), new Vector2(-25f, -80f));
 
         if (hasVideoGuide)
@@ -1145,7 +1190,7 @@ public class AlmanacManager : MonoBehaviour
 
         TextMeshProUGUI messageText = CreateText("Text", messageObject.transform, message, 22, TextAlignmentOptions.Center);
         SetStretchRect(messageText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-        messageText.color = new Color(0.65f, 0.7f, 0.75f);
+        messageText.color = new Color(0.40f, 0.32f, 0.23f);
     }
 
     private void BuildAlmanacUI()
@@ -1154,6 +1199,13 @@ public class AlmanacManager : MonoBehaviour
 
         Canvas canvas = almanacCanvas.GetComponent<Canvas>();
         if (canvas != null) canvas.sortingOrder = 60;
+        CanvasScaler bookScaler = almanacCanvas.GetComponent<CanvasScaler>();
+        if (bookScaler != null)
+        {
+            bookScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            bookScaler.referenceResolution = new Vector2(1920, 1080);
+            bookScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+        }
 
         RectTransform canvasRect = almanacCanvas.GetComponent<RectTransform>();
         canvasRect.localScale = Vector3.one;
@@ -1162,31 +1214,44 @@ public class AlmanacManager : MonoBehaviour
         GameObject background = CreatePanel("Almanac Background", almanacCanvas.transform, backgroundColor);
         SetStretchRect(background.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
-        GameObject mainPanel = CreatePanel("Almanac Book", background.transform, panelColor);
+        GameObject pageStack = CreatePanel("Page edges", background.transform, new Color32(195, 172, 132, 255));
+        SetRect(pageStack.GetComponent<RectTransform>(), new Vector2(.5f, .5f), new Vector2(.5f, .5f), new Vector2(9, -10), new Vector2(1510, 870));
+        pageStack.GetComponent<Image>().raycastTarget = false;
+        GameObject mainPanel = CreatePanel("Almanac Book", background.transform, new Color32(248, 240, 220, 255));
         SetRect(mainPanel.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1500f, 860f));
 
         GameObject header = CreatePanel("Header", mainPanel.transform, headerColor);
         SetStretchRect(header.GetComponent<RectTransform>(), new Vector2(0f, 1f), Vector2.one, new Vector2(0f, -100f), Vector2.zero);
 
-        TextMeshProUGUI titleText = CreateText("Title", header.transform, "PRODUCTION ALMANAC", 46, TextAlignmentOptions.Left);
+        TextMeshProUGUI titleText = CreateText("Title", header.transform, "THE PRODUCTION HANDBOOK", 36, TextAlignmentOptions.Left);
         SetStretchRect(titleText.rectTransform, Vector2.zero, Vector2.one, new Vector2(40f, 0f), new Vector2(-280f, 0f));
         titleText.fontStyle = FontStyles.Bold;
+        titleText.color = Color.white;
 
         closeButton = CreateButton("Close Button", header.transform, "CLOSE  [P]");
         SetRect(closeButton.GetComponent<RectTransform>(), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-145f, 0f), new Vector2(230f, 58f));
 
-        GameObject sidePanel = CreatePanel("Tabs", mainPanel.transform, new Color(0.065f, 0.085f, 0.11f, 1f));
+        GameObject sidePanel = CreatePanel("Tabs", mainPanel.transform, new Color32(228, 210, 178, 255));
         SetStretchRect(sidePanel.GetComponent<RectTransform>(), Vector2.zero, new Vector2(0f, 1f), Vector2.zero, new Vector2(300f, -100f));
 
-        playerInfoTabBtn = CreateButton("Director Tab", sidePanel.transform, "DIRECTOR");
+        playerInfoTabBtn = CreateButton("Director Tab", sidePanel.transform, "01   DIRECTOR");
         SetRect(playerInfoTabBtn.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -80f), new Vector2(250f, 64f));
 
-        knowledgeTabBtn = CreateButton("Knowledge Tab", sidePanel.transform, "KNOWLEDGE");
+        knowledgeTabBtn = CreateButton("Knowledge Tab", sidePanel.transform, "02   FIELD GUIDE");
         SetRect(knowledgeTabBtn.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -160f), new Vector2(250f, 64f));
 
-        achievementsTabBtn = CreateButton("Achievements Tab", sidePanel.transform, "ACHIEVEMENTS");
+        achievementsTabBtn = CreateButton("Achievements Tab", sidePanel.transform, "03   MILESTONES");
         SetRect(achievementsTabBtn.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -240f), new Vector2(250f, 64f));
 
+        GameObject spine = CreatePanel("Book binding", mainPanel.transform, new Color(0.43f, 0.28f, 0.15f));
+        SetStretchRect(spine.GetComponent<RectTransform>(), Vector2.zero, new Vector2(0f, 1f), new Vector2(302f, 0f), new Vector2(312f, -100f));
+        spine.GetComponent<Image>().raycastTarget = false;
+        var cover = mainPanel.AddComponent<Outline>();
+        cover.effectColor = new Color(0.25f, 0.13f, 0.06f);
+        cover.effectDistance = new Vector2(8f, -8f);
+        TextMeshProUGUI note = CreateText("Handbook note", sidePanel.transform,
+            "ON SET\n<size=75%>A director's reference</size>\n\n<size=80%>01  Plan the scene\n02  Shape the light\n03  Frame the story\n04  Refine the edit\n05  Deliver the film</size>", 28, TextAlignmentOptions.Left);
+        SetStretchRect(note.rectTransform, Vector2.zero, Vector2.one, new Vector2(20f, 40f), new Vector2(-20f, -360f));
         GameObject contentArea = new GameObject("Content Area", typeof(RectTransform));
         contentArea.transform.SetParent(mainPanel.transform, false);
         SetStretchRect(contentArea.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(330f, 35f), new Vector2(-35f, -125f));
@@ -1194,6 +1259,8 @@ public class AlmanacManager : MonoBehaviour
         BuildPlayerInfoPanel(contentArea.transform);
         BuildKnowledgePanel(contentArea.transform);
         BuildAchievementsPanel(contentArea.transform);
+        TextMeshProUGUI footer = CreateText("Book Footer", mainPanel.transform, "CREW ON SET     /     VIDEO PRODUCTION                                       FIELD EDITION    ·    SCROLL TO READ", 16, TextAlignmentOptions.Left);
+        SetStretchRect(footer.rectTransform, Vector2.zero, new Vector2(1, 0), new Vector2(345, 6), new Vector2(-35, 30));
     }
 
     private void BuildPlayerInfoPanel(Transform parent)
@@ -1201,11 +1268,12 @@ public class AlmanacManager : MonoBehaviour
         playerInfoPanel = CreatePanel("Director Panel", parent, new Color(0f, 0f, 0f, 0f));
         SetStretchRect(playerInfoPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
-        TextMeshProUGUI sectionTitle = CreateText("Section Title", playerInfoPanel.transform, "GUEST PROFILE", 38, TextAlignmentOptions.Left);
+        TextMeshProUGUI sectionTitle = CreateText("Section Title", playerInfoPanel.transform, "DIRECTOR'S RECORD", 36, TextAlignmentOptions.Left);
         SetStretchRect(sectionTitle.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(20f, -70f), new Vector2(-40f, -10f));
         sectionTitle.fontStyle = FontStyles.Bold;
 
-        playerNameText = CreateText("Player Name", playerInfoPanel.transform, "Director: Guest", 30, TextAlignmentOptions.Left);
+        playerNameText = CreateText("Player Name", playerInfoPanel.transform, "", 30, TextAlignmentOptions.Left);
+        RefreshDirectorName();
         SetStretchRect(playerNameText.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(40f, -190f), new Vector2(-40f, -130f));
 
         playerMoneyText = CreateText("Player Money", playerInfoPanel.transform, "Bank: 0 B-Coins", 30, TextAlignmentOptions.Left);
@@ -1259,13 +1327,13 @@ public class AlmanacManager : MonoBehaviour
     {
         if (knowledgePanel == null || techniqueGuidePanel != null) return;
 
-        techniqueGuidePanel = CreatePanel("Technique Video Guide", knowledgePanel.transform, new Color(0.035f, 0.05f, 0.075f, 1f));
+        techniqueGuidePanel = CreatePanel("Technique Video Guide", knowledgePanel.transform, new Color(0.94f, 0.87f, 0.71f, 1f));
         SetStretchRect(techniqueGuidePanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
 
         TextMeshProUGUI guideTitle = CreateText("Guide Title", techniqueGuidePanel.transform, "RULE OF THIRDS - IN-GAME VIDEO GUIDE", 32, TextAlignmentOptions.Left);
         SetStretchRect(guideTitle.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(25f, -70f), new Vector2(-220f, -15f));
         guideTitle.fontStyle = FontStyles.Bold;
-        guideTitle.color = new Color(1f, 0.7f, 0.3f);
+        guideTitle.color = EditorWorkspaceUI.Ink;
 
         Button closeGuideButton = CreateButton("Close Guide Button", techniqueGuidePanel.transform, "BACK TO GUIDES");
         SetRect(closeGuideButton.GetComponent<RectTransform>(), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-125f, -42f), new Vector2(220f, 52f));
@@ -1289,9 +1357,11 @@ public class AlmanacManager : MonoBehaviour
         SetStretchRect(captionPanel.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(8f, 8f), new Vector2(-8f, 92f));
 
         TextMeshProUGUI captionText = CreateText("Caption", captionPanel.transform, "", 21, TextAlignmentOptions.Center);
+        captionText.color = Color.white;
         SetStretchRect(captionText.rectTransform, Vector2.zero, Vector2.one, new Vector2(20f, 6f), new Vector2(-20f, -6f));
 
         TextMeshProUGUI videoLabel = CreateText("Video Label", videoFrame.transform, "IN-GAME CAMERA DEMONSTRATION", 17, TextAlignmentOptions.Left);
+        videoLabel.color = Color.white;
         SetStretchRect(videoLabel.rectTransform, new Vector2(0f, 1f), Vector2.one, new Vector2(20f, -38f), new Vector2(-20f, -10f));
         videoLabel.fontStyle = FontStyles.Bold;
 
@@ -1365,13 +1435,14 @@ public class AlmanacManager : MonoBehaviour
 
     private Transform CreateScrollList(string objectName, Transform parent)
     {
-        GameObject scrollObject = CreatePanel(objectName, parent, new Color(0.04f, 0.055f, 0.075f, 1f));
+        GameObject scrollObject = CreatePanel(objectName, parent, new Color32(248, 240, 220, 255));
         SetStretchRect(scrollObject.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(10f, 10f), new Vector2(-10f, -90f));
 
         ScrollRect scrollRect = scrollObject.AddComponent<ScrollRect>();
         scrollRect.horizontal = false;
         scrollRect.vertical = true;
         scrollRect.scrollSensitivity = 35f;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
 
         GameObject viewport = CreatePanel("Viewport", scrollObject.transform, new Color(0f, 0f, 0f, 0f));
         SetStretchRect(viewport.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(10f, 10f), new Vector2(-10f, -10f));
@@ -1415,18 +1486,23 @@ public class AlmanacManager : MonoBehaviour
     private Button CreateButton(string objectName, Transform parent, string buttonLabel)
     {
         GameObject buttonObject = CreatePanel(objectName, parent, buttonColor);
+        buttonObject.GetComponent<Image>().color = Color.white;
         Button button = buttonObject.AddComponent<Button>();
 
         ColorBlock colors = button.colors;
         colors.normalColor = buttonColor;
-        colors.highlightedColor = new Color(0.22f, 0.36f, 0.48f, 1f);
-        colors.pressedColor = new Color(0.08f, 0.18f, 0.27f, 1f);
+        colors.highlightedColor = new Color32(122, 84, 51, 255);
+        colors.pressedColor = new Color32(88, 57, 36, 255);
         colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color32(156, 112, 69, 255);
+        colors.fadeDuration = .15f;
+        button.targetGraphic = buttonObject.GetComponent<Image>();
         button.colors = colors;
 
         TextMeshProUGUI buttonText = CreateText("Text", buttonObject.transform, buttonLabel, 22, TextAlignmentOptions.Center);
         SetStretchRect(buttonText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         buttonText.fontStyle = FontStyles.Bold;
+        buttonText.color = Color.white;
 
         return button;
     }
@@ -1438,9 +1514,11 @@ public class AlmanacManager : MonoBehaviour
 
         TextMeshProUGUI textComponent = textObject.GetComponent<TextMeshProUGUI>();
         textComponent.text = text;
+        textComponent.font = TMP_Settings.defaultFontAsset;
         textComponent.fontSize = fontSize;
         textComponent.alignment = alignment;
-        textComponent.color = Color.white;
+        textComponent.color = EditorWorkspaceUI.Ink;
+        textComponent.raycastTarget = false;
         textComponent.enableWordWrapping = true;
 
         return textComponent;

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using Player.PlayerController;
 using TMPro;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -59,10 +60,15 @@ public class DirectorTerminal : MonoBehaviour
     private GameObject playerCameraObj;
     private PlayerController playerController;
     private GameObject mainPlayerUI;
+    private bool playerControllerWasEnabled = true;
+    private bool playerCouldMove = true;
+    private bool playerCouldLook = true;
+    private bool hasPlayerStateSnapshot;
 
     private GameObject draggedObject;
     private GameObject selectedObject;
     private Collider[] draggedColliders;
+    private readonly List<Collider> temporarilyDisabledColliders = new List<Collider>();
     private Renderer[] draggedRenderers;
     private Renderer[] selectedRenderers;
     private bool isTerminalActive = false;
@@ -70,11 +76,15 @@ public class DirectorTerminal : MonoBehaviour
     private bool showPropCostWarningOnDrop = false;
     private bool hasShownPropCostWarning = false;
     private Button poseActorButton;
+    private DirectorColorFields colorFields;
 
     private int displayedRValue = int.MinValue;
     private int displayedGValue = int.MinValue;
     private int displayedBValue = int.MinValue;
     private int displayedMoney = int.MinValue;
+    private bool pendingTutorialColorCheck;
+    private bool pendingColorIsWall;
+    private Color pendingColor;
 
     private LineRenderer selectionOutline;
     private Material selectionOutlineMaterial;
@@ -89,6 +99,7 @@ public class DirectorTerminal : MonoBehaviour
         if (currentWall != null) Destroy(currentWall);
 
         currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
+        RaiseBackdropFloorAboveStage();
         currentWall.name = "Goke Practice Wall";
         currentWallColor = wallColor;
         ApplyColorToWall(currentWallColor);
@@ -116,20 +127,25 @@ public class DirectorTerminal : MonoBehaviour
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
-        if (rSlider != null) rSlider.value = rSlider.maxValue;
-        if (gSlider != null) gSlider.value = gSlider.maxValue;
-        if (bSlider != null) bSlider.value = bSlider.maxValue;
+        SyncSlidersToColor(Color.white);
     }
 
     private void Start()
     {
         if (tabletUI != null) tabletUI.SetActive(false);
-        if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
+        if (selectionIndicatorText != null)
+        {
+            selectionIndicatorText.text = "Selected: None";
+            selectionIndicatorText.gameObject.SetActive(false);
+        }
 
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
         CreatePoseActorButton();
+        colorFields = gameObject.AddComponent<DirectorColorFields>();
+        colorFields.Initialize(this);
+        UpdateStageButtonLabel();
 
         Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
         foreach (Canvas canvas in allCanvases)
@@ -151,9 +167,21 @@ public class DirectorTerminal : MonoBehaviour
         Mouse mouse = Mouse.current;
         Keyboard keyboard = Keyboard.current;
 
-        TutorialClampSliders();
-
+        UpdateColorSliderAvailability();
         UpdateUIText();
+
+        if (colorFields != null && colorFields.IsEditing) return;
+
+        StageLightStrip strip = selectedObject != null ? selectedObject.GetComponent<StageLightStrip>() : null;
+        if (strip != null && keyboard != null)
+        {
+            if (keyboard.rKey.wasPressedThisFrame) strip.CycleTilt();
+            if (keyboard.qKey.wasPressedThisFrame) strip.transform.Rotate(0, -15, 0, Space.World);
+            if (keyboard.eKey.wasPressedThisFrame) strip.transform.Rotate(0, 15, 0, Space.World);
+            if (keyboard.fKey.wasPressedThisFrame) strip.CyclePower();
+            if (selectionIndicatorText != null)
+                selectionIndicatorText.text = "LIGHT STRIP  |  R: tilt  Q/E: turn  F: " + strip.PowerLabel;
+        }
 
         if (draggedObject != null)
         {
@@ -196,36 +224,72 @@ public class DirectorTerminal : MonoBehaviour
         UpdateSelectionOutline();
     }
 
-    private void TutorialClampSliders()
+    private void LateUpdate()
     {
-        if (TutorialManager.Instance == null) return;
+        // The tablet owns the mouse while it is open. Tutorial dialogue and other
+        // systems also manage the cursor, so enforce this after their Update calls.
+        if (!isTerminalActive) return;
 
-        var step = TutorialManager.Instance.currentStep;
+        CheckPendingTutorialColor();
 
-        if (step == TutorialManager.TutorialStep.Tablet_PaintWall || step == TutorialManager.TutorialStep.Tablet_PaintCube)
-        {
-            if (bSlider != null)
-            {
-                float bTarget = bSlider.maxValue > 1f ? 150f : 150f / 255f;
-                if (bSlider.value < bTarget)
-                {
-                    bSlider.value = bTarget;
-                }
-            }
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
 
-            if (rSlider != null && rSlider.value < rSlider.maxValue)
-            {
-                rSlider.value = rSlider.maxValue;
-            }
-        }
+    private void QueueTutorialColorCheck(Color color, bool isWall)
+    {
+        pendingColor = color;
+        pendingColorIsWall = isWall;
+        pendingTutorialColorCheck = true;
+    }
+
+    private void CheckPendingTutorialColor()
+    {
+        if (!pendingTutorialColorCheck || PauseManager.isPaused) return;
+
+        // Slider callbacks run throughout a drag. Crossing the target value is
+        // not a finished edit: the player must release on the requested color.
+        Mouse mouse = Mouse.current;
+        if (mouse != null && mouse.leftButton.isPressed) return;
+
+        pendingTutorialColorCheck = false;
+        TutorialManager tutorial = TutorialManager.Instance;
+        if (tutorial == null) return;
+
+        if (pendingColorIsWall)
+            tutorial.CheckWallColor(pendingColor.r * 255f, pendingColor.g * 255f, pendingColor.b * 255f);
+        else
+            tutorial.CheckCubeColor(pendingColor.r * 255f, pendingColor.g * 255f, pendingColor.b * 255f);
     }
 
     private Color NormalizeColor(float r, float g, float b)
     {
-        float normR = r > 1f ? r / 255f : r;
-        float normG = g > 1f ? g / 255f : g;
-        float normB = b > 1f ? b / 255f : b;
-        return new Color(normR, normG, normB, 1f);
+        return new Color(NormalizeChannel(r, rSlider), NormalizeChannel(g, gSlider), NormalizeChannel(b, bSlider), 1f);
+    }
+
+    private Color SnapTutorialPaintColor(Color color, bool isWall)
+    {
+        TutorialManager tutorial = TutorialManager.Instance;
+        if (tutorial == null) return color;
+
+        Color snappedColor = tutorial.SnapTutorialPaintColor(color, isWall);
+        if (snappedColor.b != color.b && bSlider != null)
+        {
+            // Keep the handle, readout, and material on the same exact value.
+            // Silent updates avoid recursively firing the slider's paint callback.
+            bSlider.SetValueWithoutNotify(bSlider.maxValue > 1f ? snappedColor.b * 255f : snappedColor.b);
+            UpdateUIText();
+        }
+
+        return snappedColor;
+    }
+
+    private static float NormalizeChannel(float value, Slider slider)
+    {
+        // Use the configured range, not the current value: 1 in a 0-255
+        // slider means 1/255, while 1 in a 0-1 slider means full intensity.
+        bool usesByteRange = slider != null ? slider.maxValue > 1f : value > 1f;
+        return Mathf.Clamp01(usesByteRange ? value / 255f : value);
     }
 
     public void SpawnWall()
@@ -241,14 +305,13 @@ public class DirectorTerminal : MonoBehaviour
             }
 
             currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
+            RaiseBackdropFloorAboveStage();
             if (spawnWallButton != null) spawnWallButton.SetActive(false);
 
             currentWallColor = Color.white;
             ApplyColorToWall(currentWallColor);
 
-            if (rSlider != null) rSlider.value = rSlider.maxValue;
-            if (gSlider != null) gSlider.value = gSlider.maxValue;
-            if (bSlider != null) bSlider.value = bSlider.maxValue;
+            SyncSlidersToColor(currentWallColor);
 
             if (TutorialManager.Instance != null) TutorialManager.Instance.OnWallAdded();
         }
@@ -256,15 +319,13 @@ public class DirectorTerminal : MonoBehaviour
 
     public void SetCustomColor(float r, float g, float b)
     {
-        currentWallColor = NormalizeColor(r, g, b);
-        if (currentWall != null) ApplyColorToWall(currentWallColor);
+        if (!CanUseColorSliders()) return;
 
-        if (TutorialManager.Instance != null)
+        currentWallColor = SnapTutorialPaintColor(NormalizeColor(r, g, b), true);
+        if (currentWall != null)
         {
-            float rCheck = r > 1f ? r : r * 255f;
-            float gCheck = g > 1f ? g : g * 255f;
-            float bCheck = b > 1f ? b : b * 255f;
-            TutorialManager.Instance.CheckWallColor(rCheck, gCheck, bCheck);
+            ApplyColorToWall(currentWallColor);
+            QueueTutorialColorCheck(currentWallColor, true);
         }
     }
 
@@ -273,7 +334,69 @@ public class DirectorTerminal : MonoBehaviour
         if (currentWall != null)
         {
             MeshRenderer[] renderers = currentWall.GetComponentsInChildren<MeshRenderer>();
-            foreach (MeshRenderer renderer in renderers) renderer.material.color = newColor;
+            foreach (MeshRenderer renderer in renderers)
+            {
+                // Paint the backdrop and its floor together; leave the separate hardware alone.
+                bool isBackdrop = renderer.name.StartsWith("Screen", System.StringComparison.OrdinalIgnoreCase) ||
+                    renderer.name.Equals("wall", System.StringComparison.OrdinalIgnoreCase) ||
+                    renderer.name.StartsWith("Backdrop", System.StringComparison.OrdinalIgnoreCase);
+                if (isBackdrop)
+                    foreach (Material material in renderer.materials)
+                        if (material != null && material.HasProperty("_Color")) material.color = newColor;
+            }
+        }
+    }
+
+    private void RaiseBackdropFloorAboveStage()
+    {
+        // The exported floor sits below the old wall anchor. Align in world space:
+        // the studio's Stage hierarchy is rotated and scaled non-uniformly.
+        if (currentWall == null || spawnPoint == null) return;
+        Renderer platform = spawnPoint.GetComponentInParent<Renderer>();
+        if (platform == null)
+        {
+            GameObject stage = GameObject.Find("Stage");
+            if (stage != null)
+                foreach (Renderer candidate in stage.GetComponentsInChildren<Renderer>())
+                    if (candidate.name.Equals("stage", System.StringComparison.OrdinalIgnoreCase)) { platform = candidate; break; }
+        }
+        if (platform == null) return;
+        foreach (Renderer screen in currentWall.GetComponentsInChildren<Renderer>())
+        {
+            if (!screen.name.StartsWith("Screen", System.StringComparison.OrdinalIgnoreCase)) continue;
+            float lift = platform.bounds.max.y + 0.025f - screen.bounds.min.y;
+            if (lift > 0) currentWall.transform.position += Vector3.up * lift;
+            break;
+        }
+        GroundBackdropStands();
+    }
+
+    private void GroundBackdropStands()
+    {
+        Physics.SyncTransforms();
+        foreach (Renderer stand in currentWall.GetComponentsInChildren<Renderer>())
+        {
+            if (!stand.name.StartsWith("tripod", System.StringComparison.OrdinalIgnoreCase)) continue;
+            Bounds bounds = stand.bounds;
+            RaycastHit[] hits = Physics.RaycastAll(new Vector3(bounds.center.x, bounds.max.y + .1f, bounds.center.z),
+                Vector3.down, 100f, ~0, QueryTriggerInteraction.Ignore);
+            System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+            foreach (RaycastHit hit in hits)
+            {
+                if (hit.collider.transform.IsChildOf(currentWall.transform) || hit.rigidbody != null ||
+                    hit.collider.gameObject.layer == LayerMask.NameToLayer("Props") || hit.normal.y < .5f) continue;
+                float height = bounds.size.y;
+                if (height < .01f || hit.point.y >= bounds.max.y) break;
+                // Extend the stand down to its own supporting surface while keeping
+                // its top attached to the raised backdrop rail.
+                Transform pivot = new GameObject("Stand ground alignment").transform;
+                pivot.SetParent(currentWall.transform, false);
+                pivot.position = new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+                pivot.rotation = Quaternion.identity;
+                stand.transform.SetParent(pivot, true);
+                pivot.localScale = new Vector3(1, (bounds.max.y - hit.point.y) / height, 1);
+                break;
+            }
         }
     }
 
@@ -283,6 +406,7 @@ public class DirectorTerminal : MonoBehaviour
 
         if (currentWall != null)
         {
+            currentWall.SetActive(false);
             if (selectedObject == currentWall)
             {
                 selectedObject = null;
@@ -295,9 +419,7 @@ public class DirectorTerminal : MonoBehaviour
 
         currentWallColor = Color.white;
 
-        if (rSlider != null) rSlider.value = rSlider.maxValue;
-        if (gSlider != null) gSlider.value = gSlider.maxValue;
-        if (bSlider != null) bSlider.value = bSlider.maxValue;
+        SyncSlidersToColor(Color.white);
 
         if (spawnWallButton != null) spawnWallButton.SetActive(true);
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
@@ -335,8 +457,29 @@ public class DirectorTerminal : MonoBehaviour
         }
     }
 
+    public bool CanUseColorSliders()
+    {
+        ImportedProductVisual imported = selectedObject != null ? selectedObject.GetComponentInChildren<ImportedProductVisual>() : null;
+        if (imported != null && !imported.CanRecolor) return false;
+        return TutorialManager.Instance == null ||
+               TutorialManager.Instance.CanUseTabletFeature("ColorSliders");
+    }
+
+    private void UpdateColorSliderAvailability()
+    {
+        bool canUseColorSliders = CanUseColorSliders();
+
+        if (rSlider != null) rSlider.interactable = canUseColorSliders;
+        if (gSlider != null) gSlider.interactable = canUseColorSliders;
+        if (bSlider != null) bSlider.interactable = canUseColorSliders;
+        if (colorFields != null) colorFields.Refresh(canUseColorSliders);
+    }
+
     private void SyncSlidersToColor(Color color)
     {
+        // Selecting/spawning an object updates the readout without repainting
+        // another object or triggering tutorial checks for intermediate RGB values.
+        pendingTutorialColorCheck = false;
         if (rSlider != null) rSlider.SetValueWithoutNotify(rSlider.maxValue > 1f ? color.r * 255f : color.r);
         if (gSlider != null) gSlider.SetValueWithoutNotify(gSlider.maxValue > 1f ? color.g * 255f : color.g);
         if (bSlider != null) bSlider.SetValueWithoutNotify(bSlider.maxValue > 1f ? color.b * 255f : color.b);
@@ -431,10 +574,13 @@ public class DirectorTerminal : MonoBehaviour
                 selectedObject = rb.gameObject;
                 selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
+                if (selectionIndicatorText != null && selectedObject.GetComponent<StageLightStrip>() != null)
+                    selectionIndicatorText.text += "  |  R: tilt  Q/E: turn";
 
                 if (selectedRenderers.Length > 0)
                 {
-                    SyncSlidersToColor(selectedRenderers[0].material.color);
+                    Material material = selectedRenderers[0].sharedMaterial;
+                    if (material != null && material.HasProperty("_Color")) SyncSlidersToColor(material.color);
                 }
 
                 // --- NEW: Tell Tutorial we clicked a prop! ---
@@ -445,9 +591,10 @@ public class DirectorTerminal : MonoBehaviour
                 return;
             }
 
-            if (IsWallName(hit.collider.name))
+            bool belongsToCurrentWall = currentWall != null && hit.collider.transform.IsChildOf(currentWall.transform);
+            if (belongsToCurrentWall || IsWallName(hit.collider.name))
             {
-                selectedObject = hit.collider.gameObject;
+                selectedObject = belongsToCurrentWall ? currentWall : hit.collider.gameObject;
                 selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "";
                 SyncSlidersToColor(currentWallColor);
@@ -526,13 +673,19 @@ public class DirectorTerminal : MonoBehaviour
         GameObject wrapper = new GameObject(prefab3D.name + "_Wrapper");
         wrapper.transform.position = spawnPos;
 
-        GameObject visualProp = Instantiate(prefab3D, wrapper.transform);
+        string sourceName = prefab3D.name.ToLowerInvariant();
+        int productLevel = sourceName.Contains("goke") || sourceName.Contains("coke") ? 2 :
+            sourceName.Contains("flower") || sourceName.Contains("floral") ? 1 : 0;
+        GameObject visualProp = productLevel > 0 ? ProductModelCatalog.Create(productLevel, prefab3D.name) : null;
+        bool usesImportedProduct = visualProp != null;
+        if (usesImportedProduct) visualProp.transform.SetParent(wrapper.transform, false);
+        else visualProp = Instantiate(prefab3D, wrapper.transform);
         visualProp.transform.localPosition = Vector3.zero;
 
         Renderer[] rends = visualProp.GetComponentsInChildren<Renderer>();
         foreach (Renderer r in rends)
         {
-            r.material.color = Color.white;
+            if (!usesImportedProduct && productLevel != 1) r.material.color = Color.white;
         }
 
         BoxCollider box = visualProp.GetComponent<BoxCollider>();
@@ -567,9 +720,8 @@ public class DirectorTerminal : MonoBehaviour
 
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
 
-        if (rSlider != null) rSlider.value = rSlider.maxValue;
-        if (gSlider != null) gSlider.value = gSlider.maxValue;
-        if (bSlider != null) bSlider.value = bSlider.maxValue;
+        Material previewMaterial = rends.Length > 0 ? rends[0].sharedMaterial : null;
+        SyncSlidersToColor(previewMaterial != null && previewMaterial.HasProperty("_Color") ? previewMaterial.color : Color.white);
 
         UpdatePoseActorButton();
 
@@ -599,7 +751,8 @@ public class DirectorTerminal : MonoBehaviour
 
         if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
 
-        GameObject wrapper = isActor ? CreateCubeActor(itemName, itemIndex) : CreateCubeCar(itemName);
+        GameObject wrapper = isActor ? CreateCubeActor(itemName, itemIndex) :
+            itemIndex == -1 ? StageLightStrip.Create() : CreateCubeCar(itemName);
         wrapper.transform.position = spawnPos;
 
         foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
@@ -617,8 +770,10 @@ public class DirectorTerminal : MonoBehaviour
         selectedRenderers = draggedRenderers;
         justGrabbed = true;
 
-        if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + itemName;
+        if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + itemName +
+            (wrapper.GetComponent<StageLightStrip>() != null ? "  |  R: tilt  Q/E: turn" : "");
 
+        SyncSelectedProductColor();
         UpdatePoseActorButton();
     }
 
@@ -661,13 +816,43 @@ public class DirectorTerminal : MonoBehaviour
 
         if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + itemName;
 
+        SyncSelectedProductColor();
         UpdatePoseActorButton();
+    }
+
+    private void UpdateStageButtonLabel()
+    {
+        if (spawnWallButton == null) return;
+        TMP_Text label = spawnWallButton.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = "ADD WALL";
+    }
+
+    public Color GetSliderColor()
+    {
+        return NormalizeColor(rSlider != null ? rSlider.value : 0, gSlider != null ? gSlider.value : 0, bSlider != null ? bSlider.value : 0);
+    }
+
+    public void ApplyTypedColor(Color color)
+    {
+        if (!CanUseColorSliders()) return;
+        SyncSlidersToColor(color);
+        SetSelectedPropColor(rSlider != null && rSlider.maxValue > 1 ? color.r * 255 : color.r,
+            gSlider != null && gSlider.maxValue > 1 ? color.g * 255 : color.g,
+            bSlider != null && bSlider.maxValue > 1 ? color.b * 255 : color.b);
+    }
+
+    private void SyncSelectedProductColor()
+    {
+        if (selectedRenderers == null || selectedRenderers.Length == 0) return;
+        Material material = selectedRenderers[0].sharedMaterial;
+        if (material != null && material.HasProperty("_Color")) SyncSlidersToColor(material.color);
     }
 
     public void DropDraggedProp()
     {
         if (draggedObject != null)
         {
+            if (TutorialManager.Instance != null && !TutorialManager.Instance.CanPlaceTutorialProp(draggedObject)) return;
             GameObject placedObject = draggedObject;
             bool shouldShowPropCostWarning = showPropCostWarningOnDrop;
             draggedObject = null;
@@ -704,11 +889,10 @@ public class DirectorTerminal : MonoBehaviour
 
         if (draggedColliders == null) draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
         if (draggedRenderers == null) draggedRenderers = draggedObject.GetComponentsInChildren<Renderer>();
-        foreach (var col in draggedColliders) col.enabled = false;
 
         int layerMask = (1 << LayerMask.NameToLayer("Props")) | (1 << LayerMask.NameToLayer("Default"));
 
-        if (Physics.Raycast(ray, out RaycastHit hit, 100f, layerMask))
+        if (RaycastPastDraggedObject(ray, out RaycastHit hit, layerMask))
         {
             if (hit.normal.y > 0.5f)
             {
@@ -725,7 +909,6 @@ public class DirectorTerminal : MonoBehaviour
             }
         }
 
-        foreach (var col in draggedColliders) col.enabled = true;
 
         if (!stacked)
         {
@@ -744,6 +927,28 @@ public class DirectorTerminal : MonoBehaviour
 
                 draggedObject.transform.position = flatHit + new Vector3(0, bottomOffset, 0);
             }
+        }
+    }
+
+    private bool RaycastPastDraggedObject(Ray ray, out RaycastHit hit, int layerMask)
+    {
+        temporarilyDisabledColliders.Clear();
+        try
+        {
+            foreach (Collider collider in draggedColliders)
+            {
+                // Procedural visuals may remove their temporary colliders after the drag starts.
+                if (collider == null || !collider.enabled) continue;
+                temporarilyDisabledColliders.Add(collider);
+                collider.enabled = false;
+            }
+            return Physics.Raycast(ray, out hit, 100f, layerMask);
+        }
+        finally
+        {
+            foreach (Collider collider in temporarilyDisabledColliders)
+                if (collider != null) collider.enabled = true;
+            temporarilyDisabledColliders.Clear();
         }
     }
 
@@ -770,6 +975,8 @@ public class DirectorTerminal : MonoBehaviour
 
     public void SetSelectedPropColor(float r, float g, float b)
     {
+        if (!CanUseColorSliders()) return;
+
         Color newCol = NormalizeColor(r, g, b);
 
         bool isWall = IsWallObject(selectedObject);
@@ -778,19 +985,22 @@ public class DirectorTerminal : MonoBehaviour
 
         if (selectedObject != null && !isWall)
         {
+            StageLightStrip strip = selectedObject.GetComponent<StageLightStrip>();
+            if (strip != null) { strip.SetColor(newCol); return; }
+            ImportedProductVisual imported = selectedObject.GetComponentInChildren<ImportedProductVisual>();
+            if (imported != null)
+            {
+                imported.SetBodyColor(newCol);
+                return;
+            }
+            newCol = SnapTutorialPaintColor(newCol, false);
             if (selectedRenderers == null) selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
             foreach (Renderer ren in selectedRenderers)
             {
                 ren.material.color = newCol;
             }
 
-            if (TutorialManager.Instance != null)
-            {
-                float rCheck = r > 1f ? r : r * 255f;
-                float gCheck = g > 1f ? g : g * 255f;
-                float bCheck = b > 1f ? b : b * 255f;
-                TutorialManager.Instance.CheckCubeColor(rCheck, gCheck, bCheck);
-            }
+            QueueTutorialColorCheck(newCol, false);
         }
         else
         {
@@ -839,23 +1049,50 @@ public class DirectorTerminal : MonoBehaviour
             CreateStageItemCard("LAMBORMINI CAR", false, 0);
         }
 
+        if (currentLevel >= 3) CreateStageItemCard("LIGHT STRIP", false, -1);
+
         if (currentLevel == 4) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
         if (currentLevel == 5) CreateCampaignProductCard("HARAYA PRODUCT", 5);
     }
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
+        if (isTerminalActive)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
+            return;
+        }
+
+        if (PauseManager.isPaused ||
+            (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) ||
+            (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()))
+        {
+            return;
+        }
+
         isTerminalActive = true;
         playerCameraObj = pCam;
         playerController = pController;
-        if (playerController != null) playerController.enabled = false;
+        if (playerController != null)
+        {
+            playerControllerWasEnabled = playerController.enabled;
+            playerCouldMove = playerController.canMove;
+            playerCouldLook = playerController.canLook;
+            hasPlayerStateSnapshot = true;
+            playerController.canMove = false;
+            playerController.canLook = false;
+            playerController.enabled = false;
+        }
 
         if (tabletUI != null) tabletUI.SetActive(true);
+        if (selectionIndicatorText != null) selectionIndicatorText.gameObject.SetActive(true);
         if (mainPlayerUI != null) mainPlayerUI.SetActive(false);
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
         GeneratePropBankUI();
+        UpdateStageButtonLabel();
         UpdatePoseActorButton();
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnTabletOpened();
     }
@@ -868,16 +1105,44 @@ public class DirectorTerminal : MonoBehaviour
         }
 
         isTerminalActive = false;
-        if (playerController != null) playerController.enabled = true;
+        RestorePlayerAfterTerminal();
 
         if (tabletUI != null) tabletUI.SetActive(false);
+        if (selectionIndicatorText != null) selectionIndicatorText.gameObject.SetActive(false);
         if (mainPlayerUI != null) mainPlayerUI.SetActive(true);
-        Cursor.lockState = CursorLockMode.Locked;
-        Cursor.visible = false;
 
         if (selectionOutline != null) selectionOutline.enabled = false;
 
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnTabletClosed();
+
+        ApplyCursorStateAfterTerminal();
+        StartCoroutine(RecheckCursorAfterTerminalClose());
+    }
+
+    private void RestorePlayerAfterTerminal()
+    {
+        if (!hasPlayerStateSnapshot || playerController == null) return;
+
+        playerController.canMove = playerCouldMove;
+        playerController.canLook = playerCouldLook;
+        playerController.enabled = playerControllerWasEnabled;
+        hasPlayerStateSnapshot = false;
+    }
+
+    private void ApplyCursorStateAfterTerminal()
+    {
+        bool anotherMenuNeedsCursor = PauseManager.isPaused ||
+            (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) ||
+            (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen());
+
+        Cursor.lockState = anotherMenuNeedsCursor ? CursorLockMode.None : CursorLockMode.Locked;
+        Cursor.visible = anotherMenuNeedsCursor;
+    }
+
+    private IEnumerator RecheckCursorAfterTerminalClose()
+    {
+        yield return null;
+        if (!isTerminalActive) ApplyCursorStateAfterTerminal();
     }
 
     public bool IsTerminalActive()
@@ -937,23 +1202,14 @@ public class DirectorTerminal : MonoBehaviour
 
     private GameObject CreateCubeCar(string carName)
     {
-        GameObject car = new GameObject(carName + "_Wrapper");
-        car.AddComponent<CubeVehicle>();
-
-        CreateCubePart("Car Body", car.transform, new Vector3(0, 0.45f, 0), new Vector3(2.6f, 0.55f, 1.25f), new Color(0.75f, 0.05f, 0.05f));
-        CreateCubePart("Car Cabin", car.transform, new Vector3(0.2f, 0.95f, 0), new Vector3(1.35f, 0.55f, 1f), new Color(0.25f, 0.35f, 0.45f));
-
-        Color wheelColor = new Color(0.05f, 0.05f, 0.05f);
-        CreateCubePart("Front Left Wheel", car.transform, new Vector3(0.85f, 0.2f, -0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
-        CreateCubePart("Front Right Wheel", car.transform, new Vector3(0.85f, 0.2f, 0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
-        CreateCubePart("Back Left Wheel", car.transform, new Vector3(-0.85f, 0.2f, -0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
-        CreateCubePart("Back Right Wheel", car.transform, new Vector3(-0.85f, 0.2f, 0.7f), new Vector3(0.5f, 0.5f, 0.25f), wheelColor);
-
-        return car;
+        GameObject imported = ProductModelCatalog.Create(3, carName + "_Wrapper");
+        return imported != null ? imported : LamborminiVehicleVisual.Create(carName);
     }
 
     private GameObject CreateCubeCampaignProduct(string productName, int campaignLevel)
     {
+        GameObject imported = ProductModelCatalog.Create(campaignLevel, productName + "_Wrapper");
+        if (imported != null) return imported;
         GameObject product = new GameObject(productName + "_Wrapper");
         CampaignProduct campaignProduct = product.AddComponent<CampaignProduct>();
         campaignProduct.campaignLevel = campaignLevel;

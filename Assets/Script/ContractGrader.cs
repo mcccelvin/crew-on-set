@@ -69,23 +69,54 @@ public class ContractGrader : MonoBehaviour
             feedback += $"<color=red>- Timing: Deliver 10.0 seconds within a 0.75-second tolerance. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
-        GradeBrandingQuality(2, "Goke", ref post, ref feedback);
-        GradePlayerCreatedFinish(true, ref post, ref feedback);
+        EditorManager editor = EditorManager.Instance;
+        float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : (editor != null ? editor.pixelsPerSecond : 0f);
+        var sequence = GokeSequence.Evaluate(editor != null ? editor.timelineContainer : null, pps);
+        if (sequence.intro) feedback += "<color=green>+ Intro introduces Goke at the start.</color>\n";
+        else { post -= 25f; feedback += "<color=red>- Place the full 2-second GOKE INTRO from CLIPS at 0s.</color>\n"; }
+        if (sequence.outro) feedback += "<color=green>+ Outro leaves a clear brand sign-off.</color>\n";
+        else { post -= 25f; feedback += "<color=red>- Place the full 2-second GOKE OUTRO after the product footage.</color>\n"; }
+        if (sequence.product) feedback += "<color=green>+ Your recorded Goke footage connects the opening and ending.</color>\n";
+        else { post -= 25f; feedback += "<color=red>- Put your recorded Goke product footage between the intro and outro.</color>\n"; }
+        if (!sequence.continuous) { post -= 15f; feedback += "<color=red>- Join the three sections without gaps or overlaps.</color>\n"; }
 
-        ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (HasColorControls(grading))
-        {
-            GradeColorRange(grading.brightnessSlider.value, 0.94f, 1.02f, 20f, "Exposure", "Use 0.94 to 1.02 so the can and logo retain highlight detail.", ref post, ref feedback);
-            GradeColorRange(grading.contrastSlider.value, 1.14f, 1.26f, 20f, "Contrast", "Use 1.14 to 1.26 for separation without crushing the red set.", ref post, ref feedback);
-            GradeColorRange(grading.saturationSlider.value, 1.04f, 1.16f, 20f, "Saturation", "Use 1.04 to 1.16. Stronger saturation merges the red product, backdrop, and graphics.", ref post, ref feedback);
-        }
-        else
-        {
-            post -= 42f;
-            feedback += "<color=red>- Color grade data is missing.</color>\n";
-        }
+        bool hasTwoOverlays = GradeGokeOverlays(totalSeconds, ref post, ref feedback);
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 60000, IsRequiredSetupComplete() && sequence.Complete && hasTwoOverlays);
+    }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 60000, IsRequiredSetupComplete());
+    private bool GradeGokeOverlays(float totalSeconds, ref float post, ref string feedback)
+    {
+        // Count only distinct overlays linked to the actual graphics tracks.
+        // Export preview clones and graphics still in the bank are not submissions.
+        var overlays = new HashSet<DraggableOverlay>();
+        EditorManager editor = EditorManager.Instance;
+        int finalFrame = Mathf.RoundToInt(totalSeconds * TapeSettings.framesPerSecond);
+        if (editor != null && editor.brandingTracks != null)
+        {
+            foreach (Transform track in editor.brandingTracks)
+            {
+                if (track == null) continue;
+                foreach (BrandingClip clip in track.GetComponentsInChildren<BrandingClip>(true))
+                {
+                    if (clip == null || !clip.gameObject.activeSelf) continue;
+                    DraggableOverlay overlay = clip.linkedOverlay;
+                    if (overlay == null || !overlay.isOnTimeline) continue;
+                    var image = overlay.GetComponent<UnityEngine.UI.Image>();
+                    if (image == null || !image.enabled || image.sprite == null || image.color.a <= 0f) continue;
+                    // Any positive appearance in the commercial counts; no minimum
+                    // hold, prescribed order, or overlap restriction for Goke.
+                    if (Mathf.Min(overlay.endFrame, finalFrame) > Mathf.Max(overlay.startFrame, 0)) overlays.Add(overlay);
+                }
+            }
+        }
+        if (overlays.Count == 2)
+        {
+            feedback += "<color=green>+ Two overlays used. Their timing, duration and arrangement are your creative choice.</color>\n";
+            return true;
+        }
+        post -= 25f;
+        feedback += $"<color=red>- Use exactly two overlays during the commercial. Found {overlays.Count}. Choose their timing and duration yourself.</color>\n";
+        return false;
     }
 
     private ProductionGrades GradeLevel3(float avgCam, float avgLight, float totalSeconds)
@@ -97,40 +128,46 @@ public class ContractGrader : MonoBehaviour
         AddProductionFeedback(GameLevel.Level3, avgCam, avgLight, ref feedback);
         feedback += "<color=white><b>--- POST-PRODUCTION ---</b></color>\n";
 
-        if (Mathf.Abs(totalSeconds - 10f) <= 1.5f) feedback += "<color=green>+ Premium commercial pacing.</color>\n";
+        if (LamborminiBrief.InRange(totalSeconds, LamborminiBrief.MinimumSeconds, LamborminiBrief.MaximumSeconds)) feedback += "<color=green>+ Premium commercial pacing.</color>\n";
         else
         {
             post -= 25f;
-            feedback += $"<color=red>- Timing: Target 10.0 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
+            feedback += $"<color=red>- Timing: Target 8-12 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
-        GradePlayerCreatedFinish(false, ref post, ref feedback);
+        var clips = GetCampaignClips(3);
+        var editor = FindObjectOfType<EditorManager>(true);
+        clips.RemoveAll(clip => !clip.gameObject.activeSelf || clip.providedRole != ProvidedClipRole.None || clip.endFrame <= clip.startFrame || editor == null || editor.timelineContainer == null || !clip.transform.IsChildOf(editor.timelineContainer));
+        bool hasVehicleFootage = clips.Count > 0 && HasSoftLight(clips);
+        if (hasVehicleFootage) feedback += "<color=green>+ Recorded vehicle footage uses soft lighting.</color>\n";
+        else { post -= 35f; feedback += "<color=red>- Use your Level 3 car footage, recorded with a powered Soft Light aimed at the vehicle.</color>\n"; }
+        feedback += "<color=white>Creative finish: a detail-to-hero reveal and Slow Pull Out suit this brief. Music, overlays and transitions are optional.</color>\n";
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (HasColorControls(grading))
         {
-            if (grading.contrastSlider.value >= 1.15f && grading.contrastSlider.value <= 1.45f)
+            if (LamborminiBrief.InRange(grading.contrastSlider.value, LamborminiBrief.ContrastMin, LamborminiBrief.ContrastMax))
                 feedback += "<color=green>+ Vehicle shape has premium contrast.</color>\n";
             else
             {
                 post -= 20f;
-                feedback += "<color=yellow>- Contrast: Keep reflective body detail between 1.15 and 1.45.</color>\n";
+                feedback += "<color=yellow>- Contrast: Keep reflective body detail between 1.05 and 1.45.</color>\n";
             }
 
-            if (grading.saturationSlider.value >= 0.95f && grading.saturationSlider.value <= 1.2f)
+            if (LamborminiBrief.InRange(grading.saturationSlider.value, LamborminiBrief.SaturationMin, LamborminiBrief.SaturationMax))
                 feedback += "<color=green>+ Paint color stays refined.</color>\n";
             else
             {
                 post -= 15f;
-                feedback += "<color=yellow>- Saturation: Use 0.95 to 1.20 for a premium automotive look.</color>\n";
+                feedback += "<color=yellow>- Saturation: Use 0.95 to 1.30 for readable orange paint.</color>\n";
             }
 
-            if (grading.brightnessSlider.value >= 0.9f && grading.brightnessSlider.value <= 1.1f)
+            if (LamborminiBrief.InRange(grading.brightnessSlider.value, LamborminiBrief.BrightnessMin, LamborminiBrief.BrightnessMax))
                 feedback += "<color=green>+ Reflections retain highlight detail.</color>\n";
             else
             {
                 post -= 15f;
-                feedback += "<color=yellow>- Brightness: Keep reflections between 0.90 and 1.10.</color>\n";
+                feedback += "<color=yellow>- Brightness: Keep reflections between 0.85 and 1.15.</color>\n";
             }
         }
         else
@@ -139,7 +176,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 80000, IsRequiredSetupComplete());
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 80000, IsRequiredSetupComplete() && hasVehicleFootage);
     }
 
     private ProductionGrades GradeLevel4(float avgCam, float avgLight, float totalSeconds)
@@ -219,6 +256,8 @@ public class ContractGrader : MonoBehaviour
             post -= 15f;
             feedback += $"<color=red>- Branding: Place 2 graphics. Found {logoCount}.</color>\n";
         }
+
+        GradePlayerCreatedFinish(true, ref post, ref feedback);
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (HasColorControls(grading))
@@ -368,11 +407,11 @@ public class ContractGrader : MonoBehaviour
         }
         else if (level == GameLevel.Level2)
         {
-            feedback += "<color=white>Tip: Place Goke near a grid intersection. Try Key 75%, Fill 40%, Back 60%, and aim every beam at the product.</color>\n\n";
+            feedback += "<color=white>Tip: Use any thirds intersection. Aim Key, opposite softer Fill, and Back at Goke. Choose intensities to suit your look; 75/40/60 is only an example.</color>\n\n";
         }
         else if (level == GameLevel.Level3)
         {
-            feedback += "<color=white>Tip: Keep the Lambormini silhouette clear and leave intentional negative space. Use the Soft Light near 75%, about -10 degrees tilt, aimed across the vehicle body.</color>\n\n";
+            feedback += "<color=white>Tip: Reveal the orange car from a headlight detail to a low front-quarter hero shot. Centered and thirds framing both work. Start the Soft Light near 75%; refine aim and diffusion for clear highlights.</color>\n\n";
         }
         else if (level == GameLevel.Level4)
         {
@@ -519,10 +558,11 @@ public class ContractGrader : MonoBehaviour
 
         foreach (BrandingClip brandingClip in timelineBranding)
         {
-            if (!brandingClip.linkedOverlay.IsProfessionalPlacement())
+            string issue = brandingClip.linkedOverlay.GetPlacementIssue();
+            if (issue != null)
             {
                 allGraphicsProfessional = false;
-                break;
+                feedback += "<color=yellow>- " + brandingClip.linkedOverlay.name.Replace("Logo_", "") + ": " + issue + "</color>\n";
             }
         }
 
@@ -533,7 +573,7 @@ public class ContractGrader : MonoBehaviour
         else
         {
             post -= 20f;
-            feedback += "<color=yellow>- Graphic layout: Keep every graphic inside the title-safe guide, below 22% screen coverage, and visible for at least 2 seconds.</color>\n";
+            feedback += "<color=yellow>- Graphic layout deduction: correct the specific issue listed above.</color>\n";
         }
     }
 
@@ -643,7 +683,7 @@ public class ContractGrader : MonoBehaviour
         {
             letterGrade = "F";
             payout = 0;
-            feedback += "\n<color=red><b>CONTRACT GATE:</b> One or more mandatory qualifications are missing. Complete every required shot, visibility, continuity, performance, and equipment condition before resubmitting.</color>\n";
+            feedback += "\n<color=red><b>CONTRACT GATE:</b> Complete the missing requirements listed above before resubmitting.</color>\n";
         }
 
         if (contractRequirementsMet && finalScore >= 90f && letterGrade != "S")

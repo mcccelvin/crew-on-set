@@ -34,10 +34,10 @@ namespace Player.Interactor
 
         private void Update()
         {
-            if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
-            if (PauseManager.isPaused) return;
-            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return;
-            if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) return;
+            if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) { ClearHoverText(); return; }
+            if (PauseManager.isPaused) { ClearHoverText(); return; }
+            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) { ClearHoverText(); return; }
+            if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) { ClearHoverText(); return; }
 
             if (activeTerminal != null && !activeTerminal.IsTerminalActive()) activeTerminal = null;
             if (activeShop != null && !activeShop.IsTerminalActive()) activeShop = null;
@@ -100,6 +100,11 @@ namespace Player.Interactor
             if (currentEquipment != null) currentEquipment.OnHeldUpdate(inputManager);
         }
 
+        private void ClearHoverText()
+        {
+            if (hotbarUI != null) hotbarUI.UpdateGuideText("");
+        }
+
         private bool TryInsertIntoComputer()
         {
             Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
@@ -136,7 +141,8 @@ namespace Player.Interactor
                 }
                 else if (hit.collider.GetComponentInParent<DirectorTerminal>() != null)
                 {
-                    targetText = "[E] Stage Editor Tablet";
+                    targetText = "<size=125%><color=#20E6FF><b>[ E ]</b></color></size>  <b>ENTER DIRECTOR TABLET</b>\n" +
+                                 "<size=72%><color=#C5D2DE>BUILD   |   COLOR   |   PLACE</color></size>";
                 }
                 else if (hit.collider.GetComponentInParent<ShopTerminal>() != null)
                 {
@@ -363,6 +369,7 @@ namespace Player.Interactor
                 if (hotbar[i] != null)
                 {
                     hotbar[i].OnDropped(PlayerCamera);
+                    hotbar[i].gameObject.SetActive(true);
                     hotbar[i] = null;
 
                     if (hotbarUI != null) hotbarUI.UpdateSlot(i, "", null);

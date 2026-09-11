@@ -23,6 +23,8 @@ public class ColorGradingManager : MonoBehaviour
     public Toggle fadeInToggle;
 
     private TextMeshProUGUI qualityText;
+    private bool compareOriginal;
+    private TMP_InputField[] valueInputs = new TMP_InputField[3];
     private float appliedB = float.NaN;
     private float appliedC = float.NaN;
     private float appliedS = float.NaN;
@@ -43,9 +45,9 @@ public class ColorGradingManager : MonoBehaviour
         }
 
         SetupRecommendedGrade();
-        SetupSlider(brightnessSlider, 0.75f, 1.25f, new Color(0.2f, 0.75f, 1f));
-        SetupSlider(contrastSlider, 0.75f, 1.5f, new Color(1f, 0.68f, 0.18f));
-        SetupSlider(saturationSlider, 0.65f, 1.4f, new Color(0.9f, 0.3f, 0.7f));
+        SetupSlider(brightnessSlider, 0.75f, 1.25f, EditorWorkspaceUI.Control);
+        SetupSlider(contrastSlider, 0.75f, 1.5f, EditorWorkspaceUI.Control);
+        SetupSlider(saturationSlider, 0.65f, 1.4f, EditorWorkspaceUI.Control);
 
         if (brightnessSlider) brightnessSlider.value = 1f;
         if (contrastSlider) contrastSlider.value = 1f;
@@ -63,6 +65,7 @@ public class ColorGradingManager : MonoBehaviour
     {
         if (brightnessSlider == null || contrastSlider == null || saturationSlider == null) return;
 
+        SyncNumericFields();
         ProcessTutorialTarget();
         ReconcileTutorialTarget();
 
@@ -76,9 +79,9 @@ public class ColorGradingManager : MonoBehaviour
 
             if (gradingMat != null)
             {
-                gradingMat.SetFloat("_Brightness", appliedB);
-                gradingMat.SetFloat("_Contrast", appliedC);
-                gradingMat.SetFloat("_Saturation", appliedS);
+                gradingMat.SetFloat("_Brightness", compareOriginal ? 1f : appliedB);
+                gradingMat.SetFloat("_Contrast", compareOriginal ? 1f : appliedC);
+                gradingMat.SetFloat("_Saturation", compareOriginal ? 1f : appliedS);
             }
 
             UpdateReadouts();
@@ -105,12 +108,12 @@ public class ColorGradingManager : MonoBehaviour
         }
         else if (currentLevel == 3)
         {
-            targetBrightness = 1f;
-            targetContrast = 1.22f;
-            targetSaturation = 1.06f;
-            brightnessTolerance = 0.05f;
-            contrastTolerance = 0.08f;
-            saturationTolerance = 0.08f;
+            targetBrightness = (LamborminiBrief.BrightnessMin + LamborminiBrief.BrightnessMax) * .5f;
+            targetContrast = (LamborminiBrief.ContrastMin + LamborminiBrief.ContrastMax) * .5f;
+            targetSaturation = (LamborminiBrief.SaturationMin + LamborminiBrief.SaturationMax) * .5f;
+            brightnessTolerance = (LamborminiBrief.BrightnessMax - LamborminiBrief.BrightnessMin) * .5f;
+            contrastTolerance = (LamborminiBrief.ContrastMax - LamborminiBrief.ContrastMin) * .5f;
+            saturationTolerance = (LamborminiBrief.SaturationMax - LamborminiBrief.SaturationMin) * .5f;
         }
         else if (currentLevel == 4)
         {
@@ -148,8 +151,23 @@ public class ColorGradingManager : MonoBehaviour
 
         if (slider.handleRect != null)
         {
+            RectTransform handle = slider.handleRect;
+            handle.anchorMin = new Vector2(handle.anchorMin.x, 0.5f);
+            handle.anchorMax = new Vector2(handle.anchorMax.x, 0.5f);
+            handle.sizeDelta = new Vector2(20f, 20f);
+            handle.localScale = Vector3.one;
             Image handleImage = slider.handleRect.GetComponent<Image>();
-            if (handleImage != null) handleImage.color = Color.Lerp(accentColor, Color.white, 0.55f);
+            if (handleImage != null) handleImage.enabled = false;
+            // Slider drives the handle's vertical anchors. A fixed-size child
+            // keeps the visible knob circular even when its hit area stretches.
+            var knobObject = new GameObject("Round Knob", typeof(RectTransform), typeof(CanvasRenderer), typeof(CircularSliderKnob));
+            knobObject.transform.SetParent(handle, false);
+            RectTransform knobRect = knobObject.GetComponent<RectTransform>();
+            knobRect.anchorMin = knobRect.anchorMax = new Vector2(0.5f, 0.5f);
+            knobRect.sizeDelta = new Vector2(22f, 22f);
+            CircularSliderKnob knob = knobObject.GetComponent<CircularSliderKnob>();
+            knob.color = new Color32(205, 205, 205, 255);
+            slider.targetGraphic = knob;
         }
     }
 
@@ -166,7 +184,7 @@ public class ColorGradingManager : MonoBehaviour
         markerRect.anchorMin = new Vector2(normalizedTarget, 0.5f);
         markerRect.anchorMax = new Vector2(normalizedTarget, 0.5f);
         markerRect.anchoredPosition = Vector2.zero;
-        markerRect.sizeDelta = new Vector2(4f, 30f);
+        markerRect.sizeDelta = new Vector2(3f, 16f);
 
         Image markerImage = markerObject.GetComponent<Image>();
         markerImage.color = new Color(0.35f, 1f, 0.55f, 0.95f);
@@ -175,41 +193,74 @@ public class ColorGradingManager : MonoBehaviour
 
     private void CreateQualityPanel()
     {
-        if (brightnessSlider == null || brightnessSlider.transform.parent == null) return;
+        Transform root = EditorManager.Instance != null && EditorManager.Instance.colorGradingBin != null
+            ? EditorManager.Instance.colorGradingBin.transform : null;
+        if (root == null) return;
+        // Retain the sliders and callbacks used by the tutorial and export.
+        foreach (Transform child in root) child.gameObject.SetActive(false);
+        EditorWorkspaceUI.Surface(root);
+        // COLOR and the three slider labels are already part of the panel artwork.
 
-        Transform colorPanel = brightnessSlider.transform.parent.parent;
-        if (colorPanel == null) colorPanel = brightnessSlider.transform.parent;
+        BuildGradeRow(root, brightnessSlider, "Brightness", 0, 0.63f);
+        BuildGradeRow(root, contrastSlider, "Contrast", 1, 0.39f);
+        BuildGradeRow(root, saturationSlider, "Saturation", 2, 0.15f);
+        Button compare = null;
+        compare = EditorWorkspaceUI.Button(root,"Before / After",0.05f,0.025f,0.49f,0.10f,() =>
+        {
+            compareOriginal = !compareOriginal;
+            compare.GetComponentInChildren<TextMeshProUGUI>().text = compareOriginal ? "Viewing original" : "Before / After";
+            appliedB = float.NaN; appliedC = float.NaN; appliedS = float.NaN;
+        });
+        EditorWorkspaceUI.Button(root,"Reset",0.51f,0.025f,0.95f,0.10f,() =>
+        {
+            if (brightnessSlider != null && brightnessSlider.interactable) brightnessSlider.value = 1f;
+            if (contrastSlider != null && contrastSlider.interactable) contrastSlider.value = 1f;
+            if (saturationSlider != null && saturationSlider.interactable) saturationSlider.value = 1f;
+        });
+        qualityText = EditorWorkspaceUI.Label(root,"Grade status","",0.03f,0.01f,0.97f,0.10f);
+        qualityText.gameObject.SetActive(false);
+    }
 
-        GameObject panelObject = new GameObject("Commercial Grade Monitor", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        panelObject.layer = colorPanel.gameObject.layer;
-        panelObject.transform.SetParent(colorPanel, false);
+    private void BuildGradeRow(Transform root, Slider slider, string label, int index, float bottom)
+    {
+        if (slider == null) return;
+        slider.transform.SetParent(root, false); slider.gameObject.SetActive(true);
+        EditorWorkspaceUI.Place(slider.GetComponent<RectTransform>(),0.05f,bottom,0.76f,bottom+0.07f);
 
-        RectTransform panelRect = panelObject.GetComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 0f);
-        panelRect.anchorMax = new Vector2(0.5f, 0f);
-        panelRect.anchoredPosition = new Vector2(0f, 50f);
-        panelRect.sizeDelta = new Vector2(640f, 72f);
+        var fieldObject = new GameObject(label+" value", typeof(RectTransform),typeof(Image),typeof(TMP_InputField));
+        fieldObject.transform.SetParent(root,false);
+        EditorWorkspaceUI.Place(fieldObject.GetComponent<RectTransform>(),0.65f,bottom+0.08f,0.95f,bottom+0.16f);
+        fieldObject.GetComponent<Image>().color = EditorWorkspaceUI.Control;
+        var field = fieldObject.GetComponent<TMP_InputField>();
+        var value = EditorWorkspaceUI.Label(fieldObject.transform,"Value",slider.value.ToString("F2"),0,0,1,1);
+        value.alignment = TextAlignmentOptions.Center;
+        value.color = Color.white;
+        field.textViewport = fieldObject.GetComponent<RectTransform>();
+        field.textComponent = value;
+        field.contentType = TMP_InputField.ContentType.DecimalNumber;
+        field.characterLimit = 6;
+        field.SetTextWithoutNotify(slider.value.ToString("F2"));
+        field.onEndEdit.AddListener(input =>
+        {
+            if (slider.interactable && float.TryParse(input, out float number) && !float.IsNaN(number) && !float.IsInfinity(number))
+                slider.value = Mathf.Clamp(number,slider.minValue,slider.maxValue);
+            field.SetTextWithoutNotify(slider.value.ToString("F2"));
+        });
+        valueInputs[index] = field;
+        EditorWorkspaceUI.Button(root,"Reset",0.78f,bottom,0.95f,bottom+0.07f,() =>
+        { if (slider.interactable) slider.value = 1f; });
+    }
 
-        Image panelImage = panelObject.GetComponent<Image>();
-        panelImage.color = new Color(0.035f, 0.065f, 0.095f, 0.96f);
-        panelImage.raycastTarget = false;
-
-        GameObject textObject = new GameObject("Grade Status", typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
-        textObject.layer = colorPanel.gameObject.layer;
-        textObject.transform.SetParent(panelObject.transform, false);
-
-        qualityText = textObject.GetComponent<TextMeshProUGUI>();
-        qualityText.fontSize = 20f;
-        qualityText.alignment = TextAlignmentOptions.Center;
-        qualityText.color = Color.white;
-        qualityText.enableWordWrapping = true;
-        qualityText.raycastTarget = false;
-
-        RectTransform textRect = qualityText.rectTransform;
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(12f, 5f);
-        textRect.offsetMax = new Vector2(-12f, -5f);
+    private void SyncNumericFields()
+    {
+        for (int i=0;i<3;i++)
+        {
+            var field=valueInputs[i];
+            var slider=i==0 ? brightnessSlider : i==1 ? contrastSlider : saturationSlider;
+            if (field == null || slider == null) continue;
+            field.interactable=slider.interactable;
+            if (!field.isFocused) field.SetTextWithoutNotify(slider.value.ToString("F2"));
+        }
     }
 
     private void ProcessTutorialTarget()
@@ -273,7 +324,7 @@ public class ColorGradingManager : MonoBehaviour
 
     private Color GetReadoutColor(float value, float target, float tolerance)
     {
-        if (Mathf.Abs(value - target) <= tolerance) return new Color(0.35f, 1f, 0.55f);
+        if (Mathf.Abs(value - target) <= tolerance + 0.0001f) return new Color(0.35f, 1f, 0.55f);
         return new Color(1f, 0.72f, 0.25f);
     }
 
@@ -281,16 +332,13 @@ public class ColorGradingManager : MonoBehaviour
     {
         if (qualityText == null || brightnessSlider == null || contrastSlider == null || saturationSlider == null) return;
 
-        bool brightnessReady = Mathf.Abs(brightnessSlider.value - targetBrightness) <= brightnessTolerance;
-        bool contrastReady = Mathf.Abs(contrastSlider.value - targetContrast) <= contrastTolerance;
-        bool saturationReady = Mathf.Abs(saturationSlider.value - targetSaturation) <= saturationTolerance;
+        bool brightnessReady = Mathf.Abs(brightnessSlider.value - targetBrightness) <= brightnessTolerance + 0.0001f;
+        bool contrastReady = Mathf.Abs(contrastSlider.value - targetContrast) <= contrastTolerance + 0.0001f;
+        bool saturationReady = Mathf.Abs(saturationSlider.value - targetSaturation) <= saturationTolerance + 0.0001f;
         bool deliveryReady = brightnessReady && contrastReady && saturationReady;
 
-        string status = deliveryReady ? "<color=#59FF8C>DELIVERY READY</color>" : "<color=#FFB83F>ADJUST PRIMARY GRADE</color>";
-        qualityText.text = "<b>COMMERCIAL LOOK  •  " + status + "</b>\n" +
-                           "Target  B " + GetRange(targetBrightness, brightnessTolerance) +
-                           "   C " + GetRange(targetContrast, contrastTolerance) +
-                           "   S " + GetRange(targetSaturation, saturationTolerance);
+        string status = deliveryReady ? "<color=#9DC8AA>Grade matches the brief</color>" : "<color=#C7BAB0>Adjust to the contract brief</color>";
+        qualityText.text = status;
     }
 
     private string GetRange(float target, float tolerance)
@@ -302,9 +350,9 @@ public class ColorGradingManager : MonoBehaviour
     {
         if (brightnessSlider == null || contrastSlider == null || saturationSlider == null) return false;
 
-        return Mathf.Abs(brightnessSlider.value - targetBrightness) <= brightnessTolerance &&
-               Mathf.Abs(contrastSlider.value - targetContrast) <= contrastTolerance &&
-               Mathf.Abs(saturationSlider.value - targetSaturation) <= saturationTolerance;
+        return Mathf.Abs(brightnessSlider.value - targetBrightness) <= brightnessTolerance + 0.0001f &&
+               Mathf.Abs(contrastSlider.value - targetContrast) <= contrastTolerance + 0.0001f &&
+               Mathf.Abs(saturationSlider.value - targetSaturation) <= saturationTolerance + 0.0001f;
     }
 
     public void ApplyRecommendedGrade()
@@ -327,5 +375,28 @@ public class ColorGradingManager : MonoBehaviour
     private void OnDestroy()
     {
         if (gradingMat != null) Destroy(gradingMat);
+    }
+}
+
+// A UI mesh needs no built-in resource or imported sprite.
+[RequireComponent(typeof(CanvasRenderer))]
+public sealed class CircularSliderKnob : MaskableGraphic
+{
+    protected override void OnPopulateMesh(VertexHelper mesh)
+    {
+        mesh.Clear();
+        Rect rect = rectTransform.rect;
+        Vector2 center = rect.center;
+        float radius = Mathf.Min(rect.width, rect.height) * 0.5f;
+        const int segments = 48;
+        mesh.AddVert(center, color, new Vector2(0.5f, 0.5f));
+        for (int i = 0; i < segments; i++)
+        {
+            float angle = i * Mathf.PI * 2f / segments;
+            Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+            mesh.AddVert(center + direction * radius, color, Vector2.one * 0.5f + direction * 0.5f);
+        }
+        for (int i = 0; i < segments; i++)
+            mesh.AddTriangle(0, i + 1, (i + 1) % segments + 1);
     }
 }

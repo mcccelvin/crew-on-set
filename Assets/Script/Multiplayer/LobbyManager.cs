@@ -18,7 +18,9 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         statusText.text = "Connecting to Servers...";
 
         PhotonNetwork.AutomaticallySyncScene = true;
-        PhotonNetwork.ConnectUsingSettings();
+        if (PhotonNetwork.InLobby) OnJoinedLobby();
+        else if (PhotonNetwork.IsConnectedAndReady) OnConnectedToMaster();
+        else if (!PhotonNetwork.IsConnected) PhotonNetwork.ConnectUsingSettings();
     }
 
     public override void OnConnectedToMaster()
@@ -51,7 +53,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     // --- NEW: Triggered by your JOIN button ---
     public void JoinExistingRoom()
     {
-        if (string.IsNullOrEmpty(roomInputField.text))
+        if (string.IsNullOrWhiteSpace(roomInputField.text))
         {
             statusText.text = "Please enter a Room Code first!";
             return;
@@ -62,13 +64,13 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         statusText.text = "Joining Room...";
 
         // Forces the input to uppercase so it matches the generated code perfectly
-        PhotonNetwork.JoinRoom(roomInputField.text.ToUpper());
+        PhotonNetwork.JoinRoom(roomInputField.text.Trim().ToUpperInvariant());
     }
 
     public override void OnJoinedRoom()
     {
         statusText.text = "Room Joined! Loading Sandbox...";
-        PhotonNetwork.LoadLevel("MultiplayerSandbox");
+        if (PhotonNetwork.IsMasterClient) PhotonNetwork.LoadLevel("MultiStudio");
     }
 
     // If the player types a wrong code, turn the buttons back on!
@@ -77,6 +79,20 @@ public class LobbyManager : MonoBehaviourPunCallbacks
         statusText.text = "Failed to join: Invalid Code!";
         joinButton.SetActive(true);
         createButton.SetActive(true);
+    }
+
+    public override void OnCreateRoomFailed(short returnCode, string message)
+    {
+        statusText.text = "Could not create a room. Please try again.";
+        joinButton.SetActive(true);
+        createButton.SetActive(true);
+    }
+
+    public override void OnDisconnected(DisconnectCause cause)
+    {
+        statusText.text = "Disconnected. Return to the menu and try again.";
+        joinButton.SetActive(false);
+        createButton.SetActive(false);
     }
 
     // --- THE RANDOM GENERATOR ---
