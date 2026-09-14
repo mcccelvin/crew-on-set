@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
@@ -42,6 +42,7 @@ public class TruePixelPlayer : MonoBehaviour
     private DraggableOverlay[] timelineOverlays;
     private bool isPaused = true;
     public bool isFinished = false;
+    public bool HasPlaybackReachedEnd { get; private set; }
 
     private List<ClipSegment> currentSequence = new List<ClipSegment>();
     private int currentFrameIndex = 0;
@@ -94,6 +95,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void FinishPlayback()
     {
+        HasPlaybackReachedEnd = true;
         isFinished = true;
         isPaused = true;
         if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.StopPlayback();
@@ -246,6 +248,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         if (isFinished)
         {
+            HasPlaybackReachedEnd = false;
             isFinished = false;
             currentFrameIndex = 0;
             playbackTimer = 0f;
@@ -265,6 +268,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void StopTape()
     {
+        HasPlaybackReachedEnd = false;
         StopAllCoroutines();
         HideLoading();
         isPaused = true;
@@ -368,6 +372,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         if (isFinished)
         {
+            HasPlaybackReachedEnd = false;
             isFinished = false;
             UpdatePlayPauseUI();
         }
@@ -397,6 +402,8 @@ public class TruePixelPlayer : MonoBehaviour
     public void RefreshOverlays()
     {
         timelineOverlays = FindObjectsOfType<DraggableOverlay>();
+        float x = playheadLine != null ? playheadLine.anchoredPosition.x : 0f;
+        UpdateOverlays(currentFrameIndex, x);
     }
 
     public void ShowPreviewFrame(string tapeFilePath)
@@ -1052,7 +1059,7 @@ public class CommercialPresentation : MonoBehaviour
         }
         else if (currentLevel == 3)
         {
-            title = "LAMBORMINI";
+            title = "TERRARI";
             tagline = "DESIGNED TO MOVE";
             copy = "FORM  •  LIGHT  •  MOTION";
             accent = new Color(1f, 0.66f, 0.12f);

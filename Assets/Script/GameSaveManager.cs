@@ -38,12 +38,19 @@ public sealed class GameSaveManager : MonoBehaviour
     private void OnDestroy() { SceneManager.sceneLoaded -= OnSceneLoaded; if (Instance == this) Instance = null; }
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        if(scene.name=="Account"){SaveLoadPanelHost.AddLogoutButton();return;}
         if (scene.name != "Main Menu") return;
         Active = null;
         GameSavePrefs.Activate(null);
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+        // The Load tab opens a panel directly; it does not go through SceneController.
+        foreach(var root in scene.GetRootGameObjects())
+            foreach(var rect in root.GetComponentsInChildren<RectTransform>(true))
+                if(rect.name=="load"&&rect.parent!=null&&rect.parent.name=="Play"&&rect.GetComponent<SaveLoadPanelHost>()==null)
+                    rect.gameObject.AddComponent<SaveLoadPanelHost>();
+        SaveLoadPanelHost.AddLogoutButton();
     }
     public void SetAccount(string playFabId)
     {
@@ -99,7 +106,18 @@ public sealed class GameSaveManager : MonoBehaviour
         OpenRepository();
         var slot = Repository.Create(name);
         nextSync = Time.unscaledTime + 1f;
+        Changed?.Invoke();
         return slot;
+    }
+    public void Logout()
+    {
+        // Invalidate in-flight callbacks before changing the save owner.
+        session++;authenticatedId=null;Syncing=false;nextSync=float.PositiveInfinity;
+        PlayFabClientAPI.ForgetAllCredentials();
+        Active=null;GameSavePrefs.Activate(null);Repository=null;
+        PlayerPrefs.DeleteKey("PlayFabId");PlayerPrefs.DeleteKey("PlayerName");PlayerPrefs.Save();
+        OpenRepository();Changed?.Invoke();
+        SceneManager.LoadScene("Main Menu");
     }
     public void SaveCheckpoint()
     {

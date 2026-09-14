@@ -13,7 +13,7 @@ public sealed class LamborminiShowroom : MonoBehaviour
     {
         if(stage==null)return null;
         var existing=FindObjectOfType<LamborminiShowroom>();if(existing!=null)return existing;
-        var root=new GameObject("Lambormini Showroom Wall Set");var bounds=stage.bounds;
+        var root=new GameObject("Terrari Showroom Wall Set");var bounds=stage.bounds;
         root.transform.position=new Vector3(bounds.center.x,bounds.max.y+.018f,bounds.center.z);
         front.y=0;if(front.sqrMagnitude<.01f)front=Vector3.back;
         root.transform.rotation=Quaternion.LookRotation(front.normalized,Vector3.up);

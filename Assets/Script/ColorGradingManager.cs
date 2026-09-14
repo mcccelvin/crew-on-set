@@ -1,9 +1,13 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
 public class ColorGradingManager : MonoBehaviour
 {
+    public const float BeginnerBrightnessMin = .85f, BeginnerBrightnessMax = 1.15f;
+    public const float BeginnerContrastMin = .80f, BeginnerContrastMax = 1.30f;
+    public const float BeginnerSaturationMin = .70f, BeginnerSaturationMax = 1.30f;
+
     [Header("Video Output")]
     public RawImage computerScreen;
     private Material gradingMat;
@@ -54,9 +58,12 @@ public class ColorGradingManager : MonoBehaviour
         if (saturationSlider) saturationSlider.value = 1f;
         if (fadeInToggle) fadeInToggle.isOn = false;
 
-        CreateTargetMarker(brightnessSlider, targetBrightness);
-        CreateTargetMarker(contrastSlider, targetContrast);
-        CreateTargetMarker(saturationSlider, targetSaturation);
+        if (CampaignProgression.GetCurrentLevel() >= 3)
+        {
+            CreateTargetMarker(brightnessSlider, targetBrightness);
+            CreateTargetMarker(contrastSlider, targetContrast);
+            CreateTargetMarker(saturationSlider, targetSaturation);
+        }
         CreateQualityPanel();
         UpdateReadouts();
     }
@@ -92,21 +99,15 @@ public class ColorGradingManager : MonoBehaviour
     {
         int currentLevel = CampaignProgression.GetCurrentLevel();
 
-        targetBrightness = 0.98f;
-        targetContrast = 1.12f;
-        targetSaturation = 1.08f;
-        brightnessTolerance = 0.04f;
-        contrastTolerance = 0.06f;
-        saturationTolerance = 0.05f;
+        targetBrightness = 1f;
+        targetContrast = 1.05f;
+        targetSaturation = 1f;
+        brightnessTolerance = .15f;
+        contrastTolerance = .25f;
+        saturationTolerance = .30f;
 
-        if (currentLevel == 2)
-        {
-            targetContrast = 1.2f;
-            targetSaturation = 1.1f;
-            contrastTolerance = 0.06f;
-            saturationTolerance = 0.06f;
-        }
-        else if (currentLevel == 3)
+        if (currentLevel <= 2) return;
+        if (currentLevel == 3)
         {
             targetBrightness = (LamborminiBrief.BrightnessMin + LamborminiBrief.BrightnessMax) * .5f;
             targetContrast = (LamborminiBrief.ContrastMin + LamborminiBrief.ContrastMax) * .5f;
@@ -227,6 +228,14 @@ public class ColorGradingManager : MonoBehaviour
         slider.transform.SetParent(root, false); slider.gameObject.SetActive(true);
         EditorWorkspaceUI.Place(slider.GetComponent<RectTransform>(),0.05f,bottom,0.76f,bottom+0.07f);
 
+        if (CampaignProgression.GetCurrentLevel() <= 2)
+        {
+            string range = index == 0 ? "0.85 - 1.15" : index == 1 ? "0.80 - 1.30" : "0.70 - 1.30";
+            var hint = EditorWorkspaceUI.Label(root, label + " range", "Full marks: " + range,
+                .05f, bottom + .08f, .63f, bottom + .15f);
+            hint.fontSize = 14f;
+        }
+
         var fieldObject = new GameObject(label+" value", typeof(RectTransform),typeof(Image),typeof(TMP_InputField));
         fieldObject.transform.SetParent(root,false);
         EditorWorkspaceUI.Place(fieldObject.GetComponent<RectTransform>(),0.65f,bottom+0.08f,0.95f,bottom+0.16f);
@@ -265,6 +274,7 @@ public class ColorGradingManager : MonoBehaviour
 
     private void ProcessTutorialTarget()
     {
+        if (CampaignProgression.GetCurrentLevel() <= 2) return;
         if (EditorTutorialManager.Instance == null || !EditorTutorialManager.Instance.gameObject.activeInHierarchy || !EditorTutorialManager.Instance.isTaskPhaseActive) return;
 
         if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness && Mathf.Abs(brightnessSlider.value - targetBrightness) <= 0.015f)
@@ -283,6 +293,7 @@ public class ColorGradingManager : MonoBehaviour
 
     private void ReconcileTutorialTarget()
     {
+        if (CampaignProgression.GetCurrentLevel() <= 2) return;
         if (EditorTutorialManager.Instance == null || !EditorTutorialManager.Instance.gameObject.activeInHierarchy || !EditorTutorialManager.Instance.isTaskPhaseActive) return;
 
         if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness && Mathf.Abs(brightnessSlider.value - targetBrightness) <= 0.01f)

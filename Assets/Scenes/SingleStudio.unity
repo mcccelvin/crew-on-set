@@ -8603,8 +8603,8 @@ MonoBehaviour:
     allowedProps:
     - {fileID: 599128863737958254, guid: 98bce5863c56db6498aefe6d21a20718, type: 3}
     - {fileID: 701984343092087960, guid: 7cccaff8b35059b4593fc51d144794d5, type: 3}
-  actorHireCost: 500
-  carSpawnCost: 50
+  actorHireCost: 750
+  carSpawnCost: 2500
   moveableLayer:
     serializedVersion: 2
     m_Bits: 64
@@ -12299,7 +12299,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 100
+  m_text: 1,200
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
   m_sharedMaterial: {fileID: 2140474, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
@@ -13021,7 +13021,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 50
+  m_text: 150
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
   m_sharedMaterial: {fileID: 2140474, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
@@ -18775,7 +18775,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 100
+  m_text: 1,200
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
   m_sharedMaterial: {fileID: 2140474, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
@@ -21575,7 +21575,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 50
+  m_text: 150
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
   m_sharedMaterial: {fileID: 2140474, guid: 8a89fa14b10d46a99122fd4f73fca9a2, type: 2}
@@ -26567,10 +26567,10 @@ MonoBehaviour:
     price: 4000
     prefabToSpawn: {fileID: 5028973457159641910, guid: b6acbc35844f3164284d516ab19a4f1b, type: 3}
   - itemName: 160 LED PANEL
-    price: 100
+    price: 1200
     prefabToSpawn: {fileID: 2422303196290211474, guid: 87baa9a470d30d84d8ca6327f9f885ce, type: 3}
   - itemName: SD CARD
-    price: 50
+    price: 150
     prefabToSpawn: {fileID: 5512013885041339088, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}
   worldSpaceCanvas: {fileID: 1306836461}
   screenSpaceCanvas: {fileID: 1344512090}

@@ -53,6 +53,12 @@ public class ShopTerminal : MonoBehaviour
     private CrosshairUIClicker crosshairClicker;
     private bool isTerminalActive = false;
 
+    private void Awake()
+    {
+        foreach (var item in availableItems)
+            if (item != null) item.price = ProductionEconomy.EquipmentPrice(item.itemName, item.price);
+    }
+
     private void Start()
     {
         if (worldSpaceCanvas != null) worldSpaceCanvas.gameObject.SetActive(true);
@@ -70,8 +76,42 @@ public class ShopTerminal : MonoBehaviour
             }
         }
 
+        ProductionKitShop.Setup(this);
+        RestoreOwnedEquipment();
         crosshairClicker = FindObjectOfType<CrosshairUIClicker>();
         UpdateTotalUI();
+    }
+
+    public static int OwnedPanelLights => PlayerPrefs.GetInt("OwnedEquipment.160 LED PANEL",
+        CampaignProgression.GetCurrentLevel() >= 2 ? 1 : 0);
+
+    public void RestoreOwnedEquipment()
+    {
+        if (deliveryZone == null) return;
+        // Migrate completed first-contract careers created before equipment ownership was saved.
+        if (CampaignProgression.GetCurrentLevel() >= 2)
+        {
+            if (!PlayerPrefs.HasKey("OwnedEquipment.160 LED PANEL")) PlayerPrefs.SetInt("OwnedEquipment.160 LED PANEL", 1);
+            if (availableItems.Count > 0 && !PlayerPrefs.HasKey("OwnedEquipment." + availableItems[0].itemName))
+                PlayerPrefs.SetInt("OwnedEquipment." + availableItems[0].itemName, 1);
+        }
+        foreach (ShopItem item in availableItems)
+        {
+            if (item == null || item.prefabToSpawn == null || item.itemName.ToUpperInvariant().Contains("SD")) continue;
+            if(item.prefabToSpawn.GetComponent<ProductionKit>() != null &&
+                !ProductionKitShop.HasEquipmentLesson(CampaignProgression.GetCurrentLevel())) continue;
+            if (item.itemName == "LEVEL 2 CAMERA" || item.itemName.ToUpperInvariant().Contains("SOFT LIGHT")) continue; // Existing upgrade restoration owns these.
+            int owned = PlayerPrefs.GetInt("OwnedEquipment." + item.itemName, 0);
+            int present = 0;
+            foreach (Player.Equipment.Equipment equipment in FindObjectsOfType<Player.Equipment.Equipment>(true))
+                if (equipment.name == item.prefabToSpawn.name + "(Clone)") present++;
+            for (int i = present; i < owned; i++)
+            {
+                var restored = Instantiate(item.prefabToSpawn, deliveryZone.position + new Vector3((i % 3 - 1) * .45f, .5f + (i / 3) * .25f, .25f), deliveryZone.rotation);
+                if (restored.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
+            }
+        }
+        PlayerPrefs.Save();
     }
 
     public void MarkCameraSoldOut()
@@ -97,14 +137,14 @@ public class ShopTerminal : MonoBehaviour
         {
             ShopItem level2Camera = new ShopItem();
             level2Camera.itemName = "LEVEL 2 CAMERA";
-            level2Camera.price = 10000;
+            level2Camera.price = ProductionEconomy.AdvancedCamera;
             level2Camera.prefabToSpawn = cameraPrefab;
             availableItems.Add(level2Camera);
             level2CameraItemIndex = availableItems.Count - 1;
         }
         else
         {
-            availableItems[level2CameraItemIndex].price = 10000;
+            availableItems[level2CameraItemIndex].price = ProductionEconomy.AdvancedCamera;
             availableItems[level2CameraItemIndex].prefabToSpawn = cameraPrefab;
         }
 
@@ -149,14 +189,14 @@ public class ShopTerminal : MonoBehaviour
         {
             ShopItem level3Light = new ShopItem();
             level3Light.itemName = "LEVEL 3 SOFT LIGHT";
-            level3Light.price = 5000;
+            level3Light.price = ProductionEconomy.SoftLight;
             level3Light.prefabToSpawn = lightPrefab;
             availableItems.Add(level3Light);
             level3LightItemIndex = availableItems.Count - 1;
         }
         else
         {
-            availableItems[level3LightItemIndex].price = 5000;
+            availableItems[level3LightItemIndex].price = ProductionEconomy.SoftLight;
             availableItems[level3LightItemIndex].prefabToSpawn = lightPrefab;
         }
 
@@ -205,7 +245,7 @@ public class ShopTerminal : MonoBehaviour
         foreach (TextMeshProUGUI shopText in shopTexts)
         {
             if (shopText.text == "160 LED PANEL") shopText.text = "LEVEL 3 SOFT LIGHT";
-            else if (shopText.text == "100") shopText.text = "5,000";
+            else if (shopText.text == "100" || shopText.text == "1,200") shopText.text = ProductionEconomy.SoftLight.ToString("N0");
             else if (shopText.text == "SOLD OUT") shopText.text = "ADD TO CART";
         }
 
@@ -231,6 +271,38 @@ public class ShopTerminal : MonoBehaviour
         level3LightCard.SetAsLastSibling();
     }
 
+    public void CreateStripShopCard(Canvas canvas, int index)
+    {
+        if(canvas==null || FindShopText(canvas,"LIGHT STRIP")!=null)return;
+        var original=FindShopItemCard(FindShopText(canvas,"160 LED PANEL"),canvas) as RectTransform;
+        var sd=FindShopItemCard(FindShopText(canvas,"SD CARD"),canvas) as RectTransform;
+        if(original==null)return;
+        var card=Instantiate(original.gameObject,original.parent);
+        card.name="LIGHT STRIP";
+        var rect=card.GetComponent<RectTransform>();
+        rect.anchoredPosition=(sd!=null?sd.anchoredPosition:original.anchoredPosition+new Vector2(original.rect.width+15,0))+new Vector2(0,-original.rect.height-15);
+        foreach(var text in card.GetComponentsInChildren<TextMeshProUGUI>(true))
+        {
+            if(text.text=="160 LED PANEL")text.text="LIGHT STRIP";
+            else if(text.text.Replace(",","").Trim()=="1200"||text.text.Trim()=="100")text.text=availableItems[index].price.ToString("N0");
+            else if(text.text.Contains("SOLD OUT"))text.text="+ ADD TO CART";
+        }
+        foreach(var button in card.GetComponentsInChildren<Button>(true))
+        {
+            if(!IsCartButton(button))continue;
+            button.onClick=new Button.ButtonClickedEvent();
+            button.onClick.AddListener(()=>AddItemToCartByIndex(index));button.interactable=true;
+        }
+        // Reuse the panel-light illustration as a temporary strip icon.
+        var icon=card.GetComponentsInChildren<Image>(true);
+        foreach(var image in icon)if(image.sprite!=null && image.GetComponent<Button>()==null && image.transform!=card.transform)
+        {
+            if(image.rectTransform.rect.height>40 && image.rectTransform.rect.width>40)
+                availableItems[index].prefabToSpawn.GetComponent<ProductionKit>().EquipmentIcon=image.sprite;
+        }
+        card.SetActive(true);
+    }
+
     private void CreateLevel2CameraShopCard(Canvas shopCanvas)
     {
         if (shopCanvas == null || FindShopText(shopCanvas, "LEVEL 2 CAMERA") != null) return;
@@ -248,7 +320,7 @@ public class ShopTerminal : MonoBehaviour
         {
             if (shopText.text == "NONY FX") shopText.text = "LEVEL 2 CAMERA";
             else if (shopText.text.Contains("Low End Camera")) shopText.text = "Level 2 Camera\n\nProfessional camera for Level 2.";
-            else if (shopText.text == "4,000" || shopText.text == "4000") shopText.text = "10,000";
+            else if (shopText.text == "4,000" || shopText.text == "4000") shopText.text = ProductionEconomy.AdvancedCamera.ToString("N0");
             else if (shopText.text == "SOLD OUT") shopText.text = "ADD TO CART";
         }
 
@@ -409,52 +481,44 @@ public class ShopTerminal : MonoBehaviour
 
         if (itemIndex >= 0 && itemIndex < availableItems.Count)
         {
-            // Ask the Tutorial Bouncer if we are allowed to buy this item yet
-            if (TutorialManager.Instance != null && !TutorialManager.Instance.CanBuyItem(itemIndex)) return;
-
-            // Talk to the TutorialManager to complete the step!
-            if (TutorialManager.Instance != null)
-            {
-                // During the Light Step
-                if (TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyLight_AddToCart ||
-                    TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyLight_Checkout)
-                {
-                    if (shoppingCart.Count >= 1)
-                    {
-                        TutorialManager.Instance.ShowWarning("You only need one light! Click Checkout.");
-                        return;
-                    }
-                    TutorialManager.Instance.OnLightAddedToCart();
-                }
-                // --- NEW: During the Camera Step ---
-                else if (TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuyCamera_AddToCart)
-                {
-                    TutorialManager.Instance.OnCameraAddedToCart();
-                }
-                // --- NEW: During the SD Card Step ---
-                else if (TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.BuySDCard_AddToCart)
-                {
-                    TutorialManager.Instance.OnSDCardAddedToCart();
-                }
-            }
-
             ShopItem itemToAdd = availableItems[itemIndex];
 
-            if (itemToAdd.itemName.Contains("CAMERA") && shoppingCart.Contains(itemToAdd))
+            if (itemToAdd == null) return;
+            if ((itemIndex == 0 || itemIndex == level2CameraItemIndex || itemToAdd.itemName.Contains("CAMERA")) && shoppingCart.Contains(itemToAdd))
             {
                 Debug.LogWarning("You can only buy ONE camera!");
                 return;
             }
 
+            // Later-level purchase gates also advance their lesson, so validate the item first.
+            if (TutorialManager.Instance != null && !TutorialManager.Instance.CanBuyItem(itemIndex)) return;
+
             shoppingCart.Add(itemToAdd);
             currentTotalCost += itemToAdd.price;
 
             UpdateTotalUI();
+            // Advance only after the requested item really entered the cart.
+            if (TutorialManager.Instance != null)
+            {
+                if (itemIndex == 1) TutorialManager.Instance.OnLightAddedToCart();
+                else if (itemIndex == 0) TutorialManager.Instance.OnCameraAddedToCart();
+                else if (itemIndex == 2) TutorialManager.Instance.OnSDCardAddedToCart();
+            }
         }
+    }
+
+    private bool CartContainsItem(int index)
+    {
+        return index >= 0 && index < availableItems.Count && availableItems[index] != null &&
+            shoppingCart.Contains(availableItems[index]);
     }
 
     public void ConfirmPurchase()
     {
+        if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
+            GokeLevelManager.EnsureEquipmentAdvance();
+        if (TutorialManager.Instance != null &&
+            !TutorialManager.Instance.CanCheckoutTutorialCart(CartContainsItem(0), CartContainsItem(1), CartContainsItem(2))) return;
         if (shoppingCart.Count == 0) return;
         if (deliveryZone == null || CareerManager.Instance == null)
         {
@@ -492,15 +556,7 @@ public class ShopTerminal : MonoBehaviour
             Level3Manager.Instance.IsEquipmentIntroductionActive() &&
             !Level3Manager.Instance.CanCancelPurchase()) return;
 
-        // Prevents emptying the cart while mid-tutorial!
-        if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep < TutorialManager.TutorialStep.OfferLevel1)
-        {
-            if (shoppingCart.Count > 0)
-            {
-                TutorialManager.Instance.ShowWarning("Don't cancel! Complete your purchase to continue.");
-                return;
-            }
-        }
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ShopTerminal")) return;
 
         shoppingCart.Clear();
         currentTotalCost = 0;
@@ -523,10 +579,14 @@ public class ShopTerminal : MonoBehaviour
             {
                 Vector3 randomOffset = new Vector3(Random.Range(-0.2f, 0.2f), 0.5f, Random.Range(-0.2f, 0.2f));
                 GameObject spawnedItem = Instantiate(item.prefabToSpawn, deliveryZone.position + randomOffset, deliveryZone.rotation);
+                if (spawnedItem.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
+                if (!item.itemName.ToUpperInvariant().Contains("SD"))
+                    PlayerPrefs.SetInt("OwnedEquipment." + item.itemName, PlayerPrefs.GetInt("OwnedEquipment." + item.itemName, 0) + 1);
                 if (level3LightItemIndex >= 0 && item == availableItems[level3LightItemIndex]) ConfigureLevel3Light(spawnedItem);
             }
         }
 
+        PlayerPrefs.Save();
         if (boughtCameraThisTrip) MarkCameraSoldOut();
         if (boughtLevel2CameraThisTrip)
         {
@@ -642,6 +702,7 @@ public class ShopTerminal : MonoBehaviour
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
+        ProductionKitShop.Setup(this);
         isTerminalActive = true;
         playerController = pController;
         if (playerController != null) playerController.enabled = false;
@@ -654,11 +715,16 @@ public class ShopTerminal : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
-        if (TutorialManager.Instance != null) TutorialManager.Instance.OnShopOpened();
+        if (TutorialManager.Instance != null)
+        {
+            TutorialManager.Instance.RecoverTutorialCart(CartContainsItem(0), CartContainsItem(1), CartContainsItem(2));
+            TutorialManager.Instance.OnShopOpened();
+        }
     }
 
     public void CloseTerminal()
     {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ShopTerminal")) return;
         if (GokeLevelManager.Instance != null &&
             GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
             !GokeLevelManager.Instance.CanCancelPurchase()) return;
@@ -691,3 +757,4 @@ public class ShopTerminal : MonoBehaviour
         return isTerminalActive;
     }
 }
+

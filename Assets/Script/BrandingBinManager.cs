@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI; // Required for Image component
@@ -8,11 +8,14 @@ public struct BrandingData
 {
     public string logoName;
     public Sprite logoSprite;
+    [Tooltip("Optional normalized region of the source sprite. Zero size uses the full artwork.")]
+    public Rect spriteRegion;
 }
 
 public class BrandingBinManager : MonoBehaviour
 {
     private bool populating;
+    private readonly Dictionary<(Sprite, Rect), Sprite> regionSprites = new Dictionary<(Sprite, Rect), Sprite>();
     [Header("Settings")]
     public GameObject brandingPrefabTemplate; // The Master Prefab from Step 1
     public Transform overlaysBinContent;      // The Scroll View Content
@@ -80,6 +83,14 @@ public class BrandingBinManager : MonoBehaviour
         // 2. Check Progress
         int currentLevel = CampaignProgression.GetCurrentLevel();
         List<BrandingData> activeList = currentLevel == 1 ? tutorialLogos : level1Logos;
+        if(currentLevel==3)
+        {
+            activeList=new List<BrandingData>
+            {
+                new BrandingData { logoName="TERRARI",logoSprite=ExportUIArt.Get("terrariWordmark") },
+                new BrandingData { logoName="TERRARI EMBLEM",logoSprite=ExportUIArt.Get("terrariMark") }
+            };
+        }
 
         // 3. Spawn and Assign Sprites
         int spawnedCount = 0;
@@ -97,7 +108,7 @@ public class BrandingBinManager : MonoBehaviour
             Image logoImage = newLogo.GetComponent<Image>();
             if (logoImage != null)
             {
-                logoImage.sprite = data.logoSprite;
+                logoImage.sprite = GetDisplaySprite(data);
                 logoImage.preserveAspect = true;
             }
             newLogo.transform.localScale = Vector3.one;
@@ -118,6 +129,37 @@ public class BrandingBinManager : MonoBehaviour
         if (bankRect != null) LayoutRebuilder.ForceRebuildLayoutImmediate(bankRect);
         }
         finally { populating = false; }
+    }
+
+    private Sprite GetDisplaySprite(BrandingData data)
+    {
+        if(CampaignProgression.GetCurrentLevel()==1)
+        {
+            string artworkKey=data.logoName.ToUpperInvariant().Contains("ECCENTRIC")?"vaseLine":data.logoName.ToUpperInvariant().Contains("FLORA")?"vaseWordmark":null;
+            Sprite replacement=artworkKey!=null?ExportUIArt.Get(artworkKey):null;
+            if(replacement!=null)return replacement;
+        }
+        Rect region = data.spriteRegion;
+        if (region.width <= 0f || region.height <= 0f) return data.logoSprite;
+        var key = (data.logoSprite, region);
+        if (regionSprites.TryGetValue(key, out Sprite cached)) return cached;
+        Rect source = data.logoSprite.rect;
+        float left = Mathf.Clamp01(region.xMin), bottom = Mathf.Clamp01(region.yMin);
+        float right = Mathf.Clamp(region.xMax, left, 1f), top = Mathf.Clamp(region.yMax, bottom, 1f);
+        if (right <= left || top <= bottom) return data.logoSprite;
+        Sprite sprite = Sprite.Create(data.logoSprite.texture,
+            new Rect(source.x + source.width * left, source.y + source.height * bottom,
+                source.width * (right - left), source.height * (top - bottom)),
+            new Vector2(.5f, .5f), data.logoSprite.pixelsPerUnit, 0, SpriteMeshType.FullRect);
+        sprite.name = data.logoSprite.name + "_Text";
+        regionSprites.Add(key, sprite);
+        return sprite;
+    }
+
+    private void OnDestroy()
+    {
+        foreach (Sprite sprite in regionSprites.Values) if (sprite != null) Destroy(sprite);
+        regionSprites.Clear();
     }
 
     private void OnDisable()

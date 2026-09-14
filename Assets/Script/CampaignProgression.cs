@@ -92,7 +92,7 @@ public static class CampaignProgression
     {
         if (level == 1) return "Crystal Blooms - Artisan Flower Vase";
         if (level == 2) return "Goke Cola";
-        if (level == 3) return "Lambormini";
+        if (level == 3) return "Terrari";
         if (level == 4) return "Kape Kultura";
         return "Haraya Campaign";
     }

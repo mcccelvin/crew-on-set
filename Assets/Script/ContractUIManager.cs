@@ -25,6 +25,12 @@ public class ContractUIManager : MonoBehaviour
     private bool playerCouldLook = true;
     private bool isLevel3Contract = false;
     private int activeContractLevel = 2;
+    private int browsedContractLevel = 2;
+    private bool acceptanceBriefPending;
+    private string liveTitle="GOKE COLA", liveDescription="", detailedRequirements="";
+    private TextMeshProUGUI[] folderTitles;
+    private TextMeshProUGUI selectionStatus, briefTitle, briefBody;
+    private ScrollRect briefScroll;
 
     private readonly Color backgroundColor = new Color(0.025f, 0.035f, 0.05f, 0.96f);
     private readonly Color cardColor = new Color(0.55f, 0.35f, 0.13f, 1f);
@@ -114,6 +120,11 @@ public class ContractUIManager : MonoBehaviour
     private void ShowContract(Action onAccepted)
     {
         acceptContractAction = onAccepted;
+        acceptanceBriefPending=false;
+        browsedContractLevel=activeContractLevel;
+        RefreshFolderSelection();
+        var tutorial=FindObjectOfType<TutorialManager>();
+        if(tutorial!=null&&acceptButton!=null)tutorial.acceptContractButtonRect=acceptButton.GetComponent<RectTransform>();
 
         if (declineMessageText != null) declineMessageText.text = "";
         if (offerPanel != null) offerPanel.SetActive(true);
@@ -153,9 +164,32 @@ public class ContractUIManager : MonoBehaviour
 
     private void AcceptContract()
     {
+        if(briefBody!=null)
+        {
+            if(browsedContractLevel!=activeContractLevel||acceptanceBriefPending)return;
+            acceptanceBriefPending=true;
+            offerPanel.SetActive(false);qualificationsPanel.SetActive(true);
+            RefreshBrief();
+            return;
+        }
+        CompleteContractAcceptance();
+    }
+
+    public void ShowFlowerContract(Action onAccepted)
+    {
+        activeContractLevel=1;isLevel3Contract=false;
+        SetContractText("ARTISAN FLOWER VASE","CLIENT: FLORA & FORM HOME\n\nCLIENT OBJECTIVE\nCreate a clear, inviting product commercial.\n\nSTAGE — Pink backdrop and one flower vase.\nCAMERA — Frame the full product in the center.\nLIGHT — Aim one panel light to show the flowers clearly.\nEDIT — A 10-second commercial.\nOVERLAYS — Eccentric Centerpiece first, then Flora & Form Home.\nCOLOR — Keep the product readable; avoid excessive brightness or darkness.\n\nSTARTING BUDGET: "+ProductionEconomy.StartingBudget.ToString("N0")+" B-COINS");
+        detailedRequirements="Follow the boss's equipment, staging, filming and editing lessons. Keep graphics within the title-safe guide and leave the product visible.";
+        ShowContract(onAccepted);
+    }
+
+    private void CompleteContractAcceptance()
+    {
+        acceptanceBriefPending=false;
         qualificationsUnlocked = true;
 
         if (offerPanel != null) offerPanel.SetActive(false);
+        if (qualificationsPanel != null) qualificationsPanel.SetActive(false);
         if (contractCanvas != null) contractCanvas.SetActive(false);
 
         UnlockPlayer();
@@ -176,7 +210,7 @@ public class ContractUIManager : MonoBehaviour
             else if (activeContractLevel == 4)
                 declineMessageText.text = "You can review the requirements, but the Kape Kultura contract must be accepted to continue Level 4.";
             else if (isLevel3Contract)
-                declineMessageText.text = "You can review the requirements, but the Lambormini contract must be accepted to continue Level 3.";
+                declineMessageText.text = "You can review the requirements, but the Terrari contract must be accepted to continue Level 3.";
             else
                 declineMessageText.text = "You can review the requirements, but this contract must be accepted to continue Level 2.";
         }
@@ -184,6 +218,7 @@ public class ContractUIManager : MonoBehaviour
 
     private void ToggleQualifications()
     {
+        if(acceptanceBriefPending){CloseIllustratedBrief();return;}
         isQualificationsOpen = !isQualificationsOpen;
 
         if (contractCanvas != null) contractCanvas.SetActive(isQualificationsOpen);
@@ -192,6 +227,7 @@ public class ContractUIManager : MonoBehaviour
 
         if (isQualificationsOpen)
         {
+            RefreshBrief();
             LockPlayer();
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -222,7 +258,7 @@ public class ContractUIManager : MonoBehaviour
             "EDIT    - 10 seconds: INTRO 0-2s, your footage 2-8s, OUTRO 8-10s\n" +
             "OVERLAYS - Use exactly two; choose their timing and duration\n" +
             "CLIPS   - Intro/outro supplied; effects and color changes optional\n\n" +
-            "UPFRONT PAYMENT: 60,000 B-COINS");
+            "UPFRONT PAYMENT: 10,500 B-COINS");
 
         SetQualificationSummary("STAGE: Red backdrop + depth     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 10s with intro/outro + 2 freely timed overlays");
 
@@ -261,20 +297,20 @@ public class ContractUIManager : MonoBehaviour
 
     private void ConfigureLevel3Contract()
     {
-        SetContractText("LAMBORMINI",
+        SetContractText("TERRARI",
             "CLIENT QUALIFICATIONS\n\n" +
-            "SET - ADD WALL; choose a dark backdrop and place one orange Lambormini\n" +
+            "SET - ADD WALL; choose a dark backdrop and place one orange Terrari\n" +
             "LIGHT   - Use the Level 3 Soft Light for clean reflections\n" +
             "CAMERA  - Reveal a detail into a low front-quarter hero view\n" +
             "EDIT    - 8-12 seconds; choose your own motion and finish\n\n" +
-            "UPFRONT PAYMENT: 80,000 B-COINS");
+            "UPFRONT PAYMENT: 8,500 B-COINS");
 
-        SetQualificationSummary("STAGE: Dark backdrop + orange Lambormini     CAMERA: Detail to hero reveal\nLIGHT: Soft, aimed highlights     EDIT: 8-12 seconds; creative finish");
+        SetQualificationSummary("STAGE: Dark backdrop + orange Terrari     CAMERA: Detail to hero reveal\nLIGHT: Soft, aimed highlights     EDIT: 8-12 seconds; creative finish");
 
-        SetQualificationText("LAMBORMINI - SELECTED CONTRACT",
+        SetQualificationText("TERRARI - SELECTED CONTRACT",
             "AUTOMOTIVE COMPOSITION",
             "Present the vehicle as the only hero subject.\n\n" +
-            "- Place exactly one Lambormini car.\n" +
+            "- Place exactly one Terrari car.\n" +
             "- Open with a headlight or wheel detail, then reveal the front and side.\n" +
             "- Centered and Rule of Thirds framing both work; detail shots may crop the car.\n" +
             "- Keep the camera low and avoid obstructing the vehicle.",
@@ -282,7 +318,7 @@ public class ContractUIManager : MonoBehaviour
             "Use the Level 3 Soft Light to shape the vehicle.\n\n" +
             "- Light the side and front of the car.\n" +
             "- Keep highlights clean across the body.\n" +
-            "- Optional: place a LIGHT STRIP behind the car for a rim; try a cool color against the orange paint. F adjusts strip power.\n" +
+            "- Use your Soft Light from practice; keep readable paint detail and some shadow for shape.\n" +
             "- Start near 75% output and -10 degrees tilt, then refine.\n" +
             "- Use at least 30% output and 50% diffusion; aim the beam at the car.\n\n" +
             "POST-PRODUCTION\n" +
@@ -307,7 +343,7 @@ public class ContractUIManager : MonoBehaviour
             "CAMERA  - At least 3 clips: Wide, Medium, and Close-Up\n" +
             "LIGHT   - Level 3 Soft Light in every selected clip\n" +
             "EDIT    - 15 seconds, 2 animated graphics, player-selected motion, transition, music, and warm grade\n\n" +
-            "UPFRONT PAYMENT: 100,000 B-COINS");
+            "UPFRONT PAYMENT: 6,500 B-COINS");
 
         SetQualificationSummary("STAGE: Brown set + 1 product + 1 posed actor     CAMERA: Wide, Medium & Close-Up\nLIGHT: Soft Light every clip     EDIT: 15 seconds + 2 graphics");
 
@@ -330,7 +366,7 @@ public class ContractUIManager : MonoBehaviour
             "- Preview the complete 15-second story before export.\n" +
             "- Grade within Brightness 0.95-1.15, Contrast 1.05-1.30, and Saturation 1.05-1.30.");
 
-        SetPreviousContractText("LAMBORMINI",
+        SetPreviousContractText("TERRARI",
             "PREVIOUS CONTRACT\n\n" +
             "Hero vehicle staging\n" +
             "Premium automotive composition\n" +
@@ -348,7 +384,7 @@ public class ContractUIManager : MonoBehaviour
             "CAMERA  - At least 4 shots using 3 different shot sizes\n" +
             "LIGHT   - Complete Key, Fill, and Back Light setup\n" +
             "EDIT    - 20 seconds, 3 graphics, polished color grade\n\n" +
-            "UPFRONT PAYMENT: 150,000 B-COINS");
+            "UPFRONT PAYMENT: 9,500 B-COINS");
 
         SetQualificationSummary("STAGE: Teal set + actor + product + vehicle     CAMERA: 4 shots / 3 sizes\nLIGHT: Key, Fill & Back     EDIT: 20 seconds + 3 graphics");
 
@@ -379,6 +415,10 @@ public class ContractUIManager : MonoBehaviour
     private void SetContractText(string title, string description)
     {
         if (offerPanel == null) return;
+        description += "\nCOMPLETION BONUS: up to " + ProductionEconomy.CompletionBonus(activeContractLevel).ToString("N0") +
+            " B (S grade).\nBudget for essentials first. Rebuying sets/props costs money; deleting them gives no refund.";
+        liveTitle=title;liveDescription=description;browsedContractLevel=activeContractLevel;
+        RefreshFolderSelection();RefreshBrief();
 
         Transform titleTransform = offerPanel.transform.Find("Goke Cola Contract/Contract Details/Contract Title");
         Transform descriptionTransform = offerPanel.transform.Find("Goke Cola Contract/Contract Details/Contract Description");
@@ -389,6 +429,8 @@ public class ContractUIManager : MonoBehaviour
 
     private void SetQualificationText(string heading, string leftTitle, string leftDescription, string rightTitle, string rightDescription)
     {
+        detailedRequirements=leftTitle+"\n"+leftDescription+"\n\n"+rightTitle+"\n"+rightDescription;
+        RefreshBrief();
         if (qualificationsPanel == null) return;
 
         Transform book = qualificationsPanel.transform.Find("Qualifications Book");
@@ -466,7 +508,120 @@ public class ContractUIManager : MonoBehaviour
         BuildQualificationsPanel();
     }
 
+    private static readonly string[] ContractNames={"ARTISAN FLOWER VASE","GOKE COLA","TERRARI","KAPE KULTURA","HARAYA"};
+
+    private GameObject ArtPanel(string name,Transform parent,string art,Vector2 position,Vector2 size)
+    {
+        var panel=CreatePanel(name,parent,Color.white);ExportUIArt.Apply(panel.GetComponent<Image>(),art);
+        SetRect(panel.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,position,size);return panel;
+    }
+
+    private TextMeshProUGUI Label(Transform parent,string name,string text,Vector2 position,Vector2 size,float font,bool outlined=false)
+    {
+        var label=CreateText(name,parent,text,font,TextAlignmentOptions.Center);
+        SetRect(label.rectTransform,Vector2.one*.5f,Vector2.one*.5f,position,size);
+        label.color=outlined?Color.white:Color.black;label.fontStyle=FontStyles.Bold;
+        label.enableAutoSizing=true;label.fontSizeMin=18;label.fontSizeMax=font;label.raycastTarget=false;
+        if(outlined)ExportUIArt.OutlineText(label);
+        return label;
+    }
+
+    private Button ArtButton(Transform parent,string name,string label,string art,Vector2 position,Vector2 size,Action action)
+    {
+        var button=CreateButton(name,parent,label,Color.white);ExportUIArt.Apply(button.GetComponent<Image>(),art);
+        SetRect(button.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,position,size);
+        var text=button.GetComponentInChildren<TextMeshProUGUI>();text.fontSize=36;ExportUIArt.OutlineText(text);
+        if(action!=null)button.onClick.AddListener(()=>action());return button;
+    }
+
     private void BuildOfferPanel()
+    {
+        offerPanel=CreatePanel("Contract Offer",contractCanvas.transform,new Color(0,0,0,.7f));
+        SetStretchRect(offerPanel.GetComponent<RectTransform>(),Vector2.zero,Vector2.one,Vector2.zero,Vector2.zero);
+        folderTitles=new TextMeshProUGUI[3];
+        for(int i=0;i<3;i++)
+        {
+            bool center=i==1;float width=center?572:458,height=center?691:553;
+            var card=ArtPanel("Contract folder "+i,offerPanel.transform,"psdClosedFolder",new Vector2((i-1)*610,27),new Vector2(width,height));
+            folderTitles[i]=Label(card.transform,"Contract title","",new Vector2(0,height*.282f),new Vector2(width*.64f,height*.11f),center?30:25,true);
+        }
+        acceptButton=ArtButton(offerPanel.transform,"Select contract","SELECT","blueButton",new Vector2(0,-425),new Vector2(236,96),null);
+        ArtButton(offerPanel.transform,"Previous contract","","left",new Vector2(-192,-425),new Vector2(63,93),()=>BrowseContract(-1));
+        ArtButton(offerPanel.transform,"Next contract","","right",new Vector2(192,-425),new Vector2(63,93),()=>BrowseContract(1));
+        selectionStatus=Label(offerPanel.transform,"Contract status","",new Vector2(0,-320),new Vector2(490,50),22);
+        selectionStatus.color=Color.white;
+        RefreshFolderSelection();
+    }
+
+    private void BrowseContract(int direction)
+    {
+        browsedContractLevel=Mathf.Clamp(browsedContractLevel+direction,1,ContractNames.Length);RefreshFolderSelection();
+    }
+
+    private void RefreshFolderSelection()
+    {
+        if(folderTitles==null)return;
+        for(int i=0;i<3;i++)
+        {
+            int level=(browsedContractLevel+i-2+ContractNames.Length)%ContractNames.Length+1;
+            folderTitles[i].text=level==activeContractLevel?liveTitle:ContractNames[level-1];
+        }
+        acceptButton.interactable=browsedContractLevel==activeContractLevel;
+        selectionStatus.text=browsedContractLevel<activeContractLevel?"COMPLETED":browsedContractLevel>activeContractLevel?"LOCKED — COMPLETE THE CURRENT CONTRACT":"";
+    }
+
+    private void BuildQualificationsPanel()
+    {
+        qualificationsPanel=CreatePanel("Contract Qualifications",contractCanvas.transform,new Color(0,0,0,.7f));
+        SetStretchRect(qualificationsPanel.GetComponent<RectTransform>(),Vector2.zero,Vector2.one,Vector2.zero,Vector2.zero);
+        var book=ArtPanel("Qualifications Book",qualificationsPanel.transform,"psdOpenFolder",new Vector2(20,0),new Vector2(1346,860));
+        ArtPanel("Project title tape",book.transform,"tape",new Vector2(-365,281),new Vector2(429,123));
+        briefTitle=Label(book.transform,"Project title",liveTitle,new Vector2(-365,281),new Vector2(355,70),34,true);
+        ArtPanel("Reference photo frame",book.transform,"psdPhotoFrame",new Vector2(-382,-70),new Vector2(355,434));
+        var photo=ArtPanel("Product photo",book.transform,"psdVasePhoto",new Vector2(-380,-96),new Vector2(255,300));
+        photo.GetComponent<Image>().preserveAspect=true;
+        var photoLabel=Label(book.transform,"Product photo label","",new Vector2(-380,-96),new Vector2(230,200),28);
+        photoLabel.color=Color.white;
+        ArtButton(qualificationsPanel.transform,"Close brief","","close",new Vector2(720,448),new Vector2(85,85),CloseIllustratedBrief);
+        var viewport=CreatePanel("Brief viewport",book.transform,Color.clear);
+        SetRect(viewport.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,new Vector2(294,8),new Vector2(530,740));
+        viewport.AddComponent<RectMask2D>();
+        briefScroll=viewport.AddComponent<ScrollRect>();briefScroll.horizontal=false;briefScroll.movementType=ScrollRect.MovementType.Clamped;
+        briefScroll.viewport=viewport.GetComponent<RectTransform>();briefScroll.scrollSensitivity=35;
+        briefBody=CreateText("Live contract requirements",viewport.transform,"",21,TextAlignmentOptions.TopLeft);
+        briefBody.color=Color.black;briefBody.fontStyle=FontStyles.Bold;briefBody.raycastTarget=false;
+        var content=briefBody.rectTransform;content.anchorMin=new Vector2(0,1);content.anchorMax=Vector2.one;content.pivot=new Vector2(.5f,1);content.sizeDelta=Vector2.zero;
+        var fitter=briefBody.gameObject.AddComponent<ContentSizeFitter>();fitter.verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+        briefScroll.content=content;
+        var track=CreatePanel("Scroll track",book.transform,new Color(.3f,.24f,.1f,.5f));
+        SetRect(track.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,new Vector2(584,-116),new Vector2(14,480));
+        var handle=CreatePanel("Scroll handle",track.transform,new Color(.15f,.13f,.08f));
+        SetStretchRect(handle.GetComponent<RectTransform>(),Vector2.zero,Vector2.one,Vector2.zero,Vector2.zero);
+        var scrollbar=track.AddComponent<Scrollbar>();scrollbar.direction=Scrollbar.Direction.BottomToTop;scrollbar.handleRect=handle.GetComponent<RectTransform>();scrollbar.targetGraphic=handle.GetComponent<Image>();
+        briefScroll.verticalScrollbar=scrollbar;
+        RefreshBrief();qualificationsPanel.SetActive(false);
+    }
+
+    private void RefreshBrief()
+    {
+        if(briefBody==null)return;
+        briefTitle.text=liveTitle;
+        briefBody.text="<align=center>PROJECT TITLE:\n<size=32>"+liveTitle+"</size>\nCOMMERCIAL PRODUCTION BRIEF</align>\n\n"+liveDescription+"\n\nPRODUCTION REQUIREMENTS\n\n"+detailedRequirements;
+        var photo=qualificationsPanel.transform.Find("Qualifications Book/Product photo").GetComponent<Image>();
+        // Use the supplied illustration only for the vase; other contracts display their own product art.
+        string art=activeContractLevel==1?"psdVasePhoto":activeContractLevel==2?"gokeProduct":activeContractLevel==3?"terrariMark":activeContractLevel==4?"coffeeProduct":"harayaProduct";
+        var sprite=ExportUIArt.Get(art);photo.enabled=sprite!=null;if(sprite!=null)photo.sprite=sprite;
+        qualificationsPanel.transform.Find("Qualifications Book/Product photo label").GetComponent<TextMeshProUGUI>().text=sprite==null?liveTitle:"";
+        Canvas.ForceUpdateCanvases();briefScroll.verticalNormalizedPosition=1;
+    }
+
+    private void CloseIllustratedBrief()
+    {
+        if(acceptanceBriefPending){CompleteContractAcceptance();return;}
+        if(isQualificationsOpen)ToggleQualifications();
+    }
+
+    private void BuildLegacyOfferPanel()
     {
         offerPanel = CreatePanel("Contract Offer", contractCanvas.transform, backgroundColor);
         SetStretchRect(offerPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -487,7 +642,7 @@ public class ContractUIManager : MonoBehaviour
         TextMeshProUGUI contractTitle = CreateText("Contract Title", contractInner.transform, "GOKE COLA", 44, TextAlignmentOptions.Center);
         SetRect(contractTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -65f), new Vector2(620f, 70f));
         contractTitle.fontStyle = FontStyles.Bold;
-        contractTitle.color = new Color(1f, 0.78f, 0.2f);
+        contractTitle.color = new Color(.2f,.12f,.07f);
 
         TextMeshProUGUI contractDescription = CreateText("Contract Description", contractInner.transform,
             "CLIENT QUALIFICATIONS\n\n" +
@@ -495,7 +650,7 @@ public class ContractUIManager : MonoBehaviour
             "CAMERA  • Rule of Thirds composition\n" +
             "LIGHT   • 3-Point Lighting\n" +
             "EDIT    • 10 seconds, two title-safe graphics, balanced color\n\n" +
-            "UPFRONT PAYMENT: 60,000 B-COINS",
+            "UPFRONT PAYMENT: 10,500 B-COINS",
             25, TextAlignmentOptions.TopLeft);
         SetStretchRect(contractDescription.rectTransform, Vector2.zero, Vector2.one, new Vector2(50f, 170f), new Vector2(-50f, -135f));
 
@@ -510,7 +665,7 @@ public class ContractUIManager : MonoBehaviour
         declineMessageText.color = new Color(1f, 0.55f, 0.4f);
     }
 
-    private void BuildQualificationsPanel()
+    private void BuildLegacyQualificationsPanel()
     {
         qualificationsPanel = CreatePanel("Contract Qualifications", contractCanvas.transform, backgroundColor);
         SetStretchRect(qualificationsPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -613,6 +768,8 @@ public class ContractUIManager : MonoBehaviour
         GameObject panelObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         panelObject.transform.SetParent(parent, false);
         panelObject.GetComponent<Image>().color = color;
+        if(objectName=="Goke Cola Contract"||objectName=="Qualifications Book"||objectName=="Completed Contract")ExportUIArt.Apply(panelObject.GetComponent<Image>(),"folder");
+        if(objectName=="Contract Details"||objectName=="Completed Details")ExportUIArt.Apply(panelObject.GetComponent<Image>(),"paper");
         return panelObject;
     }
 
@@ -627,6 +784,8 @@ public class ContractUIManager : MonoBehaviour
         colors.pressedColor = Color.Lerp(color, Color.black, 0.2f);
         colors.selectedColor = colors.highlightedColor;
         button.colors = colors;
+        ExportUIArt.Apply(buttonObject.GetComponent<Image>(),objectName=="Decline Button"?"redButton":"blueButton");
+        colors.normalColor=Color.white;colors.highlightedColor=new Color(.9f,.95f,1);colors.pressedColor=Color.gray;button.colors=colors;
 
         TextMeshProUGUI buttonText = CreateText("Text", buttonObject.transform, label, 22, TextAlignmentOptions.Center);
         SetStretchRect(buttonText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -645,6 +804,7 @@ public class ContractUIManager : MonoBehaviour
         textComponent.fontSize = fontSize;
         textComponent.alignment = alignment;
         textComponent.color = Color.white;
+        if(parent.name=="Contract Details"||parent.name=="Completed Details"||parent.name=="Qualifications Book")textComponent.color=new Color(.15f,.12f,.09f);
         textComponent.enableWordWrapping = true;
 
         return textComponent;

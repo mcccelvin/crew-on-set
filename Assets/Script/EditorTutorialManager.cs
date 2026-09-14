@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -307,7 +307,7 @@ public class EditorTutorialManager : MonoBehaviour
         if (currentStep == EditorStep.ExplainBrandingTimeline) { StartCoroutine(TransitionToNextStep(EditorStep.TrimBranding, false)); return; }
         if (currentStep == EditorStep.ExplainPlayerEditTools) { StartCoroutine(TransitionToNextStep(EditorStep.ChooseCameraMotion, false)); return; }
 
-        if (currentStep == EditorStep.ExplainColorGrading) { StartCoroutine(TransitionToNextStep(EditorStep.AdjustBrightness, false)); return; }
+        if (currentStep == EditorStep.ExplainColorGrading) { StartCoroutine(TransitionToNextStep(EditorStep.ClickExport, false)); return; }
         if (currentStep == EditorStep.ExplainColorSettings) { StartCoroutine(TransitionToNextStep(EditorStep.ClickExport, false)); return; }
         if (currentStep == EditorStep.ExplainReviewPanel) { StartCoroutine(TransitionToNextStep(EditorStep.ReviewAndSubmit, false)); return; }
 
@@ -331,7 +331,7 @@ public class EditorTutorialManager : MonoBehaviour
                 TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Build the Goke sequence: drag the recorded clip to the Timeline" : "- Drag your recorded clip to the Timeline" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(videoBinClipRect); break;
             case EditorStep.PlayPreview:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Click Play to preview your raw footage" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Click Play to preview your raw footage", "- Watch until the video finishes" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(playButtonRect); break;
             case EditorStep.DoubleClickToTrim:
                 TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Double-click the Goke clip to open the Trim Inspector" : "- Double-Click the video clip on the Timeline to trim it" });
@@ -358,7 +358,7 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brandingTabBtnRect); break;
 
             case EditorStep.DragLogoToScreen:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Place the Goke Main Logo inside the title-safe guide" : "- Drag 1st logo to the LOWER SIDE of the screen", isGokeTutorial ? "- Use the shot's negative space and keep the product dominant" : "- Do NOT block the main product!" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Place the Goke Main Logo inside the title-safe guide" : "- Place ECCENTRIC CENTERPIECE first, below the product", isGokeTutorial ? "- Use the shot's negative space and keep the product dominant" : "- Do NOT block the main product!" });
                 if (TutorialHighlighter.Instance != null)
                 {
                     if (brandingBinClipRect != null && brandingBinClipRect.childCount > 0) TutorialHighlighter.Instance.HighlightElement(brandingBinClipRect.GetChild(0).GetComponent<RectTransform>());
@@ -367,7 +367,7 @@ public class EditorTutorialManager : MonoBehaviour
                 break;
 
             case EditorStep.TrimBranding:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Time the Main Logo from 0.0s to 5.0s" : "- Trim 1st logo so it starts at 0.0s and ends exactly at 5.0s" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Time the Main Logo from 0.0s to 5.0s" : "- Time ECCENTRIC CENTERPIECE from 0.0s to 5.0s" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brandingTimelineClipRect); break;
 
             case EditorStep.PlayBrandingPreview:
@@ -375,7 +375,7 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(playButtonRect); break;
 
             case EditorStep.DragToOtherTimeline:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Place the Goke End Logo in the opposite safe corner" : "- Drag the 2nd logo to the LOWER RIGHT of the screen" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Place the Goke End Logo in the opposite safe corner" : "- Place FLORA & FORM HOME second, at the lower right" });
                 if (TutorialHighlighter.Instance != null)
                 {
                     if (brandingBinClipRect != null && brandingBinClipRect.childCount > 1) TutorialHighlighter.Instance.HighlightElement(brandingBinClipRect.GetChild(1).GetComponent<RectTransform>());
@@ -385,7 +385,7 @@ public class EditorTutorialManager : MonoBehaviour
                 break;
 
             case EditorStep.PositionSecondBranding:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Build the end-card beat from 5.0s to 10.0s" : "- Trim the 2nd logo to start at 5.0s and end at 10.0s" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Build the end-card beat from 5.0s to 10.0s" : "- Time FLORA & FORM HOME from 5.0s to 10.0s" });
                 if (timelineScrollRect != null) timelineScrollRect.verticalNormalizedPosition = 0f;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(otherBrandingTrackRect);
                 break;
@@ -420,11 +420,11 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
                 break;
 
-            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- CORRECT EXPOSURE: set Brightness to 0.98" : "- Set Brightness to 0.98 to protect highlight detail" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
-            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- SHAPE THE IMAGE: set Contrast to 1.20" : "- Set Contrast to 1.12 for controlled separation" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
-            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- PROTECT BRAND COLOR: set Saturation to 1.10" : "- Set Saturation to 1.08 to protect the brand color" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
+            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- CORRECT EXPOSURE: set Brightness to 0.98" : "- Soft botanical grade: Brightness 1.02 to lift the vase" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
+            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- SHAPE THE IMAGE: set Contrast to 1.20" : "- Set Contrast to 0.96 to soften shadows" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
+            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- PROTECT BRAND COLOR: set Saturation to 1.10" : "- Set Saturation to 0.88 to calm the pink backdrop" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
 
-            case EditorStep.ClickExport: TutorialUIManager.Instance.SetupTasks(new string[] { "- Click the 'Export' button" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(exportButtonRect); exported = false; break;
+            case EditorStep.ClickExport: TutorialUIManager.Instance.SetupTasks(new string[] { "- Choose your own color grade; 1.00 is fine too", "- Stay within the displayed ranges for full color marks", "- Click Export when you are happy" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(exportButtonRect); exported = false; break;
 
             case EditorStep.ReviewAndSubmit: TutorialUIManager.Instance.SetupTasks(new string[] { "- Watch your final video", "- Click 'Submit Video'" }); submitted = false; break;
         }
@@ -434,6 +434,7 @@ public class EditorTutorialManager : MonoBehaviour
     {
         if (isTransitioning) yield break;
         isTransitioning = true;
+        tutorialPreviewStarted = false;
         isTaskPhaseActive = false;
         isWarningActive = false;
 
@@ -473,37 +474,30 @@ public class EditorTutorialManager : MonoBehaviour
         StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokePacing : EditorStep.PlayPreview, true));
     }
 
+    private bool tutorialPreviewStarted;
+    private EditorStep tutorialPreviewStep;
+
     public void OnTimelinePlayed()
     {
-        if (currentStep == EditorStep.PlayPreview && isTaskPhaseActive)
-        {
-            TutorialUIManager.Instance.MarkTaskComplete(0);
-            StartCoroutine(TransitionToNextStep(EditorStep.DoubleClickToTrim, true));
-        }
-        else if (currentStep == EditorStep.PlayBrandingPreview && isTaskPhaseActive)
-        {
-            TutorialUIManager.Instance.MarkTaskComplete(0);
-            if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
-        }
-        else if (currentStep == EditorStep.PreviewCommercialFinish && isTaskPhaseActive)
-        {
-            TutorialUIManager.Instance.MarkTaskComplete(0);
-            if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
-        }
+        if (!isTaskPhaseActive || (currentStep != EditorStep.PlayPreview &&
+            currentStep != EditorStep.PlayBrandingPreview && currentStep != EditorStep.PreviewCommercialFinish)) return;
+        tutorialPreviewStarted = true;
+        tutorialPreviewStep = currentStep;
+        TutorialUIManager.Instance.MarkTaskComplete(0);
+        if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
     }
 
     public void OnPlaybackFinished()
     {
-        if (currentStep == EditorStep.PlayBrandingPreview && isTaskPhaseActive)
-        {
-            TutorialUIManager.Instance.MarkTaskComplete(1);
+        if (!tutorialPreviewStarted || tutorialPreviewStep != currentStep || !isTaskPhaseActive) return;
+        tutorialPreviewStarted = false;
+        TutorialUIManager.Instance.MarkTaskComplete(1);
+        if (currentStep == EditorStep.PlayPreview)
+            StartCoroutine(TransitionToNextStep(EditorStep.DoubleClickToTrim, true));
+        else if (currentStep == EditorStep.PlayBrandingPreview)
             StartCoroutine(TransitionToNextStep(EditorStep.DragToOtherTimeline, true));
-        }
-        else if (currentStep == EditorStep.PreviewCommercialFinish && isTaskPhaseActive)
-        {
-            TutorialUIManager.Instance.MarkTaskComplete(1);
+        else if (currentStep == EditorStep.PreviewCommercialFinish)
             StartCoroutine(TransitionToNextStep(EditorStep.PrepareForColorGrade, true));
-        }
     }
 
     public void OnVideoDoubleClicked()
@@ -742,7 +736,7 @@ public class EditorTutorialManager : MonoBehaviour
         if (ui == null) return;
         isTaskPhaseActive = false;
         isWarningActive = false;
-        spacebarCooldown = Time.unscaledTime + 1f;
+        spacebarCooldown = Time.unscaledTime + (DevTutorialBypass.FastBossDialogue ? .2f : 1f);
         if (spacePromptText != null) spacePromptText.gameObject.SetActive(false);
 
         switch (currentStep)
@@ -766,7 +760,7 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.GoToBrandingPhase: ui.ShowBossDialogue("Let's put the client's name on this. Click the <color=red>BRANDING</color> tab.", ui.posePoint, false, false); break;
 
             case EditorStep.ExplainBrandingPhase: ui.ShowBossDialogue("The graphics should help sell the product, without hiding it. Keep them readable and inside the title-safe guide so the edges won't get cut off.", ui.poseOpenHand, false, false); break;
-            case EditorStep.DragLogoToScreen: ui.ShowBossDialogue("Drag the first graphic into an open part of the preview. Stay inside title-safe and leave the product clear.", ui.posePoint, false, false); break;
+            case EditorStep.DragLogoToScreen: ui.ShowBossDialogue("Start with <color=red>ECCENTRIC CENTERPIECE</color>, the advertising line. Place it below the product, inside title-safe. The brand name comes second.", ui.posePoint, false, false); break;
 
             case EditorStep.ExplainBrandingTimeline: ui.ShowBossDialogue("See that new pink clip? It decides when your graphic appears and how long it stays.", ui.poseSmile, false, false); break;
             case EditorStep.TrimBranding: ui.ShowBossDialogue("Give this first message five seconds. Drag its handles so it starts at 0.0 and ends at 5.0 seconds.", ui.poseBoss, false, false); break;
@@ -783,13 +777,13 @@ public class EditorTutorialManager : MonoBehaviour
 
             case EditorStep.PrepareForColorGrade: ui.ShowBossDialogue("One last look at the layout: clear product, readable graphics, safe edges, and one message at a time. Then open <color=red>COLOR GRADE</color>.", ui.poseHappy, false, false); break;
 
-            case EditorStep.ExplainColorGrading: ui.ShowBossDialogue("Let's balance the picture. We'll work through brightness, contrast, then saturation. The green markers are a guide; keep an eye on the preview too.", ui.poseOpenHand, false, false); break;
-            case EditorStep.AdjustBrightness: ui.ShowBossDialogue("Bring Brightness to 0.98. We're easing back the brightest areas so the product keeps its detail.", ui.poseHappy, false, false); break;
-            case EditorStep.AdjustContrast: ui.ShowBossDialogue(isGokeTutorial ? "Bring Contrast to 1.20. Watch how the can's light and dark edges become easier to read against all that red." : "Try Contrast at 1.12. We're giving the flower some shape while keeping detail in its bright and dark areas.", ui.poseSmile, false, false); break;
-            case EditorStep.AdjustSaturation: ui.ShowBossDialogue(isGokeTutorial ? "Bring Saturation to 1.10. A little boost gives Goke its red, without letting the color take over the picture." : "Try Saturation at 1.08. Just a little lift to the pink; we still want your eye on the flower.", ui.posePoint, false, false); break;
+            case EditorStep.ExplainColorGrading: ui.ShowBossDialogue("Brightness makes the image lighter or darker. Contrast changes the difference between light and shadow. Saturation changes color intensity. Choose your own look! Use Before / After to compare and Reset to return to 1.00. Stay within the generous ranges shown for full color marks.", ui.poseOpenHand, false, false); break;
+            case EditorStep.AdjustBrightness: ui.ShowBossDialogue("Bring Brightness to 1.02 for a small exposure lift. Watch the vase and petals: they should look clearer, without washing out the light areas.", ui.poseHappy, false, false); break;
+            case EditorStep.AdjustContrast: ui.ShowBossDialogue(isGokeTutorial ? "Bring Contrast to 1.20. Watch how the can's light and dark edges become easier to read against all that red." : "Try Contrast at 0.96. Softer contrast opens the dark leaves and avoids harsh, crushed shadows. This is a gentle product look.", ui.poseSmile, false, false); break;
+            case EditorStep.AdjustSaturation: ui.ShowBossDialogue(isGokeTutorial ? "Bring Saturation to 1.10. A little boost gives Goke its red, without letting the color take over the picture." : "Try Saturation at 0.88. The flowers are already colorful, so reduce color intensity slightly instead of boosting it. Use Before / After to compare the pink backdrop, teal vase, and petal detail.", ui.posePoint, false, false); break;
 
             case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("Take a look at the difference. We want visible detail, a clear product, and color that supports it. That's the balance we're after.", ui.poseHappy, false, false); break;
-            case EditorStep.ClickExport: ui.ShowBossDialogue("Ready to see it all together? Click <color=red>EXPORT</color> to render the commercial you've made.", ui.poseBoss, false, false); break;
+            case EditorStep.ClickExport: ui.ShowBossDialogue("Adjust the colors however you like, or keep the original look at 1.00. Keep the product readable, without making the image too bright or dark. When you are happy, click <color=red>EXPORT</color>.", ui.poseBoss, false, false); break;
 
             case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. Watch it through once: check the opening, the product, graphic timing, sound, and color. This is our last look before delivery.", ui.poseOpenHand, false, false); break;
             case EditorStep.ReviewAndSubmit: ui.ShowBossDialogue("Happy it matches the brief? Click <color=red>SUBMIT VIDEO</color> and let's see what the client thinks.", ui.poseHappy, false, false); break;

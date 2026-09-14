@@ -301,7 +301,7 @@ public class AchievementEntry
     public bool isUnlocked;
 }
 
-public class AlmanacManager : MonoBehaviour
+public partial class AlmanacManager : MonoBehaviour
 {
     public static AlmanacManager Instance;
 
@@ -436,6 +436,9 @@ public class AlmanacManager : MonoBehaviour
         RemoveUIListeners();
 
         almanacCanvas = sceneAlmanacCanvas;
+        bookEntryTitle=null;
+        bookPage=0;
+        bookCategory=0;
         playerInfoTabBtn = null;
         knowledgeTabBtn = null;
         achievementsTabBtn = null;
@@ -637,6 +640,7 @@ public class AlmanacManager : MonoBehaviour
         UnlockKnowledge("motivated_lighting");
         UnlockKnowledge("lifestyle_staging");
         UnlockKnowledge("warm_commercial_grade");
+        UnlockKnowledge("coffee_story_workflow");
         PlayerPrefs.Save();
     }
 
@@ -770,6 +774,18 @@ public class AlmanacManager : MonoBehaviour
 
     private void UpdateKnowledgeFilterButtons()
     {
+        if(bookEntryTitle!=null)
+        {
+            // These tabs also return from the director record and milestones pages.
+            foreach(var button in new[]{equipmentKnowledgeButton,techniquesKnowledgeButton})
+            {
+                if(button==null)continue;
+                button.interactable=true;
+                bool selected=button==equipmentKnowledgeButton?knowledgeCategoryFilter==1:knowledgeCategoryFilter==2;
+                var colors=button.colors;colors.normalColor=selected?Color.white:new Color(.72f,.62f,.53f);button.colors=colors;
+            }
+            return;
+        }
         if (allKnowledgeButton) allKnowledgeButton.interactable = knowledgeCategoryFilter != 0;
         if (equipmentKnowledgeButton) equipmentKnowledgeButton.interactable = knowledgeCategoryFilter != 1;
         if (techniquesKnowledgeButton) techniquesKnowledgeButton.interactable = knowledgeCategoryFilter != 2;
@@ -846,21 +862,21 @@ public class AlmanacManager : MonoBehaviour
 
     private void EnsureLevel3KnowledgeEntries()
     {
-        AddKnowledgeEntry("level_3_soft_light", "LEVEL 3 - SOFT LIGHT", "Higher-output light designed for cleaner subject and vehicle lighting.\n\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Softer shadows create smoother transitions across reflective body panels.\n- For Lambormini, start near 75% intensity and -10 degrees tilt.\n- [LMB] toggles power, [Scroll] changes intensity, [Up/Down Arrows] adjust tilt, and [G] drops it.\n- Aim it across the vehicle, then check that the silhouette and highlight detail remain readable through the camera.", 3, 0);
-        AddKnowledgeEntry("hiring_and_posing_actors", "LEVEL 4 - HIRING & POSING ACTORS", "Actors are hired and staged through the Director Terminal.\n\n- Click an Actor card to attach the actor to the cursor, then click the stage to place them.\n- Each actor hire costs 500 B-Coins.\n- Select the placed actor to enable the POSE ACTOR button.\n- The button cycles between Neutral, Wave, and Action poses.\n- Press [T] while the actor is selected to reposition them.\n- Keep the actor clear of the main product so both remain readable.", 4, 0);
+        AddKnowledgeEntry("level_3_soft_light", "LEVEL 3 - SOFT LIGHT", "Higher-output light designed for cleaner subject and vehicle lighting.\n\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Softer shadows create smoother transitions across reflective body panels.\n- For Terrari, start near 75% intensity and -10 degrees tilt.\n- [LMB] toggles power, [Scroll] changes intensity, [Up/Down Arrows] adjust tilt, and [G] drops it.\n- Aim it across the vehicle, then check that the silhouette and highlight detail remain readable through the camera.", 3, 0);
+        AddKnowledgeEntry("hiring_and_posing_actors", "LEVEL 4 - HIRING & POSING ACTORS", "Actors are hired and staged through the Director Terminal.\n\n- Click an Actor card to attach the actor to the cursor, then click the stage to place them.\n- Default hire rates: Rookie 750, Trained 2,250, Expert 4,500 B-Coins. Higher tiers have smoother, more expressive gestures.\n- Select the placed actor to enable the POSE ACTOR button.\n- The button cycles between breathing idle (Neutral), animated greeting (Wave), and product presentation (Action).\n- Press [T] while the actor is selected to reposition them; [R] turns the bot in 15-degree steps.\n- Keep the actor clear of the main product so both remain readable.", 4, 0);
         AddKnowledgeEntry("automotive_staging", "LEVEL 3 - AUTOMOTIVE STAGING", "Vehicle commercials require a readable silhouette, controlled reflections, and deliberate negative space.\n\n- Click the approved car card, move it over the stage, then click to place it.\n- Leave open space around the vehicle and show its important front or side shape.\n- Use the Soft Light across body panels to reveal their form.\n- Use the Level 2 Camera grid to place the vehicle deliberately instead of crowding the frame.\n- Press [TAB] during the active contract to review its exact qualifications.", 3, 10);
-        AddKnowledgeEntry("vehicle_rim_lighting", "TECHNIQUE - RIM LIGHTING & COLOR CONTRAST", "Separate the car from a dark backdrop with a bright outline.\n\n1. Keep your Soft Light in front and off to one side. Its broad highlight reveals the paint.\n2. Add a LIGHT STRIP from the Director Tablet. Place it behind and beside the car, close enough for its light to reach the body.\n3. Look through the camera: move the strip until a narrow highlight runs along the roof or far side. Avoid washing out the whole car.\n4. Try cyan (#66CCFF) against orange paint for warm/cool contrast. Leave the opposite side darker to preserve depth.\n5. Select the strip: F cycles MEDIUM, HIGH, OFF, LOW; R tilts; Q/E turns. RGB or HEX changes both the glowing bar and its real light. Compare OFF and ON from the same camera angle.\n6. Experiment with one or two strips. Stronger is not always better. Accent lighting is optional and does not replace the required Soft Light.", "Technique", 3, 35);
-        AddKnowledgeEntry("level_3_workflow", "LEVEL 3 - VEHICLE LIGHTING WORKFLOW", "Use this plan for the Lambormini production.\n\n1. Use ADD WALL in the Director Tablet, choose a dark backdrop color, then place one orange Lambormini. Arrange the set yourself. Optional LIGHT STRIP props add bright accents: R tilts; Q/E turns; RGB or HEX changes their color.\n2. Aim the Soft Light across the body. Start at 75% output; use at least 30% output and 50% diffusion.\n3. Frame a low front-quarter hero view, centered or on thirds.\n4. A headlight detail creates curiosity; revealing the car gives it context.\n5. Record a steady hero take and choose SLOW PULL OUT in Branding, or edit separate detail and hero takes.\n6. Make an 8-12 second cut. Brightness 0.85-1.15, Contrast 1.05-1.45, Saturation 0.95-1.30.\n7. Music, overlays and intro/outro are optional. Use [TAB] for the brief.", 3, 20);
+        AddKnowledgeEntry("vehicle_rim_lighting", "TECHNIQUE - RIM LIGHTING", "Keep the Soft Light in front and to one side for readable paint. Place an LED strip behind and beside the car for a bright edge against the dark background. Buy it from the LIGHT STRIP card in the Equipment Shop. E picks it up, left-click changes power, C cycles white/cyan/warm, R tilts, Q turns and G deploys. Keep it within about 3 metres of the body, then check the camera. Move it out of frame. If it washes out the whole car, lower power or move it farther back. Cyan against orange demonstrates warm/cool contrast; choose the color that works for your shot. The boss provides guided practice once the car and backdrop are placed and the Soft Light is set down, powered on and aimed at the car.", "Technique", 3, 35);
+        AddKnowledgeEntry("level_3_workflow", "LEVEL 3 - VEHICLE LIGHTING WORKFLOW", "Use this plan for the Terrari production.\n\n1. Use ADD WALL in the Director Tablet, choose a dark backdrop color, then place one orange Terrari. Arrange the set yourself. Reuse the camera and Soft Light from the guided lessons.\n2. Aim the Soft Light across the body. Start at 75% output; use at least 30% output and 50% diffusion.\n3. Frame a low front-quarter hero view, centered or on thirds.\n4. A headlight detail creates curiosity; revealing the car gives it context.\n5. Record a steady hero take and choose SLOW PULL OUT in Branding, or edit separate detail and hero takes.\n6. Make an 8-12 second cut. Brightness 0.85-1.15, Contrast 1.05-1.45, Saturation 0.95-1.30.\n7. Music, overlays and intro/outro are optional. Use [TAB] for the brief.", 3, 20);
     }
 
     private void EnsureEquipmentAndTechniqueEntries()
     {
-        AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- Use ADD WALL, select the wall, then adjust the RGB sliders, type 0-255 in the number fields, or enter a HEX color such as #FF6600. Press Enter to apply.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
-        AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 100 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
+        AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- From Level 4 use CHOOSE SET for a plain backdrop, Cafe Corner or Living Room. Earlier levels use ADD WALL. Select the wall, then adjust the RGB sliders, type 0-255 in the number fields, or enter a HEX color such as #FF6600. Press Enter to apply.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
+        AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 1,200 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
         AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "LEVEL 1 EQUIPMENT - 4,000 B-COINS\n\nFEATURES\n- Production camera with a 15-60 degree zoom range.\n- Continuous autofocus and a subject-tracking viewfinder HUD.\n- Displays focus distance, REC status, recording time, and subject position.\n- Supports zoom and pedestal-height adjustment.\n\nHOW TO USE\n- Pick it up with [E] and press [C] to insert a blank SD Card.\n- Press [LMB] to open or close the viewfinder.\n- Use [Scroll] to zoom and [Q/E] to change camera height.\n- Press [R] to start or stop recording.\n- Press [G] to drop it. Camera adjustments lock during recording.", "Equipment", 1, 20);
-        AddKnowledgeEntry("sd_card", "EQUIPMENT - SD CARD", "LEVEL 1 EQUIPMENT - 50 B-COINS\n\nFEATURES\n- Blank cards provide recording storage for every camera.\n- Used cards store the footage filename, duration, camera score, lighting score, and total score.\n\nHOW TO USE\n- Keep a blank card in the hotbar and press [C] while holding a camera.\n- Stop the recording to eject the used card.\n- Pick it up with [E].\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E] to review the recording.", "Equipment", 1, 30);
-        AddKnowledgeEntry("level_2_camera", "EQUIPMENT - LEVEL 2 CAMERA", "LEVEL 2 EQUIPMENT - 10,000 B-COINS\n\nFEATURES\n- Adds a 3 x 3 composition grid for Rule of Thirds framing.\n- Uses the same autofocus, tracking HUD, focus display, and 15-60 degree zoom range as the NONY FX Camera.\n- Saves camera and lighting scores with the recorded footage.\n\nHOW TO USE\n- Pick it up with [E] and press [C] to insert an SD Card.\n- Press [LMB] to open the viewfinder and display the grid.\n- Use [Scroll] to zoom and [Q/E] to change height.\n- Place the subject on a grid third, then press [R] to record.\n- Press [G] to drop it.", "Equipment", 2, 0);
-        AddKnowledgeEntry("level_3_soft_light", "EQUIPMENT - LEVEL 3 SOFT LIGHT", "LEVEL 3 EQUIPMENT - 5,000 B-COINS\n\nFEATURES\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Creates softer shadow transitions on faces and reflective surfaces.\n- Strong enough for a powerful Key Light or wider coverage from farther away.\n\nHOW TO USE\n- Press [LMB] to toggle power.\n- Use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to adjust tilt.\n- Aim it across the subject or vehicle, then press [G] to drop it.", "Equipment", 3, 0);
+        AddKnowledgeEntry("sd_card", "EQUIPMENT - SD CARD", "LEVEL 1 EQUIPMENT - 150 B-COINS\n\nFEATURES\n- Blank cards provide recording storage for every camera.\n- Used cards store the footage filename, duration, camera score, lighting score, and total score.\n\nHOW TO USE\n- Keep a blank card in the hotbar and press [C] while holding a camera.\n- Stop the recording to eject the used card.\n- Pick it up with [E].\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E] to review the recording.", "Equipment", 1, 30);
+        AddKnowledgeEntry("level_2_camera", "EQUIPMENT - LEVEL 2 CAMERA", "LEVEL 2 EQUIPMENT - 6,000 B-COINS\n\nFEATURES\n- Adds a 3 x 3 composition grid for Rule of Thirds framing.\n- Uses the same autofocus, tracking HUD, focus display, and 15-60 degree zoom range as the NONY FX Camera.\n- Saves camera and lighting scores with the recorded footage.\n\nHOW TO USE\n- Pick it up with [E] and press [C] to insert an SD Card.\n- Press [LMB] to open the viewfinder and display the grid.\n- Use [Scroll] to zoom and [Q/E] to change height.\n- Place the subject on a grid third, then press [R] to record.\n- Press [G] to drop it.", "Equipment", 2, 0);
+        AddKnowledgeEntry("level_3_soft_light", "EQUIPMENT - LEVEL 3 SOFT LIGHT", "LEVEL 3 EQUIPMENT - 4,500 B-COINS\n\nFEATURES\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Creates softer shadow transitions on faces and reflective surfaces.\n- Strong enough for a powerful Key Light or wider coverage from farther away.\n\nHOW TO USE\n- Press [LMB] to toggle power.\n- Use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to adjust tilt.\n- Aim it across the subject or vehicle, then press [G] to drop it.", "Equipment", 3, 0);
 
         AddKnowledgeEntry("set_building_technique", "TECHNIQUE - SET BUILDING & PRODUCT STAGING", "LEVEL 1 TECHNIQUE\n\n- Match the backdrop color and approved props to the contract brief.\n- Use a support cube when the product needs height.\n- Keep the product visible and remove anything blocking its silhouette.\n- In the Flower Vase contract, use a pink backdrop, place the cube near center, then place the flower on top.\n- Confirm the final placement through the camera viewfinder, not only from the player view.", "Technique", 1, 0);
         AddKnowledgeEntry("center_framing", "TECHNIQUE - CENTER FRAMING", "LEVEL 1 TECHNIQUE\n\n- Place the main subject in the middle of the frame.\n- Keep it inside the center area for the entire take.\n- Use zoom to reduce distracting background and [Q/E] to correct camera height before recording.\n- Center framing creates a simple, direct product image and is required by the Flower Vase contract.\n- Do not move the camera during the 10-second recording.", "Technique", 1, 10);
@@ -872,9 +888,10 @@ public class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("product_separation", "TECHNIQUE - PRODUCT & BACKDROP SEPARATION", "LEVEL 2 TECHNIQUE\n\n- Pull the product forward instead of leaving it against the backdrop.\n- Physical distance creates depth and gives the Back Light room to work.\n- Keep the product silhouette clear from props with similar colors.\n- For Goke Cola, use a red backdrop and keep the can at least 1.5 units away from the wall.\n- Use lighting and color contrast to guide attention toward the product.", "Technique", 2, 20);
         AddKnowledgeEntry("commercial_color_grading", "TECHNIQUE - COMMERCIAL COLOR GRADING", "OPTIONAL GOKE FINISH\n\nBrightness controls exposure, contrast separates light and dark areas, and saturation controls color strength. Preserve highlight and shadow detail. For this contract these controls are optional; the lesson focuses on intro/outro placement. The contract also requires two overlays, with timing and duration chosen by you.", "Technique", 2, 30);
         AddKnowledgeEntry("advertising_post_production", "TECHNIQUE - INTRO & OUTRO", "GOKE POST-PRODUCTION\n\nINTRO: Introduces the brand and sets the tone, helping viewers understand whose commercial they are watching.\n\nOUTRO: Reinforces the brand and leaves a memorable closing message. 'Make it a Goke' invites the viewer to choose the product.\n\nBoth clips are supplied in CLIPS. Drag the full 2-second intro to 0s, place 6 seconds of your recorded product footage after it, and finish with the full 2-second outro at 8s. Join all clips without gaps or overlaps. Double-click footage to trim; right-click a clip to return it to the bank. Use both the Goke logo and tagline overlays. Choose when and how long they appear; no fixed order or minimum hold is required. Preview the complete 10-second commercial before export.", "Technique", 2, 40);
-        AddKnowledgeEntry("hiring_and_posing_actors", "TECHNIQUE - HIRING, BLOCKING & POSING ACTORS", "LEVEL 4 TECHNIQUE\n\n- Click an Actor card, move the actor over the stage, then click again to place them. Each hire costs 500 B-Coins.\n- Select the actor to enable POSE ACTOR.\n- Cycle between Neutral, Wave, and Action poses to match the commercial.\n- Select the actor and press [T] to reposition them.\n- Block the actor beside the product without hiding its important shape.\n- Preserve the same pose and screen side across matching shots.", "Technique", 4, 0);
+        AddKnowledgeEntry("hiring_and_posing_actors", "TECHNIQUE - HIRING, BLOCKING & POSING ACTORS", "LEVEL 4 TECHNIQUE\n\n- Click an Actor card, move the actor over the stage, then click again to place them. Hire prices reflect acting polish: Rookie 750, Trained 2,250, Expert 4,500 B-Coins (default rates).\n- Select the actor to enable POSE ACTOR.\n- Cycle between breathing idle (Neutral), animated greeting (Wave), and product presentation (Action). Bots perform automatically on their mark; they restart the action for every take. Rookie gestures are smaller with slower cues; Trained and Expert actors deliver progressively smoother, more expressive gestures. All tiers can meet the contract.\n- Select the actor and press [T] to reposition them; [R] turns the bot in 15-degree steps.\n- Block the actor beside the product without hiding its important shape.\n- Preserve the same pose and screen side across matching shots.", "Technique", 4, 0);
         AddKnowledgeEntry("automotive_staging", "TECHNIQUE - AUTOMOTIVE STAGING & COMPOSITION", "LEVEL 3 TECHNIQUE\n\n- Show a readable front or side silhouette of the vehicle.\n- Leave open space around the body instead of crowding it with props.\n- Use the Rule of Thirds grid to balance the vehicle with intentional negative space.\n- Aim the Soft Light across the body to reveal form without clipping reflections.\n- Check that the vehicle direction and empty space guide the viewer through the frame.", "Technique", 3, 10);
         AddKnowledgeEntry("soft_light_technique", "TECHNIQUE - SOFT LIGHTING FOR REFLECTIVE SURFACES", "LEVEL 3 TECHNIQUE\n\n- Move the Level 3 Soft Light across the front or side of the vehicle to reveal body shape.\n- Start near 75% intensity and -10 degrees tilt, then aim the beam across the car.\n- Change distance and intensity together: farther placement widens coverage but reduces brightness.\n- Keep enough shadow to preserve depth instead of lighting every surface equally.\n- In post use Contrast 1.15-1.45, Saturation 0.95-1.20, and Brightness 0.90-1.10.", "Technique", 3, 20);
+        AddKnowledgeEntry("coffee_story_workflow", "LEVEL 4 - THE COFFEE STORY", "Build a welcoming morning moment, then tell it with three shot sizes.\n\n1. CHOOSE SET in the Director Tablet: Plain Backdrop (500 B), Cafe Corner (2,000 B), or Living Room (2,750 B). Furnished sets start warm brown; wall/floor paint still works, keeping furniture colors intact. Try #80502E. Place exactly one Kape Kultura product and one Actor; use Wave or Action.\n2. Suggest a window with the Soft Light in front and to one side. Power it on and aim between the Actor and coffee. Try 75% output and at least 50% diffusion.\n3. Record a WIDE to introduce the setting, a MEDIUM to connect the Actor and product, and a CLOSE-UP to give the product emphasis. The camera focus readout names the current size. Even the close shot must show both subjects fully.\n4. Keep the same pose, prop positions and screen side throughout. Hold each take steady for about 6 seconds. Collect each recorded SD card and insert the three matching takes into the computer.\n5. Try Wide -> Medium -> Close-Up, trimmed to 5 seconds each and joined from 0. Total: 15 seconds. Use the bin labels to identify the shots.\n6. Add exactly 2 readable graphics, choose their entrance animation, camera motion, a transition and music in Branding. Try Brightness 1.05, Contrast 1.15, Saturation 1.15. Preview before export.\n\nThese shot sizes give the viewer context, connection and product emphasis. Continuity makes the cuts feel like one moment.", "Technique", 4, 50);
         AddKnowledgeEntry("shot_coverage", "TECHNIQUE - SHOT COVERAGE", "LEVEL 4 TECHNIQUE\n\n- Coverage records the same action at useful shot sizes so the editor can build a clear sequence.\n- WIDE establishes the actor, product, and setting.\n- MEDIUM shows the actor using or presenting the product.\n- CLOSE-UP emphasizes the product or a meaningful detail.\n- For Kape Kultura, record all three sizes and keep every required subject visible before moving to the next setup.", "Technique", 4, 0);
         AddKnowledgeEntry("screen_continuity", "TECHNIQUE - SCREEN DIRECTION & CONTINUITY", "LEVEL 4 TECHNIQUE\n\n- Keep the camera on one side of the actor-product axis so screen direction remains consistent.\n- Preserve the actor's pose and the positions of important props between matching shots.\n- A sudden side reversal can make the actor appear to face or move in the opposite direction.\n- Check each recording before ingesting it: the wide, medium, and close-up should feel like one continuous moment.", "Technique", 4, 10);
         AddKnowledgeEntry("motivated_lighting", "TECHNIQUE - MOTIVATED SOFT LIGHT", "LEVEL 4 TECHNIQUE\n\n- Motivated lighting appears to come from a believable source such as a window or practical lamp.\n- Use the Level 3 Soft Light as a natural-looking key and keep its direction consistent across every shot.\n- Protect highlight detail on the cup and readable light on the actor's face.\n- Avoid changing intensity, tilt, or light direction between coverage unless the story motivates the change.", "Technique", 4, 20);
@@ -1011,6 +1028,7 @@ public class AlmanacManager : MonoBehaviour
 
     private void RefreshKnowledgeUI()
     {
+        if(bookEntryTitle!=null){RefreshBookPage();return;}
         if (knowledgeListContainer == null) return;
 
         foreach (Transform child in knowledgeListContainer)
@@ -1195,6 +1213,11 @@ public class AlmanacManager : MonoBehaviour
 
     private void BuildAlmanacUI()
     {
+        BuildIllustratedBook();
+    }
+
+    private void BuildLegacyAlmanacUI()
+    {
         if (almanacCanvas == null || playerInfoPanel != null) return;
 
         Canvas canvas = almanacCanvas.GetComponent<Canvas>();
@@ -1230,6 +1253,10 @@ public class AlmanacManager : MonoBehaviour
 
         closeButton = CreateButton("Close Button", header.transform, "CLOSE  [P]");
         SetRect(closeButton.GetComponent<RectTransform>(), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-145f, 0f), new Vector2(230f, 58f));
+        ExportUIArt.Apply(closeButton.GetComponent<Image>(),"close");
+        closeButton.GetComponent<RectTransform>().sizeDelta=new Vector2(58,58);
+        closeButton.GetComponentInChildren<TextMeshProUGUI>().text="";
+        var closeColors=closeButton.colors;closeColors.normalColor=Color.white;closeButton.colors=closeColors;
 
         GameObject sidePanel = CreatePanel("Tabs", mainPanel.transform, new Color32(228, 210, 178, 255));
         SetStretchRect(sidePanel.GetComponent<RectTransform>(), Vector2.zero, new Vector2(0f, 1f), Vector2.zero, new Vector2(300f, -100f));
@@ -1305,6 +1332,7 @@ public class AlmanacManager : MonoBehaviour
 
     private void BuildKnowledgeFilters()
     {
+        if(bookEntryTitle!=null)return;
         if (knowledgePanel == null || allKnowledgeButton != null) return;
 
         allKnowledgeButton = CreateButton("All Guides Button", knowledgePanel.transform, "ALL GUIDES");
@@ -1480,6 +1508,8 @@ public class AlmanacManager : MonoBehaviour
         GameObject panelObject = new GameObject(objectName, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         panelObject.transform.SetParent(parent, false);
         panelObject.GetComponent<Image>().color = color;
+        if(objectName=="Almanac Book"||objectName=="Tabs")ExportUIArt.Apply(panelObject.GetComponent<Image>(),"paper");
+        if(objectName=="Header")ExportUIArt.Apply(panelObject.GetComponent<Image>(),"tab");
         return panelObject;
     }
 
@@ -1498,6 +1528,7 @@ public class AlmanacManager : MonoBehaviour
         colors.fadeDuration = .15f;
         button.targetGraphic = buttonObject.GetComponent<Image>();
         button.colors = colors;
+        ExportUIArt.Apply(buttonObject.GetComponent<Image>(),"tab");
 
         TextMeshProUGUI buttonText = CreateText("Text", buttonObject.transform, buttonLabel, 22, TextAlignmentOptions.Center);
         SetStretchRect(buttonText.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
@@ -1555,3 +1586,8 @@ public class AlmanacManager : MonoBehaviour
         }
     }
 }
+
+
+
+
+

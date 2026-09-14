@@ -34,6 +34,51 @@ public class CampaignLevelManager : MonoBehaviour
     private int activeLevel = 4;
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
+    private bool coffeeLessonStarted;
+    private float nextCoffeeLessonTick;
+    private CubeActor featureActor;
+    private int observedActorActions;
+    private Quaternion actorFeatureRotation;
+    private Vector3 actorFeaturePosition;
+
+    private bool ObserveActorActions()
+    {
+        var actors = FindObjectsOfType<CubeActor>();
+        if (actors.Length != 1) return false;
+        if (featureActor != actors[0]) { featureActor = actors[0]; observedActorActions = 0; }
+        if (featureActor.GetPoseName() == "Wave") observedActorActions |= 1;
+        if (featureActor.GetPoseName() == "Action") observedActorActions |= 2;
+        if (observedActorActions != 3) return false;
+        actorFeatureRotation = featureActor.transform.rotation;
+        actorFeaturePosition = featureActor.transform.position;
+        return true;
+    }
+
+    private bool ObserveActorTurn()
+    {
+        if (featureActor == null)
+        {
+            featureActor = FindObjectOfType<CubeActor>();
+            if (featureActor != null) actorFeatureRotation = featureActor.transform.rotation;
+            return false;
+        }
+        if (Quaternion.Angle(actorFeatureRotation, featureActor.transform.rotation) < 10f) return false;
+        actorFeaturePosition = featureActor.transform.position;
+        return true;
+    }
+
+    private bool ObserveActorMove()
+    {
+        if (featureActor == null)
+        {
+            featureActor = FindObjectOfType<CubeActor>();
+            if (featureActor != null) actorFeaturePosition = featureActor.transform.position;
+            return false;
+        }
+        Vector3 offset = featureActor.transform.position - actorFeaturePosition;
+        offset.y = 0f;
+        return offset.sqrMagnitude >= .01f;
+    }
 
     public void DisableForDevTesting()
     {
@@ -60,11 +105,27 @@ public class CampaignLevelManager : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (coffeeLessonStarted && Time.unscaledTime < nextCoffeeLessonTick) return;
+        nextCoffeeLessonTick = Time.unscaledTime + .2f;
         practiceLesson?.Tick();
+    }
+
+    public void OnCoffeeTakeRecorded(Player.Equipment.SDCardItem card)
+    {
+        if (activeLevel != 4 || card == null || card.campaignLevel != 4 || DevTutorialBypass.Disabled) return;
+        string size = card.shotType == 1 ? "WIDE" : card.shotType == 2 ? "MEDIUM" : "CLOSE-UP";
+        string hint = card.videoDuration < 5f ? "Record at least 5 seconds for the edit." :
+            !card.requiredSubjectsVisible ? "Retake: keep both subjects fully visible throughout." :
+            !card.usedSoftLight ? "Retake: power and aim the Soft Light at both subjects." :
+            string.IsNullOrEmpty(card.actorPose) || card.actorPose == "Neutral" ? "Retake: choose Wave or Action on the tablet." :
+            Mathf.Abs(card.screenDirection) <= .1f ? "Retake: separate the Actor and coffee in the frame." :
+            "Collect this card. Keep the same pose and screen side.";
+        GameFeedback.Show(size + " TAKE SAVED\n" + hint);
     }
 
     private void OnDestroy()
     {
+        practiceLesson?.Release();
         RemoveDirectorPracticeMarker();
         if (Instance == this) Instance = null;
     }
@@ -386,7 +447,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Lambormini's signed off on your commercial: <color=yellow>" + previousGrade + "</color>! You've had a go at shaping a car with light. Let's put someone in front of the camera next.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Terrari's signed off on your commercial: <color=yellow>" + previousGrade + "</color>! You've had a go at shaping a car with light. Let's put someone in front of the camera next.", TutorialUIManager.Instance.poseHappy, true, false);
         }
         else
         {
@@ -402,11 +463,11 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Time to bring someone onto our set. In <color=yellow>Level 4</color>, we'll pose an Actor and tell a little more of the story with wide, medium, and close-up shots.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("In <color=yellow>Level 4</color>, we will add an Actor to the product story. Keep your camera and Soft Light from the previous job. We will practice hiring, placing and posing the Actor, then learn wide, medium and close-up shots together. Each shot has a purpose; you do not need a dolly or extra lighting equipment.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("One last brief: <color=yellow>Level 5</color>. This one's going to bring your skills together. Take it a shot at a time; the contract is our guide.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 5</color>. We will combine familiar tools: your camera records the shot, the SD card carries the take, and the lights reveal the product. Reuse equipment from delivery before buying more. Start with the set, then lighting, then camera and finally editing. The contract and Almanac explain each part; no new grip tools are required.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -419,7 +480,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Let's give our scene a performance. We'll walk to the tablet, place an Actor, and choose a pose together. I'll guide each step.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's hire an Actor bot. Rookie costs 750, Trained 2,250, and Expert 4,500 B-Coins at the default rates. Better actors deliver smoother, more expressive gestures. Every tier can meet the brief. We'll place one on a mark and choose their repeating action together.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -467,7 +528,7 @@ public class CampaignLevelManager : MonoBehaviour
             "Choose one Actor card, then click the stage to place them",
             () => currentStep == CampaignLevelStep.ActorPlaced || currentStep == CampaignLevelStep.ActorPosed));
         steps.Add(new GuidedPracticeLesson.Step(
-            "Select your Actor and click <color=yellow>POSE ACTOR</color>. Choose a performance that suits the scene; keep the product visible.",
+            "Select your Actor and click <color=yellow>POSE ACTOR</color>. Wave starts an animated greeting; Action starts a product-presentation gesture. The bot performs automatically while staying on its mark. Choose an action that keeps the coffee visible.",
             "Select the Actor and click POSE ACTOR",
             () => currentStep == CampaignLevelStep.ActorPosed));
         steps.Add(new GuidedPracticeLesson.Step(
@@ -531,7 +592,7 @@ public class CampaignLevelManager : MonoBehaviour
             TutorialUIManager.Instance.SetupTasks(new string[]
             {
                 "- Review the " + CampaignProgression.GetContractName(activeLevel) + " contract",
-                "- Select ACCEPT CONTRACT to continue"
+                "- Select the contract, read the brief, then close it to continue"
             });
         }
 
@@ -546,7 +607,7 @@ public class CampaignLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                int payment = activeLevel == 4 ? 100000 : 150000;
+                int payment = ProductionEconomy.Advance(activeLevel);
                 TutorialUIManager.Instance.ShowBossDialogue(CampaignProgression.GetContractName(activeLevel) + " is putting up " + payment.ToString("N0") + " B-Coins upfront. Shall we take the job? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
@@ -555,7 +616,7 @@ public class CampaignLevelManager : MonoBehaviour
     public void AcceptContract()
     {
         string acceptedKey = CampaignProgression.GetAcceptedKey(activeLevel);
-        int upfrontPayment = activeLevel == 4 ? 100000 : 150000;
+        int upfrontPayment = ProductionEconomy.Advance(activeLevel);
 
         if (CareerManager.Instance != null)
         {
@@ -672,6 +733,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     private void StartContract()
     {
+        if (coffeeLessonStarted && practiceLesson != null) return;
         currentStep = CampaignLevelStep.LevelActive;
         isBriefingOpen = false;
 
@@ -682,12 +744,143 @@ public class CampaignLevelManager : MonoBehaviour
         }
 
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
+        if (activeLevel == 4 && !DevTutorialBypass.Disabled && !coffeeLessonStarted)
+            StartCoffeeProductionLesson();
+    }
+
+    private void StartCoffeeProductionLesson()
+    {
+        coffeeLessonStarted = true;
+        var director = FindObjectOfType<DirectorTerminal>();
+        var steps = new System.Collections.Generic.List<GuidedPracticeLesson.Step>
+        {
+            new GuidedPracticeLesson.Step(
+                "Let's build a welcoming coffee scene. Open the Director Tablet, use <color=yellow>CHOOSE SET</color>. Pick Cafe Corner, Living Room, or Plain Backdrop; each option shows its price. Furnished interiors start warm brown. You can still paint the wall and floor with HEX <color=yellow>#80502E</color>. Warm surroundings suggest a comfortable morning; the product must still stand out.",
+                "CHOOSE SET, then use a warm brown (try #80502E)",
+                () => director != null && director.HasWall() && IsCoffeeBrown(director.currentWallColor)),
+            new GuidedPracticeLesson.Step(
+                "Place <color=yellow>one KAPE KULTURA PRODUCT</color> beside <color=yellow>one Actor</color>. Keep the Actor from our practice, or place a replacement. Select the Actor and use POSE ACTOR for Wave or Action. Separate them enough that neither hides the other, then close the tablet.",
+                "Place 1 coffee + 1 posed Actor; close the tablet",
+                () => CoffeeSubjectsReady() && director != null && !director.IsTerminalActive()),
+            new GuidedPracticeLesson.Step(
+                "Your Actor is an autonomous performer. <color=yellow>Rookie</color> uses smaller, slower gestures; <color=yellow>Trained</color> is smoother; <color=yellow>Expert</color> is more expressive. The card shows the hire fee before you buy. Higher skill buys performance polish, not an automatic better grade. Keep your current Actor: every tier can meet this brief.",
+                "Keep your hired Actor; all skill tiers can meet the contract",
+                () => true),
+            new GuidedPracticeLesson.Step(
+                "Let's try both animated actions. Reopen the tablet, select your Actor and click <color=yellow>POSE ACTOR</color> until you see <color=yellow>Wave</color>. Watch the greeting. Click again for <color=yellow>Action</color>: a product-presentation gesture. Neutral returns to idle breathing. The Actor stays on its mark while performing.",
+                "On the tablet, try Wave and Action on the same Actor",
+                ObserveActorActions),
+            new GuidedPracticeLesson.Step(
+                "<color=yellow>Blocking</color> means choosing where the performer stands and faces. With the Actor selected, press <color=red>[R]</color> to turn 15 degrees. Aim the performance toward the camera without hiding the coffee. This changes the stage direction; it does not change the selected action.",
+                "Select the Actor and press [R] to turn",
+                ObserveActorTurn),
+            new GuidedPracticeLesson.Step(
+                "Now select the Actor and press <color=red>[T]</color>. Move them a little, then click the stage to place them. Leave space beside the coffee so animated hands do not block it. You can refine this placement before filming; keep it fixed across your three takes.",
+                "[T] Move the Actor, then click to place them",
+                () => ObserveActorMove() && director != null && !director.IsPlacingProp()),
+            new GuidedPracticeLesson.Step(
+                "Choose Wave or Action for the commercial, then close the tablet with <color=red>[E]</color>. Each recording restarts that animation from the beginning to help matching shots. Keep the same action and screen side in every take. Pause also pauses the bot. Watch a full gesture before recording and leave room around the moving hands.",
+                "Choose Wave or Action, then [E] close the tablet",
+                () => CoffeeSubjectsReady() && director != null && !director.IsTerminalActive()),
+            new GuidedPracticeLesson.Step(
+                "Try <color=yellow>motivated lighting</color>: let the Soft Light suggest a window beside the scene. Place it in front and to one side, power it on, and aim between the Actor and coffee. Start near 75% output and at least 50% diffusion. The broad highlight should reveal detail while leaving a gentle shadow on the far side.",
+                "Power and aim the Soft Light at the Actor and coffee",
+                CoffeeLightReady),
+            new GuidedPracticeLesson.Step(
+                "<color=yellow>WIDE</color> establishes where we are. <color=yellow>MEDIUM</color> connects the Actor to the coffee. <color=yellow>CLOSE-UP</color> gives the product emphasis. In this game, even the close shot must keep both subjects fully inside the frame. The camera's focus readout now names your shot size. Move or zoom to change it.",
+                "Plan a Wide, Medium and Close-Up of the same scene",
+                () => true),
+            new GuidedPracticeLesson.Step(
+                "Keep the same pose and set positions for all three takes. Stay on the same side of the Actor-product line so they do not swap screen sides: this is <color=yellow>continuity</color>. Record about 6 seconds per shot, holding still with both visible and the Soft Light aimed at them. Use a fresh SD card for each take and collect the recorded cards. Check the WIDE / MEDIUM / CLOSE-UP readout before recording.",
+                "Record all 3 sizes: same pose/side, both visible, Soft Light on",
+                () => HasCoffeeCoverage(GetCoffeeFootage(false))),
+            new GuidedPracticeLesson.Step(
+                "You have matching coverage. Insert those cards into the computer. In the editor, try Wide -> Medium -> Close-Up, trimmed to <color=yellow>5 seconds each</color>, joined from 0 for a 15-second story. The order moves from context to connection to product. Add exactly 2 readable animated graphics; choose motion, transition and music in Branding. For a warm grade try Brightness 1.05, Contrast 1.15 and Saturation 1.15. Preview before export.",
+                "Insert the matching Wide, Medium and Close-Up cards into the computer",
+                () => HasCoffeeCoverage(GetCoffeeFootage(true)))
+        };
+        practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
+        {
+            practiceLesson = null;
+            TutorialUIManager.Instance?.HideTasks();
+            if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
+        });
+    }
+
+    private static bool IsCoffeeBrown(Color color)
+    {
+        return color.r >= .3f && color.r > color.g && color.g > color.b && color.b <= .4f;
+    }
+
+    private static bool CoffeeSubjectsReady()
+    {
+        int products = 0;
+        foreach (var product in FindObjectsOfType<CampaignProduct>())
+            if (product.campaignLevel == 4) products++;
+        var actors = FindObjectsOfType<CubeActor>();
+        return products == 1 && actors.Length == 1 && actors[0].GetPoseName() != "Neutral";
+    }
+
+    private static bool CoffeeLightReady()
+    {
+        if (!CoffeeSubjectsReady()) return false;
+        var actor = FindObjectOfType<CubeActor>();
+        CampaignProduct coffee = null;
+        foreach (var product in FindObjectsOfType<CampaignProduct>())
+            if (product.campaignLevel == 4) coffee = product;
+        Bounds bounds = new Bounds(actor.transform.position, Vector3.zero);
+        foreach (var renderer in actor.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(renderer.bounds);
+        foreach (var renderer in coffee.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(renderer.bounds);
+        foreach (var light in FindObjectsOfType<Player.Equipment.FilmLightItem>())
+        {
+            if (!light.IsPoweredOn() || light.spotlight == null ||
+                (light.EquipmentName != "Level 3 Soft Light" && light.forcesHardLight)) continue;
+            Vector3 offset = bounds.center - light.spotlight.transform.position;
+            if (offset.magnitude <= 12f && Vector3.Dot(light.spotlight.transform.forward, offset.normalized) >= .45f)
+                return true;
+        }
+        return false;
+    }
+
+    private static System.Collections.Generic.List<FootageData> GetCoffeeFootage(bool insertedOnly)
+    {
+        var clips = new System.Collections.Generic.List<FootageData>();
+        foreach (var computer in FindObjectsOfType<ComputerStation>()) clips.AddRange(computer.GetInsertedFiles());
+        if (!insertedOnly)
+            foreach (var card in FindObjectsOfType<Player.Equipment.SDCardItem>(true))
+                if (card.isUsedCard && card.videoDuration >= 5f)
+                    clips.Add(new FootageData { fileName = card.recordedFileName, campaignLevel = card.campaignLevel,
+                        shotType = card.shotType, screenDirection = card.screenDirection, actorPose = card.actorPose,
+                        requiredSubjectsVisible = card.requiredSubjectsVisible, usedSoftLight = card.usedSoftLight });
+        return clips;
+    }
+
+    // Match the grader's evidence; accept any complete matching trio, not just the first takes.
+    internal static bool HasCoffeeCoverage(System.Collections.Generic.IEnumerable<FootageData> clips)
+    {
+        var groups = new System.Collections.Generic.Dictionary<string, int>();
+        foreach (var clip in clips)
+        {
+            if (clip == null || clip.campaignLevel != 4 || string.IsNullOrEmpty(clip.fileName) ||
+                !clip.requiredSubjectsVisible || !clip.usedSoftLight || string.IsNullOrEmpty(clip.actorPose) ||
+                clip.actorPose == "Neutral" || Mathf.Abs(clip.screenDirection) <= .1f || clip.shotType < 1 || clip.shotType > 3) continue;
+            string key = clip.actorPose + (clip.screenDirection > 0 ? ":right" : ":left");
+            groups.TryGetValue(key, out int coverage);
+            coverage |= 1 << clip.shotType;
+            if (coverage == 14) return true;
+            groups[key] = coverage;
+        }
+        return false;
     }
 
     private void ShowLevelTasks()
     {
         if (TutorialUIManager.Instance == null) return;
-
+        if (coffeeLessonStarted && practiceLesson != null)
+        {
+            practiceLesson.ShowCurrentTask();
+            return;
+        }
         TutorialUIManager.Instance.HideTasks();
     }
 
@@ -768,3 +961,5 @@ public class CampaignLevelManager : MonoBehaviour
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
     }
 }
+
+

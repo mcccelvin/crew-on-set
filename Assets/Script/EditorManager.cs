@@ -730,7 +730,7 @@ public class PlayerEditTools : MonoBehaviour
     {
         int level = CampaignProgression.GetCurrentLevel();
         if (level == 2) return "GOKE: INTRO 2s / FOOTAGE 6s / OUTRO 2s";
-        if (level == 3) return "LAMBORMINI TARGET: PUSH/PAN • DIP TO BLACK • CINEMATIC";
+        if (level == 3) return "TERRARI TARGET: PUSH/PAN • DIP TO BLACK • CINEMATIC";
         if (level == 4) return "KAPE TARGET: PULL OUT/PAN • FADE/SLIDE • FADE • CLEAN";
         return "PRODUCT TARGET: PUSH IN • FADE/POP • FADE • CLEAN";
     }

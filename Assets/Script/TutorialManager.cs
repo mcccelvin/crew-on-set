@@ -1,4 +1,4 @@
-using PlayerPrefs = GameSavePrefs;
+﻿using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using UnityEngine;
 using TMPro;
@@ -617,7 +617,7 @@ public class TutorialManager : MonoBehaviour
         practicedPositive |= positive;
         practicedNegative |= negative;
         cameraPracticeIdle = positive || negative ? 0f : cameraPracticeIdle + Time.deltaTime;
-        return practicedPositive && practicedNegative && cameraPracticeElapsed >= 10f && cameraPracticeIdle >= 1.5f;
+        return practicedPositive && practicedNegative && DevTutorialBypass.PracticeDelayComplete(cameraPracticeElapsed, 10f) && DevTutorialBypass.PracticeDelayComplete(cameraPracticeIdle, 1.5f);
     }
 
     private void ResetCameraPractice()
@@ -1036,12 +1036,12 @@ public class TutorialManager : MonoBehaviour
 
         if (currentStep == TutorialStep.SetTrainingObjectAndMoney)
         {
-            int budgetToAdd = 10000;
+            int budgetToAdd = ProductionEconomy.StartingBudget;
 
             if (isLevel1Retry)
             {
                 int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
-                budgetToAdd = Mathf.Max(0, 10000 - savedMoney);
+                budgetToAdd = Mathf.Max(0, ProductionEconomy.StartingBudget - savedMoney);
             }
             else if (PlayerPrefs.GetInt("Level1StartingBudgetGranted", 0) == 1)
             {
@@ -1146,9 +1146,10 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.LearnMovement: TutorialUIManager.Instance.SetupTasks(new string[] { "Use <color=red>[W,A,S,D]</color> to move", "Press <color=red>[Space]</color> to jump", "Hold <color=red>[Shift]</color> to sprint" }); moved = jumped = sprinted = false; break;
 
             case TutorialStep.OfferFirstContract:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Click <color=red>'Accept'</color> on the contract panel" });
-                if (firstContractPanel != null) firstContractPanel.SetActive(true);
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(acceptContractButtonRect);
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Select the flower contract, read the brief, then close it to begin" });
+                if (firstContractPanel != null) firstContractPanel.SetActive(false);
+                if (ContractUIManager.Instance == null) new GameObject("Contract UI Manager").AddComponent<ContractUIManager>();
+                ContractUIManager.Instance.ShowFlowerContract(OnFirstContractAccepted);
                 break;
 
             case TutorialStep.BuildStageWall:
@@ -1397,7 +1398,7 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator PracticeTimer(float duration, TutorialStep nextStep)
     {
-        yield return new WaitForSeconds(duration);
+        yield return DevTutorialBypass.WaitForPractice(duration);
         if (currentStep == TutorialStep.PracticeLight_Intensity || currentStep == TutorialStep.PracticeLight_Tilt)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1901,7 +1902,7 @@ public class TutorialManager : MonoBehaviour
         {
             TutorialUIManager.Instance.SetDynamicGlow("camera", false);
             TutorialUIManager.Instance.MarkTaskComplete(0);
-            StartCoroutine(TransitionToNextStep(TutorialStep.PickUpUsedSDCard, true));
+            StartCoroutine(TransitionToNextStep(usedSDCard != null && usedSDCard.GetComponentInParent<Player.Interactor.EquipmentInteractor>() != null ? TutorialStep.InsertToComputer : TutorialStep.PickUpUsedSDCard, true));
         }
     }
 
@@ -1981,12 +1982,12 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.WaitForPrompt: ui.ShowBossDialogue("First day on set? Let me show you around.\n<color=red>[SPACE]</color> Show me the ropes   <color=red>[TAB]</color> Skip the tutorial", ui.posePoint, true, true); break;
             case TutorialStep.LearnMovement: ui.ShowBossDialogue("Take a look around. Use <color=red>[WASD]</color> to walk, <color=red>[SPACE]</color> to jump, and <color=red>[SHIFT]</color> to sprint. Give each a try.", ui.posePoint, true, false); break;
             case TutorialStep.GameExplanation: ui.ShowBossDialogue(explanationPages[currentExplanationPage], ui.poseBoss, true, true); break;
-            case TutorialStep.OfferFirstContract: ui.ShowBossDialogue("Here's our first job: an Artisan Flower Vase commercial. Have a look at the brief, then click <color=red>ACCEPT</color> when you're ready.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.OfferFirstContract: ui.ShowBossDialogue("Here's our first job: an Artisan Flower Vase commercial. Click <color=red>SELECT</color> to open the brief. Read what the client needs, then close the folder to begin.", ui.poseOpenHand, true, false); break;
             case TutorialStep.SetTrainingObjectAndMoney:
                 if (isLevel1Retry)
-                    ui.ShowBossDialogue("The client needs a few changes. Have a look at the feedback; I've topped your budget back up to <color=yellow>10,000 B-Coins</color> for another take.", ui.poseBoss, true, false);
+                    ui.ShowBossDialogue("The client needs a few changes. Have a look at the feedback; I've topped your budget back up to <color=yellow>9,000 B-Coins</color> for another take.", ui.poseBoss, true, false);
                 else
-                    ui.ShowBossDialogue("All right, we're on the job. You've got <color=yellow>10,000 B-Coins</color> to work with, and the Floral Vase is ready. Let's build its set.", ui.poseSmile, true, true);
+                    ui.ShowBossDialogue("All right, we're on the job. You've got <color=yellow>9,000 B-Coins</color> to work with, and the Floral Vase is ready. Let's build its set.", ui.poseSmile, true, true);
                 break;
 
             case TutorialStep.ShowPreProductionTitle:
@@ -2065,7 +2066,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.RecordVideo: ui.ShowBossDialogue("Ready? Press <color=red>[R]</color> to roll. Hold that centered shot for 10 seconds, then press <color=red>[R]</color> again to cut.", ui.poseBoss, true, false); break;
 
             case TutorialStep.PickUpUsedSDCard: ui.ShowBossDialogue("And cut! Your take is on the card the camera just ejected. Look at it and press <color=red>[E]</color> to collect it.", ui.poseHappy, true, false); break;
-            case TutorialStep.InsertToComputer: ui.ShowBossDialogue("Let's take that footage to the editing bay. Hold the SD Card, look at the computer tower, and press <color=red>[F]</color> to insert it.", ui.posePoint, true, false); break;
+            case TutorialStep.InsertToComputer: ui.ShowBossDialogue("Your recorded SD Card is in your inventory. Select its hotbar slot, look at the computer tower, and press <color=red>[F]</color> to insert it.", ui.posePoint, true, false); break;
             case TutorialStep.OpenComputer: ui.ShowBossDialogue("The card's in. Look at the monitor and press <color=red>[E]</color>; let's see what we shot.", ui.poseBoss, true, false); break;
 
             case TutorialStep.ExplainComputerEditor: ui.ShowBossDialogue("Before we edit, let's watch the take. We're checking the framing, the light, and whether we recorded enough footage.", ui.poseOpenHand, true, true); break;
@@ -2178,15 +2179,50 @@ public class TutorialManager : MonoBehaviour
         if (currentStep >= TutorialStep.OfferLevel1) return true;
 
         if (objectType == "DirectorTerminal") return currentStep >= TutorialStep.BuildStageWall && currentStep <= TutorialStep.FreePlayDirectorTablet;
-        if (objectType == "ShopTerminal") return currentStep == TutorialStep.BuyLight_WalkToShop || currentStep >= TutorialStep.BuyCamera_WalkToShop;
+        if (objectType == "ShopTerminal") return HasGuidedShopTask || currentStep >= TutorialStep.BuyCamera_WalkToShop;
         if (objectType == "ComputerStation") return currentStep >= TutorialStep.InsertToComputer && currentStep <= TutorialStep.Complete;
         if (objectType == "HelpDesk") return currentStep >= TutorialStep.Level1Accepted;
 
         return true;
     }
 
+    private bool HasGuidedShopTask => isActiveAndEnabled && !DevTutorialBypass.Disabled &&
+        ((currentStep >= TutorialStep.BuyLight_WalkToShop && currentStep <= TutorialStep.BuyLight_CloseShop) ||
+         (currentStep >= TutorialStep.BuyCamera_WalkToShop && currentStep <= TutorialStep.BuyCamera_CloseShop));
+
+    // Reopening an interrupted order must lead to the next missing item, not an empty checkout.
+    public void RecoverTutorialCart(bool camera, bool light, bool sdCard)
+    {
+        if (!HasGuidedShopTask || isTransitioning) return;
+        TutorialStep next = currentStep;
+        if (currentStep == TutorialStep.BuyLight_Checkout && !light)
+            next = TutorialStep.BuyLight_AddToCart;
+        else if (currentStep == TutorialStep.BuySDCard_AddToCart || currentStep == TutorialStep.BuyCamera_Checkout)
+            next = !camera ? TutorialStep.BuyCamera_AddToCart : !sdCard ? TutorialStep.BuySDCard_AddToCart : currentStep;
+        if (next != currentStep) StartCoroutine(TransitionToNextStep(next, false));
+    }
+
+    public bool CanCheckoutTutorialCart(bool camera, bool light, bool sdCard)
+    {
+        if (!HasGuidedShopTask) return true;
+        if (isTransitioning || !isTaskPhaseActive) return false;
+        if ((currentStep == TutorialStep.BuyLight_Checkout && light) ||
+            (currentStep == TutorialStep.BuyCamera_Checkout && camera && sdCard)) return true;
+        ShowWarning("Finish adding the equipment in the task on the left before confirming the order.");
+        RecoverTutorialCart(camera, light, sdCard);
+        return false;
+    }
+
     public bool CanBuyItem(int itemIndex)
     {
+        if (!isActiveAndEnabled || DevTutorialBypass.Disabled) return true;
+        if (HasGuidedShopTask && (isTransitioning || !isTaskPhaseActive)) return false;
+        if (HasGuidedShopTask && (currentStep == TutorialStep.BuyLight_Checkout ||
+            currentStep == TutorialStep.BuyLight_CloseShop || currentStep == TutorialStep.BuyCamera_CloseShop))
+        {
+            ShowWarning("Follow the task on the left to finish this order before shopping again.");
+            return false;
+        }
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             return GokeLevelManager.Instance.CanBuyItem(itemIndex);
@@ -2242,7 +2278,10 @@ public class TutorialManager : MonoBehaviour
 
     public bool CanCloseUI(string uiType)
     {
+        if (!isActiveAndEnabled || DevTutorialBypass.Disabled) return true;
+        if (isTransitioning && (uiType == "ShopTerminal" || uiType == "DirectorTerminal" || uiType == "ComputerStation")) return false;
         if (currentStep >= TutorialStep.OfferLevel1) return true;
+        if (uiType == "ShopTerminal" && HasGuidedShopTask && !isTaskPhaseActive) return false;
 
         if (uiType == "DirectorTerminal")
         {

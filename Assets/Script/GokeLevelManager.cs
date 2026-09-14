@@ -1,4 +1,4 @@
-using PlayerPrefs = GameSavePrefs;
+﻿using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using System.Collections.Generic;
 using Player.Equipment;
@@ -401,18 +401,18 @@ public class GokeLevelManager : MonoBehaviour
 
             lightsAddedToCart++;
 
-            if (lightsAddedToCart >= 3)
+            if (lightsAddedToCart >= lightsRequiredToBuy)
             {
                 currentStep = GokeLevelStep.LightCheckout;
 
                 if (TutorialUIManager.Instance != null)
                 {
-                    TutorialUIManager.Instance.SetupTasks(new string[] { "- Confirm the purchase of all three 160 LED Panels" });
+                    TutorialUIManager.Instance.SetupTasks(new string[] { "- Confirm the missing 160 LED Panels" });
                 }
             }
             else if (TutorialUIManager.Instance != null)
             {
-                int remainingLights = 3 - lightsAddedToCart;
+                int remainingLights = lightsRequiredToBuy - lightsAddedToCart;
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Add " + remainingLights + " more 160 LED Panel" + (remainingLights == 1 ? "" : "s") + " to your cart" });
             }
 
@@ -421,7 +421,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.LightCheckout)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Three lights in the cart. Click CONFIRM and we'll collect them.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("The missing lights are in the cart. Click CONFIRM and we'll collect them.");
             return false;
         }
 
@@ -543,7 +543,7 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Open LIGHTS and add three 160 LED Panels to your cart" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Open LIGHTS and add " + lightsRequiredToBuy + " missing 160 LED Panels to your cart" });
             }
             return;
         }
@@ -601,7 +601,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Our three 160 LED Panels have arrived. Pick each one up with <color=red>[E]</color>, then use <color=red>[1-5]</color> to choose which one you're holding.", TutorialUIManager.Instance.posePoint, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Your new panels and the lights you already own are at delivery. Pick each one up with <color=red>[E]</color>, then use <color=red>[1-5]</color> to choose which one you're holding.", TutorialUIManager.Instance.posePoint, true, false);
             }
             return;
         }
@@ -774,7 +774,7 @@ public class GokeLevelManager : MonoBehaviour
         }
 
         ruleOfThirdsPracticeTimer += Time.deltaTime;
-        if (ruleOfThirdsPracticeTimer < 2f) return;
+        if (!DevTutorialBypass.PracticeDelayComplete(ruleOfThirdsPracticeTimer, 2f)) return;
 
         hasCompletedRuleOfThirdsPractice = true;
         if (practiceLesson == null) ShowFramingSuccess();
@@ -831,8 +831,28 @@ public class GokeLevelManager : MonoBehaviour
         }
     }
 
+    public static void EnsureEquipmentAdvance()
+    {
+        if (PlayerPrefs.GetInt("GokeContractAccepted", 0) != 0 || PlayerPrefs.GetInt("GokeEquipmentLoanIssued", 0) != 0) return;
+        // Preserve money already paid by the previous advance implementation as outstanding debt.
+        if (PlayerPrefs.GetInt("GokeEquipmentAdvancePaid", 0) > 0)
+        { PlayerPrefs.SetInt("GokeEquipmentLoanIssued", 1); PlayerPrefs.Save(); return; }
+        int required = (PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1 ? 0 : ProductionEconomy.AdvancedCamera)
+            + ProductionEconomy.SDCard + Mathf.Max(0, 3 - ShopTerminal.OwnedPanelLights) * ProductionEconomy.PanelLight;
+        int amount = Mathf.Max(0, required - PlayerPrefs.GetInt("PlayerMoney", 0));
+        PlayerPrefs.SetInt("GokeEquipmentLoanIssued", 1);
+        PlayerPrefs.SetInt("GokeEquipmentAdvancePaid", amount);
+        if (CareerManager.Instance != null) CareerManager.Instance.AddMoney(amount);
+        else PlayerPrefs.SetInt("PlayerMoney", PlayerPrefs.GetInt("PlayerMoney", 0) + amount);
+        PlayerPrefs.Save();
+        if (amount > 0) GameFeedback.Show("BOSS EQUIPMENT LOAN\n+" + amount.ToString("N0") + " B-Coins | Deducted when you accept Goke");
+    }
+
+    private int lightsRequiredToBuy = 3;
+
     private void StartCameraPurchase()
     {
+        EnsureEquipmentAdvance();
         isBriefingOpen = false;
         bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
         currentStep = alreadyOwnsCamera ? GokeLevelStep.BuySDCard : GokeLevelStep.BuyCamera;
@@ -951,7 +971,7 @@ public class GokeLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Review the Goke Cola contract", "- Select ACCEPT CONTRACT to continue" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Review the Goke Cola contract", "- Select the contract, read the brief, then close it to continue" });
         }
 
         if (contractUIManager != null)
@@ -963,7 +983,7 @@ public class GokeLevelManager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola has 60,000 B-Coins for a red set, Rule of Thirds, three-point lighting, and two graphics. Ready to take it on? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola has 10,500 B-Coins for a red set, Rule of Thirds, three-point lighting, and two graphics. Ready to take it on? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -988,7 +1008,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Let's try a three-light setup before the job. Open the shop with <color=red>[E]</color>, add three 160 LED Panels, and click <color=red>CONFIRM</color>.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Your equipment from the last contract is waiting at delivery. We need three lights total, so buy only the missing panels. If you are short, I will lend you the equipment money and deduct the loan from your advance when you accept Goke.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -1001,6 +1021,10 @@ public class GokeLevelManager : MonoBehaviour
             return;
         }
 
+        FindObjectOfType<ShopTerminal>()?.RestoreOwnedEquipment();
+        lightsRequiredToBuy = Mathf.Max(0, 3 - ShopTerminal.OwnedPanelLights);
+        if (lightsRequiredToBuy == 0) { StartLightPickup(); return; }
+        EnsureEquipmentAdvance();
         currentStep = GokeLevelStep.BuyLights;
         isBriefingOpen = false;
         lightsAddedToCart = 0;
@@ -1010,7 +1034,7 @@ public class GokeLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop", "- Buy three 160 LED Panels" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop", "- Keep your owned lights; buy " + lightsRequiredToBuy + " more 160 LED Panels" });
             TutorialUIManager.Instance.SetDynamicGlow("shop", true);
         }
 
@@ -1373,7 +1397,10 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (PlayerPrefs.GetInt("GokeContractAccepted", 0) == 0)
             {
-                CareerManager.Instance.AcceptJob("Goke Cola", 60000);
+                CareerManager.Instance.AcceptJob("Goke Cola", Mathf.Max(0, ProductionEconomy.Advance(2) - PlayerPrefs.GetInt("GokeEquipmentAdvancePaid", 0)));
+                int repaid = PlayerPrefs.GetInt("GokeEquipmentAdvancePaid", 0);
+                PlayerPrefs.SetInt("GokeEquipmentAdvancePaid", 0);
+                if (repaid > 0) GameFeedback.Show("BOSS LOAN REPAID\n" + repaid.ToString("N0") + " B-Coins deducted from the contract advance");
                 PlayerPrefs.SetInt("GokeContractAccepted", 1);
                 PlayerPrefs.Save();
             }

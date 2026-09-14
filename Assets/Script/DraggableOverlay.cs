@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
@@ -181,6 +181,8 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         {
             ClampToParent();
             CacheCommercialTransform(true);
+            CommercialCompiler compiler = FindObjectOfType<CommercialCompiler>();
+            if (compiler != null && compiler.editorPlayer != null) compiler.editorPlayer.RefreshOverlays();
             return;
         }
 
@@ -405,15 +407,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
         CacheCommercialTransform(false);
 
-        if (!isPlaying && currentFrame == 0)
-        {
-            canvasGroup.alpha = 1f;
-            canvasGroup.blocksRaycasts = true;
-            RestoreCommercialTransform();
-            return;
-        }
-
-        if (currentFrame >= startFrame && currentFrame <= endFrame)
+        if (currentFrame >= startFrame && currentFrame < endFrame)
         {
             float targetAlpha = 1f;
             PlayerEditTools.GraphicAnimationMode animationMode = PlayerEditTools.Instance != null ? PlayerEditTools.Instance.selectedGraphicAnimation : PlayerEditTools.GraphicAnimationMode.Cut;

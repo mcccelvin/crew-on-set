@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.EventSystems;
 
 public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
@@ -234,6 +234,8 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
 
             linkedOverlay.startFrame = Mathf.RoundToInt(startX / pixelsPerFrame);
             linkedOverlay.endFrame = Mathf.RoundToInt((startX + width) / pixelsPerFrame);
+            CommercialCompiler compiler = FindObjectOfType<CommercialCompiler>();
+            if (compiler != null && compiler.editorPlayer != null) compiler.editorPlayer.RefreshOverlays();
         }
     }
 

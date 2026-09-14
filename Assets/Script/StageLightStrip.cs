@@ -23,9 +23,13 @@ public sealed class StageLightStrip : MonoBehaviour
 
     private void Build()
     {
-        glow = new Material(Shader.Find("Standard")) { name = "LED strip" };
+        bool scriptedPipeline = UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null;
+        Shader shader = Shader.Find(scriptedPipeline ? "Universal Render Pipeline/Lit" : "Standard");
+        if (shader == null) shader = Shader.Find(scriptedPipeline ? "Standard" : "Universal Render Pipeline/Lit");
+        if (shader == null) throw new System.InvalidOperationException("The light strip requires a supported lit shader.");
+        glow = new Material(shader) { name = "LED strip" };
         glow.EnableKeyword("_EMISSION");
-        housing = new Material(Shader.Find("Standard")) { name = "LED frame", color = new Color(.035f,.035f,.04f) };
+        housing = new Material(shader) { name = "LED frame", color = new Color(.035f,.035f,.04f) };
         housing.SetFloat("_Metallic", .6f);
         bar = new GameObject("LED bar pivot").transform;
         bar.SetParent(transform, false); bar.localPosition = new Vector3(0,1.35f,0);
@@ -38,7 +42,10 @@ public sealed class StageLightStrip : MonoBehaviour
             Light light = source.AddComponent<Light>();
             light.type = LightType.Point; light.range = 5f;
             light.renderMode = LightRenderMode.ForcePixel;
+#if UNITY_EDITOR
+            // Baking configuration is editor-only; runtime-created lights are realtime.
             light.lightmapBakeType = LightmapBakeType.Realtime;
+#endif
             light.shadows = LightShadows.Soft;
             light.shadowResolution = UnityEngine.Rendering.LightShadowResolution.Low;
             light.shadowBias = .02f; light.shadowNormalBias = .1f;

@@ -46,7 +46,9 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
             // 1. SINGLEPLAYER LOGIC
             Debug.Log("Starting Singleplayer...");
             if (PhotonNetwork.IsConnected) PhotonNetwork.Disconnect();
-            SceneManager.LoadScene(singlePlayerScene);
+            var saves=GameSaveManager.Ensure();
+            if(saves.Syncing){if(errorText!=null)errorText.text="Please wait for save sync to finish.";return;}
+            saves.StartGame(saves.CreateGame(gameNameInput.text),true);
         }
         else if (multiPlayerToggle.isOn)
         {

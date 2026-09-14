@@ -42,8 +42,8 @@ public class DirectorTerminal : MonoBehaviour
     public List<LevelPropBank> propDatabase = new List<LevelPropBank>();
 
     [Header("Level 3 Vehicle & Level 4 Cast")]
-    public int actorHireCost = 500;
-    public int carSpawnCost = 50;
+    public int actorHireCost = ProductionEconomy.ActorBase;
+    public int carSpawnCost = ProductionEconomy.Vehicle;
 
     [Header("Drag Settings")]
     public LayerMask moveableLayer;
@@ -77,6 +77,7 @@ public class DirectorTerminal : MonoBehaviour
     private bool hasShownPropCostWarning = false;
     private Button poseActorButton;
     private DirectorColorFields colorFields;
+    private GameObject interiorPicker;
 
     private int displayedRValue = int.MinValue;
     private int displayedGValue = int.MinValue;
@@ -163,6 +164,7 @@ public class DirectorTerminal : MonoBehaviour
     {
         if (!isTerminalActive) return;
         if (PauseManager.isPaused) return;
+        if (interiorPicker != null && interiorPicker.activeSelf) return;
 
         Mouse mouse = Mouse.current;
         Keyboard keyboard = Keyboard.current;
@@ -171,6 +173,24 @@ public class DirectorTerminal : MonoBehaviour
         UpdateUIText();
 
         if (colorFields != null && colorFields.IsEditing) return;
+
+        ActorBot actorBot = selectedObject != null ? selectedObject.GetComponent<ActorBot>() : null;
+        if (actorBot != null)
+        {
+            if (keyboard != null && keyboard.rKey.wasPressedThisFrame) actorBot.transform.Rotate(0, 15, 0, Space.World);
+            if (selectionIndicatorText != null)
+                selectionIndicatorText.text = ActorBot.TierName(actorBot.SkillTier) + " ACTOR | " +
+                    actorBot.GetComponent<CubeActor>().GetPoseName() + " | R: turn";
+        }
+
+        AutomotiveGrip grip = selectedObject != null ? selectedObject.GetComponent<AutomotiveGrip>() : null;
+        if (grip != null && keyboard != null)
+        {
+            if (keyboard.qKey.wasPressedThisFrame) grip.transform.Rotate(0,-15,0,Space.World);
+            if (keyboard.eKey.wasPressedThisFrame) grip.transform.Rotate(0,15,0,Space.World);
+            if (keyboard.fKey.wasPressedThisFrame) grip.CyclePower();
+            if (selectionIndicatorText != null) selectionIndicatorText.text=grip.Controls;
+        }
 
         StageLightStrip strip = selectedObject != null ? selectedObject.GetComponent<StageLightStrip>() : null;
         if (strip != null && keyboard != null)
@@ -295,12 +315,23 @@ public class DirectorTerminal : MonoBehaviour
     public void SpawnWall()
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
+        if (CampaignProgression.GetCurrentLevel() >= 4 && tabletUI != null && spawnWallButton != null)
+        {
+            ShowInteriorPicker();
+            return;
+        }
+        SelectInterior(0);
+    }
+
+    public void SelectInterior(int style)
+    {
+        if (style < 0 || style > 2 || (style != 0 && CampaignProgression.GetCurrentLevel() < 4)) return;
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
 
         if (currentWall == null && wallPrefab != null && spawnPoint != null)
         {
-            if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(50))
+            if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(StageInterior.Cost(style)))
             {
-                if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("The wall costs 50 B-Coins!");
                 return;
             }
 
@@ -308,13 +339,51 @@ public class DirectorTerminal : MonoBehaviour
             RaiseBackdropFloorAboveStage();
             if (spawnWallButton != null) spawnWallButton.SetActive(false);
 
-            currentWallColor = Color.white;
+            currentWallColor = style == 0 ? Color.white : new Color(128f/255,80f/255,46f/255);
             ApplyColorToWall(currentWallColor);
+            StageInterior.Furnish(currentWall, style);
 
             SyncSlidersToColor(currentWallColor);
 
             if (TutorialManager.Instance != null) TutorialManager.Instance.OnWallAdded();
+            if (interiorPicker != null) interiorPicker.SetActive(false);
         }
+    }
+
+    private void ShowInteriorPicker()
+    {
+        if (currentWall != null) return;
+        if (interiorPicker == null)
+        {
+            interiorPicker = new GameObject("Choose Stage Interior", typeof(RectTransform), typeof(Image));
+            var rect = interiorPicker.GetComponent<RectTransform>();
+            rect.SetParent(tabletUI.transform, false);
+            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero;
+            interiorPicker.GetComponent<Image>().color = new Color(.06f,.07f,.08f,.96f);
+            for (int i=0;i<4;i++)
+            {
+                int choice = i;
+                var option = Instantiate(spawnWallButton, rect);
+                option.name = i == 3 ? "Cancel Interior" : StageInterior.Title(i);
+                option.SetActive(true);
+                var optionRect = option.GetComponent<RectTransform>();
+                optionRect.anchorMin = new Vector2(.18f, .72f-i*.18f);
+                optionRect.anchorMax = new Vector2(.82f, .86f-i*.18f);
+                optionRect.offsetMin = Vector2.zero; optionRect.offsetMax = Vector2.zero;
+                var label = option.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.text = i == 3 ? "CANCEL" : StageInterior.Title(i) + "  -  " + StageInterior.Cost(i) + " B";
+                    label.enableAutoSizing = true; label.fontSizeMin = 16; label.fontSizeMax = 30;
+                }
+                var button = option.GetComponent<Button>();
+                button.onClick = new Button.ButtonClickedEvent();
+                button.onClick.AddListener(() => { if (choice == 3) interiorPicker.SetActive(false); else SelectInterior(choice); });
+            }
+        }
+        interiorPicker.SetActive(true);
+        interiorPicker.transform.SetAsLastSibling();
     }
 
     public void SetCustomColor(float r, float g, float b)
@@ -651,7 +720,7 @@ public class DirectorTerminal : MonoBehaviour
             if ((propName.Contains("flower") || propName.Contains("floral")) && !TutorialManager.Instance.CanUseTabletFeature("SpawnFlower")) return;
         }
 
-        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(50))
+        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(ProductionEconomy.Prop))
         {
             if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep >= TutorialManager.TutorialStep.FreePlayDirectorTablet && !hasShownPropCostWarning)
             {
@@ -660,7 +729,7 @@ public class DirectorTerminal : MonoBehaviour
         }
         else if (CareerManager.Instance != null)
         {
-            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 50 B-Coins.");
+            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 250 B-Coins.");
             return;
         }
 
@@ -734,7 +803,7 @@ public class DirectorTerminal : MonoBehaviour
 
         showPropCostWarningOnDrop = false;
 
-        int itemCost = isActor ? actorHireCost : carSpawnCost;
+        int itemCost = isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle;
         if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost))
         {
             if (TutorialManager.Instance != null)
@@ -752,7 +821,7 @@ public class DirectorTerminal : MonoBehaviour
         if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
 
         GameObject wrapper = isActor ? CreateCubeActor(itemName, itemIndex) :
-            itemIndex == -1 ? StageLightStrip.Create() : CreateCubeCar(itemName);
+            itemIndex == -1 ? StageLightStrip.Create() : itemIndex <= -2 ? AutomotiveGrip.Create(itemIndex == -2) : CreateCubeCar(itemName);
         wrapper.transform.position = spawnPos;
 
         foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
@@ -783,9 +852,9 @@ public class DirectorTerminal : MonoBehaviour
 
         showPropCostWarningOnDrop = false;
 
-        if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(50))
+        if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(ProductionEconomy.Prop))
         {
-            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 50 B-Coins.");
+            if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 250 B-Coins.");
             return;
         }
 
@@ -824,7 +893,7 @@ public class DirectorTerminal : MonoBehaviour
     {
         if (spawnWallButton == null) return;
         TMP_Text label = spawnWallButton.GetComponentInChildren<TMP_Text>(true);
-        if (label != null) label.text = "ADD WALL";
+        if (label != null) label.text = CampaignProgression.GetCurrentLevel() >= 4 ? "CHOOSE SET" : "ADD WALL";
     }
 
     public Color GetSliderColor()
@@ -872,7 +941,7 @@ public class DirectorTerminal : MonoBehaviour
             if (shouldShowPropCostWarning && TutorialManager.Instance != null)
             {
                 hasShownPropCostWarning = true;
-                TutorialManager.Instance.ShowTimedWarning("Spawned Prop! (-50 B-Coins)", 3f);
+                TutorialManager.Instance.ShowTimedWarning("Spawned Prop! (-250 B-Coins)", 3f);
             }
         }
     }
@@ -981,7 +1050,7 @@ public class DirectorTerminal : MonoBehaviour
 
         bool isWall = IsWallObject(selectedObject);
 
-        if (selectedObject != null && selectedObject.GetComponent<CubeActor>() != null) return;
+        if (selectedObject != null && (selectedObject.GetComponent<CubeActor>() != null || selectedObject.GetComponent<AutomotiveGrip>() != null)) return;
 
         if (selectedObject != null && !isWall)
         {
@@ -1046,10 +1115,15 @@ public class DirectorTerminal : MonoBehaviour
 
         if (currentLevel == 3 || currentLevel == 5)
         {
-            CreateStageItemCard("LAMBORMINI CAR", false, 0);
+            CreateStageItemCard("TERRARI CAR", false, 0);
         }
 
-        if (currentLevel >= 3) CreateStageItemCard("LIGHT STRIP", false, -1);
+        if (currentLevel >= 3)
+        {
+
+
+
+        }
 
         if (currentLevel == 4) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
         if (currentLevel == 5) CreateCampaignProductCard("HARAYA PRODUCT", 5);
@@ -1105,6 +1179,7 @@ public class DirectorTerminal : MonoBehaviour
         }
 
         isTerminalActive = false;
+        if (interiorPicker != null) interiorPicker.SetActive(false);
         RestorePlayerAfterTerminal();
 
         if (tabletUI != null) tabletUI.SetActive(false);
@@ -1163,7 +1238,17 @@ public class DirectorTerminal : MonoBehaviour
         dragScript.Setup(itemName, isActor, itemIndex, this);
 
         TextMeshProUGUI cardText = newUICard.GetComponentInChildren<TextMeshProUGUI>();
-        if (cardText != null) cardText.text = itemName + "\n" + (isActor ? actorHireCost : carSpawnCost) + " B";
+        if (cardText != null)
+        {
+            cardText.text = itemName + (isActor ? "\n" + ActorBot.TierName(itemIndex) : "") + "\n" +
+                (isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle) + " B";
+            if (isActor)
+            {
+                cardText.enableAutoSizing = true;
+                cardText.fontSizeMin = 12f;
+                cardText.fontSizeMax = 24f;
+            }
+        }
     }
 
     private void CreateCampaignProductCard(string itemName, int campaignLevel)
@@ -1174,13 +1259,14 @@ public class DirectorTerminal : MonoBehaviour
         dragScript.Setup(itemName, campaignLevel, this);
 
         TextMeshProUGUI cardText = newUICard.GetComponentInChildren<TextMeshProUGUI>();
-        if (cardText != null) cardText.text = itemName + "\n50 B";
+        if (cardText != null) cardText.text = itemName + "\n" + ProductionEconomy.Prop + " B";
     }
 
     private GameObject CreateCubeActor(string actorName, int actorIndex)
     {
         GameObject actor = new GameObject(actorName + "_Wrapper");
         CubeActor cubeActor = actor.AddComponent<CubeActor>();
+        if (ActorBot.TryCreate(actor, actorIndex)) return actor;
 
         Color shirtColor = actorIndex == 0 ? new Color(0.8f, 0.15f, 0.15f) :
                            actorIndex == 1 ? new Color(0.15f, 0.35f, 0.85f) :
@@ -1353,6 +1439,12 @@ public class CubeActor : MonoBehaviour
         ApplyPose();
     }
 
+    public void BeginTake()
+    {
+        var bot = GetComponent<ActorBot>();
+        if (bot != null) bot.RestartTake();
+    }
+
     public string GetPoseName()
     {
         if (currentPose == 1) return "Wave";
@@ -1362,6 +1454,8 @@ public class CubeActor : MonoBehaviour
 
     private void ApplyPose()
     {
+        var bot = GetComponent<ActorBot>();
+        if (bot != null) { bot.SetPerformance(currentPose); return; }
         if (leftArmPivot == null || rightArmPivot == null || leftLegPivot == null || rightLegPivot == null) return;
 
         leftArmPivot.localRotation = Quaternion.Euler(0, 0, -5f);
@@ -1429,3 +1523,4 @@ public class UIDragCampaignProduct : MonoBehaviour, IPointerClickHandler
         if (terminal != null) terminal.StartDraggingCampaignProduct(itemName, campaignLevel);
     }
 }
+

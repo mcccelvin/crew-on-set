@@ -24,7 +24,7 @@ public sealed class LamborminiVehicleVisual : MonoBehaviour
     }
     private void Build()
     {
-        var paint = Material("Lambormini orange pearl", new Color(1f, .29f, .018f), .58f, .87f);
+        var paint = Material("Terrari orange pearl", new Color(1f, .29f, .018f), .58f, .87f);
         var glass = Material("Tinted canopy", new Color(.025f, .045f, .057f), .62f, .96f);
         var carbon = Material("Carbon trim", new Color(.018f, .019f, .022f), .25f, .54f);
         var tire = Material("Tire rubber", new Color(.017f, .017f, .019f), .0f, .2f);

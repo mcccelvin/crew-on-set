@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
 // Session-only: no tutorial completion or grades are written by this switch.
@@ -6,9 +6,39 @@ using UnityEngine.InputSystem;
 public sealed class DevTutorialBypass : MonoBehaviour
 {
     public static bool Disabled { get; private set; }
+    public static bool FastBossDialogue { get; private set; }
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetSession() { Disabled = false; }
-    public static void ResetForNewGame() { Disabled = false; }
+    private static void ResetSession() { Disabled = false; FastBossDialogue = false; }
+    public static void ResetForNewGame() { ResetSession(); }
+
+    // A test restart restores tutorial tasks, but keeps the developer's pacing preference.
+    public static void ResetForCareerTesting() { Disabled = false; }
+
+    public static bool PracticeDelayComplete(float elapsed, float duration)
+    {
+        return FastBossDialogue || elapsed >= duration;
+    }
+
+    public static System.Collections.IEnumerator WaitForPractice(float duration)
+    {
+        float elapsed = 0f;
+        // Poll the flag so switching F4 on also releases a wait already in progress.
+        while (!PracticeDelayComplete(elapsed, duration))
+        {
+            yield return null;
+            elapsed += Time.deltaTime;
+        }
+    }
+
+    public static void ToggleFastBossDialogue()
+    {
+        if (!Application.isEditor && !Debug.isDebugBuild) return;
+        FastBossDialogue = !FastBossDialogue;
+        if (FastBossDialogue && TutorialUIManager.Instance != null)
+            TutorialUIManager.Instance.CompleteBossRevealForTesting();
+        GameFeedback.Show(FastBossDialogue ? "FAST DIALOGUE ON\nInstant dialogue and practice waits; tasks remain active" :
+            "FAST DIALOGUE OFF\nNormal Boss dialogue restored");
+    }
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Install()
     {
@@ -21,6 +51,7 @@ public sealed class DevTutorialBypass : MonoBehaviour
     private void Update()
     {
         if (!Application.isEditor && !Debug.isDebugBuild) return;
+        if (Keyboard.current != null && Keyboard.current.f4Key.wasPressedThisFrame) ToggleFastBossDialogue();
         if (Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
         {
             Disabled = true;

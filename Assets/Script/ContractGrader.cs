@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
 public class ContractGrader : MonoBehaviour
@@ -40,9 +40,9 @@ public class ContractGrader : MonoBehaviour
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (HasColorControls(grading))
         {
-            GradeColorRange(grading.brightnessSlider.value, 0.94f, 1.02f, 16f, "Exposure", "Use 0.94 to 1.02 so the white flower keeps highlight detail.", ref post, ref feedback);
-            GradeColorRange(grading.contrastSlider.value, 1.06f, 1.18f, 16f, "Contrast", "Use 1.06 to 1.18 for shape without crushing the pink set.", ref post, ref feedback);
-            GradeColorRange(grading.saturationSlider.value, 1.03f, 1.13f, 16f, "Saturation", "Use 1.03 to 1.13 so the pink palette stays vibrant but believable.", ref post, ref feedback);
+            GradeColorRange(grading.brightnessSlider.value, ColorGradingManager.BeginnerBrightnessMin, ColorGradingManager.BeginnerBrightnessMax, 16f, "Exposure", "Choose any brightness from 0.85 to 1.15; avoid an overly light or dark image.", ref post, ref feedback);
+            GradeColorRange(grading.contrastSlider.value, ColorGradingManager.BeginnerContrastMin, ColorGradingManager.BeginnerContrastMax, 16f, "Contrast", "Choose any contrast from 0.80 to 1.30 to keep product detail readable.", ref post, ref feedback);
+            GradeColorRange(grading.saturationSlider.value, ColorGradingManager.BeginnerSaturationMin, ColorGradingManager.BeginnerSaturationMax, 16f, "Saturation", "Choose any saturation from 0.70 to 1.30; your color style is up to you.", ref post, ref feedback);
         }
         else
         {
@@ -50,7 +50,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 15000, IsRequiredSetupComplete());
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(1), IsRequiredSetupComplete());
     }
 
     private ProductionGrades GradeLevel2(float avgCam, float avgLight, float totalSeconds)
@@ -81,7 +81,7 @@ public class ContractGrader : MonoBehaviour
         if (!sequence.continuous) { post -= 15f; feedback += "<color=red>- Join the three sections without gaps or overlaps.</color>\n"; }
 
         bool hasTwoOverlays = GradeGokeOverlays(totalSeconds, ref post, ref feedback);
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 60000, IsRequiredSetupComplete() && sequence.Complete && hasTwoOverlays);
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(2), IsRequiredSetupComplete() && sequence.Complete && hasTwoOverlays);
     }
 
     private bool GradeGokeOverlays(float totalSeconds, ref float post, ref string feedback)
@@ -176,7 +176,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 80000, IsRequiredSetupComplete() && hasVehicleFootage);
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(3), IsRequiredSetupComplete() && hasVehicleFootage);
     }
 
     private ProductionGrades GradeLevel4(float avgCam, float avgLight, float totalSeconds)
@@ -272,7 +272,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 100000, contractRequirementsMet);
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(4), contractRequirementsMet);
     }
 
     private ProductionGrades GradeLevel5(float avgCam, float avgLight, float totalSeconds)
@@ -366,7 +366,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, 150000, contractRequirementsMet);
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(5), contractRequirementsMet);
     }
 
     private float GetPreProductionScore(out string feedback)

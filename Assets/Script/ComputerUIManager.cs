@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using TMPro;
@@ -128,11 +128,19 @@ public class ComputerUIManager : MonoBehaviour
         OpenGridView();
     }
 
+    private void Update()
+    {
+        // Includes autoplay and a take that finished while the Boss was explaining the task.
+        if (videoPlayerPanel != null && videoPlayerPanel.activeInHierarchy && pixelPlayer != null &&
+            pixelPlayer.HasPlaybackReachedEnd && TutorialManager.Instance != null)
+            TutorialManager.Instance.OnVideoPlayed();
+    }
+
     public void OnVideoPlayButtonClicked()
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("PlayVideo")) return;
 
-        if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
+        if (pixelPlayer != null && pixelPlayer.HasPlaybackReachedEnd && TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
     }
 
     public void OnBackButtonClicked()
@@ -415,12 +423,12 @@ public class ComputerUIManager : MonoBehaviour
         if (vehicles.Length == 1)
         {
             score += 35f;
-            feedback += "<color=green>+ Lambormini vehicle placed.</color>\n";
+            feedback += "<color=green>+ Terrari vehicle placed.</color>\n";
         }
         else
         {
             MarkRequiredSetupMissing();
-            feedback += $"<color=red>- Place exactly one Lambormini vehicle. Found {vehicles.Length}.</color>\n";
+            feedback += $"<color=red>- Place exactly one Terrari vehicle. Found {vehicles.Length}.</color>\n";
         }
 
         FilmLightItem softLight = null;

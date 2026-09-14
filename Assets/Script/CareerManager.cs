@@ -1,4 +1,4 @@
-using PlayerPrefs = GameSavePrefs;
+﻿using PlayerPrefs = GameSavePrefs;
 using UnityEngine;
 using TMPro;
 using UnityEngine.InputSystem;
@@ -164,23 +164,37 @@ public class CareerManager : MonoBehaviour
         // F12 resets only the active career; account identity and other saves are kept.
         if (keyboard.f12Key.wasPressedThisFrame)
         {
-            Debug.Log("<color=red>DEV COMMAND: RESETTING CURRENT CAREER!</color>");
-
-            // 1. Clear this career's progress.
-            PlayerPrefs.DeleteAll();
-            PlayerPrefs.Save();
-
-            // 2. Reset the live money variable
-            if (CareerManager.Instance != null)
-            {
-                CareerManager.Instance.playerMoney = 0;
-                CareerManager.Instance.UpdateMoneyUI();
-            }
-
-            // 3. (Optional) Reload the scene to start fresh instantly
-            GameFeedback.Show("DEV RESET ACTIVATED\nCurrent career reset. Balance: 0 B-Coins");
-            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+            ResetCareerForTesting();
+            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            // Editor/review scenes require an existing take and cannot start an empty career.
+            if (scene == "Editor" || scene == "ReviewScene") scene = "SingleStudio";
+            UnityEngine.SceneManagement.SceneManager.LoadScene(scene);
         }
+    }
+
+    public static void ResetCareerForTesting()
+    {
+        if (!Application.isEditor && !Debug.isDebugBuild) return;
+        foreach (TruePixelPlayer player in FindObjectsOfType<TruePixelPlayer>(true)) player.StopTape();
+        if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
+        CrossSceneData.finalGrades = default;
+        CrossSceneData.submittedLevel = 0;
+        CrossSceneData.resultApplied = false;
+        DevTutorialBypass.ResetForCareerTesting();
+        PauseManager.isPaused = false;
+        Time.timeScale = 1f;
+        PlayerPrefs.DeleteAll();
+        PlayerPrefs.Save();
+        if (Instance != null)
+        {
+            Instance.playerMoney = 0;
+            Instance.currentActiveJob = "None";
+            Instance.UpdateMoneyUI();
+        }
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        Debug.Log("DEV F12: Current career reset; fast dialogue " + (DevTutorialBypass.FastBossDialogue ? "ON" : "OFF"));
+        GameFeedback.Show("DEV RESET ACTIVATED\nCareer restarted | Fast dialogue " + (DevTutorialBypass.FastBossDialogue ? "ON" : "OFF"));
     }
 
     private static void SwitchLevelCheat(int targetLevel)

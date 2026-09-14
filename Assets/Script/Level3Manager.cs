@@ -8,6 +8,78 @@ using UnityEngine;
 public class Level3Manager : MonoBehaviour
 {
     public static Level3Manager Instance;
+    private bool rimLessonStarted;
+    public bool RimEquipmentAvailable { get; private set; }
+    private float rimSetupReadySince = -1f;
+
+    private bool CarStageAndLightReady()
+    {
+        var director = FindObjectOfType<DirectorTerminal>();
+        var car = FindObjectOfType<CubeVehicle>();
+        if(director == null || !director.HasWall() || director.IsTerminalActive() || car == null) return false;
+        var shop = FindObjectOfType<ShopTerminal>();
+        if(shop != null && shop.IsTerminalActive()) return false;
+        if(TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return false;
+        var bounds = new Bounds(car.transform.position, Vector3.zero);
+        foreach(var renderer in car.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(renderer.bounds);
+        foreach(var light in FindObjectsOfType<FilmLightItem>())
+        {
+            if(light.GetComponentInParent<Player.Interactor.EquipmentInteractor>() != null ||
+                !light.IsPoweredOn() || light.spotlight == null ||
+                (light.EquipmentName != "Level 3 Soft Light" && light.forcesHardLight) ||
+                light.intensityPercent < 30f || light.diffusionPercent < 50f) continue;
+            Vector3 direction = bounds.center - light.spotlight.transform.position;
+            float halfAngle = light.spotlight.spotAngle * .5f;
+            if(direction.magnitude <= light.spotlight.range &&
+                Vector3.Angle(light.spotlight.transform.forward, direction) <= halfAngle) return true;
+        }
+        return false;
+    }
+
+    private ProductionKit LessonStrip()
+    {
+        foreach(var kit in FindObjectsOfType<ProductionKit>(true))
+            if(!kit.template && kit.kind == 0) return kit;
+        return null;
+    }
+
+    private bool StripNearCar()
+    {
+        var strip=LessonStrip(); var car=FindObjectOfType<CubeVehicle>();
+        if(strip==null || !strip.placed || car==null) return false;
+        var bounds=new Bounds(car.transform.position,Vector3.zero);
+        foreach(var r in car.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(r.bounds);
+        var p=strip.transform.position+Vector3.up*1.2f;
+        return Vector3.Distance(bounds.ClosestPoint(p),p)<3f;
+    }
+
+    private void BeginRimLesson()
+    {
+        rimLessonStarted=true;
+        var shop=FindObjectOfType<ShopTerminal>();
+        if(shop==null){rimLessonStarted=false;return;}
+        RimEquipmentAvailable = true;
+        ProductionKitShop.Setup(shop);
+        shop.RestoreOwnedEquipment();
+        // Existing careers also receive the new required equipment allowance once.
+        if(PlayerPrefs.GetInt("Level3RimAllowance",0)==0 && CareerManager.Instance!=null)
+        {
+            CareerManager.Instance.AddMoney(ProductionEconomy.LightStrip);
+            PlayerPrefs.SetInt("Level3RimAllowance",1);PlayerPrefs.Save();
+        }
+        practiceLesson=new GuidedPracticeLesson(tutorialManager,new List<GuidedPracticeLesson.Step>
+        {
+            new GuidedPracticeLesson.Step("Your car, backdrop and main light are set. Now let's add <color=yellow>rim lighting</color>: a narrow bright edge that separates the car from the dark background. Keep your Soft Light where it is for body detail. The LED strip will add an accent from behind and to the side.","Continue to learn the LED-strip accent",()=>true),
+            new GuidedPracticeLesson.Step("I added <color=yellow>900 B-Coins</color> to cover one LED strip for this lesson. Open the Equipment Shop with E, find the <color=yellow>LIGHT STRIP</color> equipment card, click ADD TO CART and CONFIRM. It lights the scene; its glow alone is not the goal. If you already own one, reuse it.","Add one LIGHT STRIP card to the cart and CONFIRM",()=>LessonStrip()!=null),
+            new GuidedPracticeLesson.Step("Close the shop with E. Find the small packed strip at delivery and pick it up with E. It stays compact while carried and becomes full-size when you deploy it with G.","Close the shop and pick up your LIGHT STRIP",()=>LessonStrip()!=null && LessonStrip().GetComponentInParent<Player.Interactor.EquipmentInteractor>()!=null),
+            new GuidedPracticeLesson.Step("Left-click cycles the strip's power. Click at least once, then leave it on. Low output is often enough for an edge; very strong light can wash out the paint.","Left-click to adjust strip power; leave it ON",()=>LessonStrip()!=null && LessonStrip().PowerChanges>0 && LessonStrip().GetComponentInChildren<StageLightStrip>(true).PowerLabel!="OFF"),
+            new GuidedPracticeLesson.Step("Press C to try a cool cyan accent against the orange car. Press again for warm, then white. This is <color=yellow>warm/cool contrast</color>: different light colors help separate the edge from the main body. Keep whichever looks best.","Press C to try another strip color",()=>LessonStrip()!=null && LessonStrip().ColorChanges>0),
+            new GuidedPracticeLesson.Step("Press R to tilt the bar. A vertical strip follows a tall edge; an angled bar can follow the roof line. Try the tilt control, then choose the angle you want. Q turns the stand.","Press R to try the strip's tilt",()=>LessonStrip()!=null && LessonStrip().TiltChanges>0),
+            new GuidedPracticeLesson.Step("Walk behind and to one side of the car, then press G. The strip deploys ahead of you. Keep it within about 3 metres of the body. Leave the Soft Light in front. You can pick the strip up with E and move it again.","Deploy the strip within 3 metres of the car",StripNearCar),
+            new GuidedPracticeLesson.Step("Now hold your camera and open the viewfinder with left-click. Look for a bright edge along the far side or roof. Keep the strip outside your shot. If the whole car becomes bright, move the strip farther back or lower its power. The body should remain readable under the Soft Light.","Open the camera viewfinder and inspect the car's edge",()=>{foreach(var c in FindObjectsOfType<FilmCameraItem>())foreach(var lens in c.GetComponentsInChildren<Camera>())if(lens.isActiveAndEnabled)return StripNearCar();return false;}),
+            new GuidedPracticeLesson.Step("You have practiced rim lighting and warm/cool contrast. Adjust until the edge separates the car from the background without losing paint detail. This is a creative choice, not a required color or exact brightness. Record your reveal when ready; the contract still checks the same camera and Soft Light skills.","Continue to finish the rim-light lesson",()=>true)
+        },()=>{practiceLesson=null;PlayerPrefs.SetInt("Level3RimLessonComplete",1);PlayerPrefs.Save();ShowLevelTasks();});
+    }
 
     private enum Level3Step
     {
@@ -80,6 +152,24 @@ public class Level3Manager : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Keep previously purchased strips in storage until this production's
+        // stage and main light are ready, including careers that finished the lesson.
+        if(!RimEquipmentAvailable && currentStep==Level3Step.LevelActive &&
+            PlayerPrefs.GetInt("Level3RimLessonComplete",0)==1 && CarStageAndLightReady())
+        {
+            RimEquipmentAvailable=true;
+            var shop=FindObjectOfType<ShopTerminal>();
+            if(shop!=null){ProductionKitShop.Setup(shop);shop.RestoreOwnedEquipment();}
+        }
+        if(currentStep==Level3Step.LevelActive && isLevelStarted && !DevTutorialBypass.Disabled && !rimLessonStarted && PlayerPrefs.GetInt("Level3RimLessonComplete",0)==0 && PlayerPrefs.GetInt("LamborminiContractAccepted",0)==1)
+        {
+            if(CarStageAndLightReady())
+            {
+                if(rimSetupReadySince < 0f) rimSetupReadySince = Time.time;
+                if(Time.time - rimSetupReadySince >= .5f) BeginRimLesson();
+            }
+            else rimSetupReadySince = -1f;
+        }
         practiceLesson?.Tick();
         CampaignGuidance.Update(tutorialManager, isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining) ? "" : currentStep.ToString(), 3);
         Camera mainCamera = Camera.main;
@@ -125,7 +215,7 @@ public class Level3Manager : MonoBehaviour
 
         if (contractAlreadyAccepted && !restartLevelIntroduction && !requiresLightPurchase)
         {
-            if (CareerManager.Instance != null) CareerManager.Instance.currentActiveJob = "Lambormini";
+            if (CareerManager.Instance != null) CareerManager.Instance.currentActiveJob = "Terrari";
             if (contractUIManager != null) contractUIManager.UnlockQualifications();
             StartLevel();
             if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
@@ -531,7 +621,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("The <color=yellow>Level 3 Soft Light</color> lets us warm or cool the light and soften its shadows. Let's buy one first; open the shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Our new tool is the <color=yellow>Level 3 Soft Light</color>. A broad highlight helps show the car's curved body. Output changes how bright it is; color temperature makes it warmer or cooler; diffusion softens shadows in this game. We will practice each control after buying it. Open the equipment shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -699,7 +789,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("<color=yellow>Lambormini</color> wants an 8-12 second reveal. Build a dark set with ADD WALL. Try <color=yellow>rim lighting</color>: put a LIGHT STRIP behind and beside the car to draw a bright edge along the roof and body. Keep the Soft Light in front at an angle for readable paint.\n\nTry a cool cyan rim against the warm orange car. Move the strip closer for a stronger edge; select it and press [F] to compare OFF, LOW, MEDIUM and HIGH. Keep some shadows for depth. Lower the camera for a front-quarter hero view. These are creative choices, not extra grading requirements.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("<color=yellow>Terrari</color> wants an 8-12 second reveal. Build a dark set and place the orange car. Your Soft Light reveals the body shape. We will add one LED strip behind and to the side to create a bright rim separating the car from the background. I will teach its power, color, tilt and placement after you finish placing the car, backdrop and Soft Light.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -713,8 +803,8 @@ public class Level3Manager : MonoBehaviour
             TutorialUIManager.Instance.HideBossDialogue();
             TutorialUIManager.Instance.SetupTasks(new string[]
             {
-                "- Review the Lambormini contract",
-                "- Select ACCEPT CONTRACT to continue"
+                "- Review the Terrari contract",
+                "- Select the contract, read the brief, then close it to continue"
             });
         }
 
@@ -727,7 +817,7 @@ public class Level3Manager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Lambormini's putting up 80,000 B-Coins. A vehicle, soft lighting, and a carefully composed shot. Sound good? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Use the Soft Light we practiced with and your existing camera. Once the stage and main light are set, we will learn rim lighting with one LED strip from the equipment shop. I will add a separate 900 B-Coin equipment allowance for it. Your main production advance is 8,500 B-Coins. Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -738,13 +828,13 @@ public class Level3Manager : MonoBehaviour
         {
             if (PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 0)
             {
-                CareerManager.Instance.AcceptJob("Lambormini", 80000);
+                CareerManager.Instance.AcceptJob("Terrari", ProductionEconomy.Advance(3));
                 PlayerPrefs.SetInt("LamborminiContractAccepted", 1);
                 PlayerPrefs.Save();
             }
             else
             {
-                CareerManager.Instance.currentActiveJob = "Lambormini";
+                CareerManager.Instance.currentActiveJob = "Terrari";
             }
         }
 
@@ -982,7 +1072,13 @@ public class Level3Manager : MonoBehaviour
 
     private void ShowLevelTasks()
     {
+        if(practiceLesson!=null){practiceLesson.ShowCurrentTask();return;}
         if (TutorialUIManager.Instance == null) return;
+        if(!rimLessonStarted && PlayerPrefs.GetInt("Level3RimLessonComplete",0)==0)
+        {
+            TutorialUIManager.Instance.SetupTasks(new[]{"Place the car and backdrop; close the tablet", "Set down the Soft Light, power it ON and aim at the car", "Use at least 30% output and 50% diffusion; LED lesson follows"});
+            return;
+        }
         TutorialUIManager.Instance.HideTasks();
     }
 }
@@ -1060,6 +1156,12 @@ internal sealed class GuidedPracticeLesson
         if (stationLocked && stationPlayer != null) stationPlayer.canMove = false;
     }
 
+    public void ShowCurrentTask()
+    {
+        if (!released && !IsExplaining && index < steps.Count)
+            TutorialUIManager.Instance?.SetupTasks(new[] { steps[index].task });
+    }
+
     public void Tick()
     {
         if (released) return;
@@ -1076,7 +1178,7 @@ internal sealed class GuidedPracticeLesson
         if (steps[index].done == null || !steps[index].done())
         { stableSince = -1f; return; }
         if (stableSince < 0f) stableSince = Time.time;
-        if (Time.time - stableSince < 0.5f) return;
+        if (!DevTutorialBypass.PracticeDelayComplete(Time.time - stableSince, 0.5f)) return;
         if (index == 0 && station != null && stationPlayer != null)
         {
             stationLocked = true;
@@ -1298,3 +1400,4 @@ internal static class CampaignGuidance
         highlighted = target;
     }
 }
+

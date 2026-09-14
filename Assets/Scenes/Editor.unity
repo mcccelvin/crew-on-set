@@ -3843,10 +3843,11 @@ MonoBehaviour:
   brandingPrefabTemplate: {fileID: 3703798955193849184, guid: 59fe00f12f3f79440b9b91e0aa9cd324, type: 3}
   overlaysBinContent: {fileID: 615237954}
   tutorialLogos:
-  - logoName: Intro Logo
-    logoSprite: {fileID: 21300000, guid: d7d1fad9381419f469692824b1f30096, type: 3}
-  - logoName: Tagline
+  - logoName: ECCENTRIC CENTERPIECE
     logoSprite: {fileID: 21300000, guid: e7cbf246b0219ba4cb332c56ed00c873, type: 3}
+  - logoName: FLORA & FORM HOME
+    logoSprite: {fileID: 21300000, guid: d7d1fad9381419f469692824b1f30096, type: 3}
+    spriteRegion: {x: 0.03, y: 0.04, width: 0.94, height: 0.13}
   level1Logos:
   - logoName: Goke Main Logo
     logoSprite: {fileID: 21300000, guid: dbbee7245e8a0c148b07c662088d4323, type: 3}

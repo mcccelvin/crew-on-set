@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using TMPro;
 using Player.Manager;
 using UnityEngine.Rendering.PostProcessing;
@@ -435,6 +436,16 @@ namespace Player.Equipment
 
         public override void OnHeldUpdate(InputManager input)
         {
+            if (ProductionKitShop.HasCameraGripLesson(CampaignProgression.GetCurrentLevel()))
+            {
+                Keyboard keyboard = Keyboard.current;
+                if (keyboard != null)
+                {
+                    if (keyboard.jKey.wasPressedThisFrame) ProductionKit.MountCamera(this);
+                    if (keyboard.kKey.wasPressedThisFrame) ProductionKit.RunDolly(this);
+                    if (isCameraActive && keyboard.mKey.wasPressedThisFrame) ProductionExposureMonitor.Toggle(filmCamera);
+                }
+            }
             if (viewTransition != null) return;
             heldUpdateFrame = Time.frameCount;
             if (input.InsertCard) InsertSDCard();
@@ -763,7 +774,28 @@ namespace Player.Equipment
             if (!forceUpdate && Time.unscaledTime < nextHUDUpdateTime) return;
             nextHUDUpdateTime = Time.unscaledTime + 0.05f;
 
-            if (focusText != null) focusText.text = $"FOCUS: {currentFocusDistance:F1}m";
+            if (focusText != null)
+            {
+                string shotLabel = "";
+                if (CampaignProgression.GetCurrentLevel() == 4)
+                {
+                    // The authored focus label starts hidden. Reuse its compact box for coverage.
+                    focusText.gameObject.SetActive(true);
+                    focusText.enableAutoSizing = true;
+                    focusText.fontSizeMin = 18f;
+                    focusText.fontSizeMax = 24f;
+                    focusText.enableWordWrapping = false;
+                    shotLabel = "FRAME BOTH\n";
+                    CacheCampaignTargets(4);
+                    if (TryGetViewportBounds(level3ActorRenderers, out Vector4 actorView) &&
+                        TryGetViewportBounds(campaignProductRenderers, out Vector4 coffeeView))
+                    {
+                        int shot = ClassifyShotCoverage(GetViewportCoverage(CombineViewportBounds(actorView, coffeeView)));
+                        shotLabel = (shot == 1 ? "WIDE" : shot == 2 ? "MEDIUM" : "CLOSE-UP") + "\n";
+                    }
+                }
+                focusText.text = shotLabel + $"FOCUS: {currentFocusDistance:F1}m";
+            }
 
             float time = isRecording ? (Time.time - recordingStartTime) : 0f;
             int minutes = (int)(time / 60f);
@@ -1496,8 +1528,13 @@ namespace Player.Equipment
             if (recordedMetadataSamples <= 0) return 2;
 
             float averageCoverage = recordedCoverageAccumulated / recordedMetadataSamples;
-            if (averageCoverage <= 0.45f) return 1;
-            if (averageCoverage <= 0.75f) return 2;
+            return ClassifyShotCoverage(averageCoverage);
+        }
+
+        internal static int ClassifyShotCoverage(float coverage)
+        {
+            if (coverage <= 0.45f) return 1;
+            if (coverage <= 0.75f) return 2;
             return 3;
         }
 
@@ -1697,6 +1734,7 @@ namespace Player.Equipment
             if (isRecording)
             {
                 if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(true);
+                foreach (var actor in FindObjectsOfType<CubeActor>()) actor.BeginTake();
 
                 if (!pixelRecorder.StartRecording())
                 {
@@ -1743,6 +1781,7 @@ namespace Player.Equipment
 
         public override void OnDropped(Camera playerCamera)
         {
+            ProductionKit.DetachCamera(this);
             if (isRecording) ToggleRecording(true);
             CloseViewfinder();
             base.OnDropped(playerCamera);
@@ -1784,6 +1823,8 @@ namespace Player.Equipment
                     cardScript.usedSoftLight = recordedMetadataSamples > 0 && recordedSoftLightSamples >= Mathf.CeilToInt(recordedMetadataSamples * 0.5f);
                     cardScript.hasThreePointRoles = recordedMetadataSamples > 0 && recordedThreePointSamples == recordedMetadataSamples;
                     cardScript.MarkAsUsed();
+                    if (CampaignLevelManager.Instance != null)
+                        CampaignLevelManager.Instance.OnCoffeeTakeRecorded(cardScript);
                 }
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
                 if (renderer != null)
@@ -1848,6 +1889,9 @@ namespace Player.Equipment
                 rb.angularVelocity = Vector3.zero;
                 rb.useGravity = false;
                 rb.isKinematic = true;
+                var inventory = GetComponentInParent<Player.Interactor.EquipmentInteractor>();
+                if (inventory == null) inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
+                if (cardScript != null && inventory != null) inventory.StoreEjectedCard(cardScript);
                 return ejectedCard;
             }
 
@@ -1856,3 +1900,5 @@ namespace Player.Equipment
     }
 
 }
+
+

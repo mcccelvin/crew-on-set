@@ -16,7 +16,7 @@ public sealed class LamborminiEditLesson : MonoBehaviour
     {
         var ui=TutorialUIManager.Instance;ui.HideTasks();
         string text=step==0
-            ? "A detail creates curiosity; a reveal shows what that detail belongs to. For Lambormini, open on the headlight or front wheel, then reveal the low front-quarter view. A smooth move helps viewers read the paint and reflections.\n\nBuild an 8-12 second commercial from your recorded car footage. Press SPACE for the editing tip."
+            ? "A detail creates curiosity; a reveal shows what that detail belongs to. For Terrari, open on the headlight or front wheel, then reveal the low front-quarter view. A smooth move helps viewers read the paint and reflections.\n\nBuild an 8-12 second commercial from your recorded car footage. Press SPACE for the editing tip."
             : "For a simple reveal, record a steady front-quarter hero shot. In BRANDING, choose CAMERA MOTION > SLOW PULL OUT to start closer and reveal the frame. You can also cut a separate detail take into a hero take.\n\nKeep the orange paint readable: Brightness 0.85-1.15, Contrast 1.05-1.45, Saturation 0.95-1.30. Cinematic music is a suggestion; graphics and intro/outro cards are optional. Press SPACE to create your edit.";
         ui.ShowBossDialogue(text,ui.poseOpenHand,false,false);
     }

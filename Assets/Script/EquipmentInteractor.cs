@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using Player.Manager;
 
 namespace Player.Interactor
@@ -323,6 +323,37 @@ namespace Player.Interactor
 
                 if (hotbarUI != null) hotbarUI.UpdateSlot(currentSlotIndex, "", null);
             }
+        }
+
+        public bool StoreEjectedCard(Equipment.SDCardItem card)
+        {
+            if (card == null || HoldPoint == null) return false;
+            for (int i = 0; i < hotbar.Length; i++) if (hotbar[i] == card) return true;
+            int slot = System.Array.FindIndex(hotbar, item => item == null);
+            if (slot < 0)
+            {
+                // Keep the recording safe: make room by placing an inactive item beside the player.
+                for (int i = hotbar.Length - 1; i >= 0; i--)
+                {
+                    if (i == currentSlotIndex || hotbar[i] == null || PlayerCamera == null) continue;
+                    var displaced = hotbar[i];
+                    displaced.gameObject.SetActive(true);
+                    displaced.OnDropped(PlayerCamera);
+                    displaced.transform.position = transform.position + transform.right * .7f + Vector3.up * .2f;
+                    hotbar[i] = null;
+                    slot = i;
+                    GameFeedback.Show("INVENTORY FULL\nPlaced " + displaced.EquipmentName + " nearby to store your recording.");
+                    break;
+                }
+            }
+            if (slot < 0) return false;
+            hotbar[slot] = card;
+            card.OnPickedUp(HoldPoint);
+            card.gameObject.SetActive(slot == currentSlotIndex);
+            if (slot == currentSlotIndex) currentEquipment = card;
+            if (hotbarUI != null) hotbarUI.UpdateSlot(slot, card.EquipmentName, card.EquipmentIcon);
+            GameFeedback.Show("SD CARD STORED\nRecording added to slot " + (slot + 1));
+            return true;
         }
 
         public bool HasBlankSDCard()

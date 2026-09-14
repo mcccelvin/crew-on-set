@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using System;
@@ -101,6 +101,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     public void CloseComputerUI()
     {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ComputerStation")) return;
         TruePixelPlayer player = FindObjectOfType<TruePixelPlayer>();
         if (player != null) player.StopTape();
 

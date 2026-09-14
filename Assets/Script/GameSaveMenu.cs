@@ -9,12 +9,13 @@ public sealed class GameSaveMenu : MonoBehaviour
     private GameSaveManager saves;
     private RectTransform rows;
     private TMP_Text status;
-    private TMP_Text pageLabel;
     private TMP_InputField nameInput;
     private Button create;
-    private Button retry;
-    private int page;
-    private const int PageSize = 4;
+    private GameObject newGameDialog;
+    private GameSaveSlot selected;
+    private bool joining;
+    private Transform paper;
+    private SaveLoadPanelHost sourceHost;
 
     public static void Show(GameSaveManager manager)
     {
@@ -34,67 +35,121 @@ public sealed class GameSaveMenu : MonoBehaviour
         manager.Changed += menu.Refresh;
         menu.Refresh();
     }
-    private void OnDestroy() { if (saves != null) saves.Changed -= Refresh; }
+    private void OnDestroy()
+    {
+        if(saves!=null)saves.Changed-=Refresh;
+        var host=FindObjectOfType<SaveLoadPanelHost>();
+        if(!joining&&host!=null&&host.transform.parent!=null)host.transform.parent.gameObject.SetActive(false);
+    }
+    private void Update()
+    {
+        if(UnityEngine.InputSystem.Keyboard.current==null||!UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame)return;
+        if(newGameDialog!=null){Destroy(newGameDialog);newGameDialog=null;}else Destroy(gameObject);
+    }
+    private Button Artwork(string name,string key,Transform parent,Vector2 min,Vector2 max,UnityEngine.Events.UnityAction action)
+    {
+        var r=Rect(name,parent,min,max);var image=r.gameObject.AddComponent<Image>();ExportUIArt.Apply(image,key);
+        var b=r.gameObject.AddComponent<Button>();b.targetGraphic=image;if(action!=null)b.onClick.AddListener(action);return b;
+    }
     private void Build()
     {
-        var backdrop = Rect("Backdrop", transform, Vector2.zero, Vector2.one);
-        backdrop.gameObject.AddComponent<Image>().color = new Color(0, 0, 0, .86f);
-        var panel = Rect("Save Panel", backdrop, new Vector2(.17f, .12f), new Vector2(.83f, .88f));
-        panel.gameObject.AddComponent<Image>().color = new Color32(28, 29, 30, 255);
-        Text(panel, "YOUR GAMES", new Vector2(.04f, .89f), new Vector2(.7f, .98f), 38);
-        Button(panel, "BACK", new Vector2(.83f, .91f), new Vector2(.96f, .97f), () => Destroy(gameObject));
-        string player = PlayerPrefs.GetString("PlayerName", "Guest");
-        string id = PlayerPrefs.GetString("PlayFabId", "");
-        var identity = Text(panel, player + (string.IsNullOrEmpty(id) ? "  ·  Guest saves" : "  ·  PlayFab ID: " + id), new Vector2(.04f, .83f), new Vector2(.96f, .89f), 23);
-        identity.richText = false;
-        Text(panel, "Continue restarts the current commercial with its checkpoint budget.\nStage placement, recordings and unfinished edits start fresh.", new Vector2(.04f, .73f), new Vector2(.96f, .83f), 21);
-        rows = Rect("Save Rows", panel, new Vector2(.04f, .29f), new Vector2(.96f, .72f));
-        Button(panel, "<", new Vector2(.04f, .23f), new Vector2(.1f, .28f), () => { page = Math.Max(0, page - 1); Refresh(); });
-        pageLabel = Text(panel, "", new Vector2(.12f, .23f), new Vector2(.32f, .28f), 21);
-        Button(panel, ">", new Vector2(.33f, .23f), new Vector2(.39f, .28f), () => { page++; Refresh(); });
-        var inputRect = Rect("New Game Name", panel, new Vector2(.04f, .14f), new Vector2(.69f, .21f));
-        inputRect.gameObject.AddComponent<Image>().color = new Color32(55, 56, 58, 255);
-        nameInput = inputRect.gameObject.AddComponent<TMP_InputField>();
-        var label = Text(inputRect, "", new Vector2(.03f, .08f), new Vector2(.97f, .92f), 24);
-        label.richText = false;
-        nameInput.textViewport = inputRect;
-        nameInput.textComponent = label;
-        nameInput.characterLimit = 40;
-        nameInput.lineType = TMP_InputField.LineType.SingleLine;
-        nameInput.text = "Game " + (saves.Repository.Slots.Count + 1);
-        create = Button(panel, "NEW GAME", new Vector2(.72f, .14f), new Vector2(.96f, .21f), CreateGame);
-        status = Text(panel, "", new Vector2(.04f, .03f), new Vector2(.73f, .12f), 19);
-        retry = Button(panel, "RETRY SYNC", new Vector2(.76f, .035f), new Vector2(.96f, .10f), saves.SyncCloud);
+        sourceHost=FindObjectOfType<SaveLoadPanelHost>();
+        if(sourceHost!=null&&sourceHost.transform.parent!=null)sourceHost.transform.parent.gameObject.SetActive(false);
+        var backdrop=Rect("PLAY artwork",transform,Vector2.zero,Vector2.one);
+        ExportUIArt.Apply(backdrop.gameObject.AddComponent<Image>(),"playFolder");paper=backdrop;
+        Artwork("Close","close",paper,new Vector2(.905f,.783f),new Vector2(.949f,.862f),()=>Destroy(gameObject));
+        var join=Rect("JOIN",paper,new Vector2(.277f,.867f),new Vector2(.38f,.94f));join.gameObject.AddComponent<Image>().color=Color.clear;
+        join.gameObject.AddComponent<Button>().onClick.AddListener(()=>{
+            var host=sourceHost;
+            if(host==null)return;
+            var joinPanel=host.transform.parent.Find("join");if(joinPanel==null)return;
+            joining=true;host.gameObject.SetActive(false);joinPanel.gameObject.SetActive(true);host.transform.parent.gameObject.SetActive(true);Destroy(gameObject);
+        });
+        var viewport=Rect("Save grid viewport",paper,new Vector2(.158f,.32f),new Vector2(.845f,.79f));
+        viewport.gameObject.AddComponent<Image>().color=Color.clear;
+        viewport.gameObject.AddComponent<RectMask2D>();
+        rows=Rect("Save cards",viewport,new Vector2(0,1),Vector2.one);rows.pivot=new Vector2(.5f,1);
+        var scroll=viewport.gameObject.AddComponent<ScrollRect>();scroll.viewport=viewport;scroll.content=rows;scroll.horizontal=false;scroll.movementType=ScrollRect.MovementType.Clamped;scroll.scrollSensitivity=45;
+        Artwork("Start selected save","playStart",paper,new Vector2(.326f,.148f),new Vector2(.468f,.251f),()=>{if(selected!=null&&!saves.Syncing)saves.StartGame(selected,false);});
+        Artwork("Delete selected save","playDelete",paper,new Vector2(.521f,.148f),new Vector2(.664f,.251f),()=>{
+            if(selected==null||saves.Syncing||newGameDialog!=null)return;
+            var chosen=selected;
+            var box=CreateFolderDialog("Delete this saved game?");
+            Text(box,chosen.name,new Vector2(.18f,.42f),new Vector2(.8f,.64f),30).richText=false;
+            Button(box,"CANCEL",new Vector2(.2f,.17f),new Vector2(.45f,.3f),CloseDialog);
+            Button(box,"DELETE",new Vector2(.53f,.17f),new Vector2(.78f,.3f),()=>{chosen.values.RemoveAll(v=>v.key=="SaveDeleted");chosen.values.Add(new GameSaveValue{key="SaveDeleted",integer=1});saves.Repository.Commit(chosen);selected=null;CloseDialog();Refresh();saves.SyncCloud();});
+        });
+        status=Text(paper,"",new Vector2(.16f,.265f),new Vector2(.8f,.305f),20);
     }
     private void Refresh()
     {
-        foreach (Transform child in rows) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        var slots = saves.Repository.Slots.OrderByDescending(s => s.updatedUtc).ToList();
-        int pages = Math.Max(1, (slots.Count + PageSize - 1) / PageSize);
-        page = Mathf.Clamp(page, 0, pages - 1);
-        pageLabel.text = (page + 1) + " / " + pages;
-        status.text = saves.Status;
-        create.interactable = retry.interactable = !saves.Syncing;
-        if (slots.Count == 0) Text(rows, "No saved games yet. Name your first game below.", Vector2.zero, Vector2.one, 25);
-        for (int i = 0; i < PageSize && page * PageSize + i < slots.Count; i++)
+        if(rows==null)return;
+        foreach(Transform child in rows){child.gameObject.SetActive(false);Destroy(child.gameObject);}
+        var slots=saves.Repository.Slots.Where(s=>s.Int("SaveDeleted",0)==0).OrderByDescending(s=>s.updatedUtc).ToList();
+        int rowCount=(slots.Count+3)/3;
+        float height=Math.Max(1,rowCount)*295f;
+        rows.sizeDelta=new Vector2(0,height);
+        status.text=saves.Status;
+        if(selected==null||!slots.Contains(selected))selected=slots.FirstOrDefault();
+        for(int i=0;i<slots.Count;i++)
         {
-            var slot = slots[page * PageSize + i];
-            float top = 1f - i * .25f;
-            var row = Rect("Game " + slot.id, rows, new Vector2(0, top - .225f), new Vector2(1, top));
-            row.gameObject.AddComponent<Image>().color = new Color32(44, 46, 47, 255);
-            var title = Text(row, slot.name, new Vector2(.025f, .48f), new Vector2(.75f, .97f), 26);
-            title.richText = false;
-            string date = DateTime.TryParse(slot.updatedUtc, out var time) ? time.ToLocalTime().ToString("MMM d, HH:mm") : "";
-            Text(row, "Level " + slot.Level + "  ·  " + slot.Money.ToString("N0") + " B-Coins  ·  " + date, new Vector2(.025f, .05f), new Vector2(.75f, .48f), 20);
-            var play = Button(row, "CONTINUE", new Vector2(.78f, .19f), new Vector2(.98f, .81f), () => { saves.StartGame(slot, false); });
-            play.interactable = !saves.Syncing;
+            var slot=slots[i];float left=(i%3)*.35f;float top=1-(i/3)*295f/height;
+            var card=Artwork("Save "+slot.id,"playCard",rows,new Vector2(left,top-265f/height),new Vector2(left+.30f,top),()=>{selected=slot;Refresh();});
+            var name=Text(card.transform,slot.name,new Vector2(.04f,.01f),new Vector2(.96f,.16f),23);name.color=Color.white;name.richText=false;
+            if(slot==selected)name.color=new Color32(255,201,63,255);
+            Text(card.transform,"Level "+slot.Level+"  ·  "+slot.Money.ToString("N0")+" B",new Vector2(.05f,.68f),new Vector2(.95f,.87f),23);
         }
+        float plusLeft=(slots.Count%3)*.35f;float plusTop=1-(slots.Count/3)*295f/height;
+        create=Artwork("Create save","playCreate",rows,new Vector2(plusLeft,plusTop-265f/height),new Vector2(plusLeft+.30f,plusTop),ShowNewGameDialog);
+        create.interactable=!saves.Syncing;
     }
+    private Transform CreateFolderDialog(string title)
+    {
+        var shade=Rect("New Game Dialog",transform,Vector2.zero,Vector2.one);newGameDialog=shade.gameObject;shade.gameObject.AddComponent<Image>().color=new Color(0,0,0,.6f);
+        var box=Rect("PLAY folder dialog",shade,new Vector2(.2f,.2f),new Vector2(.8f,.8f));ExportUIArt.Apply(box.gameObject.AddComponent<Image>(),"playFolder");
+        Text(box,title,new Vector2(.17f,.66f),new Vector2(.85f,.8f),32);return box;
+    }
+    private void CloseDialog(){Destroy(newGameDialog);newGameDialog=null;}
     private void CreateGame()
     {
         if (saves.Syncing) return;
         try { saves.StartGame(saves.CreateGame(nameInput.text), true); }
         catch (Exception) { status.text = "Could not create a save. Check available disk space and try again."; }
+    }
+    private void ShowNewGameDialog()
+    {
+        if(newGameDialog!=null)return;
+        var original=sourceHost!=null?sourceHost.transform.Find("createpanel"):null;
+        if(original!=null)
+        {
+            var shade=Rect("New Game Dialog",transform,Vector2.zero,Vector2.one);
+            newGameDialog=shade.gameObject;shade.gameObject.AddComponent<Image>().color=new Color(0,0,0,.6f);
+            var panel=Instantiate(original.gameObject,shade,false);panel.SetActive(true);
+            var rect=panel.GetComponent<RectTransform>();rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one;
+            var setup=shade.gameObject.AddComponent<GameSetupMenu>();
+            setup.gameNameInput=panel.GetComponentInChildren<TMP_InputField>(true);
+            setup.singlePlayerToggle=panel.GetComponentsInChildren<Toggle>(true).First(t=>t.name=="Single");
+            setup.multiPlayerToggle=panel.GetComponentsInChildren<Toggle>(true).First(t=>t.name=="Multi");
+            setup.errorText=Text(shade,"",new Vector2(.32f,.23f),new Vector2(.68f,.29f),23);
+            var originalSetup=sourceHost.GetComponentInParent<GameSetupMenu>();
+            if(originalSetup!=null){setup.singlePlayerScene=originalSetup.singlePlayerScene;setup.multiplayerScene=originalSetup.multiplayerScene;}
+            foreach(var button in panel.GetComponentsInChildren<Button>(true))
+            {
+                button.onClick=new Button.ButtonClickedEvent();
+                if(button.name=="Button")button.onClick.AddListener(setup.OnCreateButtonPressed);
+                else button.onClick.AddListener(CloseDialog);
+            }
+            setup.singlePlayerToggle.isOn=true;
+            setup.gameNameInput.text="Game "+(saves.Repository.Slots.Count(s=>s.Int("SaveDeleted",0)==0)+1);
+            return;
+        }
+        var box=CreateFolderDialog("NAME YOUR NEW GAME");
+        Text(box,"Your commercial checkpoints save automatically.",new Vector2(.18f,.48f),new Vector2(.84f,.62f),24);
+        var field=Rect("Save name",box,new Vector2(.18f,.35f),new Vector2(.84f,.46f));field.gameObject.AddComponent<Image>().color=new Color32(237,213,167,255);
+        var input=field.gameObject.AddComponent<TMP_InputField>();var text=Text(field,"",new Vector2(.03f,0),new Vector2(.97f,1),25);text.richText=false;input.textViewport=field;input.textComponent=text;input.characterLimit=40;input.text="Game "+(saves.Repository.Slots.Count+1);nameInput=input;
+        Button(box,"START GAME",new Vector2(.53f,.17f),new Vector2(.8f,.3f),CreateGame);
+        Button(box,"CANCEL",new Vector2(.19f,.17f),new Vector2(.46f,.3f),CloseDialog);
+        input.Select();
     }
     private static RectTransform Rect(string name, Transform parent, Vector2 min, Vector2 max)
     {
@@ -107,7 +162,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private static TextMeshProUGUI Text(Transform parent, string value, Vector2 min, Vector2 max, float size)
     {
         var text = Rect("Label", parent, min, max).gameObject.AddComponent<TextMeshProUGUI>();
-        text.text = value; text.fontSize = size; text.color = Color.white;
+        text.text = value; text.fontSize = size; text.color = new Color32(75,43,19,255);
         text.alignment = TextAlignmentOptions.MidlineLeft;
         text.enableAutoSizing = true; text.fontSizeMin = size * .75f; text.fontSizeMax = size;
         text.raycastTarget = false;
@@ -120,8 +175,10 @@ public sealed class GameSaveMenu : MonoBehaviour
         var image = rect.gameObject.AddComponent<Image>(); image.color = new Color32(30, 87, 55, 255);
         var button = rect.gameObject.AddComponent<Button>(); button.targetGraphic = image;
         var text = Text(rect, title, new Vector2(.03f, 0), new Vector2(.97f, 1), 23);
+        text.color=Color.white;ExportUIArt.Apply(image,"blueButton");
         text.alignment = TextAlignmentOptions.Center;
         button.onClick.AddListener(action);
         return button;
     }
 }
+

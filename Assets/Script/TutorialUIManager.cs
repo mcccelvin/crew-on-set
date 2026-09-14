@@ -162,7 +162,17 @@ public class TutorialUIManager : MonoBehaviour
         if (okButton != null) okButton.SetActive(showOk);
         if (skipButton != null) skipButton.SetActive(showSkip);
 
-        bossRevealCoroutine = StartCoroutine(AnimateBossDialogueIn());
+        if (DevTutorialBypass.FastBossDialogue) CompleteBossRevealForTesting();
+        else bossRevealCoroutine = StartCoroutine(AnimateBossDialogueIn());
+    }
+
+    public void CompleteBossRevealForTesting()
+    {
+        if (!DevTutorialBypass.FastBossDialogue) return;
+        if (bossRevealCoroutine != null) StopCoroutine(bossRevealCoroutine);
+        bossRevealCoroutine = null;
+        ResetBossAnimationState();
+        bossDialogueReadyAt = 0f;
     }
 
     public void HideBossDialogue()

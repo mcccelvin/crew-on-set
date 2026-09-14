@@ -23,7 +23,7 @@ public class ShopManager : MonoBehaviour
             return;
         }
 
-        int cost = equipmentCosts[itemIndex];
+        int cost = ProductionEconomy.EquipmentPrice(equipmentPrefabs[itemIndex] != null ? equipmentPrefabs[itemIndex].name : "", equipmentCosts[itemIndex]);
         if (deliveryZone == null || equipmentPrefabs[itemIndex] == null || cost < 0) return;
 
         // 2. Check if the player has enough B coins in their CareerManager!
