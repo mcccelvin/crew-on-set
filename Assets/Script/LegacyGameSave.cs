@@ -8,7 +8,7 @@ public static class LegacyGameSave
     public static List<GameSaveValue> Read(bool prepareCheckpoint = true)
     {
         var values = new List<GameSaveValue>();
-        foreach (string key in new[] { "GokeEquipmentAdvancePaid", "GokeEquipmentLoanIssued", "OwnedEquipment.NON Y FX", "OwnedEquipment.NONY FX", "OwnedEquipment.160 LED PANEL", "OwnedEquipment.LEVEL 2 CAMERA", "OwnedEquipment.LEVEL 3 SOFT LIGHT" })
+        foreach (string key in new[] { "OwnedInterior.0", "OwnedInterior.1", "OwnedInterior.2", "GokeEquipmentAdvancePaid", "GokeEquipmentLoanIssued", "OwnedEquipment.NON Y FX", "OwnedEquipment.NONY FX", "OwnedEquipment.160 LED PANEL", "OwnedEquipment.LEVEL 2 CAMERA", "OwnedEquipment.LEVEL 3 SOFT LIGHT" })
             if (PlayerPrefs.HasKey(key)) values.Add(new GameSaveValue { key = key, kind = 0, integer = PlayerPrefs.GetInt(key) });
         if (PlayerPrefs.HasKey("AchivDone_advertising_post_production")) values.Add(new GameSaveValue { key = "AchivDone_advertising_post_production", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_advertising_post_production") });
         if (PlayerPrefs.HasKey("AchivDone_automotive_staging")) values.Add(new GameSaveValue { key = "AchivDone_automotive_staging", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_automotive_staging") });

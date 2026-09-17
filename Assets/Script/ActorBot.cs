@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.Animations;
 using UnityEngine.Playables;
 
-// An autonomous, on-mark performer. The director controls the action; animation never moves the stage mark.
+// Director-controlled performer with repeatable gestures and optional straight-line blocking.
 public sealed class ActorBot : MonoBehaviour
 {
     private Animator animator;
@@ -16,6 +16,47 @@ public sealed class ActorBot : MonoBehaviour
     private float elapsed;
     private Transform product;
     private float nextTargetCheck;
+    private Vector3 startMark,endMark;
+    private Quaternion startFacing;
+    private bool hasStart,hasEnd,walking;
+    public bool HasWalk => hasStart && hasEnd;
+    public void SetStartMark()
+    {
+        walking = false;
+        startMark = transform.position;
+        startFacing = transform.rotation;
+        hasStart = true;
+        hasEnd = false;
+    }
+    public void SetEndMark()
+    {
+        walking = false;
+        endMark = transform.position;
+        endMark.y = startMark.y;
+        hasEnd = hasStart && Vector3.Distance(startMark, endMark) > .2f;
+        GameFeedback.Show(hasEnd ? "END saved. K: rehearse. J: return to start. Recording repeats this walk. H: clear walk."
+            : "Set START with B first, then move the actor at least 0.2 metres before pressing N.");
+    }
+    public void ReturnToStartMark()
+    {
+        walking = false;
+        if (hasStart) { transform.position = startMark; transform.rotation = startFacing; }
+    }
+    public void ClearWalk() { ReturnToStartMark(); hasStart = hasEnd = false; }
+    public void RehearseWalk()
+    {
+        if (!HasWalk) { GameFeedback.Show("Place the actor at START and press B, then move to END and press N."); return; }
+        ReturnToStartMark();
+        walking = true;
+        elapsed = 0;
+    }
+    private bool PathBlocked(Vector3 direction, float distance)
+    {
+        foreach (var hit in Physics.CapsuleCastAll(transform.position + Vector3.up * .4f,
+            transform.position + Vector3.up * 1.5f, .22f, direction, distance, ~0, QueryTriggerInteraction.Ignore))
+            if (!hit.transform.IsChildOf(transform) && hit.normal.y < .7f) return true;
+        return false;
+    }
     private readonly System.Collections.Generic.List<Material> materials = new System.Collections.Generic.List<Material>();
     private static readonly System.Collections.Generic.Dictionary<string, int> muscles = BuildMuscleLookup();
 
@@ -107,6 +148,7 @@ public sealed class ActorBot : MonoBehaviour
 
     public void RestartTake()
     {
+        if (HasWalk) RehearseWalk();
         elapsed = 0f;
         if (idle.IsValid()) idle.SetTime(0);
         EvaluatePerformance();
@@ -116,6 +158,18 @@ public sealed class ActorBot : MonoBehaviour
     {
         if (PauseManager.isPaused || poseHandler == null) return;
         elapsed += Time.deltaTime;
+        if(walking)
+        {
+            var direction=endMark-transform.position;direction.y=0;
+            if(direction.magnitude<.03f) { transform.position=endMark; walking=false; }
+            else if (PathBlocked(direction.normalized, Mathf.Min(direction.magnitude, Time.deltaTime * .9f + .1f)))
+            { walking=false; GameFeedback.Show("Actor path blocked. Move the start or end mark to leave a clear walking route."); }
+            else
+            {
+                transform.rotation=Quaternion.LookRotation(direction);
+                transform.position=Vector3.MoveTowards(transform.position,endMark,Time.deltaTime*.9f);
+            }
+        }
         EvaluatePerformance();
     }
 
@@ -173,6 +227,13 @@ public sealed class ActorBot : MonoBehaviour
             SetMuscle("Head Turn Left-Right", Mathf.Clamp(Mathf.Atan2(direction.x, direction.z) / Mathf.PI, -.3f, .3f) * expression);
         }
         SetMuscle("Head Nod Down-Up", performance == 0 ? 0f : .035f * wave * expression);
+        if(walking)
+        {
+            float stride=Mathf.Sin(elapsed*8f)*.45f;
+            SetMuscle("Left Upper Leg Front-Back",stride);SetMuscle("Right Upper Leg Front-Back",-stride);
+            SetMuscle("Left Lower Leg Stretch",-.2f-Mathf.Max(0,-stride));SetMuscle("Right Lower Leg Stretch",-.2f-Mathf.Max(0,stride));
+            SetMuscle("Left Arm Front-Back",-stride*.5f);SetMuscle("Right Arm Front-Back",stride*.5f);
+        }
         poseHandler.SetHumanPose(ref pose);
     }
 

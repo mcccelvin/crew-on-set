@@ -89,6 +89,7 @@ public class TutorialUIManager : MonoBehaviour
         Instance = this;
         RecoverTaskPanel();
 
+
         if (bossHUDCanvas != null)
         {
             bossCanvasGroup = bossHUDCanvas.GetComponent<CanvasGroup>();

@@ -94,9 +94,14 @@ public sealed class GameSaveMenu : MonoBehaviour
         for(int i=0;i<slots.Count;i++)
         {
             var slot=slots[i];float left=(i%3)*.35f;float top=1-(i/3)*295f/height;
-            var card=Artwork("Save "+slot.id,"playCard",rows,new Vector2(left,top-265f/height),new Vector2(left+.30f,top),()=>{selected=slot;Refresh();});
-            var name=Text(card.transform,slot.name,new Vector2(.04f,.01f),new Vector2(.96f,.16f),23);name.color=Color.white;name.richText=false;
-            if(slot==selected)name.color=new Color32(255,201,63,255);
+            var cardRect=Rect("Save "+slot.id,rows,new Vector2(left,top-265f/height),new Vector2(left+.30f,top));
+            var border=cardRect.gameObject.AddComponent<Image>();border.color=slot==selected?new Color32(208,147,42,255):new Color32(210,188,143,255);
+            var card=cardRect.gameObject.AddComponent<Button>();card.targetGraphic=border;card.onClick.AddListener(()=>{selected=slot;Refresh();});
+            var surface=Rect("Cream surface",cardRect,new Vector2(.012f,.018f),new Vector2(.988f,.982f));surface.gameObject.AddComponent<Image>().color=new Color32(255,245,217,255);
+            surface.GetComponent<Image>().raycastTarget=false;
+            var footer=Rect("Name band",surface,Vector2.zero,new Vector2(1,.23f));footer.gameObject.AddComponent<Image>().color=new Color32(239,215,168,255);footer.GetComponent<Image>().raycastTarget=false;
+            var name=Text(card.transform,slot.name,new Vector2(.05f,.025f),new Vector2(.95f,.21f),23);name.richText=false;
+            Text(card.transform,slot==selected?"SELECTED":"SELECT SAVE",new Vector2(.05f,.30f),new Vector2(.95f,.58f),27).alignment=TextAlignmentOptions.Center;
             Text(card.transform,"Level "+slot.Level+"  ·  "+slot.Money.ToString("N0")+" B",new Vector2(.05f,.68f),new Vector2(.95f,.87f),23);
         }
         float plusLeft=(slots.Count%3)*.35f;float plusTop=1-(slots.Count/3)*295f/height;
@@ -105,8 +110,13 @@ public sealed class GameSaveMenu : MonoBehaviour
     }
     private Transform CreateFolderDialog(string title)
     {
-        var shade=Rect("New Game Dialog",transform,Vector2.zero,Vector2.one);newGameDialog=shade.gameObject;shade.gameObject.AddComponent<Image>().color=new Color(0,0,0,.6f);
-        var box=Rect("PLAY folder dialog",shade,new Vector2(.2f,.2f),new Vector2(.8f,.8f));ExportUIArt.Apply(box.gameObject.AddComponent<Image>(),"playFolder");
+        var shade=Rect("New Game Dialog",transform,Vector2.zero,Vector2.one);newGameDialog=shade.gameObject;shade.gameObject.AddComponent<Image>().color=new Color(.25f,.16f,.07f,.45f);
+        var box=Rect("Creation style dialog",shade,new Vector2(.3f,.29f),new Vector2(.7f,.71f));
+        var background=box.gameObject.AddComponent<Image>();
+        var original=sourceHost!=null?sourceHost.transform.Find("createpanel"):null;
+        var artwork=original!=null?original.GetComponent<Image>():null;
+        if(artwork!=null){background.sprite=artwork.sprite;background.type=artwork.type;background.color=artwork.color;}
+        else background.color=new Color32(255,244,210,255);
         Text(box,title,new Vector2(.17f,.66f),new Vector2(.85f,.8f),32);return box;
     }
     private void CloseDialog(){Destroy(newGameDialog);newGameDialog=null;}

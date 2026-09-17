@@ -103,3 +103,5 @@ MonoBehaviour:
     texture: {fileID: 2800000, guid: 2b1d86aac30d49e09ffc8a88adc8c250, type: 3}
   - key: playDelete
     texture: {fileID: 2800000, guid: 83b829d265214da7aa757e8afeb40ce7, type: 3}
+  - key: almanacHud
+    texture: {fileID: 2800000, guid: 5c81f996f8b64852b68414ac57497e59, type: 3}

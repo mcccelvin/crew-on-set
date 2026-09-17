@@ -23,6 +23,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     private Vector3 commercialScale;
     private Transform commercialParent;
     private bool commercialTransformCached = false;
+    private bool isDragging;
     private const float SafeMargin = 0.06f;
     private const float MaximumCoverage = 0.22f;
 
@@ -89,6 +90,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     {
         if (eventData.button != PointerEventData.InputButton.Left) return;
         if (isOnTimeline) RestoreCommercialTransform();
+        isDragging = true;
 
         if (!isOnTimeline)
         {
@@ -171,6 +173,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public void OnEndDrag(PointerEventData eventData)
     {
         if (eventData.button != PointerEventData.InputButton.Left) return;
+        isDragging = false;
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 1f;
@@ -255,17 +258,18 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 isOnTimeline = true;
 
                 transform.SetParent(tvPlayer.computerScreen.transform, false);
+                // Bank anchors belong to the thumbnail layout, not the monitor.
+                rectTransform.anchorMin = rectTransform.anchorMax = new Vector2(.5f,.5f);
+                rectTransform.pivot = new Vector2(.5f,.5f);
 
                 if (droppedOnTV)
                 {
                     RectTransformUtility.ScreenPointToLocalPointInRectangle(tvPlayer.computerScreen.GetComponent<RectTransform>(), eventData.position, eventData.pressEventCamera, out Vector2 tvLocal);
-                    rectTransform.anchoredPosition = tvLocal;
-
-                    ClampToParent();
+                    rectTransform.localPosition = new Vector3(tvLocal.x,tvLocal.y,0f);
                 }
                 else
                 {
-                    rectTransform.anchoredPosition = Vector2.zero;
+                    rectTransform.localPosition = Vector3.zero;
                 }
 
                 PrepareForCommercialOutput();
@@ -404,6 +408,8 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public void EvaluateVisibility(int currentFrame, bool isPlaying)
     {
         if (!isOnTimeline || canvasGroup == null) return;
+        // Playback must not restore the previous cached placement while the user drags.
+        if (isDragging) return;
 
         CacheCommercialTransform(false);
 

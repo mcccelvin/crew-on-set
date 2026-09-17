@@ -15,10 +15,11 @@ Read the row relevant to the task, then search its entry points. Paths below are
 | Level 4 / actors | `CampaignLevelManager.cs`, `ActorBot.cs` | `Docs/Level4Tutorial.md`, `Docs/ActorBots.md` |
 | Stage / director tablet | `DirectorTerminal.cs`, `UIDragProp.cs` | `StageInterior.cs`, `ImportedProductVisual.cs`; `Docs/DirectorTablet.md`, `Docs/StageInteriors.md`, `Docs/ProductModels.md` |
 | Equipment shop / delivery | `ShopManager.cs`, `ShopTerminal.cs`, `EquipmentInteractor.cs` | `ProductionKit.cs`, `ProductionKitShop.cs`, `ProductionEconomy.cs` |
-| Lighting / grip | `FilmLightItem.cs`, `StageLightStrip.cs` | `ProductionLightModifiers.cs`, `ProductionExposureMonitor.cs`, `AutomotiveGrip.cs` |
+| Lighting / grip | `FilmLightItem.cs`, `StageLightStrip.cs`, `StudioLightHaze.cs` | `ProductionLightModifiers.cs`, `ProductionExposureMonitor.cs`, `AutomotiveGrip.cs` |
 | Camera / SD / recordings | `FilmCameraItem.cs`, `ComputerStation.cs`, `ComputerUIManager.cs` | Follow recording and inventory callers before changing media transfer |
 | Editing / playback | `EditorManager.cs`, `TruePixelPlayer.cs`, `CommercialCompiler.cs` | `EditorTutorialManager.cs`, `DraggableClip.cs`, `ClipInspector.cs`, `ProjectDataManager.cs` |
 | Branding / color | `BrandingBinManager.cs`, `DraggableOverlay.cs`, `BrandingClip.cs` | `ColorGradingManager.cs`, `ContractGrader.cs`; timing must agree with playback and grading |
+| Gameplay HUD | `CareerManager.ConfigureGameplayHUD`, `HotbarUIManager` | Almanac PSD book icon above balance; P shortcut; dark slots with selected outline. Artwork key: `almanacHud`. |
 | Contract / Almanac UI | `ContractUIManager.cs`, `AlmanacManager.cs`, `AlmanacBook.cs` | `ExportUIArt.cs`, `Assets/Resources/ExportUIArt.asset`; `Docs/UIExportIntegration.md` |
 | Player controls / testing cheats | `InputManager.cs`, `DevTutorialBypass.cs` | Also inspect `Assets/Player`; tutorials own movement restrictions |
 

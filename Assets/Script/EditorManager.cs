@@ -10,6 +10,8 @@ using UnityEngine.InputSystem;
 public class EditorManager : MonoBehaviour
 {
     public static EditorManager Instance;
+    public int EditingLevel { get; private set; }
+    private bool submissionStarted;
 
     [Header("UI References - Graphics Track")]
     public Transform[] brandingTracks;
@@ -54,7 +56,7 @@ public class EditorManager : MonoBehaviour
     private Coroutine phaseRevealCoroutine;
     private TMP_Text emptyPreviewMessage;
 
-    private void Awake() { Instance = this; }
+    private void Awake() { Instance = this; EditingLevel = CampaignProgression.GetCurrentLevel(); }
 
     private void Start()
     {
@@ -72,7 +74,7 @@ public class EditorManager : MonoBehaviour
         EditorWorkspaceUI.Surface(brandingBinPanel != null ? brandingBinPanel.transform : null);
         EditorWorkspaceUI.Surface(colorGradingBin != null ? colorGradingBin.transform : null);
         UpdatePhaseUI();
-        if (CampaignProgression.GetCurrentLevel() == 2) ConfigureGokeClipBank();
+        ConfigureClipBank();
         LoadClipsFromBridge();
         if (CampaignProgression.GetCurrentLevel() == 2)
         {
@@ -80,7 +82,12 @@ public class EditorManager : MonoBehaviour
             AddProvidedGokeClip("GokeOutro", "GOKE OUTRO", ProvidedClipRole.GokeOutro);
             gameObject.AddComponent<GokeIntroOutroLesson>();
         }
-        else if (CampaignProgression.GetCurrentLevel() == 3) gameObject.AddComponent<LamborminiEditLesson>();
+        else if (CampaignProgression.GetCurrentLevel() == 3)
+        {
+            AddGeneratedTerrariClip("TerrariIntro", "TERRARI INTRO", ProvidedClipRole.TerrariIntro);
+            AddGeneratedTerrariClip("TerrariOutro", "TERRARI OUTRO", ProvidedClipRole.TerrariOutro);
+            gameObject.AddComponent<LamborminiEditLesson>();
+        }
     }
 
     private void Update()
@@ -194,13 +201,13 @@ public class EditorManager : MonoBehaviour
         }
     }
 
-    private void ConfigureGokeClipBank()
+    private void ConfigureClipBank()
     {
         var content = clipBankContainer as RectTransform;
         if (content == null || content.parent == null) return;
         Canvas.ForceUpdateCanvases();
         float minimumHeight = content.rect.height;
-        var viewportObject = new GameObject("Goke Clip Bank Viewport", typeof(RectTransform), typeof(RectMask2D), typeof(ScrollRect));
+        var viewportObject = new GameObject("Clip Bank Viewport", typeof(RectTransform), typeof(RectMask2D), typeof(ScrollRect));
         viewportObject.layer = content.gameObject.layer;
         var viewport = (RectTransform)viewportObject.transform;
         viewport.SetParent(content.parent, false);
@@ -264,6 +271,65 @@ public class EditorManager : MonoBehaviour
         rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.Max(200f, rect.rect.width));
         var layout = clip.GetComponent<LayoutElement>();
         if (layout != null) layout.preferredWidth = rect.rect.width;
+    }
+
+    private void AddGeneratedTerrariClip(string resource, string label, ProvidedClipRole role)
+    {
+        if (clipPrefab == null || clipBankContainer == null) return;
+        string folder = Path.Combine(Application.persistentDataPath, "ProvidedTerrari");
+        string path = Path.Combine(folder, resource + ".tape");
+        try
+        {
+            Directory.CreateDirectory(folder);
+            Texture2D card = new Texture2D(1920, 1080, TextureFormat.RGB24, false);
+            Color32[] pixels = new Color32[1920 * 1080];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(0, 0, 0, 255);
+            PaintTerrariArt(pixels, ExportUIArt.GetWhite("terrariMark"), new Rect(780, 430, 360, 400));
+            PaintTerrariArt(pixels, ExportUIArt.GetWhite("terrariWordmark"), new Rect(660, 260, 600, 136));
+            card.SetPixels32(pixels);
+            card.Apply();
+            byte[] jpg = card.EncodeToJPG(95);
+            Destroy(card);
+            int frames = Mathf.RoundToInt(LamborminiBrief.CardSeconds * TapeSettings.framesPerSecond);
+            using (BinaryWriter writer = new BinaryWriter(File.Open(path, FileMode.Create)))
+            {
+                writer.Write(frames);
+                for (int i = 0; i < frames; i++) { writer.Write(jpg.Length); writer.Write(jpg); }
+            }
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("Could not prepare " + label + ": " + e.Message);
+            return;
+        }
+        GameObject clip = Instantiate(clipPrefab, clipBankContainer);
+        clip.name = label;
+        DraggableClip data = clip.GetComponent<DraggableClip>();
+        data.clipFilePath = path;
+        data.campaignLevel = 3;
+        data.providedRole = role;
+        LoadThumbnail(path, clip, data, label, clip.GetComponentInChildren<TextMeshProUGUI>());
+        var rect = (RectTransform)clip.transform;
+        rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, Mathf.Max(200f, rect.rect.width));
+        var layout = clip.GetComponent<LayoutElement>();
+        if (layout != null) layout.preferredWidth = rect.rect.width;
+    }
+
+    private static void PaintTerrariArt(Color32[] card, Sprite sprite, Rect bounds)
+    {
+        if (sprite == null) throw new System.InvalidOperationException("Terrari title artwork is missing.");
+        Texture2D texture = sprite.texture;
+        float scale = Mathf.Min(bounds.width / texture.width, bounds.height / texture.height);
+        int width = Mathf.Max(1, Mathf.RoundToInt(texture.width * scale));
+        int height = Mathf.Max(1, Mathf.RoundToInt(texture.height * scale));
+        int left = Mathf.RoundToInt(bounds.center.x - width * .5f);
+        int bottom = Mathf.RoundToInt(bounds.center.y - height * .5f);
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            byte value = (byte)Mathf.RoundToInt(texture.GetPixelBilinear((x + .5f) / width, (y + .5f) / height).a * 255f);
+            card[(bottom + y) * 1920 + left + x] = new Color32(value, value, value, 255);
+        }
     }
 
     private bool IsReadableTape(string path)
@@ -480,6 +546,17 @@ public class EditorManager : MonoBehaviour
 
     public void ExportCommercial()
     {
+        var lesson=EditorTutorialManager.Instance;
+        if(lesson!=null&&lesson.gameObject.activeInHierarchy&&
+            (lesson.currentStep==EditorTutorialManager.EditorStep.ExplainColorGrading||
+             lesson.currentStep==EditorTutorialManager.EditorStep.AdjustBrightness||
+             lesson.currentStep==EditorTutorialManager.EditorStep.AdjustContrast||
+             lesson.currentStep==EditorTutorialManager.EditorStep.AdjustSaturation||
+             lesson.currentStep==EditorTutorialManager.EditorStep.ExplainColorSettings))
+        {
+            ShowEditorWarning("Finish trying brightness, contrast and saturation with the boss before exporting.");
+            return;
+        }
         if (timelineContainer == null || exportPlayer == null)
         {
             ShowEditorWarning("The export system is not ready. Please check the Editor setup and try again.");
@@ -615,12 +692,14 @@ public class EditorManager : MonoBehaviour
 
     public void SubmitVideo()
     {
+        if(submissionStarted)return;
         if (grader == null)
         {
             ShowEditorWarning("The grading system is not ready. Your commercial has not been submitted.");
             return;
         }
 
+        submissionStarted=true;
         CrossSceneData.finalGrades = grader.GenerateGrades(pendingCam, pendingLight, pendingSec);
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnVideoSubmitted();
 
@@ -730,7 +809,7 @@ public class PlayerEditTools : MonoBehaviour
     {
         int level = CampaignProgression.GetCurrentLevel();
         if (level == 2) return "GOKE: INTRO 2s / FOOTAGE 6s / OUTRO 2s";
-        if (level == 3) return "TERRARI TARGET: PUSH/PAN • DIP TO BLACK • CINEMATIC";
+        if (level == 3) return "TERRARI: INTRO 2s • BACK 7s • SIDE 7s • OVERALL 7s • OUTRO 2s = 25s";
         if (level == 4) return "KAPE TARGET: PULL OUT/PAN • FADE/SLIDE • FADE • CLEAN";
         return "PRODUCT TARGET: PUSH IN • FADE/POP • FADE • CLEAN";
     }

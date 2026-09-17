@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 public class HotbarUIManager : MonoBehaviour
 {
@@ -17,6 +19,11 @@ public class HotbarUIManager : MonoBehaviour
     public TextMeshProUGUI equipmentGuideText;
 
     private string currentGuideText;
+    private RectTransform equipmentControlsRoot;
+    private readonly List<TextMeshProUGUI> controlLabels = new List<TextMeshProUGUI>();
+    private readonly List<TextMeshProUGUI> controlKeys = new List<TextMeshProUGUI>();
+    private bool showingEquipment;
+    private static readonly Regex ControlPattern = new Regex(@"\[([^\]]+)\]\s*([^\[]*)");
     private bool isInteractionPrompt;
     private GameObject directorPromptRoot;
     private RectTransform directorPromptRect;
@@ -29,6 +36,11 @@ public class HotbarUIManager : MonoBehaviour
 
     private void Start()
     {
+        // Override the old translucent colors serialized into the studio scenes.
+        activeColor = new Color32(83, 63, 40, 245);
+        inactiveColor = new Color32(24, 22, 20, 235);
+        foreach (var text in slotTexts)
+            if (text != null) { text.color = Color.white; text.fontStyle |= FontStyles.Bold; }
         HighlightSlot(0);
 
         for (int i = 0; i < slotIcons.Length; i++)
@@ -67,6 +79,11 @@ public class HotbarUIManager : MonoBehaviour
             if (slotBackgrounds[i] != null)
             {
                 slotBackgrounds[i].color = (i == activeIndex) ? activeColor : inactiveColor;
+                var border = slotBackgrounds[i].GetComponent<Outline>();
+                if (border == null) border = slotBackgrounds[i].gameObject.AddComponent<Outline>();
+                border.effectColor = new Color32(235,181,73,255);
+                border.effectDistance = new Vector2(2,-2);
+                border.enabled = i == activeIndex;
             }
         }
     }
@@ -96,8 +113,11 @@ public class HotbarUIManager : MonoBehaviour
     public void UpdateGuideText(string newText)
     {
         newText = newText ?? "";
-        if (currentGuideText == newText) return;
+        if (newText.StartsWith("LIGHT_CONTROL_ROWS|")) { UpdateEquipmentGuide(newText); return; }
+        if (currentGuideText == newText && !showingEquipment) return;
         currentGuideText = newText;
+        showingEquipment = false;
+        if (equipmentControlsRoot != null) equipmentControlsRoot.gameObject.SetActive(false);
         isInteractionPrompt = TryBuildInteractionPrompt(newText, out string key, out string title, out string action);
 
         if (isInteractionPrompt)
@@ -111,6 +131,80 @@ public class HotbarUIManager : MonoBehaviour
         {
             equipmentGuideText.text = isInteractionPrompt ? "" : newText;
         }
+    }
+
+    // Equipment hints have their own route so single-key controls never become interaction popups.
+    public void UpdateEquipmentGuide(string controls)
+    {
+        controls = controls ?? "";
+        if (showingEquipment && currentGuideText == controls) return;
+        currentGuideText = controls;
+        showingEquipment = true;
+        isInteractionPrompt = false;
+        if (equipmentGuideText == null) return;
+        equipmentGuideText.text = "";
+        if (equipmentControlsRoot == null)
+        {
+            var canvas = equipmentGuideText.GetComponentInParent<Canvas>();
+            if (canvas == null) return;
+            equipmentControlsRoot = new GameObject("Equipment Key Guide", typeof(RectTransform)).GetComponent<RectTransform>();
+            equipmentControlsRoot.SetParent(canvas.transform, false);
+            equipmentControlsRoot.anchorMin = equipmentControlsRoot.anchorMax = equipmentControlsRoot.pivot = new Vector2(1, .5f);
+            equipmentControlsRoot.anchoredPosition = new Vector2(-28, 0);
+        }
+        string source = controls;
+        if (source.StartsWith("LIGHT_CONTROL_ROWS|"))
+        {
+            string[] fields = source.Split('|');
+            source = "[LMB] Toggle power | [SCROLL] Intensity | [ARROWS] Tilt | [Q UP / E DOWN] Height +" + fields[1] + " m | [G] Drop";
+            if (controls.Contains("ADVANCED")) source += " | [Z / K] Temperature | [V / B] Diffusion";
+        }
+        var matches = ControlPattern.Matches(source);
+        for (int i = 0; i < matches.Count; i++)
+        {
+            if (i == controlLabels.Count) CreateControlRow(i);
+            var label = controlLabels[i];
+            var key = controlKeys[i];
+            label.transform.parent.gameObject.SetActive(true);
+            label.text = matches[i].Groups[2].Value.Trim(' ', '|', '\n', '\r').ToUpperInvariant();
+            key.text = matches[i].Groups[1].Value.Trim().ToUpperInvariant();
+            float width = Mathf.Clamp(key.GetPreferredValues(key.text).x + 20, 32, 132);
+            ((RectTransform)key.transform.parent).sizeDelta = new Vector2(width, 28);
+            label.rectTransform.offsetMax = new Vector2(-width - 12, 0);
+        }
+        for (int i = matches.Count; i < controlLabels.Count; i++) controlLabels[i].transform.parent.gameObject.SetActive(false);
+        equipmentControlsRoot.sizeDelta = new Vector2(310, Mathf.Max(0, matches.Count * 40 - 12));
+        equipmentControlsRoot.gameObject.SetActive(matches.Count > 0);
+    }
+
+    private void CreateControlRow(int index)
+    {
+        var row = new GameObject("Control " + index, typeof(RectTransform)).GetComponent<RectTransform>();
+        row.SetParent(equipmentControlsRoot, false);
+        row.anchorMin = row.anchorMax = row.pivot = new Vector2(1, 1);
+        row.anchoredPosition = new Vector2(0, -index * 40);
+        row.sizeDelta = new Vector2(310, 28);
+        var label = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        label.transform.SetParent(row, false);
+        label.font = equipmentGuideText.font;
+        label.fontSize = 18; label.fontStyle = FontStyles.Bold;
+        label.color = Color.white; label.alignment = TextAlignmentOptions.MidlineRight;
+        label.enableWordWrapping = false; label.enableAutoSizing = true;
+        label.fontSizeMin = 14; label.fontSizeMax = 18; label.raycastTarget = false;
+        label.rectTransform.anchorMin = Vector2.zero; label.rectTransform.anchorMax = Vector2.one;
+        label.rectTransform.offsetMin = Vector2.zero;
+        var shadow = label.gameObject.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0, 0, 0, .65f); shadow.effectDistance = new Vector2(1, -1);
+        var badge = new GameObject("Key Badge", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+        badge.transform.SetParent(row, false); badge.color = Color.white; badge.raycastTarget = false;
+        badge.rectTransform.anchorMin = badge.rectTransform.anchorMax = badge.rectTransform.pivot = new Vector2(1, .5f);
+        var key = new GameObject("Key", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        key.transform.SetParent(badge.transform, false); key.font = equipmentGuideText.font;
+        key.fontSize = 16; key.fontStyle = FontStyles.Bold; key.color = new Color32(30, 27, 24, 255);
+        key.alignment = TextAlignmentOptions.Center; key.enableWordWrapping = false; key.raycastTarget = false;
+        key.rectTransform.anchorMin = Vector2.zero; key.rectTransform.anchorMax = Vector2.one;
+        key.rectTransform.offsetMin = key.rectTransform.offsetMax = Vector2.zero;
+        controlLabels.Add(label); controlKeys.Add(key);
     }
 
     private static bool TryBuildInteractionPrompt(string source, out string key, out string title, out string action)

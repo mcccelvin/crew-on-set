@@ -21,6 +21,39 @@ public sealed class ExportUIArt : ScriptableObject
         }
         return null;
     }
+    // Make a white version of the original artwork without changing imported assets.
+    public static Sprite GetWhite(string key)
+    {
+        string cacheKey = key + "/white";
+        if (sprites.TryGetValue(cacheKey, out var cached) && cached != null) return cached;
+        Sprite original = Get(key);
+        if (original == null) return null;
+        Texture2D source = original.texture;
+        RenderTexture previous = RenderTexture.active;
+        RenderTexture target = RenderTexture.GetTemporary(source.width, source.height, 0, RenderTextureFormat.ARGB32);
+        Texture2D white = new Texture2D(source.width, source.height, TextureFormat.RGBA32, false);
+        try
+        {
+            Graphics.Blit(source, target);
+            RenderTexture.active = target;
+            white.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0);
+            Color32[] pixels = white.GetPixels32();
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, pixels[i].a);
+            white.SetPixels32(pixels);
+            white.Apply();
+        }
+        finally
+        {
+            RenderTexture.active = previous;
+            RenderTexture.ReleaseTemporary(target);
+        }
+        white.name = cacheKey;
+        Sprite sprite = Sprite.Create(white, original.rect, new Vector2(.5f, .5f), original.pixelsPerUnit);
+        sprite.name = original.name + "/white";
+        sprites[cacheKey] = sprite;
+        return sprite;
+    }
+
     public static void Apply(Image image,string key)
     {
         var sprite=Get(key);if(image==null||sprite==null)return;

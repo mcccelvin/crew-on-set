@@ -176,7 +176,7 @@ namespace Player.Equipment
         protected override void Awake()
         {
             base.Awake();
-            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert SD | [R] Record | [Scroll] Zoom | [Q/E] Height";
+            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert SD | [R] Record | [Scroll] Zoom | [Q/E] Height | [CTRL + WASD] Smooth move | [CTRL + MOUSE] Fine aim";
             ResolvePixelRecorder();
             noiseOffset = Random.Range(0f, 1000f);
 
@@ -488,6 +488,9 @@ namespace Player.Equipment
             }
             else
             {
+                if ((Mathf.Abs(input.EquipmentAdjust) > 0.01f || Mathf.Abs(input.CameraPedestal) > 0.01f) &&
+                    TutorialManager.Instance != null)
+                    TutorialManager.Instance.WarnTutorialRecordingMovement();
                 targetFOV = filmCamera.fieldOfView;
                 zoomVelocity = heightVelocity = heightAcceleration = 0f;
             }
@@ -1215,7 +1218,7 @@ namespace Player.Equipment
                 score += 7f * Mathf.InverseLerp(0.45f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
                 score += 2f * Mathf.InverseLerp(-0.15f, 0.75f, Vector3.Dot(cameraArrow, lightArrow));
                 score += 2f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 2f, 8f);
-                score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetColorTemperature() - 5400f) / 2200f);
+                score += 3f * Mathf.Clamp01(1f - Mathf.Abs(light.GetColorTemperature() - 3200f) / 2200f);
                 score += creativeVehicleLight ? 4f * Mathf.InverseLerp(10f, 50f, light.GetDiffusionPercent()) : 4f * Mathf.Clamp01(1f - Mathf.Abs(light.GetDiffusionPercent() - 75f) / 50f);
 
                 if (!isSoftLight) score = Mathf.Min(score * 0.5f, 7f);
@@ -1660,7 +1663,7 @@ namespace Player.Equipment
                 isSDCardInserted = true;
 
                 HotbarUIManager ui = FindObjectOfType<HotbarUIManager>();
-                if (ui != null) ui.UpdateGuideText(EquipmentControls);
+                if (ui != null) ui.UpdateEquipmentGuide(EquipmentControls);
 
                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera(EquipmentName);
             }

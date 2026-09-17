@@ -11,25 +11,27 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 86de3b2fa56240cfa654bd88671d9f2d, type: 3}
   m_Name: ProductModels
-  m_EditorClassIdentifier:
+  m_EditorClassIdentifier: 
   products:
   - level: 1
-    model: {fileID: 919132149155446097, guid: ec2371a4a2cbc21438cc2703a9876f25, type: 3}
+    model: {fileID: 919132149155446097, guid: e0ccc2196a693fc4b963747d303b2650, type: 3}
     size: 1
     rotation: {x: 0, y: 0, z: 0}
   - level: 2
     model: {fileID: 919132149155446097, guid: 0f87943582b0e994abd388ab9eb894a1, type: 3}
-    size: 1
-    rotation: {x: 0, y: 0, z: 0}
+    size: 0.35
+    rotation: {x: 0, y: 180, z: 0}
   - level: 3
     model: {fileID: 919132149155446097, guid: 04a20a804de186c4695418f2433b5044, type: 3}
     size: 5.25
     rotation: {x: 0, y: 90, z: 0}
   - level: 4
     model: {fileID: 919132149155446097, guid: 6832ddba1b0b3434a8df9756b1488a17, type: 3}
-    size: 1.3
-    rotation: {x: 0, y: 0, z: 0}
+    size: 0.45
+    rotation: {x: 0, y: 180, z: 0}
   - level: 5
     model: {fileID: 919132149155446097, guid: fef84c2bebef8154da5359c90e659da3, type: 3}
     size: 1.1
     rotation: {x: 0, y: 0, z: 0}
+  flowerTable: {fileID: 919132149155446097, guid: b711466301f508f4a87e5df8b286db87, type: 3}
+  coffeeInterior: {fileID: 919132149155446097, guid: a411f49d25aae614b8586211e2358d93, type: 3}

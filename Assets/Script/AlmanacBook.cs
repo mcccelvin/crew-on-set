@@ -12,6 +12,162 @@ public partial class AlmanacManager
     private readonly List<KnowledgeEntry> bookEntries=new List<KnowledgeEntry>();
     private static readonly string[] BookCategories={"DIRECTOR","LIGHTING","AUDIO","CAMERA","EDITING"};
 
+    private int navigationStep = -1;
+    private const string NavigationLessonKey = "AlmanacGuideShown";
+    private TutorialUIManager navigationUI;
+    private Canvas navigationCanvas;
+    private CanvasGroup navigationGroup;
+    private bool navigationOverrideSorting, navigationBlocksRaycasts, navigationTasksVisible;
+    private int navigationSortingOrder;
+    private bool navigationAwaitingSpace;
+    private Button navigationLightingButton;
+    private GameObject navigationFrame;
+    private readonly List<CanvasGroup> navigationButtonGates = new List<CanvasGroup>();
+
+    private Button NavigationTarget()
+    {
+        switch (navigationStep)
+        {
+            case 0: return equipmentKnowledgeButton;
+            case 1: return navigationLightingButton;
+            case 2: return techniquesKnowledgeButton;
+            case 3: return bookNext;
+            default: return null;
+        }
+    }
+
+    private void ClearNavigationFocus()
+    {
+        if (navigationFrame != null) { navigationFrame.SetActive(false); Destroy(navigationFrame); }
+        foreach (var gate in navigationButtonGates)
+        {
+            if (gate == null) continue;
+            gate.interactable = true;
+            gate.blocksRaycasts = true;
+            Destroy(gate);
+        }
+        navigationButtonGates.Clear();
+    }
+
+    private void SetNavigationFocus(Button target)
+    {
+        ClearNavigationFocus();
+        if (UnityEngine.EventSystems.EventSystem.current != null)
+            UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+        foreach (var button in almanacCanvas.GetComponentsInChildren<Button>(true))
+        {
+            if (button == target || button == closeButton) continue;
+            var gate = button.gameObject.AddComponent<CanvasGroup>();
+            gate.interactable = false;
+            gate.blocksRaycasts = false;
+            navigationButtonGates.Add(gate);
+        }
+        if (target == null) return;
+        navigationFrame = new GameObject("Almanac tutorial square", typeof(RectTransform));
+        var frame = navigationFrame.GetComponent<RectTransform>();
+        frame.SetParent(target.transform, false);
+        frame.anchorMin = Vector2.zero; frame.anchorMax = Vector2.one;
+        frame.offsetMin = new Vector2(-8, -8); frame.offsetMax = new Vector2(8, 8);
+        for (int i = 0; i < 4; i++)
+        {
+            var edge = new GameObject("Border", typeof(RectTransform), typeof(Image));
+            var rect = edge.GetComponent<RectTransform>();
+            rect.SetParent(frame, false);
+            bool horizontal = i < 2;
+            rect.anchorMin = horizontal ? new Vector2(0, i) : new Vector2(i - 2, 0);
+            rect.anchorMax = horizontal ? new Vector2(1, i) : new Vector2(i - 2, 1);
+            rect.sizeDelta = horizontal ? new Vector2(0, 4) : new Vector2(4, 0);
+            rect.anchoredPosition = Vector2.zero;
+            var image = edge.GetComponent<Image>();
+            image.color = new Color(1f, .8f, .15f);
+            image.raycastTarget = false;
+        }
+    }
+
+    private void UpdateNavigationLesson()
+    {
+        var keyboard = UnityEngine.InputSystem.Keyboard.current;
+        if (!isAlmanacOpen || !navigationAwaitingSpace || navigationUI == null ||
+            PauseManager.isPaused || !Application.isFocused || keyboard == null ||
+            !keyboard.spaceKey.wasPressedThisFrame || !navigationUI.CanAdvanceBossDialogue()) return;
+        navigationAwaitingSpace = false;
+        navigationUI.HideBossDialogue();
+        if (navigationStep >= 4) { EndNavigationLesson(); return; }
+        SetNavigationFocus(NavigationTarget());
+    }
+
+    private void BeginNavigationLesson()
+    {
+        var ui = TutorialUIManager.Instance;
+        if (DevTutorialBypass.Disabled || ui == null || ui.bossHUDCanvas == null ||
+            GameSavePrefs.GetInt(NavigationLessonKey, 0) == 1) return;
+
+        navigationUI = ui;
+        navigationTasksVisible = ui.taskPanel != null && ui.taskPanel.activeSelf;
+        navigationCanvas = ui.bossHUDCanvas.GetComponent<Canvas>();
+        navigationGroup = ui.bossHUDCanvas.GetComponent<CanvasGroup>();
+        if (navigationCanvas != null)
+        {
+            navigationOverrideSorting = navigationCanvas.overrideSorting;
+            navigationSortingOrder = navigationCanvas.sortingOrder;
+            navigationCanvas.overrideSorting = true;
+            var bookCanvas = almanacCanvas.GetComponent<Canvas>();
+            navigationCanvas.sortingOrder = Mathf.Max(navigationSortingOrder, bookCanvas != null ? bookCanvas.sortingOrder + 1 : 61);
+        }
+        if (navigationGroup != null)
+        {
+            navigationBlocksRaycasts = navigationGroup.blocksRaycasts;
+            navigationGroup.blocksRaycasts = false;
+        }
+        // One introduction per career, including when the player closes it early.
+        GameSavePrefs.SetInt(NavigationLessonKey, 1);
+        GameSavePrefs.Save();
+        navigationStep = 0;
+        ShowNavigationLesson();
+    }
+
+    private void NavigationAction(int step)
+    {
+        if (navigationStep != step || navigationAwaitingSpace) return;
+        navigationStep++;
+        if (navigationStep == 3 && !bookNext.interactable) navigationStep++;
+        ShowNavigationLesson();
+    }
+
+    private void ShowNavigationLesson()
+    {
+        if (navigationUI == null || navigationStep < 0) return;
+        string[] instructions = {
+            "Welcome to your Almanac! Click EQUIPMENTS above the book. These pages explain what each tool does and its controls.",
+            "The ribbons on the right filter the book by subject. Let's try Lighting: after pressing Space, click the highlighted light ribbon.",
+            "Now click TECHNIQUES above the book. Equipment pages explain the tools; techniques teach you how and why to use them in your commercial.",
+            "Click the right arrow to turn a page. The left arrow takes you back, and the page number tells you where you are.",
+            "You've got it! Read at your own pace. Press P or the red X to close. You can reopen the Almanac with P whenever you need a reminder."
+        };
+        navigationAwaitingSpace = true;
+        SetNavigationFocus(null);
+        navigationUI.ShowBossDialogue(instructions[Mathf.Min(navigationStep, 4)] + "\n\nPress [SPACE] to continue.", navigationUI.poseOpenHand, true, false);
+    }
+
+    private void EndNavigationLesson()
+    {
+        if (navigationStep < 0) return;
+        navigationStep = -1;
+        navigationAwaitingSpace = false;
+        ClearNavigationFocus();
+        if (navigationUI != null)
+        {
+            navigationUI.HideBossDialogue();
+            if (navigationUI.taskPanel != null) navigationUI.taskPanel.SetActive(navigationTasksVisible);
+        }
+        if (navigationCanvas != null)
+        {
+            navigationCanvas.sortingOrder = navigationSortingOrder;
+            navigationCanvas.overrideSorting = navigationOverrideSorting;
+        }
+        if (navigationGroup != null) navigationGroup.blocksRaycasts = navigationBlocksRaycasts;
+        navigationUI = null;
+    }
     private void BuildIllustratedBook()
     {
         if(almanacCanvas==null||bookEntryTitle!=null)return;
@@ -33,12 +189,13 @@ public partial class AlmanacManager
         closeButton=BookButton(root.transform,"Close book","","close",new Vector2(820,440),new Vector2(86,99));
         bookPrevious=BookButton(root.transform,"Previous page","","left",new Vector2(-813,49),new Vector2(62,93));
         bookNext=BookButton(root.transform,"Next page","","right",new Vector2(898,49),new Vector2(62,93));
-        bookPrevious.onClick.AddListener(()=>{bookPage--;RefreshBookPage();});bookNext.onClick.AddListener(()=>{bookPage++;RefreshBookPage();});
+        bookPrevious.onClick.AddListener(()=>{bookPage--;RefreshBookPage();});bookNext.onClick.AddListener(()=>{bookPage++;RefreshBookPage();NavigationAction(3);});
         for(int i=0;i<BookCategories.Length;i++)
         {
             int category=i;
             var button=BookButton(root.transform,"Category "+BookCategories[i],"",new[]{"psdDirector","psdLight","psdAudio","psdCamera","psdEdit"}[i],new Vector2(780,215-i*108),new Vector2(122,82));
-            button.onClick.AddListener(()=>{bookCategory=category;bookPage=0;OpenTab(1);RefreshBookPage();});
+            if (category == 1) navigationLightingButton = button;
+            button.onClick.AddListener(()=>{bookCategory=category;bookPage=0;OpenTab(1);RefreshBookPage();NavigationAction(1);});
         }
         bookHeading=BookText(knowledgePanel.transform,"Section",new Vector2(-365,338),new Vector2(610,80),60);
         bookEntryTitle=BookText(knowledgePanel.transform,"Entry title",new Vector2(-365,262),new Vector2(595,70),30);
@@ -58,6 +215,8 @@ public partial class AlmanacManager
         achievementsTabBtn=BookButton(root.transform,"Milestones","MILESTONES","psdTab",new Vector2(-235,-413),new Vector2(230,40));
         BuildTechniqueGuidePanel();
         other.GetComponent<Image>().raycastTarget=false;
+        equipmentKnowledgeButton.onClick.AddListener(() => { ShowEquipmentKnowledge(); NavigationAction(0); });
+        techniquesKnowledgeButton.onClick.AddListener(() => { ShowTechniqueKnowledge(); NavigationAction(2); });
         OpenTab(1);RefreshBookPage();
     }
     private Button BookButton(Transform parent,string name,string label,string artwork,Vector2 position,Vector2 size)

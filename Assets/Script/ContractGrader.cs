@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections.Generic;
 
 public class ContractGrader : MonoBehaviour
@@ -7,7 +7,9 @@ public class ContractGrader : MonoBehaviour
 
     public ProductionGrades GenerateGrades(float avgCam, float avgLight, float totalSeconds)
     {
-        int currentLevel = CampaignProgression.GetCurrentLevel();
+        // Grade the contract that opened this editor, not progression changed by a result callback.
+        int currentLevel = EditorManager.Instance != null && EditorManager.Instance.EditingLevel >= 1
+            ? EditorManager.Instance.EditingLevel : CampaignProgression.GetCurrentLevel();
         CrossSceneData.submittedLevel = currentLevel;
         CrossSceneData.resultApplied = false;
 
@@ -40,9 +42,9 @@ public class ContractGrader : MonoBehaviour
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (HasColorControls(grading))
         {
-            GradeColorRange(grading.brightnessSlider.value, ColorGradingManager.BeginnerBrightnessMin, ColorGradingManager.BeginnerBrightnessMax, 16f, "Exposure", "Choose any brightness from 0.85 to 1.15; avoid an overly light or dark image.", ref post, ref feedback);
-            GradeColorRange(grading.contrastSlider.value, ColorGradingManager.BeginnerContrastMin, ColorGradingManager.BeginnerContrastMax, 16f, "Contrast", "Choose any contrast from 0.80 to 1.30 to keep product detail readable.", ref post, ref feedback);
-            GradeColorRange(grading.saturationSlider.value, ColorGradingManager.BeginnerSaturationMin, ColorGradingManager.BeginnerSaturationMax, 16f, "Saturation", "Choose any saturation from 0.70 to 1.30; your color style is up to you.", ref post, ref feedback);
+            GradeColorRange(grading.brightnessSlider.value, ColorGradingManager.BeginnerBrightnessMin, ColorGradingManager.BeginnerBrightnessMax, 16f, "Exposure", "Use the brightness control's supported range, 0.75 to 1.25. Any value in that range earns full credit.", ref post, ref feedback);
+            GradeColorRange(grading.contrastSlider.value, ColorGradingManager.BeginnerContrastMin, ColorGradingManager.BeginnerContrastMax, 16f, "Contrast", "Use the contrast control's supported range, 0.75 to 1.50. Any value in that range earns full credit.", ref post, ref feedback);
+            GradeColorRange(grading.saturationSlider.value, ColorGradingManager.BeginnerSaturationMin, ColorGradingManager.BeginnerSaturationMax, 16f, "Saturation", "Use the saturation control's supported range, 0.65 to 1.40. Any value in that range earns full credit.", ref post, ref feedback);
         }
         else
         {
@@ -62,11 +64,11 @@ public class ContractGrader : MonoBehaviour
         AddProductionFeedback(GameLevel.Level2, avgCam, avgLight, ref feedback);
         feedback += "<color=white><b>--- POST-PRODUCTION ---</b></color>\n";
 
-        if (Mathf.Abs(totalSeconds - 10f) <= 0.75f) feedback += "<color=green>+ Precise 10-second commercial cut.</color>\n";
+        if (Mathf.Abs(totalSeconds - GokeSequence.TargetSeconds) <= 0.75f) feedback += "<color=green>+ Precise 12-second commercial cut.</color>\n";
         else
         {
             post -= 30f;
-            feedback += $"<color=red>- Timing: Deliver 10.0 seconds within a 0.75-second tolerance. Your cut is {totalSeconds:F1} seconds.</color>\n";
+            feedback += $"<color=red>- Timing: Deliver 12.0 seconds within a 0.75-second tolerance. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
         EditorManager editor = EditorManager.Instance;
@@ -132,16 +134,20 @@ public class ContractGrader : MonoBehaviour
         else
         {
             post -= 25f;
-            feedback += $"<color=red>- Timing: Target 8-12 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
+            feedback += $"<color=red>- Timing: Target 25 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
         var clips = GetCampaignClips(3);
         var editor = FindObjectOfType<EditorManager>(true);
         clips.RemoveAll(clip => !clip.gameObject.activeSelf || clip.providedRole != ProvidedClipRole.None || clip.endFrame <= clip.startFrame || editor == null || editor.timelineContainer == null || !clip.transform.IsChildOf(editor.timelineContainer));
+        float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : (editor != null ? editor.pixelsPerSecond : 0);
+        bool requiredTakes = LamborminiBrief.HasRequiredRecordedTakes(editor != null ? editor.timelineContainer : null, pps);
+        if (requiredTakes) feedback += "<color=green>+ Terrari intro, three separate recordings and outro form a continuous 25-second commercial.</color>\n";
+        else { post -= 35f; feedback += "<color=red>- Build this continuous 25-second sequence: full 2s TERRARI INTRO, three different SD-card recordings (back, side and overall), then full 2s TERRARI OUTRO. Duplicating one take does not count.</color>\n"; }
         bool hasVehicleFootage = clips.Count > 0 && HasSoftLight(clips);
         if (hasVehicleFootage) feedback += "<color=green>+ Recorded vehicle footage uses soft lighting.</color>\n";
         else { post -= 35f; feedback += "<color=red>- Use your Level 3 car footage, recorded with a powered Soft Light aimed at the vehicle.</color>\n"; }
-        feedback += "<color=white>Creative finish: a detail-to-hero reveal and Slow Pull Out suit this brief. Music, overlays and transitions are optional.</color>\n";
+        feedback += "<color=white>Creative finish: use Ctrl movement for a smooth take. Keep overlays title-safe and away from the car; upper-left is usually the clearest space.</color>\n";
 
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (HasColorControls(grading))
@@ -176,7 +182,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Color grade data is missing.</color>\n";
         }
 
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(3), IsRequiredSetupComplete() && hasVehicleFootage);
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(3), IsRequiredSetupComplete() && hasVehicleFootage && requiredTakes);
     }
 
     private ProductionGrades GradeLevel4(float avgCam, float avgLight, float totalSeconds)
@@ -411,7 +417,7 @@ public class ContractGrader : MonoBehaviour
         }
         else if (level == GameLevel.Level3)
         {
-            feedback += "<color=white>Tip: Reveal the orange car from a headlight detail to a low front-quarter hero shot. Centered and thirds framing both work. Start the Soft Light near 75%; refine aim and diffusion for clear highlights.</color>\n\n";
+            feedback += "<color=white>Tip: Show the back, side and overall view of the orange car. These angles are equally valid; keep the car visible and well lit. Centered and thirds framing both work. Start the Soft Light near 75%; refine aim and diffusion for clear highlights.</color>\n\n";
         }
         else if (level == GameLevel.Level4)
         {
@@ -653,6 +659,11 @@ public class ContractGrader : MonoBehaviour
         pre = Mathf.Clamp(pre, 0f, 100f);
         prod = Mathf.Clamp(prod, 0f, 100f);
         post = Mathf.Clamp(post, 0f, 100f);
+
+        // Keep all three departments explicit in the detailed feedback as well as the summary.
+        feedback = feedback.Replace("--- PRE-PRODUCTION ---", $"1. PRE-PRODUCTION — {pre:F1}/100")
+            .Replace("--- PRODUCTION ---", $"2. PRODUCTION — {prod:F1}/100")
+            .Replace("--- POST-PRODUCTION ---", $"3. POST-PRODUCTION — {post:F1}/100");
 
         float finalScore = (pre + prod + post) / 3f;
         string letterGrade = "F";

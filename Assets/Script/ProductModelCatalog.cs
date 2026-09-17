@@ -15,6 +15,38 @@ public sealed class ProductModelCatalog : ScriptableObject
 
     public Product[] products;
 
+    public GameObject flowerTable;
+    public GameObject coffeeInterior;
+
+    // Set dressing must never count as a recorded product or actor.
+    public static GameObject CreateFurniture(bool table, Vector3 availableSize)
+    {
+        var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
+        var source = catalog == null ? null : table ? catalog.flowerTable : catalog.coffeeInterior;
+        if (source == null) return null;
+        var root = new GameObject(table ? "Flower Table" : "Coffee Interior");
+        if (table) root.AddComponent<ImportedProductVisual>().Initialize(false);
+        var visual = Instantiate(source, root.transform);
+        // Present the two curved legs at the front (-Z), with the third leg behind.
+        if (table) visual.transform.localRotation = Quaternion.Euler(0, 180, 0) * visual.transform.localRotation;
+        foreach (var camera in visual.GetComponentsInChildren<Camera>(true)) camera.enabled = false;
+        foreach (var light in visual.GetComponentsInChildren<Light>(true)) light.enabled = false;
+        foreach (var animator in visual.GetComponentsInChildren<Animator>(true)) animator.enabled = false;
+        foreach (var collider in visual.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+        var renderers = visual.GetComponentsInChildren<Renderer>();
+        if (renderers.Length == 0) { Destroy(root); return null; }
+        var bounds = GetBounds(renderers);
+        float scale = table ? availableSize.y / Mathf.Max(.001f, bounds.size.y) :
+            Mathf.Min(availableSize.x / Mathf.Max(.001f, bounds.size.x), availableSize.z / Mathf.Max(.001f, bounds.size.z));
+        visual.transform.localScale *= scale;
+        bounds = GetBounds(renderers);
+        visual.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        // Individual mesh colliders leave the room and the spaces between furniture accessible.
+        foreach (var filter in visual.GetComponentsInChildren<MeshFilter>())
+            if (filter.sharedMesh != null) filter.gameObject.AddComponent<MeshCollider>().sharedMesh = filter.sharedMesh;
+        return root;
+    }
+
     public static GameObject Create(int level, string objectName)
     {
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");

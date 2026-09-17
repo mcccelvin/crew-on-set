@@ -1,6 +1,8 @@
 using UnityEngine;
 using System.Collections;
 using System.IO;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 public class TruePixelRecorder : MonoBehaviour
 {
@@ -53,9 +55,9 @@ public class TruePixelRecorder : MonoBehaviour
             recordedFrameCount = 0;
             recordingStartTime = Time.time;
             lastFrameData = null;
-            captureTexture = new RenderTexture(captureWidth, captureHeight, 24);
+            captureTexture = new RenderTexture(captureWidth, captureHeight, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             captureTexture.Create();
-            screenShot = new Texture2D(captureWidth, captureHeight, TextureFormat.RGB24, false);
+            screenShot = new Texture2D(captureWidth, captureHeight, TextureFormat.RGB24, false, false);
 
             isRecording = true;
             recordingCoroutine = StartCoroutine(RecordFramesCoroutine());
@@ -132,8 +134,7 @@ public class TruePixelRecorder : MonoBehaviour
 
             try
             {
-                filmCamera.targetTexture = captureTexture;
-                filmCamera.Render();
+                RenderRecordingFrame();
                 RenderTexture.active = captureTexture;
 
                 screenShot.ReadPixels(new Rect(0, 0, captureWidth, captureHeight), 0, 0);
@@ -160,6 +161,25 @@ public class TruePixelRecorder : MonoBehaviour
 
                 WriteFrame(frameData);
                 lastFrameData = frameData;
+            }
+        }
+    }
+
+    private void RenderRecordingFrame()
+    {
+        // Use the same URP camera settings, lights and post-processing as the viewfinder.
+        // The sRGB target stores display-ready bytes for JPEG and UI playback.
+        using (StudioLightHaze.HideForCapture())
+        {
+            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
+            {
+                var request = new UniversalRenderPipeline.SingleCameraRequest { destination = captureTexture };
+                RenderPipeline.SubmitRenderRequest(filmCamera, request);
+            }
+            else
+            {
+                filmCamera.targetTexture = captureTexture;
+                filmCamera.Render();
             }
         }
     }

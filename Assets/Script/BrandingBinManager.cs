@@ -87,8 +87,8 @@ public class BrandingBinManager : MonoBehaviour
         {
             activeList=new List<BrandingData>
             {
-                new BrandingData { logoName="TERRARI",logoSprite=ExportUIArt.Get("terrariWordmark") },
-                new BrandingData { logoName="TERRARI EMBLEM",logoSprite=ExportUIArt.Get("terrariMark") }
+                new BrandingData { logoName="TERRARI",logoSprite=ExportUIArt.GetWhite("terrariWordmark") },
+                new BrandingData { logoName="TERRARI EMBLEM",logoSprite=ExportUIArt.GetWhite("terrariMark") }
             };
         }
 

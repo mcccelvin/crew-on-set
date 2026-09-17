@@ -44,7 +44,7 @@ public sealed class GokeIntroOutroLesson : MonoBehaviour
                 ui.SetupTasks(new[] {
                     "Keep the full INTRO at 0-2s.",
                     "Trim your Goke footage to 6s; place it at 2-8s.",
-                    "Drag the full OUTRO after the footage at 8-10s.",
+                    "Drag the full OUTRO after the footage at 10-12s.",
                     "Join the clips with no gaps or overlaps." });
             }
             return;
@@ -67,9 +67,9 @@ public sealed class GokeIntroOutroLesson : MonoBehaviour
         if (next == Step.ExplainIntro)
             text = "Goke's intro and outro are supplied in CLIPS. An INTRO introduces the brand and sets the tone, so viewers know whose commercial they are watching. Put the 2-second GOKE INTRO at the very beginning.\n\nPress SPACE to try it.";
         else if (next == Step.ExplainOutro)
-            text = "An OUTRO reinforces the brand and gives viewers a final message to remember. 'Make it a Goke' invites them to choose the product. Put it after your footage: INTRO 2s > PRODUCT 6s > OUTRO 2s. Double-click the footage to trim it; right-click a clip to return it to CLIPS.\n\nPress SPACE to build the ending.";
+            text = "An OUTRO reinforces the brand and gives viewers a final message to remember. 'Make it a Goke' invites them to choose the product. Put it after your footage: INTRO 2s > PRODUCT 8s > OUTRO 2s. Double-click the footage to trim it; right-click a clip to return it to CLIPS.\n\nPress SPACE to build the ending.";
         else
-            text = "You've placed the intro, product footage and outro. The intro introduces Goke; the outro leaves a memorable sign-off. The lesson is finished. Aim for 2s intro + 6s footage + 2s outro, with no gaps. Add the logo and tagline overlays whenever you like; their timing is yours to choose.\n\nPress SPACE to continue editing.";
+            text = "You've placed the intro, product footage and outro. The intro introduces Goke; the outro leaves a memorable sign-off. The lesson is finished. Aim for 2s intro + 8s footage + 2s outro, with no gaps. Add the logo and tagline overlays whenever you like; their timing is yours to choose.\n\nPress SPACE to continue editing.";
         ui.ShowBossDialogue(text, next == Step.Finish ? ui.poseHappy : ui.poseOpenHand, false, false);
     }
 

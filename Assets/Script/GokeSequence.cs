@@ -5,7 +5,7 @@ using UnityEngine;
 public static class GokeSequence
 {
     public const float CardSeconds = 2f;
-    public const float TargetSeconds = 10f;
+    public const float TargetSeconds = 12f;
 
     public struct Result
     {

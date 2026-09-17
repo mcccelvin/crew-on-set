@@ -158,7 +158,8 @@ namespace Player.Interactor
             {
                 if (currentEquipment != null)
                 {
-                    targetText = currentEquipment.EquipmentControls;
+                    if (hotbarUI != null) hotbarUI.UpdateEquipmentGuide(currentEquipment.EquipmentControls);
+                    return;
                 }
             }
 

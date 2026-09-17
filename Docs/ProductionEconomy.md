@@ -33,3 +33,5 @@ Conservative minimum production baskets (excluding equipment already owned):
 - Level 5: car + Rookie + product + wall + three panels + four cards = 8,200; 1,300 remains before carried equipment/savings.
 
 Unnecessary rebuilds, extra actors, premium interiors and discarded takes now use a meaningful fraction of the production budget. No new random grade penalties or automatic grade bonuses for buying expensive actors. The existing Level 1 retry training top-up is retained so beginners can learn; later levels do not receive this top-up. Cheat grants remain development tools and bypass the intended economy.
+
+Goke delivery is now 12 seconds (2s supplied intro, 8s recorded footage, 2s supplied outro). Product-to-backdrop distance is no longer a pre-production failure gate or scoring penalty; red backdrop, product presence and lighting requirements remain.

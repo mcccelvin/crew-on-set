@@ -755,7 +755,7 @@ public class CampaignLevelManager : MonoBehaviour
         var steps = new System.Collections.Generic.List<GuidedPracticeLesson.Step>
         {
             new GuidedPracticeLesson.Step(
-                "Let's build a welcoming coffee scene. Open the Director Tablet, use <color=yellow>CHOOSE SET</color>. Pick Cafe Corner, Living Room, or Plain Backdrop; each option shows its price. Furnished interiors start warm brown. You can still paint the wall and floor with HEX <color=yellow>#80502E</color>. Warm surroundings suggest a comfortable morning; the product must still stand out.",
+                "Let's build a welcoming coffee scene. Open the Director Tablet, use <color=yellow>CHOOSE SET</color>. Preview Cafe Corner, Coffee Interior, or Plain Backdrop for free. Inspect the set in the tablet, then click BUY SET to own it. Click USE SET to place your purchase. Reopen CHOOSE SET to switch between owned sets for free; only one set is active. CANCEL spends nothing. Furnished interiors start warm brown. You can still paint the wall and floor with HEX <color=yellow>#80502E</color>. Warm surroundings suggest a comfortable morning; the product must still stand out.",
                 "CHOOSE SET, then use a warm brown (try #80502E)",
                 () => director != null && director.HasWall() && IsCoffeeBrown(director.currentWallColor)),
             new GuidedPracticeLesson.Step(
@@ -783,15 +783,35 @@ public class CampaignLevelManager : MonoBehaviour
                 "Choose Wave or Action, then [E] close the tablet",
                 () => CoffeeSubjectsReady() && director != null && !director.IsTerminalActive()),
             new GuidedPracticeLesson.Step(
+                "Reuse your Soft Light from delivery. Pick it up with E and select its hotbar slot. Left Click switches power on. The controls on the right show its live values. We will build a window-like Key first; extra lights are not required for this brief.",
+                "Hold your Soft Light and turn it on with Left Click",
+                () => HeldCoffeeLight() != null && HeldCoffeeLight().IsPoweredOn()),
+            new GuidedPracticeLesson.Step(
+                "Hold Q to raise the head or E to lower it. Try +0.50 m extension. Place the source a little above the subjects and use Up/Down to aim it down. Height changes shadow direction; tilt points the beam. Check both the face and coffee instead of copying one height for every scene.",
+                "[Q up / E down] Try +0.50 m height extension",
+                () => HeldCoffeeLight() != null && Mathf.Abs(HeldCoffeeLight().HeightExtension - .5f) <= .08f),
+            new GuidedPracticeLesson.Step(
+                "Scroll changes light output. Start at 75%, then use V/B for at least 50% diffusion. Diffusion spreads the beam and softens shadow edges; it is different from simply making the light dimmer. Preserve a gentle shadow side so the actor and product keep their shape.",
+                "[Scroll] 75% intensity; [V/B] at least 50% diffusion",
+                () => HeldCoffeeLight() != null && Mathf.Abs(HeldCoffeeLight().intensityPercent - 75) <= 3 && HeldCoffeeLight().GetDiffusionPercent() >= 50),
+            new GuidedPracticeLesson.Step(
+                "Z/X changes color temperature: lower Kelvin is warmer, higher is cooler. Try 4400K for a warm-neutral starting point. Check skin and packaging: warm atmosphere should not hide their real colors. You can fine-tune these settings after practice.",
+                "[Z/X] Try 4400K",
+                () => HeldCoffeeLight() != null && Mathf.Abs(HeldCoffeeLight().GetColorTemperature() - 4400) <= 200),
+            new GuidedPracticeLesson.Step(
                 "Try <color=yellow>motivated lighting</color>: let the Soft Light suggest a window beside the scene. Place it in front and to one side, power it on, and aim between the Actor and coffee. Start near 75% output and at least 50% diffusion. The broad highlight should reveal detail while leaving a gentle shadow on the far side.",
-                "Power and aim the Soft Light at the Actor and coffee",
+                "[G] Place the Soft Light; aim at both the Actor and coffee",
                 CoffeeLightReady),
             new GuidedPracticeLesson.Step(
                 "<color=yellow>WIDE</color> establishes where we are. <color=yellow>MEDIUM</color> connects the Actor to the coffee. <color=yellow>CLOSE-UP</color> gives the product emphasis. In this game, even the close shot must keep both subjects fully inside the frame. The camera's focus readout now names your shot size. Move or zoom to change it.",
                 "Plan a Wide, Medium and Close-Up of the same scene",
                 () => true),
             new GuidedPracticeLesson.Step(
-                "Keep the same pose and set positions for all three takes. Stay on the same side of the Actor-product line so they do not swap screen sides: this is <color=yellow>continuity</color>. Record about 6 seconds per shot, holding still with both visible and the Soft Light aimed at them. Use a fresh SD card for each take and collect the recorded cards. Check the WIDE / MEDIUM / CLOSE-UP readout before recording.",
+                "Blocking means planning where an actor moves. In the tablet: select an actor, place them at the start and press B. Move them to the end and press N. K rehearses the walk; J returns to the start. Keep the route clear of furniture. Recording repeats the walk from START automatically. Use the same route and pose for each shot so the cuts match. H clears the walk if you prefer a stationary performance.",
+                "Optional walk: B start, N end, K rehearse, J reset, H clear",
+                () => true),
+            new GuidedPracticeLesson.Step(
+                "Stay on the same side of the Actor-product line so they do not swap screen sides: this is <color=yellow>continuity</color>. Record about 6 seconds per shot, holding still with both visible and the Soft Light aimed at them. Use a fresh SD card for each take and collect the recorded cards. Check the WIDE / MEDIUM / CLOSE-UP readout before recording.",
                 "Record all 3 sizes: same pose/side, both visible, Soft Light on",
                 () => HasCoffeeCoverage(GetCoffeeFootage(false))),
             new GuidedPracticeLesson.Step(
@@ -821,6 +841,13 @@ public class CampaignLevelManager : MonoBehaviour
         return products == 1 && actors.Length == 1 && actors[0].GetPoseName() != "Neutral";
     }
 
+    private static Player.Equipment.FilmLightItem HeldCoffeeLight()
+    {
+        foreach (var light in FindObjectsOfType<Player.Equipment.FilmLightItem>())
+            if (light.EquipmentName == "Level 3 Soft Light" && light.GetComponentInParent<Player.PlayerController.PlayerController>() != null) return light;
+        return null;
+    }
+
     private static bool CoffeeLightReady()
     {
         if (!CoffeeSubjectsReady()) return false;
@@ -833,7 +860,7 @@ public class CampaignLevelManager : MonoBehaviour
         foreach (var renderer in coffee.GetComponentsInChildren<Renderer>()) bounds.Encapsulate(renderer.bounds);
         foreach (var light in FindObjectsOfType<Player.Equipment.FilmLightItem>())
         {
-            if (!light.IsPoweredOn() || light.spotlight == null ||
+            if (!light.IsPoweredOn() || light.GetDiffusionPercent() < 50 || light.spotlight == null ||
                 (light.EquipmentName != "Level 3 Soft Light" && light.forcesHardLight)) continue;
             Vector3 offset = bounds.center - light.spotlight.transform.position;
             if (offset.magnitude <= 12f && Vector3.Dot(light.spotlight.transform.forward, offset.normalized) >= .45f)

@@ -101,7 +101,9 @@ public class TutorialHighlighter : MonoBehaviour
             if (dimmerGroup != null)
             {
                 currentDimmerAlpha = Mathf.MoveTowards(currentDimmerAlpha, 1f, Time.unscaledDeltaTime * 5f);
-                dimmerGroup.alpha = currentDimmerAlpha;
+                var editor=EditorManager.Instance;
+                bool grading=editor!=null&&editor.colorGradingBin!=null&&editor.colorGradingBin.activeInHierarchy;
+                dimmerGroup.alpha = grading ? 0f : currentDimmerAlpha;
             }
 
             TrackTarget();

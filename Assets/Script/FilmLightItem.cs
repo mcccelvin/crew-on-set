@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Player.Manager;
 using TMPro;
 using UnityEngine.UI;
@@ -77,6 +78,44 @@ namespace Player.Equipment
 
         // Safety lock for Shop Prefabs!
         private bool isHeld = false;
+        private StudioLightHaze haze;
+        
+        private float heightExtension = .5f;
+        private Vector3 originalHeadPosition;
+        private Transform originalStand;
+        private Vector3 standScale, standPosition;
+        private float standHeight, standBottom;
+        public float HeightExtension => heightExtension;
+
+        public void AdjustStandHeight(float metres)
+        {
+            if (headPivot == null) return;
+            heightExtension = Mathf.Clamp(heightExtension + metres, 0f, 1.5f);
+            float rootScale = Mathf.Max(.001f, Mathf.Abs(transform.lossyScale.y));
+            // Stored metres describe the deployed stand, not its miniature held model.
+            float deployedScale = isHeld ? rootScale / heldPresentationScale : rootScale;
+            headPivot.localPosition = originalHeadPosition + Vector3.up * (heightExtension / deployedScale);
+            if (originalStand != null && standHeight > .001f)
+            {
+                float extension = heightExtension / deployedScale;
+                float factor = 1f + extension / standHeight;
+                originalStand.localScale = new Vector3(standScale.x, standScale.y * factor, standScale.z);
+                // Preserve the authored stand's bottom, not its mesh pivot.
+                originalStand.localPosition = standPosition;
+                float newBottom = GetStandBounds().min.y;
+                originalStand.position += transform.up * ((standBottom - newBottom) * rootScale);
+            }
+            RefreshPlacementControls();
+        }
+
+        private void RefreshPlacementControls()
+        {
+            EquipmentControls = "[LMB] Power " + (isLightOn ? "ON" : "OFF") +
+                " | [SCROLL] Intensity " + Mathf.RoundToInt(intensityPercent) + "%" +
+                " | [ARROWS] Tilt " + currentTilt.ToString("+0;-0;0") + "°" +
+                " | [Q UP / E DOWN] Height +" + heightExtension.ToString("F2") + " m | [G] Drop";
+            if (HasAdvancedFeatures()) EquipmentControls += " | [Z / K] Temperature " + Mathf.RoundToInt(colorTemperature) + "K | [V / B] Diffusion " + Mathf.RoundToInt(diffusionPercent) + "%";
+        }
 
         protected override void Awake()
         {
@@ -98,7 +137,7 @@ namespace Player.Equipment
         {
             if (isHeld && lightUICanvas != null)
             {
-                lightUICanvas.SetActive(true);
+                lightUICanvas.SetActive(false);
                 UpdateLightUI();
             }
         }
@@ -118,8 +157,8 @@ namespace Player.Equipment
             heldBeamReference = FindHeldBeamReference(holdPoint);
             transform.localScale *= heldPresentationScale;
             UpdateHeldBeamTransform();
-            EnsureAdvancedFeatureUI();
-            if (lightUICanvas != null) lightUICanvas.SetActive(true);
+            RefreshPlacementControls();
+            if (lightUICanvas != null) lightUICanvas.SetActive(false);
             UpdateLightUI();
         }
 
@@ -177,7 +216,7 @@ namespace Player.Equipment
             float bottom = float.PositiveInfinity;
             foreach (Renderer part in GetComponentsInChildren<Renderer>(true))
             {
-                if (part is MeshRenderer && part.enabled) bottom = Mathf.Min(bottom, part.bounds.min.y);
+                if (part is MeshRenderer && part.enabled && part.GetComponent<StudioLightHaze>() == null) bottom = Mathf.Min(bottom, part.bounds.min.y);
             }
             if (!float.IsPositiveInfinity(bottom)) transform.position += Vector3.up * (surface.y + 0.01f - bottom);
         }
@@ -198,13 +237,20 @@ namespace Player.Equipment
         public override void OnHeldUpdate(InputManager input)
         {
             UpdateHeldBeamTransform();
+            if (input != null && input.CanReadGameplayAction() && Keyboard.current != null)
+            {
+                var keys = Keyboard.current;
+                float heightInput = (keys.qKey.isPressed ? 1f : 0f) - (keys.eKey.isPressed ? 1f : 0f);
+                if (heightInput != 0) AdjustStandHeight(heightInput * .6f * Time.deltaTime);
+
+            }
             if (!isLightOn) return;
 
             float scroll = input.EquipmentAdjust;
             if (scroll > 0) AdjustIntensity(5f);
             else if (scroll < 0) AdjustIntensity(-5f);
 
-            if (input.LightTilt != 0f) TiltLight(input.LightTilt * tiltStep);
+            if (input.LightTilt != 0f) TiltLight(-input.LightTilt * tiltStep);
 
             if (HasAdvancedFeatures())
             {
@@ -246,7 +292,7 @@ namespace Player.Equipment
         public void RefreshAdvancedFeatures()
         {
             UpdateLightOutput();
-            EnsureAdvancedFeatureUI();
+            RefreshPlacementControls();
             UpdateLightUI();
         }
 
@@ -257,6 +303,7 @@ namespace Player.Equipment
             Vector3 targetDirection = targetPosition - spotlight.transform.position;
             if (targetDirection.sqrMagnitude <= 0.001f) return;
 
+            currentTilt = Mathf.Asin(Mathf.Clamp(targetDirection.normalized.y, -1f, 1f)) * Mathf.Rad2Deg;
             headPivot.rotation = Quaternion.LookRotation(targetDirection.normalized, Vector3.up) * Quaternion.Inverse(neutralBeamRotation);
             UpdateLightUI();
         }
@@ -283,9 +330,12 @@ namespace Player.Equipment
             if (!isHeld || heldBeamReference == null || headPivot == null) return;
             Vector3 heading = Vector3.ProjectOnPlane(heldBeamReference.forward, Vector3.up);
             if (heading.sqrMagnitude > 0.001f) transform.rotation = Quaternion.LookRotation(heading, Vector3.up);
-            headPivot.rotation = heldBeamReference.rotation * Quaternion.Euler(currentTilt, 0f, 0f) * Quaternion.Inverse(neutralBeamRotation);
+            headPivot.rotation = heldBeamReference.rotation * Quaternion.Euler(-currentTilt, 0f, 0f) * Quaternion.Inverse(neutralBeamRotation);
             // Move the physical panel, not an invisible detached light source.
-            Vector3 panelPosition = heldBeamReference.position + heldBeamReference.rotation * heldPanelPosition;
+            // Preserve the held stand base as the telescopic head rises. Without this
+            // offset the hand-follow code cancels every height adjustment.
+            Vector3 panelPosition = heldBeamReference.position + heldBeamReference.rotation * heldPanelPosition
+                + Vector3.up * (heightExtension * heldPresentationScale);
             transform.position += panelPosition - headPivot.position;
         }
 
@@ -365,7 +415,42 @@ namespace Player.Equipment
             spotlight.type = LightType.Spot;
             spotlight.shadowNearPlane = 0.05f;
             spotlight.shadowNormalBias = 0.1f;
-            EquipmentControls = "[LMB] Power | [Arrows] Tilt | [Scroll] Intensity | [G] Place";
+            originalHeadPosition = headPivot.localPosition;
+            originalStand = transform.Find("Light/Stick");
+            if (originalStand != null)
+            {
+                standScale = originalStand.localScale;
+                standPosition = originalStand.localPosition;
+                Bounds bounds = GetStandBounds();
+                standHeight = bounds.size.y;
+                standBottom = bounds.min.y;
+            }
+            var hazeObject = new GameObject("Studio Haze Beam");
+            hazeObject.layer = spotlight.gameObject.layer;
+            hazeObject.transform.SetParent(transform, false);
+            haze = hazeObject.AddComponent<StudioLightHaze>();
+            haze.Initialize(spotlight);
+            // Apply the starting extension only after the authored head and stand
+            // have been measured. Pickups retain the player's current adjustment.
+            AdjustStandHeight(0f);
+        }
+
+        private Bounds GetStandBounds()
+        {
+            Bounds result = new Bounds(); bool first = true;
+            foreach (Renderer part in originalStand.GetComponentsInChildren<Renderer>())
+            {
+                Bounds local = part.localBounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    Vector3 corner = local.center + Vector3.Scale(local.extents,
+                        new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    Vector3 point = transform.InverseTransformPoint(part.transform.TransformPoint(corner));
+                    if (first) { result = new Bounds(point, Vector3.zero); first = false; }
+                    else result.Encapsulate(point);
+                }
+            }
+            return result;
         }
 
         private void OnDestroy()
@@ -477,7 +562,7 @@ namespace Player.Equipment
             CreateFeatureText("Header", "LEVEL 3 SOFT LIGHT", new Vector2(0f, 50f), 25f, Color.white, TextAlignmentOptions.Center);
             temperatureText = CreateFeatureText("Temperature", "", new Vector2(-205f, 12f), 22f, Color.white, TextAlignmentOptions.Left);
             diffusionText = CreateFeatureText("Diffusion", "", new Vector2(-205f, -22f), 22f, Color.white, TextAlignmentOptions.Left);
-            CreateFeatureText("Controls", "[Z / X] TEMPERATURE     [V / B] DIFFUSION", new Vector2(0f, -58f), 17f, Color.white, TextAlignmentOptions.Center);
+            CreateFeatureText("Controls", "[Z / K] TEMPERATURE     [V / B] DIFFUSION", new Vector2(0f, -58f), 17f, Color.white, TextAlignmentOptions.Center);
         }
 
         private void RemoveAdvancedFeatureBackground()
@@ -534,7 +619,7 @@ namespace Player.Equipment
         // Syncs the numbers and images to your visual HUD
         private void UpdateLightUI()
         {
-            EnsureAdvancedFeatureUI();
+            RefreshPlacementControls();
             if (diffuserRenderer != null && diffuserProperties != null)
             {
                 diffuserRenderer.GetPropertyBlock(diffuserProperties);
@@ -553,7 +638,7 @@ namespace Player.Equipment
             // 2. Tilt Text Update
             if (tiltText != null)
             {
-                tiltText.text = $"{Mathf.RoundToInt(currentTilt)}\u00b0";
+                tiltText.text = currentTilt.ToString("+0;-0;0") + "°";
                 tiltText.enableWordWrapping = false;
                 tiltText.color = isLightOn ? Color.white : new Color(0.5f, 0.5f, 0.5f, 1f);
             }

@@ -5,7 +5,7 @@ using System.Collections.Generic;
 public sealed class StageInterior : MonoBehaviour
 {
     private readonly List<Material> materials = new List<Material>();
-    public static string Title(int index) => index == 1 ? "CAFE CORNER" : index == 2 ? "LIVING ROOM" : "PLAIN BACKDROP";
+    public static string Title(int index) => index == 1 ? "CAFE CORNER" : index == 2 ? "COFFEE INTERIOR" : "PLAIN BACKDROP";
     public static int Cost(int index) => index == 1 ? 2000 : index == 2 ? 2750 : ProductionEconomy.Wall;
 
     public static void Furnish(GameObject wall, int style)
@@ -30,11 +30,20 @@ public sealed class StageInterior : MonoBehaviour
         // Shrink only for unusually small authored stages; leave the front and centre clear for filming.
         float scale = Mathf.Min(1f, width / 5.5f, depth / 3.5f);
         host.transform.localScale *= Mathf.Max(.15f, scale);
+        if (style == 2)
+        {
+            var imported = ProductModelCatalog.CreateFurniture(false, new Vector3(5.5f, 3, 3.5f));
+            if (imported != null)
+            {
+                imported.transform.SetParent(host.transform, false);
+                return;
+            }
+        }
         var wood = interior.Material(new Color(.25f,.12f,.055f));
         var cream = interior.Material(new Color(.85f,.76f,.6f));
         var dark = interior.Material(new Color(.08f,.085f,.09f));
         var green = interior.Material(new Color(.15f,.34f,.17f));
-        if (style == 1)
+        if (style == 1 || style == 2)
         {
             interior.Part("Cafe counter", new Vector3(-1.5f,.48f,1.05f), new Vector3(2f,.96f,.65f), wood);
             interior.Part("Countertop", new Vector3(-1.5f,1f,1.05f), new Vector3(2.12f,.08f,.76f), cream);
@@ -47,19 +56,6 @@ public sealed class StageInterior : MonoBehaviour
                 for(int j=-1;j<=1;j+=2) for(int k=-1;k<=1;k+=2)
                     interior.Part("Stool leg",new Vector3(x+j*.17f,.31f,1.1f+k*.17f),new Vector3(.06f,.62f,.06f),dark);
             }
-        }
-        else
-        {
-            interior.Part("Sofa base",new Vector3(-1.1f,.27f,1),new Vector3(2.35f,.4f,.83f),wood);
-            interior.Part("Sofa cushion",new Vector3(-1.1f,.51f,.92f),new Vector3(2.15f,.18f,.7f),cream);
-            interior.Part("Sofa back",new Vector3(-1.1f,.8f,1.4f),new Vector3(2.35f,.82f,.18f),cream);
-            for(int i=-1;i<=1;i+=2)
-                interior.Part("Sofa arm",new Vector3(-1.1f+i*1.18f,.58f,1),new Vector3(.15f,.55f,.86f),wood);
-            interior.Part("Side table",new Vector3(1.05f,.58f,1.1f),new Vector3(.6f,.08f,.6f),wood);
-            interior.Part("Table pedestal",new Vector3(1.05f,.27f,1.1f),new Vector3(.15f,.54f,.15f),dark);
-            interior.Part("Lamp base",new Vector3(1.05f,.67f,1.1f),new Vector3(.18f,.1f,.18f),dark);
-            interior.Part("Lamp stem",new Vector3(1.05f,.88f,1.1f),new Vector3(.04f,.35f,.04f),dark);
-            interior.Part("Lamp shade",new Vector3(1.05f,1.12f,1.1f),new Vector3(.4f,.3f,.4f),cream);
         }
         interior.Part("Plant pot",new Vector3(2.3f,.2f,1.15f),new Vector3(.4f,.4f,.4f),wood);
         interior.Part("Plant stem",new Vector3(2.3f,.68f,1.15f),new Vector3(.06f,.62f,.06f),wood);

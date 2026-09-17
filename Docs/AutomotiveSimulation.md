@@ -1,8 +1,16 @@
 # Automotive commercial simulation and 3D asset guide
 
+## Contract 3 editing requirement
+
+Camera practice requires opening the viewfinder with LMB first, then five accumulated seconds of actual Ctrl + WASD movement with the viewfinder open before the next Boss dialogue.
+
+The Soft Light starts at 4300K; the player uses Z (lower) / K (higher) to reach 3200K during the placement lesson and immediately starts Boss-guided camera pickup, blank SD-card collection, and Ctrl + WASD rehearsal. Rehearsal requires at least one metre of actual movement with the camera equipped. It runs before the Almanac/contract introduction and marks the camera lesson complete to avoid repeating it at the car setup. Existing careers that skipped this introduction retain the later setup fallback.
+
+Use exactly three separate Level 3 recordings on three SD cards: back, side and overall car views. Budget 450 B-Coins for three blank cards. Record and trim each view to about 7 seconds. The editor supplies a 2-second Terrari intro and 2-second outro. The required continuous sequence is intro + three different recordings + outro, totaling 25 seconds. The grader requires different source filenames, full supplied cards, valid trim ranges, no gaps/overlaps, and Soft Light metadata on the recorded takes. Duplicate or split copies of one recording do not satisfy the contract. Hold Ctrl while moving with the camera for precision movement; the movement itself does not change the score.
+
 ## Current release: beginner curriculum
 
-Level 3 now introduces one LED strip for rim lighting and warm/cool contrast. The other six prototype tools remain reserved. The shop exposes only the strip in Level 3; no dolly or exposure-monitor shortcuts are enabled. The guided boss lesson starts only after the car and backdrop are placed, the tablet/shop are closed, and a deployed Soft Light is on, aimed at the car, with at least 30% output and 50% diffusion. It then covers shop purchase, pickup, power, color, tilt, deployment near the car, and viewfinder inspection. One 900 B-Coin allowance covers the strip. Completion and allowance are saved separately to avoid duplicate funding. Current rendering approximates accent lighting; the lesson does not claim physically accurate reflections.
+Level 3 uses the warm Soft Light and does not introduce the LED strip. Its guided boss lesson starts after the car, backdrop and deployed Soft Light are ready. The lesson teaches Ctrl precision movement with the camera, how to begin and settle a moving shot, the three required SD-card views, and the 25-second editor structure. The Soft Light practice target is 3200K so the lesson target and score agree.
 
 | Level | Equipment taught and used |
 |---|---|
@@ -59,3 +67,15 @@ These are visual references; build your own meshes rather than treating the phot
 8. Review client notes and export the requested format; calculate actual spending and profit.
 
 The next technical priorities should be believable car reflections and exposure monitoring. More decorative props alone will not make lighting decisions realistic. After that, add a controllable dolly, diffusion/bounce behavior, shot-list coverage and rental/crew-time costs. Keep these staged so the player learns one technique at a time.
+
+## Camera precision movement
+Hold either Ctrl key with a camera equipped to move at 1.25 m/s with eased acceleration/deceleration and gentler mouse/stick look. Ctrl overrides sprint. Release movement before Ctrl for a smooth stop. This applies to the single-player Rigidbody controller and respects existing menu/tutorial movement locks; zoom and pedestal recording locks are unchanged. It does not change grading or the first tutorial stationary-shot requirement.
+
+## Panel / Soft Light height and haze
+While holding a FilmLightItem, Page Up / Page Down extends its head by 0-1.5 metres above the original stand height. A telescopic riser connects the head; deployment and re-pickup retain the extension. H toggles a subtle local haze volume, following power, tint and output. The Resources/StudioLightHaze shader ray-marches a cone with camera-depth clipping; it is a visual approximation, not shadowed volumetric scattering. Transparent blockers and occlusion between source and objects are not simulated. The effect does not add grading points. The separate LED-strip prop is unchanged.
+
+The haze is now setup-view only: per-camera density is zero for film-camera hierarchies, recorder cameras, render textures and reflections. Height raises the physical panel and emitter together, including while carried; the held-model anchor no longer cancels extension. Actual light placement still affects illumination; only the haze guide is excluded from footage.
+
+Stand revision: panel and Soft Lights start at +0.50 m extension, applied after measuring the authored Light/Stick hierarchy. Q raises and E lowers the stand within +0.00 to +1.50 m; the right-side HEIGHT readout shows this extension live. Pickup and placement preserve the current adjustment. Height stretches the authored stand about its measured bottom, with no added pole. Setup haze follows light power automatically; there is no H toggle.
+
+Shared light practice now teaches stand height before tilt: Key +0.50m, Fill +0.25m, Back +0.80m. These are demonstration extensions. Goke practice uses increased stage-bounded spacing; its camera station remains between the front-light stations. Key/Fill/Back roles and intensity guidance remain consistent.

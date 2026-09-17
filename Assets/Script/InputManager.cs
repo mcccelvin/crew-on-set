@@ -11,6 +11,8 @@ namespace Player.Manager
         public Vector2 Look { get; private set; }
         public bool IsPointerLook => lookAction != null && lookAction.activeControl != null && lookAction.activeControl.device is UnityEngine.InputSystem.Pointer;
         public bool Run { get; private set; }
+        public bool CameraPrecisionHeld => CanReadGameplayAction() && Keyboard.current != null &&
+            (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed);
         public bool Jump { get; private set; }
         public bool JumpPressedThisFrame { get; private set; }
         public float EquipmentAdjust { get; private set; }

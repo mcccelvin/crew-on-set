@@ -27,6 +27,7 @@ public class ContractUIManager : MonoBehaviour
     private int activeContractLevel = 2;
     private int browsedContractLevel = 2;
     private bool acceptanceBriefPending;
+    private Button briefAcceptButton;
     private string liveTitle="GOKE COLA", liveDescription="", detailedRequirements="";
     private TextMeshProUGUI[] folderTitles;
     private TextMeshProUGUI selectionStatus, briefTitle, briefBody;
@@ -252,23 +253,23 @@ public class ContractUIManager : MonoBehaviour
     {
         SetContractText("GOKE COLA",
             "CLIENT QUALIFICATIONS\n\n" +
-            "STAGE   - Red backdrop; Goke at least 1.5 units from the wall\n" +
+            "STAGE   - Red backdrop; place Goke wherever you choose\n" +
             "CAMERA  - Rule of Thirds; choose any grid intersection\n" +
             "LIGHT   - Key, softer opposite Fill, and Back; choose intensities\n" +
-            "EDIT    - 10 seconds: INTRO 0-2s, your footage 2-8s, OUTRO 8-10s\n" +
+            "EDIT    - 12 seconds: INTRO 0-2s, your footage 2-10s, OUTRO 10-12s\n" +
             "OVERLAYS - Use exactly two; choose their timing and duration\n" +
             "CLIPS   - Intro/outro supplied; effects and color changes optional\n\n" +
             "UPFRONT PAYMENT: 10,500 B-COINS");
 
-        SetQualificationSummary("STAGE: Red backdrop + depth     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 10s with intro/outro + 2 freely timed overlays");
+        SetQualificationSummary("STAGE: Red backdrop + freely placed Goke     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 12s with intro/outro + 2 freely timed overlays");
 
         SetQualificationText("GOKE COLA - SELECTED CONTRACT",
             "STAGE & COMPOSITION",
-            "STAGE\nRed backdrop. Place Goke at least 1.5 units away from the wall for depth. Choose its position and camera angle.\n\n" +
+            "STAGE\nRed backdrop. Place Goke wherever you choose; no minimum wall distance. Choose its position and camera angle.\n\n" +
             "RULE OF THIRDS\nPlace the full can near any of the four grid intersections. Left or right, upper or lower: your choice. Keep it visible and leave room for graphics.",
             "LIGHTING & EDIT",
             "KEY shapes the can. FILL softens shadows from the opposite side. BACK separates it from the backdrop. Power and aim all three; keep Fill softer than Key. Choose intensities, not fixed percentages.\n\n" +
-            "EDIT\n10s: supplied intro 2s + footage 6s + supplied outro 2s, joined without gaps.\n\n" +
+            "EDIT\n12s: supplied intro 2s + footage 8s + supplied outro 2s, joined without gaps.\n\n" +
             "Use two overlays: logo + tagline. Any timing or duration during the ad; together or separately. Choose placement and animation. Effects, music and color changes are optional.");
 
         if (qualificationsPanel != null)
@@ -301,28 +302,28 @@ public class ContractUIManager : MonoBehaviour
             "CLIENT QUALIFICATIONS\n\n" +
             "SET - ADD WALL; choose a dark backdrop and place one orange Terrari\n" +
             "LIGHT   - Use the Level 3 Soft Light for clean reflections\n" +
-            "CAMERA  - Reveal a detail into a low front-quarter hero view\n" +
-            "EDIT    - 8-12 seconds; choose your own motion and finish\n\n" +
+            "CAMERA  - Three recordings on three SD cards: back, side, overall view\n" +
+            "EDIT    - 2s Terrari intro + three different recordings + 2s outro; 25 seconds\n\n" +
             "UPFRONT PAYMENT: 8,500 B-COINS");
 
-        SetQualificationSummary("STAGE: Dark backdrop + orange Terrari     CAMERA: Detail to hero reveal\nLIGHT: Soft, aimed highlights     EDIT: 8-12 seconds; creative finish");
+        SetQualificationSummary("STAGE: Dark backdrop + orange Terrari     CAMERA: 3 takes / 3 SD cards: back, side, overall\nLIGHT: Warm Soft Light, aimed highlights     EDIT: Intro + 3 takes + outro; 25 seconds");
 
         SetQualificationText("TERRARI - SELECTED CONTRACT",
             "AUTOMOTIVE COMPOSITION",
             "Present the vehicle as the only hero subject.\n\n" +
             "- Place exactly one Terrari car.\n" +
-            "- Open with a headlight or wheel detail, then reveal the front and side.\n" +
-            "- Centered and Rule of Thirds framing both work; detail shots may crop the car.\n" +
+            "- Include a back view, a side view and an overall view of the full car.\n" +
+            "- Centered and Rule of Thirds framing both work from any side; keep the overall view uncropped.\n" +
             "- Keep the camera low and avoid obstructing the vehicle.",
             "SOFT REFLECTIVE LIGHTING",
             "Use the Level 3 Soft Light to shape the vehicle.\n\n" +
-            "- Light the side and front of the car.\n" +
+            "- Aim the Soft Light at the visible body for each camera angle.\n" +
             "- Keep highlights clean across the body.\n" +
             "- Use your Soft Light from practice; keep readable paint detail and some shadow for shape.\n" +
             "- Start near 75% output and -10 degrees tilt, then refine.\n" +
             "- Use at least 30% output and 50% diffusion; aim the beam at the car.\n\n" +
             "POST-PRODUCTION\n" +
-            "Use your recorded Level 3 footage with soft lighting in an 8-12 second cut. Slow Pull Out reveals a steady hero take; separate detail and hero takes also work. Cinematic music is suggested. Music, transitions, overlays and intro/outro cards are optional. Use Contrast 1.05-1.45, Saturation 0.95-1.30, Brightness 0.85-1.15.");
+            "Use three separate Level 3 recordings with the warm Soft Light, one per SD card (450 B-Coins for three blank cards). Record the back, side and overall views for about 7 seconds each. Hold Ctrl with WASD and the mouse for smooth camera movement. Ingest all three cards. In the editor, join the supplied 2-second TERRARI INTRO, the three different recordings, and the supplied 2-second TERRARI OUTRO from 0s without gaps or overlaps. The finished commercial must be 25 seconds. Splitting one recording does not count. Put overlays inside title safe without covering the car; upper-left works well. Use Contrast 1.05-1.45, Saturation 0.95-1.30, Brightness 0.85-1.15.");
 
         SetPreviousContractText("GOKE COLA",
             "PREVIOUS CONTRACT\n\n" +
@@ -583,6 +584,9 @@ public class ContractUIManager : MonoBehaviour
         var photoLabel=Label(book.transform,"Product photo label","",new Vector2(-380,-96),new Vector2(230,200),28);
         photoLabel.color=Color.white;
         ArtButton(qualificationsPanel.transform,"Close brief","","close",new Vector2(720,448),new Vector2(85,85),CloseIllustratedBrief);
+        briefAcceptButton=ArtButton(qualificationsPanel.transform,"Accept contract","ACCEPT","blueButton",new Vector2(0,-475),new Vector2(300,70),()=>{
+            if(acceptanceBriefPending)CompleteContractAcceptance();
+        });
         var viewport=CreatePanel("Brief viewport",book.transform,Color.clear);
         SetRect(viewport.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,new Vector2(294,8),new Vector2(530,740));
         viewport.AddComponent<RectMask2D>();
@@ -605,6 +609,7 @@ public class ContractUIManager : MonoBehaviour
     private void RefreshBrief()
     {
         if(briefBody==null)return;
+        if(briefAcceptButton!=null)briefAcceptButton.gameObject.SetActive(acceptanceBriefPending);
         briefTitle.text=liveTitle;
         briefBody.text="<align=center>PROJECT TITLE:\n<size=32>"+liveTitle+"</size>\nCOMMERCIAL PRODUCTION BRIEF</align>\n\n"+liveDescription+"\n\nPRODUCTION REQUIREMENTS\n\n"+detailedRequirements;
         var photo=qualificationsPanel.transform.Find("Qualifications Book/Product photo").GetComponent<Image>();
@@ -678,7 +683,7 @@ public class ContractUIManager : MonoBehaviour
         headingText.fontStyle = FontStyles.Bold;
 
         TextMeshProUGUI contractSummary = CreateText("Contract Summary", mainPanel.transform,
-            "STAGE: Red backdrop + depth     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 10s with intro/outro + 2 freely timed overlays",
+            "STAGE: Red backdrop + freely placed Goke     CAMERA: Any thirds intersection\nLIGHT: Key / Fill / Back     EDIT: 12s with intro/outro + 2 freely timed overlays",
             21, TextAlignmentOptions.Center);
         SetRect(contractSummary.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -115f), new Vector2(1320f, 68f));
         contractSummary.color = new Color(1f, 0.82f, 0.35f);

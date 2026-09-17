@@ -41,6 +41,8 @@ public class TruePixelPlayer : MonoBehaviour
     private Texture2D playbackTexture;
     private DraggableOverlay[] timelineOverlays;
     private bool isPaused = true;
+    private bool isLoading;
+    public bool CanStartPlayback => !isLoading && preloadedFrames.Count > 0;
     public bool isFinished = false;
     public bool HasPlaybackReachedEnd { get; private set; }
 
@@ -112,12 +114,14 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void ShowLoading(string message)
     {
+        isLoading = true;
         if (loadingPanel != null) loadingPanel.SetActive(true);
         if (loadingText != null) loadingText.text = message;
     }
 
     private void HideLoading()
     {
+        isLoading = false;
         if (loadingPanel != null) loadingPanel.SetActive(false);
     }
 
@@ -126,10 +130,18 @@ public class TruePixelPlayer : MonoBehaviour
         StopTape();
         currentSequence.Clear();
         isFadingIn = false;
-        StartCoroutine(LoadSingleTapeCoroutine(tapeFilePath));
+        StartCoroutine(LoadSingleTapeCoroutine(tapeFilePath, false));
     }
 
-    private IEnumerator LoadSingleTapeCoroutine(string tapeFilePath)
+    public void PreviewTape(string tapeFilePath)
+    {
+        StopTape();
+        currentSequence.Clear();
+        isFadingIn = false;
+        StartCoroutine(LoadSingleTapeCoroutine(tapeFilePath, true));
+    }
+
+    private IEnumerator LoadSingleTapeCoroutine(string tapeFilePath, bool startPaused)
     {
         ShowLoading("Loading Tape...");
         yield return null;
@@ -158,7 +170,7 @@ public class TruePixelPlayer : MonoBehaviour
         finally
         {
             HideLoading();
-            isPaused = preloadedFrames.Count == 0;
+            isPaused = startPaused || preloadedFrames.Count == 0;
             isFinished = preloadedFrames.Count == 0;
             currentFrameIndex = 0;
             playbackTimer = 0f;
@@ -244,7 +256,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void TogglePlayPause()
     {
-        if (preloadedFrames.Count == 0) return;
+        if (!CanStartPlayback) return;
 
         if (isFinished)
         {
@@ -288,13 +300,11 @@ public class TruePixelPlayer : MonoBehaviour
     {
         if (computerScreen == null || preloadedFrames.Count == 0 || currentFrameIndex >= preloadedFrames.Count) return;
 
-        if (playbackTexture == null) playbackTexture = new Texture2D(2, 2);
+        if (playbackTexture == null) playbackTexture = new Texture2D(2, 2, TextureFormat.RGB24, false, false);
         playbackTexture.LoadImage(preloadedFrames[currentFrameIndex]);
         computerScreen.texture = playbackTexture;
 
-        Color screenColor = computerScreen.color;
-        screenColor.a = 1f;
-        computerScreen.color = screenColor;
+        computerScreen.color = Color.white;
 
         float newX = 0f;
 
@@ -420,9 +430,10 @@ public class TruePixelPlayer : MonoBehaviour
             int frameSize = reader.ReadInt32();
             byte[] frameBytes = reader.ReadBytes(frameSize);
             if (thumb != null) Destroy(thumb);
-            thumb = new Texture2D(2, 2);
+            thumb = new Texture2D(2, 2, TextureFormat.RGB24, false, false);
             thumb.LoadImage(frameBytes);
             computerScreen.texture = thumb;
+            computerScreen.color = Color.white;
         }
     }
 

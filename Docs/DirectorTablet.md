@@ -1,8 +1,12 @@
 # Director tablet stage and color controls
 
-Default ADD WALL uses `Assets/Studio/wall-both.prefab` in SingleStudio and MultiStudio, including guided wall practice. The prefab retains the previous wall's 0.95 scale and uses a non-convex mesh collider on the screen panels so the stage interior stays open. Selecting a panel selects the complete wall for color changes. Spawn, three-panel collision, open front, color, selection, clear, and practice cleanup passed an isolated Unity Play-mode check.
+Prop selection and right-click deletion resolve the outer Props Rigidbody, including tablet wrappers around prefabs with nested bodies (such as the Goke cube). Deletion clears selection and drag references before destroying the whole prop; selection outlines skip destroyed renderers.
 
-Level 3 uses the same **ADD WALL** action as the other levels. It spawns the supplied wall-both asset for 500 B-Coins. There is no automatic or tablet-generated showroom preset. The player chooses the backdrop color, places the car, and arranges the lighting to follow the contract. **CLEAR STAGE** removes the wall and props. The contract, tutorial, and handbook describe this manual setup.
+Default ADD WALL uses `Assets/Studio/GreenScreenBackdrop.prefab`, derived from `Assets/Product/GreenScreen.fbx`, in SingleStudio and MultiStudio, including guided wall practice. It uses 0.95 scale and mesh colliders so the interior stays open. The existing Screen color-selection path is retained. Placement aligns the screen floor to the stage in either vertical direction.
+
+Both studios use `Assets/Product/STUDIOP.fbx`. Existing station components remain attached to their original objects and are positioned on the model's director, editor, sound and kiosk tables. `Assets/Editor/StudioAssetMigration.cs` owns the migration; original scene backups and inspection reports are in `Logs/StudioRedesign`. The former studio renderers and colliders are disabled while existing gameplay references and lesson markers are retained.
+
+Level 3 uses the same **ADD WALL** action as the other levels. It spawns the supplied green-screen asset for 500 B-Coins. There is no automatic or tablet-generated showroom preset. The player chooses the backdrop color, places the car, and arranges the lighting to follow the contract. **CLEAR STAGE** removes the wall and props. The contract, tutorial, and handbook describe this manual setup.
 
 The RGB readouts beside the sliders are now editable integer fields. Enter **0–255** and press Enter or click elsewhere to apply. Values outside this range are clamped. The HEX field accepts six digits with an optional `#`, plus three-digit shorthand (for example, `#F60`). Invalid input restores the previous valid color. Inputs and sliders synchronize, and live refresh does not overwrite a field while it is being edited. Editing a field suspends the tablet's object movement/selection shortcuts.
 
@@ -20,7 +24,7 @@ Backdrop placement now raises the Screen floor to 0.025 world units above the su
 
 ## Light-strip props
 
-From Level 3 onward, the Elements bank includes **LIGHT STRIP** (900 B-Coins; car hire is 2,500 B-Coins). Click to place, then select and use **T** to reposition, **R** to cycle upright/diagonal/horizontal, and **Q/E** to turn in 15-degree steps. These keys also work during placement. RGB/HEX changes the diffuser color and emission while preserving the base and stem. Right-click removes a strip; CLEAR STAGE clears purchased strips. The strip casts real accent light and does not count as a car, product, or required Level 3 Soft Light.
+The Level 3 Terrari contract does not add a light strip to the Elements bank. It uses the warm Level 3 Soft Light and the existing camera. Hold **Ctrl** while moving the equipped camera with WASD and the mouse for smooth precision movement.
 
 After raising the backdrop floor, each tripod is grounded independently. A downward ray finds the room floor or raised stage beneath that stand, ignoring the backdrop and movable props. The stand is stretched vertically around its top attachment so the feet touch the support while the rail connection stays in place.
 

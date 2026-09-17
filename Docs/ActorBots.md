@@ -12,7 +12,7 @@ Default tiers use ProductionEconomy.ActorBase (750) multiplied by 1, 3 and 6:
 
 The same pricing function drives bank labels and actual charges. All tiers can satisfy the contract; higher prices buy visual polish rather than an automatic grading bonus.
 
-Use POSE ACTOR to cycle the performance, T to reposition and R to turn in 15-degree steps. Bots remain on the placed mark. Action turns their attention toward the campaign product. Starting a camera recording resets the performance clock, so takes begin consistently. Pausing freezes the animation. Materials and animation graphs are released when actors are removed.
+Use POSE ACTOR to cycle the performance, T to reposition and R to turn in 15-degree steps. Bots remain on their mark unless a walk is configured. Select the actor, place START and press B; move with T to END and press N. K rehearses the straight walk, J resets to START, and H clears the route. Recordings restart the route automatically. The actor stops at END or an obstacle; route planning is manual, without automatic pathfinding. Action turns their attention toward the campaign product. Starting a camera recording resets the performance clock, so takes begin consistently. Pausing freezes the animation. Materials and animation graphs are released when actors are removed.
 
 The model is normalized to about 1.85 units tall with its feet on the stage. If the humanoid model cannot load, the existing cube actor remains the fallback. No player controller, navigation or multiplayer components are attached to the NPC.
 

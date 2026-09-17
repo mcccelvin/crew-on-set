@@ -19,6 +19,7 @@ public class ComputerUIManager : MonoBehaviour
     public TextMeshProUGUI playerTitleText;
 
     private string currentlyPlayingFile = "";
+    private bool replayStartedByPlayer;
     private ComputerStation physicalComputer;
 
     private void Awake() { physicalComputer = FindObjectOfType<ComputerStation>(); }
@@ -43,9 +44,10 @@ public class ComputerUIManager : MonoBehaviour
     {
         recordingsGridPanel.SetActive(false);
         videoPlayerPanel.SetActive(true);
+        replayStartedByPlayer = false;
         currentlyPlayingFile = Path.GetFileName(filePath);
         if (playerTitleText != null) playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
-        if (pixelPlayer != null) pixelPlayer.PlayTape(filePath);
+        if (pixelPlayer != null) pixelPlayer.PreviewTape(filePath);
     }
 
     public void DeleteClip(string filePath)
@@ -130,17 +132,22 @@ public class ComputerUIManager : MonoBehaviour
 
     private void Update()
     {
-        // Includes autoplay and a take that finished while the Boss was explaining the task.
+        // Only a replay explicitly started by the player can complete this lesson.
         if (videoPlayerPanel != null && videoPlayerPanel.activeInHierarchy && pixelPlayer != null &&
-            pixelPlayer.HasPlaybackReachedEnd && TutorialManager.Instance != null)
+            replayStartedByPlayer && pixelPlayer.HasPlaybackReachedEnd && TutorialManager.Instance != null)
+        {
+            replayStartedByPlayer = false;
             TutorialManager.Instance.OnVideoPlayed();
+        }
     }
 
     public void OnVideoPlayButtonClicked()
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("PlayVideo")) return;
 
-        if (pixelPlayer != null && pixelPlayer.HasPlaybackReachedEnd && TutorialManager.Instance != null) TutorialManager.Instance.OnVideoPlayed();
+        if (pixelPlayer == null || !pixelPlayer.CanStartPlayback) return;
+        replayStartedByPlayer = true;
+        pixelPlayer.TogglePlayPause();
     }
 
     public void OnBackButtonClicked()
@@ -394,17 +401,9 @@ public class ComputerUIManager : MonoBehaviour
 
         if (wall != null && product != null)
         {
-            float depthDistance = GetDistanceFromObject(product.transform.position, wall);
-            if (depthDistance >= 1.5f)
-            {
-                score += 30f;
-                feedback += "<color=green>+ Great Stage Depth.</color>\n";
-            }
-            else
-            {
-                MarkRequiredSetupMissing();
-                feedback += "<color=yellow>- Pull Goke Cola farther away from the backdrop.</color>\n";
-            }
+            // Product placement is a creative choice, not a minimum backdrop-distance gate.
+            score += 30f;
+            feedback += "<color=green>+ Goke placement selected by the director.</color>\n";
         }
 
         FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();

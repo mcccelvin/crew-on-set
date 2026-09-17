@@ -78,6 +78,58 @@ public class DirectorTerminal : MonoBehaviour
     private Button poseActorButton;
     private DirectorColorFields colorFields;
     private GameObject interiorPicker;
+    private GameObject interiorPreview;
+    private int previewStyle = -1;
+    private readonly TMP_Text[] interiorLabels = new TMP_Text[5];
+    private static bool OwnsInterior(int style) => GameSavePrefs.GetInt("OwnedInterior." + style) == 1;
+
+    private void RefreshInteriorLabels()
+    {
+        for (int i = 0; i < 3; i++)
+            if (interiorLabels[i] != null) interiorLabels[i].text = StageInterior.Title(i) + "\n" + (OwnsInterior(i) ? "OWNED - PREVIEW" : StageInterior.Cost(i) + " B - PREVIEW");
+        if (interiorLabels[3] != null) interiorLabels[3].text = previewStyle < 0 ? "SELECT A SET" : OwnsInterior(previewStyle) ? "USE SET" : "BUY SET";
+    }
+
+    private void BuyOrUseInterior()
+    {
+        if (previewStyle < 0) return;
+        if (OwnsInterior(previewStyle)) { SelectInterior(previewStyle); return; }
+        if (CareerManager.Instance == null || !CareerManager.Instance.TrySpendMoney(StageInterior.Cost(previewStyle))) return;
+        GameSavePrefs.SetInt("OwnedInterior." + previewStyle, 1);
+        GameSavePrefs.Save();
+        GameSaveManager.Instance?.SaveCheckpoint();
+        RefreshInteriorLabels();
+        GameFeedback.Show("SET PURCHASED - " + StageInterior.Title(previewStyle) + "\nChoose USE SET to place it. Owned sets can be reused for free.");
+    }
+
+    private void CancelInteriorPreview()
+    {
+        if(interiorPreview!=null){interiorPreview.SetActive(false);Destroy(interiorPreview);}
+        interiorPreview=null;previewStyle=-1;
+        if (currentWall != null) currentWall.SetActive(true);
+    }
+    private void PreviewInterior(int style)
+    {
+        CancelInteriorPreview();
+        if(wallPrefab==null||spawnPoint==null)return;
+        GameObject placedWall = currentWall;
+        if (placedWall != null) placedWall.SetActive(false);
+        interiorPreview=Instantiate(wallPrefab,spawnPoint.position,spawnPoint.rotation);
+        interiorPreview.name="Unpurchased set preview";
+        // Use the exact purchased-set alignment and paint without registering a purchase.
+        currentWall = interiorPreview;
+        try
+        {
+            RaiseBackdropFloorAboveStage();
+            ApplyColorToWall(style == 0 ? Color.white : new Color(128f/255,80f/255,46f/255));
+        }
+        finally { currentWall = placedWall; }
+        StageInterior.Furnish(interiorPreview,style);
+        foreach(var collider in interiorPreview.GetComponentsInChildren<Collider>())collider.enabled=false;
+        previewStyle=style;
+        RefreshInteriorLabels();
+        GameFeedback.Show("PREVIEW - " + StageInterior.Title(style) + (OwnsInterior(style) ? "\nChoose USE SET. No additional charge." : "\nChoose BUY SET to purchase for " + StageInterior.Cost(style) + " B-Coins."));
+    }
 
     private int displayedRValue = int.MinValue;
     private int displayedGValue = int.MinValue;
@@ -177,10 +229,15 @@ public class DirectorTerminal : MonoBehaviour
         ActorBot actorBot = selectedObject != null ? selectedObject.GetComponent<ActorBot>() : null;
         if (actorBot != null)
         {
+            if(keyboard!=null&&keyboard.bKey.wasPressedThisFrame){actorBot.SetStartMark();GameFeedback.Show("START MARK saved. Move the actor to the end position, then press N.");}
+            if(keyboard!=null&&keyboard.nKey.wasPressedThisFrame){actorBot.SetEndMark();}
+            if(keyboard!=null&&keyboard.kKey.wasPressedThisFrame)actorBot.RehearseWalk();
+            if(keyboard!=null&&keyboard.jKey.wasPressedThisFrame)actorBot.ReturnToStartMark();
+            if(keyboard!=null&&keyboard.hKey.wasPressedThisFrame)actorBot.ClearWalk();
             if (keyboard != null && keyboard.rKey.wasPressedThisFrame) actorBot.transform.Rotate(0, 15, 0, Space.World);
             if (selectionIndicatorText != null)
                 selectionIndicatorText.text = ActorBot.TierName(actorBot.SkillTier) + " ACTOR | " +
-                    actorBot.GetComponent<CubeActor>().GetPoseName() + " | R: turn";
+                    actorBot.GetComponent<CubeActor>().GetPoseName() + " | R: turn\nB: start | N: end | K: walk | J: reset | H: clear walk";
         }
 
         AutomotiveGrip grip = selectedObject != null ? selectedObject.GetComponent<AutomotiveGrip>() : null;
@@ -328,16 +385,25 @@ public class DirectorTerminal : MonoBehaviour
         if (style < 0 || style > 2 || (style != 0 && CampaignProgression.GetCurrentLevel() < 4)) return;
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
 
-        if (currentWall == null && wallPrefab != null && spawnPoint != null)
+        bool reusable = CampaignProgression.GetCurrentLevel() >= 4;
+        if (reusable && !OwnsInterior(style)) return;
+        if ((currentWall == null || reusable) && wallPrefab != null && spawnPoint != null)
         {
-            if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(StageInterior.Cost(style)))
+            if (!reusable && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(StageInterior.Cost(style)))
             {
                 return;
             }
 
+            CancelInteriorPreview();
+            if (currentWall != null)
+            {
+                if (selectedObject == currentWall) selectedObject = null;
+                currentWall.SetActive(false);
+                Destroy(currentWall);
+            }
             currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
             RaiseBackdropFloorAboveStage();
-            if (spawnWallButton != null) spawnWallButton.SetActive(false);
+            if (spawnWallButton != null) spawnWallButton.SetActive(reusable);
 
             currentWallColor = style == 0 ? Color.white : new Color(128f/255,80f/255,46f/255);
             ApplyColorToWall(currentWallColor);
@@ -352,37 +418,42 @@ public class DirectorTerminal : MonoBehaviour
 
     private void ShowInteriorPicker()
     {
-        if (currentWall != null) return;
         if (interiorPicker == null)
         {
             interiorPicker = new GameObject("Choose Stage Interior", typeof(RectTransform), typeof(Image));
             var rect = interiorPicker.GetComponent<RectTransform>();
             rect.SetParent(tabletUI.transform, false);
-            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one;
+            rect.anchorMin = new Vector2(.72f,0); rect.anchorMax = Vector2.one;
             rect.offsetMin = Vector2.zero; rect.offsetMax = Vector2.zero;
-            interiorPicker.GetComponent<Image>().color = new Color(.06f,.07f,.08f,.96f);
-            for (int i=0;i<4;i++)
+            interiorPicker.GetComponent<Image>().color = new Color(.95f,.92f,.84f,1f);
+            for (int i=0;i<5;i++)
             {
                 int choice = i;
                 var option = Instantiate(spawnWallButton, rect);
-                option.name = i == 3 ? "Cancel Interior" : StageInterior.Title(i);
+                option.name = i == 4 ? "Cancel Interior" : i == 3 ? "Buy Interior" : StageInterior.Title(i);
                 option.SetActive(true);
                 var optionRect = option.GetComponent<RectTransform>();
-                optionRect.anchorMin = new Vector2(.18f, .72f-i*.18f);
-                optionRect.anchorMax = new Vector2(.82f, .86f-i*.18f);
+                optionRect.anchorMin = new Vector2(.04f, .78f-i*.16f);
+                optionRect.anchorMax = new Vector2(.96f, .91f-i*.16f);
                 optionRect.offsetMin = Vector2.zero; optionRect.offsetMax = Vector2.zero;
                 var label = option.GetComponentInChildren<TMP_Text>(true);
+                interiorLabels[i] = label;
                 if (label != null)
                 {
-                    label.text = i == 3 ? "CANCEL" : StageInterior.Title(i) + "  -  " + StageInterior.Cost(i) + " B";
+                    label.text = i == 4 ? "CANCEL" : i==3 ? "BUY SET" : "PREVIEW " + StageInterior.Title(i) + " - " + StageInterior.Cost(i) + " B";
                     label.enableAutoSizing = true; label.fontSizeMin = 16; label.fontSizeMax = 30;
                 }
                 var button = option.GetComponent<Button>();
                 button.onClick = new Button.ButtonClickedEvent();
-                button.onClick.AddListener(() => { if (choice == 3) interiorPicker.SetActive(false); else SelectInterior(choice); });
+                button.onClick.AddListener(() => {
+                    if(choice==4){CancelInteriorPreview();interiorPicker.SetActive(false);}
+                    else if(choice==3) BuyOrUseInterior();
+                    else PreviewInterior(choice);
+                });
             }
         }
         interiorPicker.SetActive(true);
+        RefreshInteriorLabels();
         interiorPicker.transform.SetAsLastSibling();
     }
 
@@ -434,7 +505,7 @@ public class DirectorTerminal : MonoBehaviour
         {
             if (!screen.name.StartsWith("Screen", System.StringComparison.OrdinalIgnoreCase)) continue;
             float lift = platform.bounds.max.y + 0.025f - screen.bounds.min.y;
-            if (lift > 0) currentWall.transform.position += Vector3.up * lift;
+            if (Mathf.Abs(lift) > 0.001f) currentWall.transform.position += Vector3.up * lift;
             break;
         }
         GroundBackdropStands();
@@ -580,8 +651,13 @@ public class DirectorTerminal : MonoBehaviour
                 Bounds bounds = new Bounds(selectedObject.transform.position, Vector3.zero);
                 if (selectedRenderers != null && selectedRenderers.Length > 0)
                 {
-                    bounds = selectedRenderers[0].bounds;
-                    foreach (Renderer r in selectedRenderers) bounds.Encapsulate(r.bounds);
+                    bool hasBounds = false;
+                    foreach (Renderer r in selectedRenderers)
+                    {
+                        if (r == null) continue;
+                        if (!hasBounds) { bounds = r.bounds; hasBounds = true; }
+                        else bounds.Encapsulate(r.bounds);
+                    }
                 }
 
                 float pad = 0.1f;
@@ -629,6 +705,19 @@ public class DirectorTerminal : MonoBehaviour
         return topDownCamera != null ? topDownCamera.ScreenPointToRay(mousePosition) : new Ray();
     }
 
+    private static Rigidbody FindPropRoot(Collider collider)
+    {
+        // Imported prefabs can contain their own Rigidbody inside the tablet wrapper.
+        Rigidbody root = null;
+        int propsLayer = LayerMask.NameToLayer("Props");
+        for (Transform t = collider != null ? collider.transform : null; t != null; t = t.parent)
+        {
+            if (t.gameObject.layer != propsLayer) break;
+            if (t.TryGetComponent(out Rigidbody body)) root = body;
+        }
+        return root;
+    }
+
     private void TrySelect3DObject()
     {
         Ray ray = GetMouseRay();
@@ -637,7 +726,7 @@ public class DirectorTerminal : MonoBehaviour
 
         foreach (RaycastHit hit in hits)
         {
-            Rigidbody rb = hit.collider.GetComponentInParent<Rigidbody>();
+            Rigidbody rb = FindPropRoot(hit.collider);
             if (rb != null && rb.gameObject.layer == LayerMask.NameToLayer("Props"))
             {
                 selectedObject = rb.gameObject;
@@ -691,15 +780,23 @@ public class DirectorTerminal : MonoBehaviour
 
         foreach (RaycastHit hit in hits)
         {
-            Rigidbody rb = hit.collider.GetComponentInParent<Rigidbody>();
+            Rigidbody rb = FindPropRoot(hit.collider);
             if (rb != null && rb.gameObject.layer == LayerMask.NameToLayer("Props"))
             {
-                if (selectedObject == rb.gameObject)
+                if (selectedObject != null && selectedObject.transform.IsChildOf(rb.transform))
                 {
                     selectedObject = null;
                     selectedRenderers = null;
                     if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
                     UpdatePoseActorButton();
+                    if (selectionOutline != null) selectionOutline.enabled = false;
+                }
+                if (draggedObject != null && draggedObject.transform.IsChildOf(rb.transform))
+                {
+                    draggedObject = null;
+                    draggedColliders = null;
+                    draggedRenderers = null;
+                    showPropCostWarningOnDrop = false;
                 }
                 Destroy(rb.gameObject);
                 return;
@@ -746,6 +843,8 @@ public class DirectorTerminal : MonoBehaviour
         int productLevel = sourceName.Contains("goke") || sourceName.Contains("coke") ? 2 :
             sourceName.Contains("flower") || sourceName.Contains("floral") ? 1 : 0;
         GameObject visualProp = productLevel > 0 ? ProductModelCatalog.Create(productLevel, prefab3D.name) : null;
+        bool isFlowerTable = sourceName.Contains("cube") && CampaignProgression.GetCurrentLevel() == 1;
+        if (isFlowerTable) visualProp = ProductModelCatalog.CreateFurniture(true, new Vector3(1, 1, 1));
         bool usesImportedProduct = visualProp != null;
         if (usesImportedProduct) visualProp.transform.SetParent(wrapper.transform, false);
         else visualProp = Instantiate(prefab3D, wrapper.transform);
@@ -1173,6 +1272,7 @@ public class DirectorTerminal : MonoBehaviour
 
     public void CloseTerminal()
     {
+        CancelInteriorPreview();
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("DirectorTerminal"))
         {
             return;
@@ -1405,6 +1505,7 @@ public class DirectorTerminal : MonoBehaviour
 
     private void OnDestroy()
     {
+        CancelInteriorPreview();
         if (selectionOutlineMaterial != null) Destroy(selectionOutlineMaterial);
     }
 }

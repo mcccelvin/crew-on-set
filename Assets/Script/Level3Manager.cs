@@ -53,32 +53,45 @@ public class Level3Manager : MonoBehaviour
         return Vector3.Distance(bounds.ClosestPoint(p),p)<3f;
     }
 
-    private void BeginRimLesson()
+    private void BeginCameraMovementLesson(bool afterLightPlacement = false)
     {
         rimLessonStarted=true;
-        var shop=FindObjectOfType<ShopTerminal>();
-        if(shop==null){rimLessonStarted=false;return;}
-        RimEquipmentAvailable = true;
-        ProductionKitShop.Setup(shop);
-        shop.RestoreOwnedEquipment();
-        // Existing careers also receive the new required equipment allowance once.
-        if(PlayerPrefs.GetInt("Level3RimAllowance",0)==0 && CareerManager.Instance!=null)
-        {
-            CareerManager.Instance.AddMoney(ProductionEconomy.LightStrip);
-            PlayerPrefs.SetInt("Level3RimAllowance",1);PlayerPrefs.Save();
-        }
+        var inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
+        Vector3 previousPosition = Vector3.zero;
+        bool trackingMovement = false;
+        float practiceSeconds = 0f;
         practiceLesson=new GuidedPracticeLesson(tutorialManager,new List<GuidedPracticeLesson.Step>
         {
-            new GuidedPracticeLesson.Step("Your car, backdrop and main light are set. Now let's add <color=yellow>rim lighting</color>: a narrow bright edge that separates the car from the dark background. Keep your Soft Light where it is for body detail. The LED strip will add an accent from behind and to the side.","Continue to learn the LED-strip accent",()=>true),
-            new GuidedPracticeLesson.Step("I added <color=yellow>900 B-Coins</color> to cover one LED strip for this lesson. Open the Equipment Shop with E, find the <color=yellow>LIGHT STRIP</color> equipment card, click ADD TO CART and CONFIRM. It lights the scene; its glow alone is not the goal. If you already own one, reuse it.","Add one LIGHT STRIP card to the cart and CONFIRM",()=>LessonStrip()!=null),
-            new GuidedPracticeLesson.Step("Close the shop with E. Find the small packed strip at delivery and pick it up with E. It stays compact while carried and becomes full-size when you deploy it with G.","Close the shop and pick up your LIGHT STRIP",()=>LessonStrip()!=null && LessonStrip().GetComponentInParent<Player.Interactor.EquipmentInteractor>()!=null),
-            new GuidedPracticeLesson.Step("Left-click cycles the strip's power. Click at least once, then leave it on. Low output is often enough for an edge; very strong light can wash out the paint.","Left-click to adjust strip power; leave it ON",()=>LessonStrip()!=null && LessonStrip().PowerChanges>0 && LessonStrip().GetComponentInChildren<StageLightStrip>(true).PowerLabel!="OFF"),
-            new GuidedPracticeLesson.Step("Press C to try a cool cyan accent against the orange car. Press again for warm, then white. This is <color=yellow>warm/cool contrast</color>: different light colors help separate the edge from the main body. Keep whichever looks best.","Press C to try another strip color",()=>LessonStrip()!=null && LessonStrip().ColorChanges>0),
-            new GuidedPracticeLesson.Step("Press R to tilt the bar. A vertical strip follows a tall edge; an angled bar can follow the roof line. Try the tilt control, then choose the angle you want. Q turns the stand.","Press R to try the strip's tilt",()=>LessonStrip()!=null && LessonStrip().TiltChanges>0),
-            new GuidedPracticeLesson.Step("Walk behind and to one side of the car, then press G. The strip deploys ahead of you. Keep it within about 3 metres of the body. Leave the Soft Light in front. You can pick the strip up with E and move it again.","Deploy the strip within 3 metres of the car",StripNearCar),
-            new GuidedPracticeLesson.Step("Now hold your camera and open the viewfinder with left-click. Look for a bright edge along the far side or roof. Keep the strip outside your shot. If the whole car becomes bright, move the strip farther back or lower its power. The body should remain readable under the Soft Light.","Open the camera viewfinder and inspect the car's edge",()=>{foreach(var c in FindObjectsOfType<FilmCameraItem>())foreach(var lens in c.GetComponentsInChildren<Camera>())if(lens.isActiveAndEnabled)return StripNearCar();return false;}),
-            new GuidedPracticeLesson.Step("You have practiced rim lighting and warm/cool contrast. Adjust until the edge separates the car from the background without losing paint detail. This is a creative choice, not a required color or exact brightness. Record your reveal when ready; the contract still checks the same camera and Soft Light skills.","Continue to finish the rim-light lesson",()=>true)
-        },()=>{practiceLesson=null;PlayerPrefs.SetInt("Level3RimLessonComplete",1);PlayerPrefs.Save();ShowLevelTasks();});
+            new GuidedPracticeLesson.Step("Your Soft Light is placed at 3200K for a warm look. Now pick up your camera with <color=yellow>[E]</color> and select its hotbar slot. If it is already in your inventory, just equip it. We'll practice smooth movement before recording.","Pick up and equip your camera",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem),
+            new GuidedPracticeLesson.Step("Next, pick up a blank SD card with <color=yellow>[E]</color>. It stores one recording. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect a blank SD card",()=>inventory != null && inventory.HasBlankSDCard()),
+            new GuidedPracticeLesson.Step("Select your camera and click <color=yellow>Left Mouse Button</color> to open the viewfinder. Look through it to frame the lit subject before practicing movement.","Equip camera and click LMB to open the viewfinder",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive()),
+            new GuidedPracticeLesson.Step("Keep the viewfinder open. Hold <color=yellow>Ctrl</color> while moving with WASD, and turn gently with the mouse. Ctrl slows walking and looking for a steady shot. Practice for five seconds while keeping the lit subject framed; then I'll come back. We are rehearsing, so do not record yet.","Keep viewfinder open; practice Ctrl + WASD for 5 seconds",()=>
+            {
+                var keys = UnityEngine.InputSystem.Keyboard.current;
+                bool moving = inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && keys != null &&
+                    (keys.leftCtrlKey.isPressed || keys.rightCtrlKey.isPressed) &&
+                    (keys.wKey.isPressed || keys.aKey.isPressed || keys.sKey.isPressed || keys.dKey.isPressed);
+                if (!moving) { trackingMovement = false; return practiceSeconds >= 5f; }
+                Vector3 position = inventory.transform.position;
+                if (trackingMovement)
+                {
+                    Vector3 delta = position - previousPosition;
+                    delta.y = 0f;
+                    if (delta.sqrMagnitude > .000001f) practiceSeconds += Time.deltaTime;
+                }
+                previousPosition = position;
+                trackingMovement = true;
+                return practiceSeconds >= 5f;
+            }),
+            new GuidedPracticeLesson.Step("Use three SD cards for three different views: back, side and overall. Record about 7 seconds for each view. For a moving take, hold Ctrl before pressing WASD, keep the car framed, release WASD first, let the camera settle, then stop recording. The editor provides a 2-second Terrari intro and 2-second outro, making a 25-second commercial.","Continue to finish the camera-movement lesson",()=>true)
+        },()=>
+        {
+            practiceLesson=null;
+            PlayerPrefs.SetInt("Level3CameraMovementLessonComplete",1);
+            PlayerPrefs.Save();
+            if (afterLightPlacement) ShowLightingPracticeComplete();
+            else ShowLevelTasks();
+        });
     }
 
     private enum Level3Step
@@ -152,21 +165,12 @@ public class Level3Manager : MonoBehaviour
 
     private void LateUpdate()
     {
-        // Keep previously purchased strips in storage until this production's
-        // stage and main light are ready, including careers that finished the lesson.
-        if(!RimEquipmentAvailable && currentStep==Level3Step.LevelActive &&
-            PlayerPrefs.GetInt("Level3RimLessonComplete",0)==1 && CarStageAndLightReady())
-        {
-            RimEquipmentAvailable=true;
-            var shop=FindObjectOfType<ShopTerminal>();
-            if(shop!=null){ProductionKitShop.Setup(shop);shop.RestoreOwnedEquipment();}
-        }
-        if(currentStep==Level3Step.LevelActive && isLevelStarted && !DevTutorialBypass.Disabled && !rimLessonStarted && PlayerPrefs.GetInt("Level3RimLessonComplete",0)==0 && PlayerPrefs.GetInt("LamborminiContractAccepted",0)==1)
+        if(currentStep==Level3Step.LevelActive && isLevelStarted && !DevTutorialBypass.Disabled && !rimLessonStarted && PlayerPrefs.GetInt("Level3CameraMovementLessonComplete",0)==0 && PlayerPrefs.GetInt("LamborminiContractAccepted",0)==1)
         {
             if(CarStageAndLightReady())
             {
                 if(rimSetupReadySince < 0f) rimSetupReadySince = Time.time;
-                if(Time.time - rimSetupReadySince >= .5f) BeginRimLesson();
+                if(Time.time - rimSetupReadySince >= .5f) BeginCameraMovementLesson();
             }
             else rimSetupReadySince = -1f;
         }
@@ -465,7 +469,7 @@ public class Level3Manager : MonoBehaviour
         bool isNearMarker = GuidedPracticeLesson.AtMarker(softLightPlacementMarker);
         bool hasCorrectIntensity = Mathf.Abs(light.intensityPercent - 75f) <= 2.5f;
         bool hasCorrectTilt = Mathf.Abs(light.GetCurrentTilt() + 10f) <= 2.5f;
-        bool hasCorrectTemperature = Mathf.Abs(light.GetColorTemperature() - 5400f) <= 250f;
+        bool hasCorrectTemperature = Mathf.Abs(light.GetColorTemperature() - 3200f) <= 250f;
         bool hasCorrectDiffusion = Mathf.Abs(light.GetDiffusionPercent() - 75f) <= 2.5f;
 
         if (!light.IsPoweredOn() || !hasCorrectIntensity || !hasCorrectTilt || !hasCorrectTemperature || !hasCorrectDiffusion || !isNearMarker)
@@ -479,7 +483,7 @@ public class Level3Manager : MonoBehaviour
                         : !hasCorrectTilt
                             ? "Set the tilt to -10 degrees with the arrow keys."
                             : !hasCorrectTemperature
-                                ? "Set color temperature to 5400K with Z and X."
+                                ? "Set color temperature to 3200K with Z and K."
                                 : !hasCorrectDiffusion
                                     ? "Set diffusion to 75% with V and B."
                                     : "Stand on the SOFT KEY marker before pressing G.";
@@ -504,7 +508,9 @@ public class Level3Manager : MonoBehaviour
         }
 
         softLightPlacementMarker.gameObject.SetActive(false);
-        StartCoroutine(ObserveLightingSetup());
+        currentStep = Level3Step.ObserveSoftLight;
+        isBriefingOpen = false;
+        BeginCameraMovementLesson(true);
     }
 
     public void OnContractQualificationsOpened()
@@ -561,7 +567,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("For <color=yellow>Level 3</color>, create an orange supercar reveal in a dark showroom. Begin with a headlight detail, then reveal a low front-quarter hero view. Soft highlights describe the curves; the dark background separates the orange paint.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("For <color=yellow>Level 3</color>, create an orange supercar reveal in a dark showroom. Show three views: the back, the side, and an overall view with the full car visible. Soft highlights describe the curves; the dark background separates the orange paint.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -621,7 +627,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Our new tool is the <color=yellow>Level 3 Soft Light</color>. A broad highlight helps show the car's curved body. Output changes how bright it is; color temperature makes it warmer or cooler; diffusion softens shadows in this game. We will practice each control after buying it. Open the equipment shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Our new tool is the <color=yellow>Level 3 Soft Light</color>. We will use it warm at about 3200K so the Terrari paint feels rich. Output changes brightness, color temperature changes warmth, and diffusion softens reflections. While holding the light, hold Q to raise or E to lower its real stand, then G to place it. The setup-only beam guide never appears in recordings. After lighting the car, I will teach you to hold Ctrl for smooth camera movement. Open the equipment shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -789,7 +795,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("<color=yellow>Terrari</color> wants an 8-12 second reveal. Build a dark set and place the orange car. Your Soft Light reveals the body shape. We will add one LED strip behind and to the side to create a bright rim separating the car from the background. I will teach its power, color, tilt and placement after you finish placing the car, backdrop and Soft Light.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("<color=yellow>Terrari</color> wants a 25-second reveal. Record three separate takes on three SD cards: back, side and overall, about 7 seconds each. The editor provides a 2-second Terrari intro and 2-second outro. Build a dark set, place the orange car, and use the warm Soft Light to reveal its shape. Use the Ctrl camera movement we practiced for steady moving shots.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -817,7 +823,7 @@ public class Level3Manager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Use the Soft Light we practiced with and your existing camera. Once the stage and main light are set, we will learn rim lighting with one LED strip from the equipment shop. I will add a separate 900 B-Coin equipment allowance for it. Your main production advance is 8,500 B-Coins. Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Use the warm Soft Light we practiced with and your existing camera. Hold Ctrl for smooth camera movement when filming. Your production advance is 8,500 B-Coins. Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -846,7 +852,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("We've got the job. Place the car with the tablet and try our Soft Light settings: 75%, -10°, 5400K, and 75% diffusion. The brief's on <color=red>[TAB]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("We've got the job. Place the car with the tablet and try our warm Soft Light settings: 75%, -10°, 3200K, and 75% diffusion. The brief's on <color=red>[TAB]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -857,7 +863,7 @@ public class Level3Manager : MonoBehaviour
         string powerTask = practiceLight.IsPoweredOn() ? "<color=#55FF88>ON</color>" : "OFF";
         string intensityTask = Mathf.RoundToInt(practiceLight.intensityPercent) + "% / 75%";
         string tiltTask = Mathf.RoundToInt(practiceLight.GetCurrentTilt()) + " degrees / -10 degrees";
-        string temperatureTask = Mathf.RoundToInt(practiceLight.GetColorTemperature()) + "K / 5400K";
+        string temperatureTask = Mathf.RoundToInt(practiceLight.GetColorTemperature()) + "K / 3200K";
         string diffusionTask = Mathf.RoundToInt(practiceLight.GetDiffusionPercent()) + "% / 75%";
 
         TutorialUIManager.Instance.SetupTasks(new string[]
@@ -874,6 +880,7 @@ public class Level3Manager : MonoBehaviour
         if (light == null || light.spotlight == null || lightingPracticeTarget == null) return;
 
         Light practiceSpotlight = light.spotlight;
+
         practiceSpotlight.range = Mathf.Max(40f, light.advancedRange);
         practiceSpotlight.spotAngle = 38f;
         practiceSpotlight.innerSpotAngle = 30f;
@@ -1074,9 +1081,9 @@ public class Level3Manager : MonoBehaviour
     {
         if(practiceLesson!=null){practiceLesson.ShowCurrentTask();return;}
         if (TutorialUIManager.Instance == null) return;
-        if(!rimLessonStarted && PlayerPrefs.GetInt("Level3RimLessonComplete",0)==0)
+        if(!rimLessonStarted && PlayerPrefs.GetInt("Level3CameraMovementLessonComplete",0)==0)
         {
-            TutorialUIManager.Instance.SetupTasks(new[]{"Place the car and backdrop; close the tablet", "Set down the Soft Light, power it ON and aim at the car", "Use at least 30% output and 50% diffusion; LED lesson follows"});
+            TutorialUIManager.Instance.SetupTasks(new[]{"Place the car and backdrop; close the tablet", "Set down the warm Soft Light, power it ON and aim at the car", "Use at least 30% output and 50% diffusion; Ctrl camera lesson follows"});
             return;
         }
         TutorialUIManager.Instance.HideTasks();
@@ -1288,18 +1295,37 @@ internal sealed class GuidedPracticeLesson
             new Step("Use <color=red>[Scroll]</color> to set brightness to " + intensity + "%. " +
                 (role.Contains("Fill") ? "A weaker fill keeps some shadow so the product still has shape." :
                 role.Contains("Back") ? "This light catches the edge and separates the product from the background." :
-                "This is our main light; it gives the subject its shape."),
+                "This is our main light; it gives the subject its shape. These percentages are practice starting points, not universal settings. Greater distance reduces illumination; judge the subject through the camera."),
                 "[Scroll] Set brightness to " + intensity + "%",
                 () => heldLight() != null && Mathf.Abs(heldLight().intensityPercent - intensity) <= 2.5f)
         };
+        float practiceHeight = role.IndexOf("Back", System.StringComparison.OrdinalIgnoreCase) >= 0 ? .8f :
+            role.IndexOf("Fill", System.StringComparison.OrdinalIgnoreCase) >= 0 ? .25f : .5f;
+        if (advanced) practiceHeight = .75f;
+        float? startingHeight = null;
+        bool adjustedHeight = false;
+        steps.Add(new Step("Lights start at +0.50 m extension. The HEIGHT indicator shows the current extension above the original stand. Hold <color=red>[Q]</color> to raise it or <color=red>[E]</color> to lower it, down to +0.00 m. For this " + role + " demonstration set the extension to +" + practiceHeight.ToString("F2") + " m. " + (advanced ? "Try the height controls yourself; if it already matches, move it away and back. " : "If it already matches, keep it there. ") + "The head and beam move together. A high Key shapes the subject, a lower Fill opens shadows, and a raised Back light outlines the edge.",
+            "[Q up / E down] Set height extension to +" + practiceHeight.ToString("F2") + " m",
+            () =>
+            {
+                var light = heldLight();
+                if (light == null) return false;
+                if (!startingHeight.HasValue) startingHeight = light.HeightExtension;
+                if (Mathf.Abs(light.HeightExtension - startingHeight.Value) > .02f) adjustedHeight = true;
+                return (!advanced || adjustedHeight) && Mathf.Abs(light.HeightExtension - practiceHeight) <= .08f;
+            }));
+        if (!advanced)
+            steps.Add(new Step("After changing height, use <color=red>[Up/Down]</color> to tilt the head. Try -10 degrees. Raising the stand does not automatically aim it. After placement we aim this demonstration light at the practice subject; on your commercial, check the beam yourself.",
+                "[Up/Down] Try a -10 degree tilt",
+                () => heldLight() != null && Mathf.Abs(heldLight().GetCurrentTilt() + 10f) <= 2.5f));
         if (advanced)
         {
-            steps.Add(new Step("Tilt the head down to -10 degrees with <color=red>[Up/Down]</color>. Aim the light onto the subject.",
+            steps.Add(new Step("Negative tilt points down; positive tilt points up. Press Down Arrow to tilt down to -10 degrees with <color=red>[Up/Down]</color>. Aim the light onto the subject.",
                 "[Up/Down] Set tilt to -10 degrees",
                 () => heldLight() != null && Mathf.Abs(heldLight().GetCurrentTilt() + 10f) <= 2.5f));
-            steps.Add(new Step("Now try <color=red>[Z/X]</color>. Set 5400K for a daylight look. Lower numbers look warmer; higher numbers look cooler.",
-                "[Z/X] Set temperature to 5400K",
-                () => heldLight() != null && Mathf.Abs(heldLight().GetColorTemperature() - 5400f) <= 250f));
+            steps.Add(new Step("Hold <color=red>[Z]</color> to lower Kelvin or <color=red>[K]</color> to raise it. Set 3200K for a warm automotive look. Lower numbers look warmer; higher numbers look cooler.",
+                "[Z/K] Set temperature to 3200K",
+                () => heldLight() != null && Mathf.Abs(heldLight().GetColorTemperature() - 3200f) <= 250f));
             steps.Add(new Step("Use <color=red>[V/B]</color> to set diffusion to 75%. Diffusion softens shadow edges and spreads the reflection.",
                 "[V/B] Set diffusion to 75%",
                 () => heldLight() != null && Mathf.Abs(heldLight().GetDiffusionPercent() - 75f) <= 2.5f));

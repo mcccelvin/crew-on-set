@@ -25,6 +25,41 @@ namespace Player.Equipment
         [Tooltip("Drag the icon for a RECORDED SD card here")]
         public Sprite usedCardIcon;
 
+        private bool awaitingShopPickup;
+
+        public void PrepareShopDelivery(Vector3 position)
+        {
+            transform.position = position;
+            // Imported mesh pivots are offset; place the visible card, not its root pivot.
+            Renderer[] renderers = GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                Bounds bounds = renderers[0].bounds;
+                foreach (Renderer renderer in renderers) bounds.Encapsulate(renderer.bounds);
+                transform.position += new Vector3(position.x - bounds.center.x,
+                    position.y - bounds.min.y, position.z - bounds.center.z);
+            }
+            itemRigidbody.velocity = Vector3.zero;
+            itemRigidbody.angularVelocity = Vector3.zero;
+            itemRigidbody.useGravity = false;
+            itemRigidbody.isKinematic = true;
+            awaitingShopPickup = true;
+        }
+
+        public override void OnPickedUp(Transform holdPoint)
+        {
+            if (holdPoint == null) return;
+            if (awaitingShopPickup)
+            {
+                // Let Equipment capture normal physics so dropping the card still works.
+                itemRigidbody.isKinematic = false;
+                itemRigidbody.useGravity = true;
+                itemRigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+                awaitingShopPickup = false;
+            }
+            base.OnPickedUp(holdPoint);
+        }
+
         public override void OnUse(Camera playerCamera)
         {
             if (isUsedCard)

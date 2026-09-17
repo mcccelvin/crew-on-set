@@ -48,6 +48,10 @@ namespace Player.PlayerController
         private const float walkSpeed = 5f;
         private const float runSpeed = 8f;
         private Vector2 currentVelocity;
+        private Player.Interactor.EquipmentInteractor equipmentInteractor;
+        private bool precisionWasActive;
+        private bool CameraPrecisionActive => MovementAllowed && inputManager.CameraPrecisionHeld &&
+            equipmentInteractor != null && equipmentInteractor.GetHeldItem() is Equipment.FilmCameraItem;
 
         private void OnEnable()
         {
@@ -57,6 +61,8 @@ namespace Player.PlayerController
             playerRigidbody = GetComponent<Rigidbody>();
             inputManager = GetComponent<InputManager>();
             bodyCollider = GetComponent<Collider>();
+            equipmentInteractor = GetComponent<Player.Interactor.EquipmentInteractor>();
+            precisionWasActive = false;
 
             if (playerRigidbody != null)
             {
@@ -108,13 +114,18 @@ namespace Player.PlayerController
         {
             bool allowed = MovementAllowed;
             Vector2 currentInput = allowed ? Vector2.ClampMagnitude(inputManager.Move, 1f) : Vector2.zero;
-            float targetSpeed = allowed && inputManager.Run ? runSpeed : walkSpeed;
+            bool precision = CameraPrecisionActive;
+            // Ctrl takes priority over sprint while a camera is equipped.
+            float targetSpeed = precision ? 1.25f : (allowed && inputManager.Run ? runSpeed : walkSpeed);
             Vector3 desiredVelocity = playerRigidbody.rotation * new Vector3(currentInput.x * targetSpeed, 0f, currentInput.y * targetSpeed);
             Vector3 horizontalVelocity = Vector3.ProjectOnPlane(playerRigidbody.velocity, Vector3.up);
             float response = Mathf.Max(0f, AnimBlendSpeed) * (grounded ? 1f : Mathf.Clamp01(AirResistance));
+            bool easing = precision || (precisionWasActive && (horizontalVelocity - desiredVelocity).sqrMagnitude > .0001f);
             horizontalVelocity = allowed
-                ? (grounded ? desiredVelocity : Vector3.Lerp(horizontalVelocity, desiredVelocity, 1f - Mathf.Exp(-response * Time.fixedDeltaTime)))
+                ? (easing ? Vector3.Lerp(horizontalVelocity, desiredVelocity, 1f - Mathf.Exp(-8f * Time.fixedDeltaTime))
+                    : (grounded ? desiredVelocity : Vector3.Lerp(horizontalVelocity, desiredVelocity, 1f - Mathf.Exp(-response * Time.fixedDeltaTime))))
                 : Vector3.zero;
+            precisionWasActive = allowed && easing;
             playerRigidbody.velocity = horizontalVelocity + Vector3.up * playerRigidbody.velocity.y;
             Vector3 localVelocity = Quaternion.Inverse(playerRigidbody.rotation) * horizontalVelocity;
             currentVelocity = new Vector2(localVelocity.x, localVelocity.z);
@@ -133,6 +144,9 @@ namespace Player.PlayerController
             if (inputManager == null || playerRigidbody == null || Camera == null || CameraRoot == null) return;
             if (!canLook || isTutorialRecordingLocked)
             {
+                if (isTutorialRecordingLocked &&
+                    (inputManager.Look.sqrMagnitude > 0.01f || inputManager.Move.sqrMagnitude > 0.01f))
+                    TutorialManager.Instance.WarnTutorialRecordingMovement();
                 lookInitialized = false;
                 yawVelocity = pitchVelocity = 0f;
                 return;
@@ -150,12 +164,14 @@ namespace Player.PlayerController
 
             // Mouse delta already measures movement per frame; only sticks need delta time.
             float lookScale = MouseSensitivity * (inputManager.IsPointerLook ? GameOptions.MouseSensitivityMultiplier / 60f : Time.deltaTime);
+            bool precision = CameraPrecisionActive;
+            if (precision) lookScale *= .35f;
             xRotation -= MouseY * lookScale;
             xRotation = Mathf.Clamp(xRotation, UpperLimit, LowerLimit);
             targetYaw += MouseX * lookScale;
 
-            cameraYaw = Mathf.SmoothDampAngle(cameraYaw, targetYaw, ref yawVelocity, 0.045f);
-            cameraPitch = Mathf.SmoothDampAngle(cameraPitch, xRotation, ref pitchVelocity, 0.045f);
+            cameraYaw = Mathf.SmoothDampAngle(cameraYaw, targetYaw, ref yawVelocity, precision ? .12f : .045f);
+            cameraPitch = Mathf.SmoothDampAngle(cameraPitch, xRotation, ref pitchVelocity, precision ? .12f : .045f);
             // Render the view independently of the body's fixed-step rotation.
             Camera.rotation = Quaternion.Euler(cameraPitch, cameraYaw, 0f);
         }

@@ -78,6 +78,7 @@ public class FinalGradePanelUI : MonoBehaviour
             feedbackDetailedText.text = feedbackDetailedText.text.Replace("<color=white>", "<color=#181818>")
                 .Replace("<color=green>", "<color=#22652D>").Replace("<color=yellow>", "<color=#795012>")
                 .Replace("<color=red>", "<color=#A32323>");
+            feedbackDetailedText.text = $"<b>PRE-PRODUCTION: {grades.preProductionScore:F1}/100\nPRODUCTION: {grades.productionScore:F1}/100\nPOST-PRODUCTION: {grades.postProductionScore:F1}/100</b>\n\n" + feedbackDetailedText.text;
         }
 
         if (feedbackButtonText != null) feedbackButtonText.text = "REVIEW FEEDBACK";

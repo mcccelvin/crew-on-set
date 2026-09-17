@@ -4,9 +4,10 @@ using TMPro;
 
 public class ColorGradingManager : MonoBehaviour
 {
-    public const float BeginnerBrightnessMin = .85f, BeginnerBrightnessMax = 1.15f;
-    public const float BeginnerContrastMin = .80f, BeginnerContrastMax = 1.30f;
-    public const float BeginnerSaturationMin = .70f, BeginnerSaturationMax = 1.30f;
+    // The beginner controls are bounded: every available look earns full credit.
+    public const float BeginnerBrightnessMin = .75f, BeginnerBrightnessMax = 1.25f;
+    public const float BeginnerContrastMin = .75f, BeginnerContrastMax = 1.50f;
+    public const float BeginnerSaturationMin = .65f, BeginnerSaturationMax = 1.40f;
 
     [Header("Video Output")]
     public RawImage computerScreen;
@@ -49,9 +50,9 @@ public class ColorGradingManager : MonoBehaviour
         }
 
         SetupRecommendedGrade();
-        SetupSlider(brightnessSlider, 0.75f, 1.25f, EditorWorkspaceUI.Control);
-        SetupSlider(contrastSlider, 0.75f, 1.5f, EditorWorkspaceUI.Control);
-        SetupSlider(saturationSlider, 0.65f, 1.4f, EditorWorkspaceUI.Control);
+        SetupSlider(brightnessSlider, BeginnerBrightnessMin, BeginnerBrightnessMax, EditorWorkspaceUI.Control);
+        SetupSlider(contrastSlider, BeginnerContrastMin, BeginnerContrastMax, EditorWorkspaceUI.Control);
+        SetupSlider(saturationSlider, BeginnerSaturationMin, BeginnerSaturationMax, EditorWorkspaceUI.Control);
 
         if (brightnessSlider) brightnessSlider.value = 1f;
         if (contrastSlider) contrastSlider.value = 1f;
@@ -106,6 +107,15 @@ public class ColorGradingManager : MonoBehaviour
         contrastTolerance = .25f;
         saturationTolerance = .30f;
 
+        if (currentLevel == 1)
+        {
+            targetBrightness = (BeginnerBrightnessMin + BeginnerBrightnessMax) * .5f;
+            targetContrast = (BeginnerContrastMin + BeginnerContrastMax) * .5f;
+            targetSaturation = (BeginnerSaturationMin + BeginnerSaturationMax) * .5f;
+            brightnessTolerance = (BeginnerBrightnessMax - BeginnerBrightnessMin) * .5f;
+            contrastTolerance = (BeginnerContrastMax - BeginnerContrastMin) * .5f;
+            saturationTolerance = (BeginnerSaturationMax - BeginnerSaturationMin) * .5f;
+        }
         if (currentLevel <= 2) return;
         if (currentLevel == 3)
         {
@@ -230,10 +240,7 @@ public class ColorGradingManager : MonoBehaviour
 
         if (CampaignProgression.GetCurrentLevel() <= 2)
         {
-            string range = index == 0 ? "0.85 - 1.15" : index == 1 ? "0.80 - 1.30" : "0.70 - 1.30";
-            var hint = EditorWorkspaceUI.Label(root, label + " range", "Full marks: " + range,
-                .05f, bottom + .08f, .63f, bottom + .15f);
-            hint.fontSize = 14f;
+            // The authored artwork already labels each slider. Keep its title clear.
         }
 
         var fieldObject = new GameObject(label+" value", typeof(RectTransform),typeof(Image),typeof(TMP_InputField));
@@ -293,7 +300,7 @@ public class ColorGradingManager : MonoBehaviour
 
     private void ReconcileTutorialTarget()
     {
-        if (CampaignProgression.GetCurrentLevel() <= 2) return;
+        if (CampaignProgression.GetCurrentLevel() <= 2) { TrackBeginnerPractice(); return; }
         if (EditorTutorialManager.Instance == null || !EditorTutorialManager.Instance.gameObject.activeInHierarchy || !EditorTutorialManager.Instance.isTaskPhaseActive) return;
 
         if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness && Mathf.Abs(brightnessSlider.value - targetBrightness) <= 0.01f)
@@ -308,6 +315,28 @@ public class ColorGradingManager : MonoBehaviour
         {
             EditorTutorialManager.Instance.OnSaturationAdjusted();
         }
+    }
+
+    private int practiceStep = -1;
+    private float practiceValue, practiceChangedAt;
+    private bool practiceChanged;
+    private void TrackBeginnerPractice()
+    {
+        var lesson=EditorTutorialManager.Instance;
+        if(lesson==null||!lesson.gameObject.activeInHierarchy||!lesson.isTaskPhaseActive){practiceStep=-1;return;}
+        var step=lesson.currentStep;
+        Slider slider=step==EditorTutorialManager.EditorStep.AdjustBrightness?brightnessSlider:
+            step==EditorTutorialManager.EditorStep.AdjustContrast?contrastSlider:
+            step==EditorTutorialManager.EditorStep.AdjustSaturation?saturationSlider:null;
+        if(slider==null){practiceStep=-1;return;}
+        if(practiceStep!=(int)step){practiceStep=(int)step;practiceValue=slider.value;practiceChanged=false;return;}
+        if(!Mathf.Approximately(practiceValue,slider.value))
+        {practiceValue=slider.value;practiceChanged=true;practiceChangedAt=Time.unscaledTime;}
+        if(!practiceChanged||Time.unscaledTime-practiceChangedAt<1.5f)return;
+        practiceChanged=false;
+        if(step==EditorTutorialManager.EditorStep.AdjustBrightness)lesson.OnBrightnessAdjusted();
+        else if(step==EditorTutorialManager.EditorStep.AdjustContrast)lesson.OnContrastAdjusted();
+        else lesson.OnSaturationAdjusted();
     }
 
     private void UpdateReadouts()

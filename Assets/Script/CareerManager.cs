@@ -1,6 +1,7 @@
-﻿using PlayerPrefs = GameSavePrefs;
+using PlayerPrefs = GameSavePrefs;
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
 using UnityEngine.InputSystem;
 
 public class CareerManager : MonoBehaviour
@@ -26,7 +27,7 @@ public class CareerManager : MonoBehaviour
         {
             // We just returned to the Studio! 
             // 1. Give the surviving manager the fresh UI connection from this new scene
-            if (moneyTextHUD != null) Instance.moneyTextHUD = moneyTextHUD;
+            if (moneyTextHUD != null) { Instance.moneyTextHUD = moneyTextHUD; Instance.ConfigureGameplayHUD(); }
 
             // 2. Tell the surviving manager to pull the new money from the hard drive
             Instance.playerMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
@@ -47,17 +48,101 @@ public class CareerManager : MonoBehaviour
         if (Instance == this) UpdateMoneyUI();
     }
 
+    private TextMeshProUGUI dayTextHUD;
+    private Image almanacHudImage;
+    private Material lockedAlmanacMaterial;
+
+    private void RefreshAlmanacAppearance()
+    {
+        if (almanacHudImage == null) return;
+        bool locked = CampaignProgression.GetCurrentLevel() == 1 && PlayerPrefs.GetInt("AlmanacUnlocked", 0) == 0;
+        if (locked && lockedAlmanacMaterial == null)
+        {
+            var shader = Resources.Load<Shader>("AlmanacLocked");
+            if (shader != null) lockedAlmanacMaterial = new Material(shader);
+        }
+        almanacHudImage.material = locked ? lockedAlmanacMaterial : null;
+    }
+
+
+
+
     private void Update()
     {
         if (Instance != this) return;
+        RefreshAlmanacAppearance();
+        if (dayTextHUD != null) dayTextHUD.text = "DAY " + CampaignProgression.GetCurrentLevel();
         if (playerMoney != Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0))) UpdateMoneyUI();
     }
 
     private void Start()
     {
+        ConfigureGameplayHUD();
         // --- FIX: ALWAYS LOAD MONEY FROM THE HARD DRIVE ON START ---
         playerMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
         UpdateMoneyUI();
+    }
+
+    // Keep the book shortcut and balance in the same gameplay canvas so menus hide both.
+    public void ConfigureGameplayHUD()
+    {
+        if (moneyTextHUD == null) return;
+        var coins = moneyTextHUD.transform.parent as RectTransform;
+        if (coins == null || coins.parent == null) return;
+        coins.anchorMin = coins.anchorMax = Vector2.one;
+        coins.pivot = new Vector2(1,1);
+        coins.anchoredPosition = new Vector2(-28,-40);
+        if (coins.parent.Find("Day HUD") == null)
+        {
+            dayTextHUD = Instantiate(moneyTextHUD, coins.parent);
+            dayTextHUD.name = "Day HUD";
+            dayTextHUD.text = "DAY " + CampaignProgression.GetCurrentLevel();
+            dayTextHUD.fontSize = 36;
+            dayTextHUD.fontStyle = FontStyles.Bold;
+            dayTextHUD.alignment = TextAlignmentOptions.Center;
+            dayTextHUD.raycastTarget = false;
+            var dayRect = dayTextHUD.rectTransform;
+            dayRect.anchorMin = dayRect.anchorMax = new Vector2(.5f,1);
+            dayRect.pivot = new Vector2(.5f,1);
+            dayRect.anchoredPosition = new Vector2(0,-32);
+            dayRect.sizeDelta = new Vector2(260,60);
+        }
+        else dayTextHUD = coins.parent.Find("Day HUD").GetComponent<TextMeshProUGUI>();
+        var existingBook = coins.parent.Find("Almanac HUD");
+        if (existingBook != null)
+        {
+            almanacHudImage = existingBook.GetComponent<Image>();
+            RefreshAlmanacAppearance();
+            return;
+        }
+        var root = new GameObject("Almanac HUD", typeof(RectTransform), typeof(Image), typeof(Button));
+        var rect = root.GetComponent<RectTransform>();
+        rect.SetParent(coins.parent, false);
+        rect.anchorMin = rect.anchorMax = new Vector2(0,1);
+        rect.pivot = new Vector2(0,1);
+        rect.anchoredPosition = new Vector2(28,-24);
+        rect.sizeDelta = new Vector2(130,172);
+        ExportUIArt.Apply(root.GetComponent<Image>(), "almanacHud");
+        root.GetComponent<Image>().preserveAspect = true;
+        almanacHudImage = root.GetComponent<Image>();
+        RefreshAlmanacAppearance();
+        root.GetComponent<Button>().onClick.AddListener(() =>
+        {
+            var almanac = FindObjectOfType<AlmanacManager>();
+            if (almanac != null) almanac.ToggleAlmanac();
+        });
+        var caption = Instantiate(moneyTextHUD, rect);
+        caption.name = "Almanac shortcut";
+        caption.text = "P";
+        caption.fontSize = 34;
+        caption.fontStyle = FontStyles.Bold;
+        caption.color = Color.white;
+        caption.alignment = TextAlignmentOptions.Center;
+        caption.raycastTarget = false;
+        caption.rectTransform.anchorMin = caption.rectTransform.anchorMax = new Vector2(.5f,0);
+        caption.rectTransform.pivot = new Vector2(.5f,0);
+        caption.rectTransform.anchoredPosition = new Vector2(0,14);
+        caption.rectTransform.sizeDelta = new Vector2(60,44);
     }
 
     public void AcceptJob(string jobName, int upfrontPayment)
@@ -231,6 +316,7 @@ public class CareerManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (lockedAlmanacMaterial != null) Destroy(lockedAlmanacMaterial);
         if (Instance == this) Instance = null;
     }
 }

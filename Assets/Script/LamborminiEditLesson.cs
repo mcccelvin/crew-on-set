@@ -16,8 +16,8 @@ public sealed class LamborminiEditLesson : MonoBehaviour
     {
         var ui=TutorialUIManager.Instance;ui.HideTasks();
         string text=step==0
-            ? "A detail creates curiosity; a reveal shows what that detail belongs to. For Terrari, open on the headlight or front wheel, then reveal the low front-quarter view. A smooth move helps viewers read the paint and reflections.\n\nBuild an 8-12 second commercial from your recorded car footage. Press SPACE for the editing tip."
-            : "For a simple reveal, record a steady front-quarter hero shot. In BRANDING, choose CAMERA MOTION > SLOW PULL OUT to start closer and reveal the frame. You can also cut a separate detail take into a hero take.\n\nKeep the orange paint readable: Brightness 0.85-1.15, Contrast 1.05-1.45, Saturation 0.95-1.30. Cinematic music is a suggestion; graphics and intro/outro cards are optional. Press SPACE to create your edit.";
+            ? "The back shows rear styling, the side shows the silhouette, and an overall view introduces the full car. Keep the warm light and orange paint consistent across the cuts.\n\nThe clip bank now includes a 2-second TERRARI INTRO and 2-second TERRARI OUTRO. Put the intro first, your three separate SD-card recordings in the middle, and the outro last. The finished commercial must be 25 seconds. Press SPACE for the editing tip."
+            : "Build this order with no gaps or overlaps: TERRARI INTRO 2s, back 7s, side 7s, overall 7s, TERRARI OUTRO 2s. That makes exactly 25 seconds. Each car view must come from a different SD card; copying or splitting one take does not count. Use SLOW PULL OUT on a moving shot if it helps.\n\nPlace a readable overlay in the upper-left title-safe area where it does not cover the car. Keep Brightness 0.85-1.15, Contrast 1.05-1.45, and Saturation 0.95-1.30. Press SPACE to create your edit.";
         ui.ShowBossDialogue(text,ui.poseOpenHand,false,false);
     }
     private void Update()

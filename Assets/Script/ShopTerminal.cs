@@ -38,6 +38,7 @@ public class ShopTerminal : MonoBehaviour
     // Cart Tracking
     private List<ShopItem> shoppingCart = new List<ShopItem>();
     private int currentTotalCost = 0;
+    private int deliveredCardCount;
     private bool cameraSoldOut = false;
     private bool level2CameraSoldOut = false;
     private int level2CameraItemIndex = -1;
@@ -579,6 +580,25 @@ public class ShopTerminal : MonoBehaviour
             {
                 Vector3 randomOffset = new Vector3(Random.Range(-0.2f, 0.2f), 0.5f, Random.Range(-0.2f, 0.2f));
                 GameObject spawnedItem = Instantiate(item.prefabToSpawn, deliveryZone.position + randomOffset, deliveryZone.rotation);
+                if (spawnedItem.TryGetComponent<Player.Equipment.SDCardItem>(out var card))
+                {
+                    // Keep tiny cards visible and separated instead of dropping them among equipment.
+                    int slot = deliveredCardCount++;
+                    Vector3 position = deliveryZone.position + deliveryZone.right * ((slot % 3 - 1) * 0.14f)
+                        + deliveryZone.forward * (((slot / 3) % 3 - 1) * 0.14f);
+                    float surfaceY = position.y;
+                    float closest = float.PositiveInfinity;
+                    foreach (RaycastHit hit in Physics.RaycastAll(position + Vector3.up * 0.5f,
+                        Vector3.down, 2f, ~0, QueryTriggerInteraction.Ignore))
+                    {
+                        if (hit.collider.GetComponentInParent<Player.Equipment.Equipment>() != null) continue;
+                        if (hit.distance >= closest) continue;
+                        closest = hit.distance;
+                        surfaceY = hit.point.y;
+                    }
+                    position.y = surfaceY + 0.01f + (slot / 9) * 0.012f;
+                    card.PrepareShopDelivery(position);
+                }
                 if (spawnedItem.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
                 if (!item.itemName.ToUpperInvariant().Contains("SD"))
                     PlayerPrefs.SetInt("OwnedEquipment." + item.itemName, PlayerPrefs.GetInt("OwnedEquipment." + item.itemName, 0) + 1);
@@ -622,7 +642,7 @@ public class ShopTerminal : MonoBehaviour
         if (equipment != null)
         {
             equipment.EquipmentName = "Level 3 Soft Light";
-            equipment.EquipmentControls = "[LMB] Power  |  [SCROLL] Intensity  |  [UP/DOWN] Tilt  |  [Z/X] Kelvin  |  [V/B] Diffusion  |  [G] Drop";
+            equipment.EquipmentControls = "[LMB] Power  |  [SCROLL] Intensity  |  [UP/DOWN] Tilt  |  [Z/K] Kelvin  |  [V/B] Diffusion  |  [G] Drop";
             equipment.HoldPositionOffset = new Vector3(0.45f, -0.35f, 1.05f);
             equipment.HoldRotationOffset = new Vector3(0f, -90f, 0f);
         }

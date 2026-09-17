@@ -12,6 +12,8 @@ public sealed class GameFeedback : MonoBehaviour
     private readonly List<TMP_Text> balances = new List<TMP_Text>();
     private GameObject panel;
     private TMP_Text message;
+    private TMP_Text heading;
+    private TMP_Text badge;
     private float hideAt;
     private int displayedBalance = -1;
 
@@ -79,8 +81,25 @@ public sealed class GameFeedback : MonoBehaviour
     {
         GameFeedback feedback = EnsureInstance();
         if (feedback.panel == null) feedback.BuildNotification();
-        feedback.message.text = text;
-        feedback.panel.GetComponent<Image>().color = Color.white;
+        string[] lines = (text ?? "").Split(new[] { '\n' }, 2);
+        string title = lines[0];
+        string detail = lines.Length > 1 ? lines[1] : "";
+        const string purchase = "PURCHASE CONFIRMED";
+        if (title.StartsWith(purchase))
+        {
+            detail = "Spent " + title.Substring(purchase.Length).Trim().TrimStart('-') +
+                (detail.Length > 0 ? "  •  " + detail : "");
+            title = purchase;
+        }
+        feedback.heading.text = title;
+        feedback.message.text = detail;
+        feedback.badge.text = error ? "!" : title == purchase ? "B" : "i";
+        feedback.heading.ForceMeshUpdate();
+        float height = Mathf.Clamp(feedback.heading.GetPreferredValues(title, 440, 0).y +
+            feedback.message.GetPreferredValues(detail, 440, 0).y + 38, 100, 240);
+        ((RectTransform)feedback.panel.transform).sizeDelta = new Vector2(560, height);
+        feedback.heading.rectTransform.sizeDelta = new Vector2(440, detail.Length == 0 ? height - 30 : Mathf.Max(30, height * .45f - 10));
+        feedback.message.rectTransform.offsetMax = new Vector2(-20, -height * .45f - 8);
         feedback.panel.SetActive(true);
         feedback.hideAt = Time.unscaledTime + 4f;
         feedback.RefreshBalances();
@@ -104,23 +123,41 @@ public sealed class GameFeedback : MonoBehaviour
         rect.pivot = new Vector2(0.5f, 1f);
         rect.anchoredPosition = new Vector2(0, -110);
         rect.sizeDelta = new Vector2(560, 114);
+        var background = panel.GetComponent<Image>();
+        background.color = new Color32(49, 32, 12, 250); background.raycastTarget = false;
+        var border = panel.AddComponent<Outline>(); border.effectColor = new Color32(20, 13, 6, 255); border.effectDistance = new Vector2(4, -4);
+        var shadow = panel.AddComponent<Shadow>(); shadow.effectColor = new Color(0, 0, 0, .5f); shadow.effectDistance = new Vector2(8, -8);
+        var accent = new GameObject("Gold edge", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+        accent.transform.SetParent(panel.transform, false); accent.color = new Color32(181, 130, 49, 255); accent.raycastTarget = false;
+        accent.rectTransform.anchorMin = Vector2.zero; accent.rectTransform.anchorMax = new Vector2(0, 1);
+        accent.rectTransform.offsetMin = Vector2.zero; accent.rectTransform.offsetMax = new Vector2(6, 0);
+        var key = new GameObject("Notice badge", typeof(RectTransform), typeof(Image)).GetComponent<Image>();
+        key.transform.SetParent(panel.transform, false); key.color = new Color32(121, 78, 28, 255); key.raycastTarget = false;
+        key.rectTransform.anchorMin = key.rectTransform.anchorMax = new Vector2(0, .5f);
+        key.rectTransform.anchoredPosition = new Vector2(52, 0); key.rectTransform.sizeDelta = new Vector2(58, 58);
+        var gold = key.gameObject.AddComponent<Outline>(); gold.effectColor = new Color32(239, 184, 71, 255); gold.effectDistance = new Vector2(2, -2);
         NotificationStyle style = Resources.Load<NotificationStyle>("NotificationStyle");
-        if (style != null) panel.GetComponent<Image>().sprite = style.container;
-        panel.GetComponent<Image>().raycastTarget = false;
-        var textObject = new GameObject("Message", typeof(RectTransform), typeof(TextMeshProUGUI));
-        textObject.transform.SetParent(panel.transform, false);
-        message = textObject.GetComponent<TextMeshProUGUI>();
-        message.rectTransform.anchorMin = Vector2.zero;
-        message.rectTransform.anchorMax = Vector2.one;
-        message.rectTransform.offsetMin = new Vector2(24, 16);
-        message.rectTransform.offsetMax = new Vector2(-24, -16);
-        message.font = style != null && style.font != null ? style.font : TMP_Settings.defaultFontAsset;
-        message.fontSize = 23;
-        message.enableAutoSizing = true;
-        message.fontSizeMin = 18;
-        message.fontSizeMax = 23;
-        message.alignment = TextAlignmentOptions.Center;
-        message.color = Color.white;
-        message.raycastTarget = false;
+        TMP_FontAsset font = style != null && style.font != null ? style.font : TMP_Settings.defaultFontAsset;
+        badge = CreateText("Symbol", key.transform, font, 28, Color.white);
+        badge.alignment = TextAlignmentOptions.Center;
+        badge.rectTransform.anchorMin = Vector2.zero; badge.rectTransform.anchorMax = Vector2.one;
+        badge.rectTransform.offsetMin = badge.rectTransform.offsetMax = Vector2.zero;
+        heading = CreateText("Title", panel.transform, font, 23, new Color32(255, 231, 173, 255));
+        heading.rectTransform.anchorMin = heading.rectTransform.anchorMax = heading.rectTransform.pivot = new Vector2(0, 1);
+        heading.rectTransform.anchoredPosition = new Vector2(100, -15);
+        heading.rectTransform.sizeDelta = new Vector2(440, 34);
+        message = CreateText("Message", panel.transform, font, 18, new Color32(218, 184, 120, 255));
+        message.fontStyle = FontStyles.Normal;
+        message.rectTransform.anchorMin = Vector2.zero; message.rectTransform.anchorMax = Vector2.one;
+        message.rectTransform.offsetMin = new Vector2(100, 14); message.rectTransform.offsetMax = new Vector2(-20, -50);
+    }
+
+    private static TMP_Text CreateText(string name, Transform parent, TMP_FontAsset font, float size, Color color)
+    {
+        var text = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        text.transform.SetParent(parent, false); text.font = font; text.fontSize = size;
+        text.fontStyle = FontStyles.Bold; text.color = color; text.alignment = TextAlignmentOptions.MidlineLeft;
+        text.enableWordWrapping = true; text.raycastTarget = false;
+        return text;
     }
 }

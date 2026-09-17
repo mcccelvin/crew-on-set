@@ -17,3 +17,5 @@ Validation: editor and player script compilation, plus isolated Unity Play Mode 
 
 Actor features extension: after set placement, the lesson explains hire tiers, observes Wave and Action, checks a turn of at least 10 degrees ([R] turns 15), and checks a horizontal move of at least 0.1 units followed by dropping the actor. It then asks for a non-neutral action and closing the tablet, and explains take resets and leaving room for gestures. These steps also run when continuing Level 4 from its studio checkpoint.
 
+
+Beginner refinement: Level 4's soft-light setup now checks held power, +0.50m stand extension, 75% practice intensity with at least 50% diffusion, and 4400K practice temperature separately before the placement/aim step. Practice values are starting points, not additional contract grading requirements. Levels 2-4 also introduce Equipment, category ribbons, Techniques and page navigation in the Almanac. Completion is career-scoped via AlmanacNavigationLesson.<level>.

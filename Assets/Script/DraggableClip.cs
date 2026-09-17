@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public enum ProvidedClipRole { None, GokeIntro, GokeOutro }
+public enum ProvidedClipRole { None, GokeIntro, GokeOutro, TerrariIntro, TerrariOutro }
 
 public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {

@@ -1210,7 +1210,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Our Key does the main work. We'll set it up on the yellow circle first. Keep the other two lights for later.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Our Key does the main work, in front and to one side of the subject. This larger setup leaves more working distance. Walk to the marked Key circle; we will set power, intensity, stand height and tilt before placing it. Keep the other two lights for later.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -1230,7 +1230,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("See the shadow the Key makes? Let's soften it with our second light. The blue circle marks its position.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("See the shadow the Key makes? Let's soften it with our second light. The Fill circle is opposite the Key, still in front of the subject. Keep it weaker so the shadows retain depth.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -1250,7 +1250,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Now let's separate the product from the background. We'll use the last light at the magenta circle.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Now let's separate the product from the background. We'll use the last light behind and to one side of the subject, at the Back circle. Raise it to catch the edge without pointing straight into the camera.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -1604,7 +1604,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Roll a 10-second take with <color=red>[R]</color>, then take the card to the computer. We'll give Graphic 1 the first five seconds and Graphic 2 the last five.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Record at least 8 seconds of product footage with <color=red>[R]</color>, then take the card to the computer. Build a 12-second video: 2-second intro, 8 seconds of your footage, and 2-second outro. Choose the timing of your two graphics.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -1688,12 +1688,12 @@ public class GokeLevelManager : MonoBehaviour
         Vector3 stageRight = Vector3.Cross(Vector3.up, stageFront).normalized;
         float stageFrontExtent = Mathf.Abs(stageFront.x) * stageBounds.extents.x + Mathf.Abs(stageFront.z) * stageBounds.extents.z;
         float stageSideExtent = Mathf.Abs(stageRight.x) * stageBounds.extents.x + Mathf.Abs(stageRight.z) * stageBounds.extents.z;
-        float frontLightDistance = Mathf.Min(4.6f, stageFrontExtent * 0.72f, stageSideExtent * 0.45f);
+        float frontLightDistance = Mathf.Min(5.6f, stageFrontExtent * 0.78f, stageSideExtent * 0.48f);
         float sideLightDistance = frontLightDistance;
-        float backLightDistance = Mathf.Min(2.4f, stageFrontExtent * 0.38f);
+        float backLightDistance = Mathf.Min(3.2f, stageFrontExtent * 0.44f);
         float backLightSideDistance = Mathf.Min(4.2f, stageSideExtent * 0.4f);
 
-        Vector3 targetPosition = stageCenter - stageFront * Mathf.Min(1f, stageFrontExtent * 0.15f);
+        Vector3 targetPosition = stageCenter - stageFront * Mathf.Min(1.8f, stageFrontExtent * 0.24f);
         Vector3 keyPosition = targetPosition + stageFront * frontLightDistance - stageRight * sideLightDistance;
         Vector3 fillPosition = targetPosition + stageFront * frontLightDistance + stageRight * sideLightDistance;
         Vector3 backPosition = targetPosition - stageFront * backLightDistance + stageRight * backLightSideDistance;

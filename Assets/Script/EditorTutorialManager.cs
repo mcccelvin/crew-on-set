@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -307,7 +307,7 @@ public class EditorTutorialManager : MonoBehaviour
         if (currentStep == EditorStep.ExplainBrandingTimeline) { StartCoroutine(TransitionToNextStep(EditorStep.TrimBranding, false)); return; }
         if (currentStep == EditorStep.ExplainPlayerEditTools) { StartCoroutine(TransitionToNextStep(EditorStep.ChooseCameraMotion, false)); return; }
 
-        if (currentStep == EditorStep.ExplainColorGrading) { StartCoroutine(TransitionToNextStep(EditorStep.ClickExport, false)); return; }
+        if (currentStep == EditorStep.ExplainColorGrading) { StartCoroutine(TransitionToNextStep(EditorStep.AdjustBrightness, false)); return; }
         if (currentStep == EditorStep.ExplainColorSettings) { StartCoroutine(TransitionToNextStep(EditorStep.ClickExport, false)); return; }
         if (currentStep == EditorStep.ExplainReviewPanel) { StartCoroutine(TransitionToNextStep(EditorStep.ReviewAndSubmit, false)); return; }
 
@@ -345,7 +345,7 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(rightTrimHandleRect); break;
 
             case EditorStep.TrimTo10Seconds:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Create a precise 10.0-second advertising cut" : "- Make video exactly 10s", isGokeTutorial ? "- Remove dead air, then close the Trim Inspector" : "- Close window when finished" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Create a 12-second advertising cut: intro 2s + footage 8s + outro 2s" : "- Make video exactly 10s", isGokeTutorial ? "- Remove dead air, then close the Trim Inspector" : "- Close window when finished" });
                 break;
 
             case EditorStep.PositionVideoAtStart:
@@ -367,7 +367,7 @@ public class EditorTutorialManager : MonoBehaviour
                 break;
 
             case EditorStep.TrimBranding:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Time the Main Logo from 0.0s to 5.0s" : "- Time ECCENTRIC CENTERPIECE from 0.0s to 5.0s" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Choose when the Goke logo appears in your 12-second cut" : "- Time ECCENTRIC CENTERPIECE from 0.0s to 5.0s" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brandingTimelineClipRect); break;
 
             case EditorStep.PlayBrandingPreview:
@@ -385,7 +385,7 @@ public class EditorTutorialManager : MonoBehaviour
                 break;
 
             case EditorStep.PositionSecondBranding:
-                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Build the end-card beat from 5.0s to 10.0s" : "- Time FLORA & FORM HOME from 5.0s to 10.0s" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Choose when the Goke tagline appears in your 12-second cut" : "- Time FLORA & FORM HOME from 5.0s to 10.0s" });
                 if (timelineScrollRect != null) timelineScrollRect.verticalNormalizedPosition = 0f;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(otherBrandingTrackRect);
                 break;
@@ -411,7 +411,7 @@ public class EditorTutorialManager : MonoBehaviour
                 break;
 
             case EditorStep.PreviewCommercialFinish:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Press Play to preview your finishing choices", "- Watch the complete commercial before color grading" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Play the full commercial: watch framing and readable text", "- Listen to the music and check the opening and ending" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(playButtonRect);
                 break;
 
@@ -420,11 +420,11 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
                 break;
 
-            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- CORRECT EXPOSURE: set Brightness to 0.98" : "- Soft botanical grade: Brightness 1.02 to lift the vase" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
-            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- SHAPE THE IMAGE: set Contrast to 1.20" : "- Set Contrast to 0.96 to soften shadows" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
-            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- PROTECT BRAND COLOR: set Saturation to 1.10" : "- Set Saturation to 0.88 to calm the pink backdrop" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
+            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Brightness; pause to inspect the product" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
+            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Contrast; pause to inspect light and shadow" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
+            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Saturation; pause to inspect the colors" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
 
-            case EditorStep.ClickExport: TutorialUIManager.Instance.SetupTasks(new string[] { "- Choose your own color grade; 1.00 is fine too", "- Stay within the displayed ranges for full color marks", "- Click Export when you are happy" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(exportButtonRect); exported = false; break;
+            case EditorStep.ClickExport: TutorialUIManager.Instance.SetupTasks(new string[] { "- Compare your grade with Before / After", "- Click Export when you are happy with the picture" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(exportButtonRect); exported = false; break;
 
             case EditorStep.ReviewAndSubmit: TutorialUIManager.Instance.SetupTasks(new string[] { "- Watch your final video", "- Click 'Submit Video'" }); submitted = false; break;
         }
@@ -742,14 +742,14 @@ public class EditorTutorialManager : MonoBehaviour
         switch (currentStep)
         {
             case EditorStep.ShowPostProductionTitle: if (postProductionTitleCard != null) StartCoroutine(FadeTitleCardSequence(postProductionTitleCard, isGokeTutorial ? EditorStep.ExplainGokePostProduction : EditorStep.ExplainPostProduction)); else StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokePostProduction : EditorStep.ExplainPostProduction, false)); break;
-            case EditorStep.ExplainGokePostProduction: ui.ShowBossDialogue("We've got Goke's footage. This time we'll give the commercial a beginning, a product moment, and an ending. You'll add a 2-second intro and a 2-second outro inside the 10-second cut, then finish the sound and color.", ui.poseOpenHand, false, false); break;
+            case EditorStep.ExplainGokePostProduction: ui.ShowBossDialogue("We've got Goke's footage. This time we'll give the commercial a beginning, a product moment, and an ending. You'll add a 2-second intro and a 2-second outro inside the 12-second cut, then finish the sound and color.", ui.poseOpenHand, false, false); break;
             case EditorStep.ExplainGokePacing: ui.ShowBossDialogue("An ad hasn't got long to catch someone's eye. Let's start the footage at 0 seconds and keep the opening free of dead time.", ui.posePointUp, false, false); break;
             case EditorStep.ExplainGokeVisualHierarchy: ui.ShowBossDialogue("Remember that open space beside the can? That's where our graphics belong. The product should still catch your eye first.", ui.poseOpenHand, false, false); break;
             case EditorStep.ExplainGokeGraphicTiming: ui.ShowBossDialogue("Give each message a moment to land. Show the Main Logo from 0-5 seconds, then the End Logo from 5-10.", ui.poseHappy, false, false); break;
             case EditorStep.ExplainGokeColorSeparation: ui.ShowBossDialogue("We want that Goke red to stand out without losing the can's detail. We'll balance brightness first, then contrast, then saturation.", ui.poseBoss, false, false); break;
-            case EditorStep.ExplainPostProduction: ui.ShowBossDialogue("Here's our footage. Let's turn it into an ad you'd actually want to watch. We'll build the edit together, one choice at a time.", ui.poseHappy, false, false); break;
-            case EditorStep.DragVideoToTimeline: ui.ShowBossDialogue("Grab your take from the Clips panel and drag it onto the Video Track below. That's where we'll build the edit.", ui.posePoint, false, false); break;
-            case EditorStep.PlayPreview: ui.ShowBossDialogue("Hit <color=red>PLAY</color> and watch the whole take. Get a feel for it before we start cutting.", ui.poseOpenHand, false, false); break;
+            case EditorStep.ExplainPostProduction: ui.ShowBossDialogue("Welcome to the editor! The Clips panel holds your recorded takes. The large Program Monitor shows the picture at the playhead, the red line on the timeline below. The timeline is your commercial arranged from left to right in seconds. We will place a clip, trim it, add messages and sound, then adjust its colors together.", ui.poseHappy, false, false); break;
+            case EditorStep.DragVideoToTimeline: ui.ShowBossDialogue("Drag your take from the Clips panel onto the Video Track below. A clip is one piece of footage. The bank keeps your source; the timeline decides which parts the audience sees and in what order.", ui.posePoint, false, false); break;
+            case EditorStep.PlayPreview: ui.ShowBossDialogue("Press PLAY to watch the timeline. The red playhead moves through time and the Program Monitor shows that moment. Pause stops there; dragging the playback bar lets you inspect a moment. For this first preview, watch the whole take before we trim it.", ui.poseOpenHand, false, false); break;
             case EditorStep.DoubleClickToTrim: ui.ShowBossDialogue("Let's tidy up the take. Double-click the clip on the timeline to open the Trim Inspector.", ui.posePointUp, false, false); break;
 
             case EditorStep.TrimLeftHandle: ui.ShowBossDialogue("Try pulling the left pink handle inward. You're choosing where the shot begins, leaving the unwanted opening frames out.", ui.posePoint, false, false); break;
@@ -768,22 +768,22 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.DragToOtherTimeline: ui.ShowBossDialogue("Now bring in the second graphic. Find another spot inside title-safe where it won't cover the product.", ui.posePointUp, false, false); break;
             case EditorStep.PositionSecondBranding: ui.ShowBossDialogue("Let the second message take over at 5.0 seconds and end at 10.0. We don't want both talking at once.", ui.poseBoss, false, false); break;
 
-            case EditorStep.ExplainPlayerEditTools: ui.ShowBossDialogue("Let's give the edit a little personality. These finishing tools are yours to choose; anything left OFF or on CUT stays as it is.", ui.poseOpenHand, false, false); break;
-            case EditorStep.ChooseCameraMotion: ui.ShowBossDialogue("What suits your shot? Push In draws us closer, Pull Out reveals the set, and Pan moves our attention sideways. Pick one and see how it feels.", ui.posePoint, false, false); break;
-            case EditorStep.ChooseGraphicAnimation: ui.ShowBossDialogue("Choose an entrance for your graphics: Fade, Slide Up, or Pop. Think about how you'd like the client's message to arrive.", ui.posePointUp, false, false); break;
-            case EditorStep.ChooseTransition: ui.ShowBossDialogue("How should the ad open and close? Try Fade, Dip to Black, or Straight Cut, then preview your choice.", ui.poseBoss, false, false); break;
-            case EditorStep.ChooseMusic: ui.ShowBossDialogue("Let's hear it with music. Try Clean, Energy, or Cinematic and choose what fits the client. MUSIC OFF leaves the soundtrack silent.", ui.poseHappy, false, false); break;
-            case EditorStep.PreviewCommercialFinish: ui.ShowBossDialogue("Play it from the top with <color=red>PLAY</color>. Do the picture, graphics, motion, and music feel like they belong together?", ui.poseOpenHand, false, false); break;
+            case EditorStep.ExplainPlayerEditTools: ui.ShowBossDialogue("Now let's shape how the commercial feels. In BRANDING, the four effect buttons control picture movement, text entrances, transitions and music. Click a button to cycle its choices. These choices are used in playback and the final review. We will try each tool, then watch the complete result together.", ui.poseOpenHand, false, false); break;
+            case EditorStep.ChooseCameraMotion: ui.ShowBossDialogue("CAMERA MOTION moves or zooms the recorded picture in the edit; it does not move the studio camera. Slow Push In brings attention toward the product and can make a reveal feel important. Pull Out widens the view. Pan Left or Right shifts attention sideways. These effects crop the image, so keep the whole product safely in frame. Click to try a motion; OFF keeps the original framing.", ui.posePoint, false, false); break;
+            case EditorStep.ChooseGraphicAnimation: ui.ShowBossDialogue("GRAPHIC ANIMATION changes how your advertising line and brand name enter the picture. Fade appears gently and can suit a calm product. Slide Up guides the eye toward the message. Pop feels lively, but can compete with the product. CUT shows the graphic immediately. Choose an entrance, and leave enough time afterward for someone to read the words.", ui.posePointUp, false, false); break;
+            case EditorStep.ChooseTransition: ui.ShowBossDialogue("A TRANSITION controls how pictures begin, end or change. Fade In / Out gives the opening and ending a softer finish. Dip to Black briefly darkens the picture, and can separate clips when there is more than one. Straight Cut changes immediately. Transitions temporarily hide the picture, so check that your short commercial still gives the product and messages enough clear screen time.", ui.poseBoss, false, false); break;
+            case EditorStep.ChooseMusic: ui.ShowBossDialogue("MUSIC gives the same pictures a different mood and sense of pace. Clean is lighter and relaxed, Energy has a faster beat, and Cinematic feels slower and more dramatic. Try a soundtrack that fits the product: a gentle flower commercial may feel different with a fast beat. Music does not change clip duration. OFF removes the added music. Listen during our preview, not just to the option's name.", ui.poseHappy, false, false); break;
+            case EditorStep.PreviewCommercialFinish: ui.ShowBossDialogue("Press PLAY and watch the whole commercial. Notice whether the motion keeps the product in frame, whether each animated message is easy to read, and whether transitions hide anything important. Listen to how the music changes the mood. These choices will carry into the final review. You can revisit the buttons to change your treatment; stronger effects do not automatically make a better advertisement.", ui.poseOpenHand, false, false); break;
 
             case EditorStep.PrepareForColorGrade: ui.ShowBossDialogue("One last look at the layout: clear product, readable graphics, safe edges, and one message at a time. Then open <color=red>COLOR GRADE</color>.", ui.poseHappy, false, false); break;
 
-            case EditorStep.ExplainColorGrading: ui.ShowBossDialogue("Brightness makes the image lighter or darker. Contrast changes the difference between light and shadow. Saturation changes color intensity. Choose your own look! Use Before / After to compare and Reset to return to 1.00. Stay within the generous ranges shown for full color marks.", ui.poseOpenHand, false, false); break;
-            case EditorStep.AdjustBrightness: ui.ShowBossDialogue("Bring Brightness to 1.02 for a small exposure lift. Watch the vase and petals: they should look clearer, without washing out the light areas.", ui.poseHappy, false, false); break;
-            case EditorStep.AdjustContrast: ui.ShowBossDialogue(isGokeTutorial ? "Bring Contrast to 1.20. Watch how the can's light and dark edges become easier to read against all that red." : "Try Contrast at 0.96. Softer contrast opens the dark leaves and avoids harsh, crushed shadows. This is a gentle product look.", ui.poseSmile, false, false); break;
-            case EditorStep.AdjustSaturation: ui.ShowBossDialogue(isGokeTutorial ? "Bring Saturation to 1.10. A little boost gives Goke its red, without letting the color take over the picture." : "Try Saturation at 0.88. The flowers are already colorful, so reduce color intensity slightly instead of boosting it. Use Before / After to compare the pink backdrop, teal vase, and petal detail.", ui.posePoint, false, false); break;
+            case EditorStep.ExplainColorGrading: ui.ShowBossDialogue("Color grading changes the look of your recorded picture. We will try brightness, contrast, then saturation. Watch the product in the Program Monitor. 1.00 means unchanged. Every value available on these controls earns full color credit in this first lesson; the controls limit extreme adjustments. Choose your own look and use Before / After to check that petals, shadows and vase edges stay readable.", ui.poseOpenHand, false, false); break;
+            case EditorStep.AdjustBrightness: ui.ShowBossDialogue("Brightness makes the whole image lighter or darker. Move the slider right to brighten or left to darken, or type a number in its value box. Try a small change and pause to see it. Keep detail in the petals and shadows: avoid washed-out whites or a product that disappears into darkness. You can reset to 1.00 afterward.", ui.poseHappy, false, false); break;
+            case EditorStep.AdjustContrast: ui.ShowBossDialogue("Contrast controls the difference between light and dark areas. More contrast makes the picture punchier, but can hide detail in shadows. Less contrast softens the picture, but too little looks flat. Try this slider and watch the leaves and vase edges. Choose what looks clear to you, then pause to inspect it.", ui.poseSmile, false, false); break;
+            case EditorStep.AdjustSaturation: ui.ShowBossDialogue("Saturation controls color strength. Lower it for softer colors; raise it for richer colors. Too much can make the flowers look fluorescent. It does not fix a dark image: use brightness for that. Try a small change and watch the petals and background, then pause to inspect your result.", ui.posePoint, false, false); break;
 
-            case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("Take a look at the difference. We want visible detail, a clear product, and color that supports it. That's the balance we're after.", ui.poseHappy, false, false); break;
-            case EditorStep.ClickExport: ui.ShowBossDialogue("Adjust the colors however you like, or keep the original look at 1.00. Keep the product readable, without making the image too bright or dark. When you are happy, click <color=red>EXPORT</color>.", ui.poseBoss, false, false); break;
+            case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("You have tried all three controls. Before / After compares your grade with the original picture. Reset returns the controls to 1.00. You can keep the original look if it reads best. Take your time comparing the product, not just the background. When ready, press SPACE for the delivery lesson.", ui.poseHappy, false, false); break;
+            case EditorStep.ClickExport: ui.ShowBossDialogue("Export prepares your timeline as the finished commercial. You can still adjust your grade before clicking it. Check that the product is clear, the text is readable, and the colors suit the brief. Click EXPORT when you are satisfied; the next screen lets you watch it before submitting to the client.", ui.poseBoss, false, false); break;
 
             case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. Watch it through once: check the opening, the product, graphic timing, sound, and color. This is our last look before delivery.", ui.poseOpenHand, false, false); break;
             case EditorStep.ReviewAndSubmit: ui.ShowBossDialogue("Happy it matches the brief? Click <color=red>SUBMIT VIDEO</color> and let's see what the client thinks.", ui.poseHappy, false, false); break;

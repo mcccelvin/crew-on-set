@@ -694,7 +694,7 @@
                 {
                     "name": "positive",
                     "id": "40000000-0000-0000-0000-000000000005",
-                    "path": "<Keyboard>/x",
+                    "path": "<Keyboard>/k",
                     "interactions": "",
                     "processors": "",
                     "groups": "",

@@ -470,7 +470,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.Tablet_MoveCube:
                 cubeMoved = true;
                 if (cubePlacementTarget != null) cubePlacementTarget.SetActive(false);
-                StartCoroutine(TransitionToNextStep(TutorialStep.Tablet_PaintCube, true));
+                StartCoroutine(TransitionToNextStep(TutorialStep.Tablet_SpawnProp, true));
                 break;
             case TutorialStep.Tablet_PaintCube: cubePainted = true; StartCoroutine(TransitionToNextStep(TutorialStep.Tablet_SpawnProp, true)); break;
             case TutorialStep.Tablet_SpawnProp: propSpawned = true; StartCoroutine(TransitionToNextStep(TutorialStep.Tablet_MovePropToCube, true)); break;
@@ -571,7 +571,7 @@ public class TutorialManager : MonoBehaviour
                     cubeMoved = true;
                     cubePlacementTarget.SetActive(false);
                     TutorialUIManager.Instance.MarkTaskComplete(0);
-                    StartCoroutine(TransitionToNextStep(TutorialStep.Tablet_PaintCube, true));
+                    StartCoroutine(TransitionToNextStep(TutorialStep.Tablet_SpawnProp, true));
                 }
             }
         }
@@ -671,12 +671,12 @@ public class TutorialManager : MonoBehaviour
         if (currentStep < TutorialStep.Tablet_MoveCube || currentStep > TutorialStep.TabletPracticeFinished) return true;
         if (prop == tutorialCube && !IsCubeOnMarker(prop))
         {
-            ShowWarning("Move the cube onto the center marker, then click to place it.");
+            ShowWarning("Move the table onto the center marker, then click to place it.");
             return false;
         }
         if (prop == tutorialFlower && (!IsCubeOnMarker(tutorialCube) || !IsFlowerOnCube(prop)))
         {
-            ShowWarning("Place the flower on top of the cube, then click.");
+            ShowWarning("Place the flower on top of the table, then click.");
             return false;
         }
         return true;
@@ -697,7 +697,7 @@ public class TutorialManager : MonoBehaviour
             if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
 
             currentStep = TutorialStep.Tablet_MoveCube;
-            TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Cube over the center marker, then click to place it" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Table over the center marker, then click to place it" });
             TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
             if (cubePlacementTarget != null) cubePlacementTarget.SetActive(true);
             return;
@@ -712,7 +712,7 @@ public class TutorialManager : MonoBehaviour
             if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
 
             currentStep = TutorialStep.Tablet_MovePropToCube;
-            TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Flower over the pink Cube, then click to place it" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Flower onto the wooden Table, then click to place it" });
             TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
             if (cubePlacementTarget != null) cubePlacementTarget.SetActive(true);
         }
@@ -1180,13 +1180,13 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.Tablet_SpawnCube:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Click the 'Cube' button to spawn a table top" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Click the 'Table' button to spawn a table top" });
                 cubeSpawned = false;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(cubePropCardRect);
                 break;
 
             case TutorialStep.Tablet_MoveCube:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Cube over the center marker, then click to place it" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Table over the center marker, then click to place it" });
                 TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
 
                 cubeMoved = false;
@@ -1208,7 +1208,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.Tablet_MovePropToCube:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Flower over the pink Cube, then click to place it" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Move the Flower onto the wooden Table, then click to place it" });
                 flowerOnCube = false;
 
                 TutorialUIManager.Instance.SetDynamicGlow("pointB", true);
@@ -2009,13 +2009,13 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.Tablet_PaintWall: ui.ShowBossDialogue("Let's give the backdrop that pink the client asked for. Set Red to 255, Green to 0, and Blue to 150.", ui.posePointUp, true, false); break;
 
-            case TutorialStep.Tablet_SpawnCube: ui.ShowBossDialogue("The vase needs a little height. Click the <color=red>Cube</color> card to pick up a display stand with your cursor.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.Tablet_MoveCube: ui.ShowBossDialogue("Bring the cube over to the stage marker, then <color=red>[Left Click]</color> to set it down.", ui.posePoint, true, false); break;
+            case TutorialStep.Tablet_SpawnCube: ui.ShowBossDialogue("The vase needs a little height. Click the <color=red>Table</color> card to pick up a display stand with your cursor.", ui.poseOpenHand, true, false); break;
+            case TutorialStep.Tablet_MoveCube: ui.ShowBossDialogue("Bring the table over to the stage marker, then <color=red>[Left Click]</color> to set it down.", ui.posePoint, true, false); break;
 
-            case TutorialStep.Tablet_PaintCube: ui.ShowBossDialogue("Let's match the stand to our backdrop. Select the cube and use the same pink: Red 255, Green 0, Blue 150.", ui.posePointUp, true, false); break;
+            case TutorialStep.Tablet_PaintCube: ui.ShowBossDialogue("Keep the table in its original wood finish. Next, place the vase on top.", ui.posePointUp, true, false); break;
 
             case TutorialStep.Tablet_SpawnProp: ui.ShowBossDialogue("Now for the star of the shot. Click the <color=red>Floral Vase</color> card to pick it up with your cursor.", ui.poseOpenHand, true, false); break;
-            case TutorialStep.Tablet_MovePropToCube: ui.ShowBossDialogue("Move the vase onto the cube, then <color=red>[Left Click]</color> to place it. Leave the whole vase in view.", ui.poseBoss, true, false); break;
+            case TutorialStep.Tablet_MovePropToCube: ui.ShowBossDialogue("Move the vase onto the table, then <color=red>[Left Click]</color> to place it. Leave the whole vase in view.", ui.poseBoss, true, false); break;
 
             case TutorialStep.TabletPracticeFinished: ui.ShowBossDialogue("That's our set! Need to reposition anything? Select it and press <color=red>[T]</color>. When you're done, close the tablet with <color=red>[E]</color> or <color=red>[ESC]</color>.", ui.poseChill, true, true); break;
 
@@ -2276,6 +2276,15 @@ public class TutorialManager : MonoBehaviour
         return isTutorialRecordingLookLocked && currentStep == TutorialStep.RecordVideo && isTaskPhaseActive;
     }
 
+    public void WarnTutorialRecordingMovement()
+    {
+        if (!isActiveAndEnabled || DevTutorialBypass.Disabled || !IsTutorialRecordingLookLocked() ||
+            isTransitioning || PauseManager.isPaused || TutorialUIManager.Instance == null ||
+            TutorialUIManager.Instance.IsBossDialogueOpen() || pInput == null || !pInput.CanReadGameplayAction()) return;
+
+        ShowWarning("Hold steady! Keep the camera in place while recording this first shot. Finish at least 10 seconds, then press [R] to stop before changing your position, aim, zoom, or height.");
+    }
+
     public bool CanCloseUI(string uiType)
     {
         if (!isActiveAndEnabled || DevTutorialBypass.Disabled) return true;
@@ -2288,11 +2297,11 @@ public class TutorialManager : MonoBehaviour
             if (currentStep == TutorialStep.Tablet_AddWall) { ShowWarning("Let's add our backdrop before we leave the tablet."); return false; }
             if (currentStep == TutorialStep.Tablet_SelectWall) { ShowWarning("Click the wall first. We still need to give it some color."); return false; }
             if (currentStep == TutorialStep.Tablet_PaintWall) { ShowWarning("We still need the pink backdrop. Let's finish its color first."); return false; }
-            if (currentStep == TutorialStep.Tablet_SpawnCube) { ShowWarning("Let's add the Cube first; the vase needs a display stand."); return false; }
-            if (currentStep == TutorialStep.Tablet_MoveCube) { ShowWarning("Bring the cube over to the center marker and click to place it."); return false; }
-            if (currentStep == TutorialStep.Tablet_PaintCube) { ShowWarning("Let's give the cube the same pink as our backdrop before we leave."); return false; }
+            if (currentStep == TutorialStep.Tablet_SpawnCube) { ShowWarning("Let's add the Table first; the vase needs a display stand."); return false; }
+            if (currentStep == TutorialStep.Tablet_MoveCube) { ShowWarning("Bring the table over to the center marker and click to place it."); return false; }
+            if (currentStep == TutorialStep.Tablet_PaintCube) { ShowWarning("Keep the table's original wood finish and place the vase on top."); return false; }
             if (currentStep == TutorialStep.Tablet_SpawnProp) { ShowWarning("Our set's missing its product. Choose the Floral Vase card first."); return false; }
-            if (currentStep == TutorialStep.Tablet_MovePropToCube) { ShowWarning("Let's put the vase on top of the cube before we close the tablet."); return false; }
+            if (currentStep == TutorialStep.Tablet_MovePropToCube) { ShowWarning("Let's put the vase on top of the table before we close the tablet."); return false; }
         }
         else if (uiType == "ShopTerminal")
         {
@@ -2357,7 +2366,7 @@ public class TutorialManager : MonoBehaviour
             }
             else
             {
-                ShowWarning("Choose the Cube card first; that's our display stand.");
+                ShowWarning("Choose the Table card first; that's our display stand.");
                 return false;
             }
         }
@@ -2382,6 +2391,8 @@ public class TutorialManager : MonoBehaviour
     public bool CanUseComputerFeature(string featureName)
     {
         if (currentStep >= TutorialStep.OfferLevel1) return true;
+
+        if (!isTaskPhaseActive || isTransitioning) return false;
 
         if (featureName == "RecordingsFolder" && currentStep != TutorialStep.OpenRecordingsFolder)
         {
