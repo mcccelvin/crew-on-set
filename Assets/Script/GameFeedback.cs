@@ -10,10 +10,10 @@ public sealed class GameFeedback : MonoBehaviour
 {
     private static GameFeedback instance;
     private readonly List<TMP_Text> balances = new List<TMP_Text>();
-    private GameObject panel;
-    private TMP_Text message;
-    private TMP_Text heading;
-    private TMP_Text badge;
+    [SerializeField] private GameObject panel;
+    [SerializeField] private TMP_Text message;
+    [SerializeField] private TMP_Text heading;
+    [SerializeField] private TMP_Text badge;
     private float hideAt;
     private int displayedBalance = -1;
 
@@ -33,7 +33,7 @@ public sealed class GameFeedback : MonoBehaviour
     {
         if (instance != null && instance != this) { Destroy(gameObject); return; }
         instance = this;
-        DontDestroyOnLoad(gameObject);
+        // Each scene owns its editable notification canvas.
     }
 
     private void OnEnable()
@@ -104,6 +104,14 @@ public sealed class GameFeedback : MonoBehaviour
         feedback.hideAt = Time.unscaledTime + 4f;
         feedback.RefreshBalances();
     }
+
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        if (panel == null) BuildNotification();
+        panel.SetActive(false);
+    }
+#endif
 
     private void BuildNotification()
     {

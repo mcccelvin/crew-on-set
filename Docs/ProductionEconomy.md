@@ -23,6 +23,7 @@ Existing saved balances are preserved. New purchases and unclaimed contract paym
 | Living room interior | 2,750 |
 | Car | 2,500 |
 | Light strip | 900 |
+| Director Megaphone | 900 |
 | Rookie / Trained / Expert actor | 750 / 2,250 / 4,500 |
 
 Conservative minimum production baskets (excluding equipment already owned):

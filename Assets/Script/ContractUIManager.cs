@@ -27,11 +27,11 @@ public class ContractUIManager : MonoBehaviour
     private int activeContractLevel = 2;
     private int browsedContractLevel = 2;
     private bool acceptanceBriefPending;
-    private Button briefAcceptButton;
+    [SerializeField] private Button briefAcceptButton;
     private string liveTitle="GOKE COLA", liveDescription="", detailedRequirements="";
-    private TextMeshProUGUI[] folderTitles;
-    private TextMeshProUGUI selectionStatus, briefTitle, briefBody;
-    private ScrollRect briefScroll;
+    [SerializeField] private TextMeshProUGUI[] folderTitles;
+    [SerializeField] private TextMeshProUGUI selectionStatus, briefTitle, briefBody;
+    [SerializeField] private ScrollRect briefScroll;
 
     private readonly Color backgroundColor = new Color(0.025f, 0.035f, 0.05f, 0.96f);
     private readonly Color cardColor = new Color(0.55f, 0.35f, 0.13f, 1f);
@@ -49,12 +49,36 @@ public class ContractUIManager : MonoBehaviour
         }
 
         if (contractCanvas == null) BuildRuntimeUI();
+        BindLayoutButtons();
 
         if (acceptButton != null) acceptButton.onClick.AddListener(AcceptContract);
         if (declineButton != null) declineButton.onClick.AddListener(DeclineContract);
 
         if (contractCanvas != null) contractCanvas.SetActive(false);
     }
+
+    private bool layoutButtonsBound;
+    private void BindLayoutButtons()
+    {
+        if (layoutButtonsBound || offerPanel == null || briefBody == null) return;
+        layoutButtonsBound = true;
+        offerPanel.transform.Find("Previous contract").GetComponent<Button>().onClick.AddListener(() => BrowseContract(-1));
+        offerPanel.transform.Find("Next contract").GetComponent<Button>().onClick.AddListener(() => BrowseContract(1));
+        qualificationsPanel.transform.Find("Close brief").GetComponent<Button>().onClick.AddListener(CloseIllustratedBrief);
+        briefAcceptButton.onClick.AddListener(() => { if (acceptanceBriefPending) CompleteContractAcceptance(); });
+    }
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        if (offerPanel == null)
+        {
+            if (contractCanvas == null) BuildRuntimeUI();
+            else { BuildOfferPanel(); BuildQualificationsPanel(); }
+        }
+        contractCanvas.name = "Contract";
+        contractCanvas.SetActive(false);
+    }
+#endif
 
     private void Update()
     {
@@ -547,8 +571,8 @@ public class ContractUIManager : MonoBehaviour
             folderTitles[i]=Label(card.transform,"Contract title","",new Vector2(0,height*.282f),new Vector2(width*.64f,height*.11f),center?30:25,true);
         }
         acceptButton=ArtButton(offerPanel.transform,"Select contract","SELECT","blueButton",new Vector2(0,-425),new Vector2(236,96),null);
-        ArtButton(offerPanel.transform,"Previous contract","","left",new Vector2(-192,-425),new Vector2(63,93),()=>BrowseContract(-1));
-        ArtButton(offerPanel.transform,"Next contract","","right",new Vector2(192,-425),new Vector2(63,93),()=>BrowseContract(1));
+        ArtButton(offerPanel.transform,"Previous contract","","left",new Vector2(-192,-425),new Vector2(63,93),null);
+        ArtButton(offerPanel.transform,"Next contract","","right",new Vector2(192,-425),new Vector2(63,93),null);
         selectionStatus=Label(offerPanel.transform,"Contract status","",new Vector2(0,-320),new Vector2(490,50),22);
         selectionStatus.color=Color.white;
         RefreshFolderSelection();
@@ -583,10 +607,8 @@ public class ContractUIManager : MonoBehaviour
         photo.GetComponent<Image>().preserveAspect=true;
         var photoLabel=Label(book.transform,"Product photo label","",new Vector2(-380,-96),new Vector2(230,200),28);
         photoLabel.color=Color.white;
-        ArtButton(qualificationsPanel.transform,"Close brief","","close",new Vector2(720,448),new Vector2(85,85),CloseIllustratedBrief);
-        briefAcceptButton=ArtButton(qualificationsPanel.transform,"Accept contract","ACCEPT","blueButton",new Vector2(0,-475),new Vector2(300,70),()=>{
-            if(acceptanceBriefPending)CompleteContractAcceptance();
-        });
+        ArtButton(qualificationsPanel.transform,"Close brief","","close",new Vector2(720,448),new Vector2(85,85),null);
+        briefAcceptButton=ArtButton(qualificationsPanel.transform,"Accept contract","ACCEPT","blueButton",new Vector2(0,-475),new Vector2(300,70),null);
         var viewport=CreatePanel("Brief viewport",book.transform,Color.clear);
         SetRect(viewport.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,new Vector2(294,8),new Vector2(530,740));
         viewport.AddComponent<RectMask2D>();

@@ -1,6 +1,5 @@
 using UnityEngine;
 
-// An accent-light prop. It supplements the graded Soft Light and is not a camera subject.
 public sealed class StageLightStrip : MonoBehaviour
 {
     private Transform bar;

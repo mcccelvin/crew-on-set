@@ -37,6 +37,12 @@ public class TutorialUIManager : MonoBehaviour
     [Tooltip("Replaces the harsh yellow emphasis used by older dialogue with the contract-style brown accent.")]
     [SerializeField] private string bossEmphasisColor = "#7A3E12";
 
+    [Header("Boss Dialogue Pages")]
+    [Tooltip("Long lessons are split at readable sentence breaks so the Boss panel never becomes a wall of text.")]
+    [SerializeField] private int dialoguePageMaxVisibleCharacters = 230;
+    [Tooltip("Prevents a page from ending as a tiny fragment when a sentence break is nearby.")]
+    [SerializeField] private int dialoguePageMinimumVisibleCharacters = 90;
+
     [Header("Boss 2D Poses")]
     public Sprite poseBoss;
     public Sprite poseChill;
@@ -81,6 +87,11 @@ public class TutorialUIManager : MonoBehaviour
     private float bossDialogueReadyAt;
     private float currentDialogueRevealDuration;
     private int currentDialogueVisibleCharacters;
+    private string[] bossDialoguePages = new string[0];
+    private int bossDialoguePageIndex;
+    private Sprite bossDialoguePose;
+    private bool bossDialogueShowOk;
+    private bool bossDialogueShowSkip;
     private readonly Dictionary<GameObject, Vector2> taskRowBasePositions = new Dictionary<GameObject, Vector2>();
     private readonly Dictionary<GameObject, Vector3> taskRowBaseScales = new Dictionary<GameObject, Vector3>();
 
@@ -108,11 +119,19 @@ public class TutorialUIManager : MonoBehaviour
     private void Update()
     {
         if (PauseManager.isPaused) return;
-        if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
 
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
-
         Keyboard keyboard = Keyboard.current;
+        bool continuePressed = (keyboard != null && keyboard.spaceKey.wasPressedThisFrame) ||
+                               (inputManager != null && inputManager.Continue);
+        if (continuePressed && HasPendingBossDialoguePage() && CanAdvanceCurrentBossDialoguePage())
+        {
+            AdvanceBossDialoguePage();
+            return;
+        }
+
+        if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
+
         bool contextPanelPressed = (inputManager != null && inputManager.ContextPanel) ||
                                    (keyboard != null && keyboard.tabKey.wasPressedThisFrame);
 
@@ -140,6 +159,25 @@ public class TutorialUIManager : MonoBehaviour
             message = message.Replace("<color=yellow>", "<color=" + bossEmphasisColor + ">");
         }
 
+        bossDialoguePages = SplitDialogueIntoPages(message);
+        bossDialoguePageIndex = 0;
+        bossDialoguePose = pose;
+        bossDialogueShowOk = showOk;
+        bossDialogueShowSkip = showSkip;
+        ShowBossDialoguePage(bossDialoguePages[0]);
+    }
+
+    /// <summary>Returns true when Space should be consumed by the current dialogue before its owner advances.</summary>
+    public bool TryAdvanceBossDialoguePage()
+    {
+        if (!HasPendingBossDialoguePage()) return false;
+        if (!CanAdvanceCurrentBossDialoguePage()) return true;
+        AdvanceBossDialoguePage();
+        return true;
+    }
+
+    private void ShowBossDialoguePage(string message)
+    {
         if (bossRevealCoroutine != null)
         {
             StopCoroutine(bossRevealCoroutine);
@@ -159,12 +197,29 @@ public class TutorialUIManager : MonoBehaviour
             0.65f,
             Mathf.Max(0.65f, maximumDialogueRevealTime));
         bossDialogueReadyAt = Time.unscaledTime + currentDialogueRevealDuration + Mathf.Max(0f, dialogueReadingPause);
-        if (bossPortraitDisplay != null) bossPortraitDisplay.sprite = pose;
-        if (okButton != null) okButton.SetActive(showOk);
-        if (skipButton != null) skipButton.SetActive(showSkip);
+        if (bossPortraitDisplay != null) bossPortraitDisplay.sprite = bossDialoguePose;
+        if (okButton != null) okButton.SetActive(bossDialogueShowOk);
+        if (skipButton != null) skipButton.SetActive(bossDialogueShowSkip);
 
         if (DevTutorialBypass.FastBossDialogue) CompleteBossRevealForTesting();
         else bossRevealCoroutine = StartCoroutine(AnimateBossDialogueIn());
+    }
+
+    private bool HasPendingBossDialoguePage()
+    {
+        return bossDialoguePages != null && bossDialoguePageIndex < bossDialoguePages.Length - 1;
+    }
+
+    private bool CanAdvanceCurrentBossDialoguePage()
+    {
+        return !IsBossDialogueOpen() || Time.unscaledTime >= bossDialogueReadyAt;
+    }
+
+    private void AdvanceBossDialoguePage()
+    {
+        if (!HasPendingBossDialoguePage()) return;
+        bossDialoguePageIndex++;
+        ShowBossDialoguePage(bossDialoguePages[bossDialoguePageIndex]);
     }
 
     public void CompleteBossRevealForTesting()
@@ -186,6 +241,8 @@ public class TutorialUIManager : MonoBehaviour
 
         ResetBossAnimationState();
         bossDialogueReadyAt = 0f;
+        bossDialoguePages = new string[0];
+        bossDialoguePageIndex = 0;
         if (bossHUDCanvas != null) bossHUDCanvas.SetActive(false);
     }
 
@@ -196,7 +253,9 @@ public class TutorialUIManager : MonoBehaviour
 
     public bool CanAdvanceBossDialogue()
     {
-        return !IsBossDialogueOpen() || Time.unscaledTime >= bossDialogueReadyAt;
+        // Owners must wait while this shared UI still has another page to show.
+        // TutorialUIManager.Update consumes Space and advances that page first.
+        return !HasPendingBossDialoguePage() && CanAdvanceCurrentBossDialoguePage();
     }
 
     public float GetBossDialogueReadyDelay()
@@ -465,6 +524,82 @@ public class TutorialUIManager : MonoBehaviour
             bossText.maxVisibleCharacters = int.MaxValue;
         }
         if (bossPortraitDisplay != null) bossPortraitDisplay.rectTransform.localScale = bossPortraitBaseScale;
+    }
+
+    private string[] SplitDialogueIntoPages(string message)
+    {
+        if (string.IsNullOrEmpty(message) || CountVisibleCharacters(message) <= Mathf.Max(1, dialoguePageMaxVisibleCharacters))
+            return new[] { message ?? string.Empty };
+
+        List<string> pages = new List<string>();
+        int start = 0;
+        int maxCharacters = Mathf.Max(120, dialoguePageMaxVisibleCharacters);
+        int minimumCharacters = Mathf.Clamp(dialoguePageMinimumVisibleCharacters, 0, maxCharacters - 1);
+
+        while (start < message.Length)
+        {
+            int split = FindDialoguePageBreak(message, start, maxCharacters, minimumCharacters);
+            if (split <= start || split >= message.Length)
+            {
+                pages.Add(message.Substring(start).Trim());
+                break;
+            }
+
+            string page = message.Substring(start, split - start).Trim();
+            if (!string.IsNullOrEmpty(page)) pages.Add(page);
+            start = split;
+            while (start < message.Length && char.IsWhiteSpace(message[start])) start++;
+        }
+
+        return pages.Count > 0 ? pages.ToArray() : new[] { message };
+    }
+
+    private int FindDialoguePageBreak(string message, int start, int maxCharacters, int minimumCharacters)
+    {
+        int visible = 0;
+        int lastSpace = -1;
+        int lastSentence = -1;
+        int tagDepth = 0;
+        bool insideTag = false;
+        int i = start;
+
+        for (; i < message.Length; i++)
+        {
+            char character = message[i];
+            if (character == '<')
+            {
+                insideTag = true;
+                continue;
+            }
+            if (character == '>' && insideTag)
+            {
+                insideTag = false;
+                int tagStart = message.LastIndexOf('<', i);
+                if (tagStart >= start)
+                {
+                    string tag = message.Substring(tagStart, i - tagStart + 1);
+                    if (tag.StartsWith("</")) tagDepth = Mathf.Max(0, tagDepth - 1);
+                    else if (!tag.EndsWith("/>") && !tag.StartsWith("<!")) tagDepth++;
+                }
+                continue;
+            }
+            if (insideTag) continue;
+
+            visible++;
+            if (char.IsWhiteSpace(character) && tagDepth == 0) lastSpace = i + 1;
+            if ((character == '.' || character == '!' || character == '?' || character == '\n') && tagDepth == 0)
+                lastSentence = i + 1;
+
+            if (visible < maxCharacters) continue;
+
+            int candidate = lastSentence > start && CountVisibleCharacters(message.Substring(start, lastSentence - start)) >= minimumCharacters
+                ? lastSentence
+                : lastSpace;
+            if (candidate <= start) candidate = i + 1;
+            return candidate;
+        }
+
+        return message.Length;
     }
 
     private static int CountVisibleCharacters(string message)

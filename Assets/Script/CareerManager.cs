@@ -112,6 +112,7 @@ public class CareerManager : MonoBehaviour
         if (existingBook != null)
         {
             almanacHudImage = existingBook.GetComponent<Image>();
+            BindAlmanacShortcut(existingBook.GetComponent<Button>());
             RefreshAlmanacAppearance();
             return;
         }
@@ -125,12 +126,8 @@ public class CareerManager : MonoBehaviour
         ExportUIArt.Apply(root.GetComponent<Image>(), "almanacHud");
         root.GetComponent<Image>().preserveAspect = true;
         almanacHudImage = root.GetComponent<Image>();
-        RefreshAlmanacAppearance();
-        root.GetComponent<Button>().onClick.AddListener(() =>
-        {
-            var almanac = FindObjectOfType<AlmanacManager>();
-            if (almanac != null) almanac.ToggleAlmanac();
-        });
+        if (Application.isPlaying) RefreshAlmanacAppearance();
+        BindAlmanacShortcut(root.GetComponent<Button>());
         var caption = Instantiate(moneyTextHUD, rect);
         caption.name = "Almanac shortcut";
         caption.text = "P";
@@ -144,6 +141,21 @@ public class CareerManager : MonoBehaviour
         caption.rectTransform.anchoredPosition = new Vector2(0,14);
         caption.rectTransform.sizeDelta = new Vector2(60,44);
     }
+
+    private void BindAlmanacShortcut(Button button)
+    {
+        if (button == null) return;
+        button.onClick.RemoveListener(OpenAlmanac);
+        button.onClick.AddListener(OpenAlmanac);
+    }
+    private void OpenAlmanac()
+    {
+        var almanac = FindObjectOfType<AlmanacManager>();
+        if (almanac != null) almanac.ToggleAlmanac();
+    }
+#if UNITY_EDITOR
+    public void BakeHierarchyUI() { ConfigureGameplayHUD(); }
+#endif
 
     public void AcceptJob(string jobName, int upfrontPayment)
     {

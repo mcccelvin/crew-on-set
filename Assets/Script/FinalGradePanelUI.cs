@@ -92,11 +92,21 @@ public class FinalGradePanelUI : MonoBehaviour
     }
 
     private bool themeApplied;
-    private ScrollRect feedbackScroll;
+    [SerializeField] private ScrollRect feedbackScroll;
+#if UNITY_EDITOR
+    public void BakeHierarchyUI() { ApplyMenuTheme(); }
+#endif
+
     private void ApplyMenuTheme()
     {
         if (themeApplied || feedbackPanel == null || feedbackDetailedText == null) return;
         themeApplied = true;
+        if (feedbackScroll != null)
+        {
+            var button = feedbackPanel.transform.Find("CLOSE");
+            if (button != null) button.GetComponent<Button>().onClick.AddListener(CloseFeedbackPanel);
+            return;
+        }
         // Leave the original Review scene artwork, positions and buttons untouched.
         Image background = feedbackPanel.GetComponent<Image>();
         if (background != null) { background.sprite = null; background.color = EditorWorkspaceUI.Panel; }

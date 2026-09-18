@@ -239,6 +239,7 @@ public class Level3Manager : MonoBehaviour
 
     public void CloseBriefing()
     {
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.TryAdvanceBossDialoguePage()) return;
         if (practiceLesson != null) { practiceLesson.Continue(); return; }
         if (!isBriefingOpen) return;
 

@@ -18,7 +18,7 @@ public class GradeManager : MonoBehaviour
     [Tooltip("How long a passing grade stays visible before the next level starts. Opening feedback pauses this timer.")]
     [Min(0f)] public float successfulResultHoldSeconds = 5f;
 
-    private GameObject failureDialogue;
+    [SerializeField] private GameObject failureDialogue;
     private bool isLoadingScene = false;
     private Coroutine successfulContinuation;
 
@@ -121,9 +121,30 @@ public class GradeManager : MonoBehaviour
         if (!isLoadingScene) ReturnToStudio();
     }
 
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        ShowFailureDialogue(1);
+        if(failureDialogue!=null)failureDialogue.SetActive(false);
+    }
+#endif
+
     private void ShowFailureDialogue(int submittedLevel)
     {
-        if (failureDialogue != null) return;
+        if (failureDialogue != null)
+        {
+            foreach(var text in failureDialogue.GetComponentsInChildren<TextMeshProUGUI>(true))
+                if(text.name=="Dialogue")text.text="The client needs a few changes. Review the feedback, then try Level "+submittedLevel+": "+CampaignProgression.GetContractName(submittedLevel)+" again.";
+            foreach(var button in failureDialogue.GetComponentsInChildren<Button>(true))
+            {
+                if(button.name!="Retry Contract Button"&&button.name!="Not Now Button")continue;
+                button.onClick.RemoveAllListeners();
+                if(button.name=="Retry Contract Button")button.onClick.AddListener(RetryContract);
+                else button.onClick.AddListener(CloseFailureDialogue);
+            }
+            if(gradePanelUI!=null)gradePanelUI.ShowFailureQuestion(submittedLevel);
+            failureDialogue.SetActive(true);return;
+        }
 
         if (gradePanelUI != null) gradePanelUI.ShowFailureQuestion(submittedLevel);
         if (bossDialoguePrefab == null) return;
@@ -220,8 +241,7 @@ public class GradeManager : MonoBehaviour
     {
         if (failureDialogue == null) return;
 
-        Destroy(failureDialogue);
-        failureDialogue = null;
+        failureDialogue.SetActive(false);
     }
 
     public void RetryContract()

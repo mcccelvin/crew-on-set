@@ -21,8 +21,8 @@ public class TutorialHighlighter : MonoBehaviour
     private readonly Vector3[] targetCorners = new Vector3[4];
 
     // --- NEW: 4-Panel Dimmer Variables ---
-    private CanvasGroup dimmerGroup;
-    private RectTransform[] dimmerPanels = new RectTransform[4];
+    [SerializeField] private CanvasGroup dimmerGroup;
+    [SerializeField] private RectTransform[] dimmerPanels = new RectTransform[4];
     private float currentDimmerAlpha = 0f;
 
     private void Awake()
@@ -51,7 +51,7 @@ public class TutorialHighlighter : MonoBehaviour
 
     private void CreateDimmerPanels()
     {
-        if (myCanvas == null || highlightFrame == null) return;
+        if (dimmerGroup != null || myCanvas == null || highlightFrame == null) return;
 
         // Create a container for the darkness
         GameObject container = new GameObject("Dynamic_Dimmer_Mask");
@@ -88,6 +88,17 @@ public class TutorialHighlighter : MonoBehaviour
             dimmerPanels[i] = rt;
         }
     }
+
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        myCanvas = GetComponentInParent<Canvas>();
+        if (highlightFrame != null && highlightFrame.GetComponent<CanvasGroup>() == null)
+            highlightFrame.gameObject.AddComponent<CanvasGroup>();
+        CreateDimmerPanels();
+        if (highlightFrame != null) highlightFrame.gameObject.SetActive(false);
+    }
+#endif
 
     private void Update()
     {

@@ -529,6 +529,19 @@ namespace Player.Equipment
             spotlight.shadowStrength = Mathf.Lerp(0.8f, 0.45f, diffusionAmount);
         }
 
+#if UNITY_EDITOR
+        public void BakeHierarchyUI()
+        {
+            if(advancedFeaturePanel==null)
+            {
+                bool previous=isFixedKelvin, previousHard=forcesHardLight;isFixedKelvin=false;forcesHardLight=false;
+                EnsureAdvancedFeatureUI();isFixedKelvin=previous;forcesHardLight=previousHard;
+            }
+            if(advancedFeaturePanel!=null)advancedFeaturePanel.SetActive(false);
+            if (lightUICanvas != null) lightUICanvas.SetActive(false);
+        }
+#endif
+
         private void EnsureAdvancedFeatureUI()
         {
             if (!HasAdvancedFeatures()) return;
@@ -536,7 +549,6 @@ namespace Player.Equipment
             if (advancedFeaturePanel != null)
             {
                 RemoveAdvancedFeatureBackground();
-                PositionAdvancedFeaturePanel();
                 return;
             }
 

@@ -35,6 +35,7 @@ public class CampaignLevelManager : MonoBehaviour
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
     private bool coffeeLessonStarted;
+    private int megaphoneIntroductionPage;
     private float nextCoffeeLessonTick;
     private CubeActor featureActor;
     private int observedActorActions;
@@ -296,6 +297,7 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void AdvanceDialogue()
     {
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.TryAdvanceBossDialoguePage()) return;
         if (practiceLesson != null) { practiceLesson.Continue(); return; }
         if (!isBriefingOpen) return;
 
@@ -319,6 +321,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (currentStep == CampaignLevelStep.ActorPracticeComplete)
         {
+            if (activeLevel == 4 && ShowMegaphoneIntroduction()) return;
             ShowContractIntroduction();
             return;
         }
@@ -565,6 +568,22 @@ public class CampaignLevelManager : MonoBehaviour
         }
     }
 
+    private bool ShowMegaphoneIntroduction()
+    {
+        var ui = TutorialUIManager.Instance;
+        if (ui == null) return false;
+        string[] pages =
+        {
+            "Before we accept, meet the <color=yellow>Director Megaphone</color>. At the Equipment Shop, add it to your cart and click CONFIRM. It costs 900 B-Coins and stays yours for future jobs.",
+            "After buying, pick up the megaphone on the director table with <color=yellow>[E]</color>. It equips automatically. Later, press its hotbar number <color=yellow>[1-5]</color> to hold it again. <color=yellow>[G]</color> drops it.",
+            "Aim at your Actor and click <color=yellow>[LMB]</color> to select them. Use <color=yellow>[Z]</color> for Neutral, <color=yellow>[X]</color> for Wave, or <color=yellow>[C]</color> for Action. You can direct them without opening the tablet.",
+            "Arrow keys move the selected Actor; <color=yellow>[R]</color> turns them. Save START with <color=yellow>[B]</color>, move them, then save END with <color=yellow>[N]</color>. <color=yellow>[K]</color> rehearses, <color=yellow>[J]</color> resets and <color=yellow>[H]</color> clears the walk. We'll practice after building the set."
+        };
+        if (megaphoneIntroductionPage >= pages.Length) return false;
+        ui.ShowBossDialogue(pages[megaphoneIntroductionPage++], ui.posePoint, true, false);
+        return true;
+    }
+
     private void ShowContractIntroduction()
     {
         currentStep = CampaignLevelStep.IntroduceContract;
@@ -763,6 +782,18 @@ public class CampaignLevelManager : MonoBehaviour
                 "Place 1 coffee + 1 posed Actor; close the tablet",
                 () => CoffeeSubjectsReady() && director != null && !director.IsTerminalActive()),
             new GuidedPracticeLesson.Step(
+                "The <color=yellow>Director Megaphone</color> lets you cue an Actor from the floor, without reopening the tablet. Visit the Equipment Shop and buy one for 900 B-Coins. Click ADD TO CART, then CONFIRM. Close the shop. Your purchase activates the megaphone on the director table and stays owned in future jobs.",
+                "Buy the DIRECTOR MEGAPHONE from the Equipment Shop",
+                HasOwnedMegaphone),
+            new GuidedPracticeLesson.Step(
+                "Close the shop, then press <color=yellow>[E]</color> at the megaphone on the director table. It equips automatically; use its hotbar number [1-5] to equip it again later. Aim at the Actor and press <color=yellow>[LMB]</color>. The selected Actor remains your target while you carry the tool. If you cannot select them, move closer and aim at their body.",
+                "Hold the megaphone and press [LMB] while aiming at the Actor",
+                () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor),
+            new GuidedPracticeLesson.Step(
+                "Now direct the performance from the floor: <color=yellow>[Z]</color> Neutral, <color=yellow>[X]</color> Wave, <color=yellow>[C]</color> Action, arrow keys nudge the actor, and <color=yellow>[R]</color> turns them. <color=yellow>[B/N/K/J/H]</color> save marks, rehearse, reset and clear a walk. Try Wave or Action so the actor performs for the camera.",
+                "Use the megaphone to cue Wave or Action",
+                () => HeldMegaphone() != null && HeldMegaphone().CommandCount > 0 && FindObjectOfType<CubeActor>() != null && FindObjectOfType<CubeActor>().GetPoseName() != "Neutral"),
+            new GuidedPracticeLesson.Step(
                 "Your Actor is an autonomous performer. <color=yellow>Rookie</color> uses smaller, slower gestures; <color=yellow>Trained</color> is smoother; <color=yellow>Expert</color> is more expressive. The card shows the hire fee before you buy. Higher skill buys performance polish, not an automatic better grade. Keep your current Actor: every tier can meet this brief.",
                 "Keep your hired Actor; all skill tiers can meet the contract",
                 () => true),
@@ -778,6 +809,22 @@ public class CampaignLevelManager : MonoBehaviour
                 "Now select the Actor and press <color=red>[T]</color>. Move them a little, then click the stage to place them. Leave space beside the coffee so animated hands do not block it. You can refine this placement before filming; keep it fixed across your three takes.",
                 "[T] Move the Actor, then click to place them",
                 () => ObserveActorMove() && director != null && !director.IsPlacingProp()),
+            new GuidedPracticeLesson.Step(
+                "Let's plan a short walk through your interior. Keep the tablet open and select the Actor. Their current position will be START: press <color=yellow>[B]</color> to save it. Choose an open area beside the coffee, away from furniture.",
+                "Select the Actor and press [B] to save START",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().HasStartMark),
+            new GuidedPracticeLesson.Step(
+                "Press <color=yellow>[T]</color>, move the Actor along a clear route, and click to place them at least a little farther away. Select them again and press <color=yellow>[N]</color> to save END. Keep the coffee visible along the entire route; walking through it would spoil the commercial.",
+                "[T] Move and place the Actor, then [N] save END",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().HasWalk && director != null && !director.IsPlacingProp()),
+            new GuidedPracticeLesson.Step(
+                "With the Actor selected, press <color=yellow>[K]</color> to rehearse. Watch them walk from START to END before filming. If furniture blocks the path, move the end position with T, save it with N and try K again. A clear route makes the performance look intentional.",
+                "[K] Rehearse and let the Actor reach END",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().WalkCompleted),
+            new GuidedPracticeLesson.Step(
+                "Now press <color=yellow>[J]</color> with the Actor selected to return to START. Each recording repeats this walk, helping your Wide, Medium and Close-Up shots match. <color=yellow>[H]</color> clears the route if you later prefer a stationary performance. Keep the same route and action between takes.",
+                "Select the Actor and press [J] to return to START",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().ReturnedAfterWalk),
             new GuidedPracticeLesson.Step(
                 "Choose Wave or Action for the commercial, then close the tablet with <color=red>[E]</color>. Each recording restarts that animation from the beginning to help matching shots. Keep the same action and screen side in every take. Pause also pauses the bot. Watch a full gesture before recording and leave room around the moving hands.",
                 "Choose Wave or Action, then [E] close the tablet",
@@ -807,10 +854,6 @@ public class CampaignLevelManager : MonoBehaviour
                 "Plan a Wide, Medium and Close-Up of the same scene",
                 () => true),
             new GuidedPracticeLesson.Step(
-                "Blocking means planning where an actor moves. In the tablet: select an actor, place them at the start and press B. Move them to the end and press N. K rehearses the walk; J returns to the start. Keep the route clear of furniture. Recording repeats the walk from START automatically. Use the same route and pose for each shot so the cuts match. H clears the walk if you prefer a stationary performance.",
-                "Optional walk: B start, N end, K rehearse, J reset, H clear",
-                () => true),
-            new GuidedPracticeLesson.Step(
                 "Stay on the same side of the Actor-product line so they do not swap screen sides: this is <color=yellow>continuity</color>. Record about 6 seconds per shot, holding still with both visible and the Soft Light aimed at them. Use a fresh SD card for each take and collect the recorded cards. Check the WIDE / MEDIUM / CLOSE-UP readout before recording.",
                 "Record all 3 sizes: same pose/side, both visible, Soft Light on",
                 () => HasCoffeeCoverage(GetCoffeeFootage(false))),
@@ -830,6 +873,18 @@ public class CampaignLevelManager : MonoBehaviour
     private static bool IsCoffeeBrown(Color color)
     {
         return color.r >= .3f && color.r > color.g && color.g > color.b && color.b <= .4f;
+    }
+
+    private static bool HasOwnedMegaphone()
+    {
+        return PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) > 0;
+    }
+
+    private static Player.Equipment.ActorMegaphoneItem HeldMegaphone()
+    {
+        foreach (var megaphone in FindObjectsOfType<Player.Equipment.ActorMegaphoneItem>())
+            if (megaphone.GetComponentInParent<Player.Interactor.EquipmentInteractor>() != null) return megaphone;
+        return null;
     }
 
     private static bool CoffeeSubjectsReady()

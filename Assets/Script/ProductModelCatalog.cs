@@ -17,6 +17,7 @@ public sealed class ProductModelCatalog : ScriptableObject
 
     public GameObject flowerTable;
     public GameObject coffeeInterior;
+    public GameObject coffeeActors;
 
     // Set dressing must never count as a recorded product or actor.
     public static GameObject CreateFurniture(bool table, Vector3 availableSize)

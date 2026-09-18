@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
@@ -27,9 +27,9 @@ public class ColorGradingManager : MonoBehaviour
     [Tooltip("Drag your Fade In Checkbox/Toggle UI here")]
     public Toggle fadeInToggle;
 
-    private TextMeshProUGUI qualityText;
+    [SerializeField] private TextMeshProUGUI qualityText;
     private bool compareOriginal;
-    private TMP_InputField[] valueInputs = new TMP_InputField[3];
+    [SerializeField] private TMP_InputField[] valueInputs = new TMP_InputField[3];
     private float appliedB = float.NaN;
     private float appliedC = float.NaN;
     private float appliedS = float.NaN;
@@ -171,6 +171,8 @@ public class ColorGradingManager : MonoBehaviour
             if (handleImage != null) handleImage.enabled = false;
             // Slider drives the handle's vertical anchors. A fixed-size child
             // keeps the visible knob circular even when its hit area stretches.
+            var existingKnob = handle.GetComponentInChildren<CircularSliderKnob>(true);
+            if (existingKnob != null) { slider.targetGraphic = existingKnob; return; }
             var knobObject = new GameObject("Round Knob", typeof(RectTransform), typeof(CanvasRenderer), typeof(CircularSliderKnob));
             knobObject.transform.SetParent(handle, false);
             RectTransform knobRect = knobObject.GetComponent<RectTransform>();
@@ -186,7 +188,9 @@ public class ColorGradingManager : MonoBehaviour
     {
         if (slider == null) return;
 
-        GameObject markerObject = new GameObject("Recommended Grade Marker", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        var existingMarker = slider.transform.Find("Recommended Grade Marker");
+        GameObject markerObject = existingMarker != null ? existingMarker.gameObject : new GameObject("Recommended Grade Marker", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        markerObject.SetActive(true);
         markerObject.layer = slider.gameObject.layer;
         markerObject.transform.SetParent(slider.transform, false);
 
@@ -202,69 +206,82 @@ public class ColorGradingManager : MonoBehaviour
         markerImage.raycastTarget = false;
     }
 
+    [SerializeField] private Button compareButton, resetAllButton;
+    [SerializeField] private Button[] resetRowButtons = new Button[3];
+    private bool gradeControlsBound;
+    private void BindGradeControls()
+    {
+        if (gradeControlsBound) return;
+        gradeControlsBound = true;
+        compareButton.onClick.AddListener(() => {
+            compareOriginal = !compareOriginal;
+            compareButton.GetComponentInChildren<TextMeshProUGUI>().text = compareOriginal ? "Viewing original" : "Before / After";
+            appliedB = appliedC = appliedS = float.NaN;
+        });
+        resetAllButton.onClick.AddListener(() => {
+            foreach (var slider in new[] { brightnessSlider, contrastSlider, saturationSlider })
+                if (slider != null && slider.interactable) slider.value = 1;
+        });
+        for (int i=0;i<3;i++)
+        {
+            var slider=i==0?brightnessSlider:i==1?contrastSlider:saturationSlider;
+            var field=valueInputs[i];
+            if (slider == null || field == null) continue;
+            field.onEndEdit.AddListener(input => {
+                if (slider.interactable && float.TryParse(input,out float number) && !float.IsNaN(number) && !float.IsInfinity(number))
+                    slider.value=Mathf.Clamp(number,slider.minValue,slider.maxValue);
+                field.SetTextWithoutNotify(slider.value.ToString("F2"));
+            });
+            if(resetRowButtons[i]!=null) resetRowButtons[i].onClick.AddListener(() => { if(slider.interactable) slider.value=1; });
+        }
+    }
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        SetupSlider(brightnessSlider,BeginnerBrightnessMin,BeginnerBrightnessMax,EditorWorkspaceUI.Control);
+        SetupSlider(contrastSlider,BeginnerContrastMin,BeginnerContrastMax,EditorWorkspaceUI.Control);
+        SetupSlider(saturationSlider,BeginnerSaturationMin,BeginnerSaturationMax,EditorWorkspaceUI.Control);
+        CreateQualityPanel();
+        foreach(var slider in new[] {brightnessSlider,contrastSlider,saturationSlider})
+        {
+            CreateTargetMarker(slider,1);
+            if(slider!=null) slider.transform.Find("Recommended Grade Marker").gameObject.SetActive(false);
+        }
+    }
+#endif
     private void CreateQualityPanel()
     {
-        Transform root = EditorManager.Instance != null && EditorManager.Instance.colorGradingBin != null
-            ? EditorManager.Instance.colorGradingBin.transform : null;
-        if (root == null) return;
-        // Retain the sliders and callbacks used by the tutorial and export.
-        foreach (Transform child in root) child.gameObject.SetActive(false);
+        if(compareButton!=null) { BindGradeControls(); return; }
+        Transform root=EditorManager.Instance!=null && EditorManager.Instance.colorGradingBin!=null ? EditorManager.Instance.colorGradingBin.transform : null;
+        if(root==null) return;
+        foreach(Transform child in root) child.gameObject.SetActive(false);
         EditorWorkspaceUI.Surface(root);
-        // COLOR and the three slider labels are already part of the panel artwork.
-
-        BuildGradeRow(root, brightnessSlider, "Brightness", 0, 0.63f);
-        BuildGradeRow(root, contrastSlider, "Contrast", 1, 0.39f);
-        BuildGradeRow(root, saturationSlider, "Saturation", 2, 0.15f);
-        Button compare = null;
-        compare = EditorWorkspaceUI.Button(root,"Before / After",0.05f,0.025f,0.49f,0.10f,() =>
-        {
-            compareOriginal = !compareOriginal;
-            compare.GetComponentInChildren<TextMeshProUGUI>().text = compareOriginal ? "Viewing original" : "Before / After";
-            appliedB = float.NaN; appliedC = float.NaN; appliedS = float.NaN;
-        });
-        EditorWorkspaceUI.Button(root,"Reset",0.51f,0.025f,0.95f,0.10f,() =>
-        {
-            if (brightnessSlider != null && brightnessSlider.interactable) brightnessSlider.value = 1f;
-            if (contrastSlider != null && contrastSlider.interactable) contrastSlider.value = 1f;
-            if (saturationSlider != null && saturationSlider.interactable) saturationSlider.value = 1f;
-        });
-        qualityText = EditorWorkspaceUI.Label(root,"Grade status","",0.03f,0.01f,0.97f,0.10f);
+        BuildGradeRow(root,brightnessSlider,"Brightness",0,.63f);
+        BuildGradeRow(root,contrastSlider,"Contrast",1,.39f);
+        BuildGradeRow(root,saturationSlider,"Saturation",2,.15f);
+        compareButton=EditorWorkspaceUI.Button(root,"Before / After",.05f,.025f,.49f,.10f,()=>{});
+        resetAllButton=EditorWorkspaceUI.Button(root,"Reset",.51f,.025f,.95f,.10f,()=>{});
+        qualityText=EditorWorkspaceUI.Label(root,"Grade status","",.03f,.01f,.97f,.10f);
         qualityText.gameObject.SetActive(false);
+        BindGradeControls();
     }
-
-    private void BuildGradeRow(Transform root, Slider slider, string label, int index, float bottom)
+    private void BuildGradeRow(Transform root,Slider slider,string label,int index,float bottom)
     {
-        if (slider == null) return;
-        slider.transform.SetParent(root, false); slider.gameObject.SetActive(true);
-        EditorWorkspaceUI.Place(slider.GetComponent<RectTransform>(),0.05f,bottom,0.76f,bottom+0.07f);
-
-        if (CampaignProgression.GetCurrentLevel() <= 2)
-        {
-            // The authored artwork already labels each slider. Keep its title clear.
-        }
-
-        var fieldObject = new GameObject(label+" value", typeof(RectTransform),typeof(Image),typeof(TMP_InputField));
-        fieldObject.transform.SetParent(root,false);
-        EditorWorkspaceUI.Place(fieldObject.GetComponent<RectTransform>(),0.65f,bottom+0.08f,0.95f,bottom+0.16f);
-        fieldObject.GetComponent<Image>().color = EditorWorkspaceUI.Control;
-        var field = fieldObject.GetComponent<TMP_InputField>();
-        var value = EditorWorkspaceUI.Label(fieldObject.transform,"Value",slider.value.ToString("F2"),0,0,1,1);
-        value.alignment = TextAlignmentOptions.Center;
-        value.color = Color.white;
-        field.textViewport = fieldObject.GetComponent<RectTransform>();
-        field.textComponent = value;
-        field.contentType = TMP_InputField.ContentType.DecimalNumber;
-        field.characterLimit = 6;
+        if(slider==null) return;
+        slider.transform.SetParent(root,false); slider.gameObject.SetActive(true);
+        EditorWorkspaceUI.Place(slider.GetComponent<RectTransform>(),.05f,bottom,.76f,bottom+.07f);
+        var obj=new GameObject(label+" value",typeof(RectTransform),typeof(Image),typeof(TMP_InputField));
+        obj.transform.SetParent(root,false);
+        EditorWorkspaceUI.Place(obj.GetComponent<RectTransform>(),.65f,bottom+.08f,.95f,bottom+.16f);
+        obj.GetComponent<Image>().color=EditorWorkspaceUI.Control;
+        var field=obj.GetComponent<TMP_InputField>();
+        var value=EditorWorkspaceUI.Label(obj.transform,"Value",slider.value.ToString("F2"),0,0,1,1);
+        value.alignment=TextAlignmentOptions.Center; value.color=Color.white;
+        field.textViewport=obj.GetComponent<RectTransform>(); field.textComponent=value;
+        field.contentType=TMP_InputField.ContentType.DecimalNumber;field.characterLimit=6;
         field.SetTextWithoutNotify(slider.value.ToString("F2"));
-        field.onEndEdit.AddListener(input =>
-        {
-            if (slider.interactable && float.TryParse(input, out float number) && !float.IsNaN(number) && !float.IsInfinity(number))
-                slider.value = Mathf.Clamp(number,slider.minValue,slider.maxValue);
-            field.SetTextWithoutNotify(slider.value.ToString("F2"));
-        });
-        valueInputs[index] = field;
-        EditorWorkspaceUI.Button(root,"Reset",0.78f,bottom,0.95f,bottom+0.07f,() =>
-        { if (slider.interactable) slider.value = 1f; });
+        valueInputs[index]=field;
+        resetRowButtons[index]=EditorWorkspaceUI.Button(root,"Reset",.78f,bottom,.95f,bottom+.07f,()=>{});
     }
 
     private void SyncNumericFields()
@@ -418,25 +435,4 @@ public class ColorGradingManager : MonoBehaviour
     }
 }
 
-// A UI mesh needs no built-in resource or imported sprite.
-[RequireComponent(typeof(CanvasRenderer))]
-public sealed class CircularSliderKnob : MaskableGraphic
-{
-    protected override void OnPopulateMesh(VertexHelper mesh)
-    {
-        mesh.Clear();
-        Rect rect = rectTransform.rect;
-        Vector2 center = rect.center;
-        float radius = Mathf.Min(rect.width, rect.height) * 0.5f;
-        const int segments = 48;
-        mesh.AddVert(center, color, new Vector2(0.5f, 0.5f));
-        for (int i = 0; i < segments; i++)
-        {
-            float angle = i * Mathf.PI * 2f / segments;
-            Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-            mesh.AddVert(center + direction * radius, color, Vector2.one * 0.5f + direction * 0.5f);
-        }
-        for (int i = 0; i < segments; i++)
-            mesh.AddTriangle(0, i + 1, (i + 1) % segments + 1);
-    }
-}
+

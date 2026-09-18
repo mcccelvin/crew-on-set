@@ -7,20 +7,88 @@ using UnityEngine.UI;
 public sealed class GameSaveMenu : MonoBehaviour
 {
     private GameSaveManager saves;
-    private RectTransform rows;
-    private TMP_Text status;
-    private TMP_InputField nameInput;
+    [SerializeField] private RectTransform rows;
+    [SerializeField] private TMP_Text status;
+    [SerializeField] private TMP_InputField nameInput;
     private Button create;
     private GameObject newGameDialog;
     private GameSaveSlot selected;
     private bool joining;
-    private Transform paper;
+    [SerializeField] private Transform paper;
     private SaveLoadPanelHost sourceHost;
+
+    [SerializeField] private GameObject createDialogLayout, deleteDialogLayout;
+    [SerializeField] private TMP_Text deleteName;
+    [SerializeField] private GameSetupMenu createSetup;
+    private void BindMainButtons()
+    {
+        Bind(paper.Find("Close"),CloseMenu);
+        Bind(paper.Find("JOIN"),()=>{
+            if(sourceHost==null)return;
+            var joinPanel=sourceHost.transform.parent.Find("join");if(joinPanel==null)return;
+            joining=true;sourceHost.gameObject.SetActive(false);joinPanel.gameObject.SetActive(true);
+            sourceHost.transform.parent.gameObject.SetActive(true);CloseMenu();
+        });
+        Bind(paper.Find("Start selected save"),()=>{if(selected!=null&&!saves.Syncing)saves.StartGame(selected,false);});
+        Bind(paper.Find("Delete selected save"),ShowDeleteDialog);
+    }
+    private static void Bind(Transform target,UnityEngine.Events.UnityAction action)
+    {
+        var button=target.GetComponent<UnityEngine.UI.Button>();
+        button.onClick.RemoveAllListeners();button.onClick.AddListener(action);
+    }
+    private void CloseMenu()
+    {
+        CloseDialog();
+        if(saves!=null)saves.Changed-=Refresh;
+        gameObject.SetActive(false);
+        if(!joining&&sourceHost!=null&&sourceHost.transform.parent!=null)sourceHost.transform.parent.gameObject.SetActive(false);
+    }
+    private void ShowDeleteDialog()
+    {
+        if(selected==null||saves.Syncing||newGameDialog!=null)return;
+        if(deleteDialogLayout==null) BuildDeleteDialog();
+        var chosen=selected;newGameDialog=deleteDialogLayout;newGameDialog.SetActive(true);deleteName.text=chosen.name;
+        var box=deleteDialogLayout.transform.Find("Creation style dialog");
+        Bind(box.Find("CANCEL"),CloseDialog);
+        Bind(box.Find("DELETE"),()=>{chosen.values.RemoveAll(v=>v.key=="SaveDeleted");chosen.values.Add(new GameSaveValue{key="SaveDeleted",integer=1});saves.Repository.Commit(chosen);selected=null;CloseDialog();Refresh();saves.SyncCloud();});
+    }
+    private void BuildDeleteDialog()
+    {
+        var box=CreateFolderDialog("Delete this saved game?");
+        deleteDialogLayout=newGameDialog;deleteDialogLayout.name="Delete Save Dialog";
+        deleteName=Text(box,"Selected save",new Vector2(.18f,.42f),new Vector2(.8f,.64f),30);deleteName.richText=false;
+        Button(box,"CANCEL",new Vector2(.2f,.17f),new Vector2(.45f,.3f),CloseDialog);
+        Button(box,"DELETE",new Vector2(.53f,.17f),new Vector2(.78f,.3f),()=>{});
+        deleteDialogLayout.SetActive(false);newGameDialog=null;
+    }
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        sourceHost=FindObjectsOfType<SaveLoadPanelHost>(true).FirstOrDefault(host=>host.gameObject.scene==gameObject.scene);
+        if(createSetup==null && createDialogLayout!=null && sourceHost!=null && sourceHost.transform.Find("createpanel")!=null)
+        {
+            DestroyImmediate(createDialogLayout);createDialogLayout=null;newGameDialog=null;
+        }
+        if(paper==null) Build();
+        if(deleteDialogLayout==null) BuildDeleteDialog();
+        if(createDialogLayout==null) {ShowNewGameDialog();CloseDialog();}
+        gameObject.SetActive(false);
+    }
+#endif
 
     public static void Show(GameSaveManager manager)
     {
-        var existing = FindObjectOfType<GameSaveMenu>();
-        if (existing != null) return;
+        var existing = FindObjectOfType<GameSaveMenu>(true);
+        if (existing != null)
+        {
+            if(existing.gameObject.activeSelf)return;
+            existing.saves=manager;existing.joining=false;
+            existing.sourceHost=FindObjectOfType<SaveLoadPanelHost>(true);
+            if(existing.sourceHost!=null&&existing.sourceHost.transform.parent!=null)existing.sourceHost.transform.parent.gameObject.SetActive(false);
+            existing.BindMainButtons();existing.gameObject.SetActive(true);
+            manager.Changed-=existing.Refresh;manager.Changed+=existing.Refresh;existing.Refresh();return;
+        }
         var go = new GameObject("Saved Games", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         var canvas = go.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -32,6 +100,7 @@ public sealed class GameSaveMenu : MonoBehaviour
         var menu = go.AddComponent<GameSaveMenu>();
         menu.saves = manager;
         menu.Build();
+        menu.BindMainButtons();
         manager.Changed += menu.Refresh;
         menu.Refresh();
     }
@@ -44,7 +113,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private void Update()
     {
         if(UnityEngine.InputSystem.Keyboard.current==null||!UnityEngine.InputSystem.Keyboard.current.escapeKey.wasPressedThisFrame)return;
-        if(newGameDialog!=null){Destroy(newGameDialog);newGameDialog=null;}else Destroy(gameObject);
+        if(newGameDialog!=null)CloseDialog();else CloseMenu();
     }
     private Button Artwork(string name,string key,Transform parent,Vector2 min,Vector2 max,UnityEngine.Events.UnityAction action)
     {
@@ -53,32 +122,20 @@ public sealed class GameSaveMenu : MonoBehaviour
     }
     private void Build()
     {
-        sourceHost=FindObjectOfType<SaveLoadPanelHost>();
-        if(sourceHost!=null&&sourceHost.transform.parent!=null)sourceHost.transform.parent.gameObject.SetActive(false);
+        sourceHost=FindObjectOfType<SaveLoadPanelHost>(true);
+        if(Application.isPlaying&&sourceHost!=null&&sourceHost.transform.parent!=null)sourceHost.transform.parent.gameObject.SetActive(false);
         var backdrop=Rect("PLAY artwork",transform,Vector2.zero,Vector2.one);
         ExportUIArt.Apply(backdrop.gameObject.AddComponent<Image>(),"playFolder");paper=backdrop;
-        Artwork("Close","close",paper,new Vector2(.905f,.783f),new Vector2(.949f,.862f),()=>Destroy(gameObject));
+        Artwork("Close","close",paper,new Vector2(.905f,.783f),new Vector2(.949f,.862f),CloseMenu);
         var join=Rect("JOIN",paper,new Vector2(.277f,.867f),new Vector2(.38f,.94f));join.gameObject.AddComponent<Image>().color=Color.clear;
-        join.gameObject.AddComponent<Button>().onClick.AddListener(()=>{
-            var host=sourceHost;
-            if(host==null)return;
-            var joinPanel=host.transform.parent.Find("join");if(joinPanel==null)return;
-            joining=true;host.gameObject.SetActive(false);joinPanel.gameObject.SetActive(true);host.transform.parent.gameObject.SetActive(true);Destroy(gameObject);
-        });
+        join.gameObject.AddComponent<UnityEngine.UI.Button>();
         var viewport=Rect("Save grid viewport",paper,new Vector2(.158f,.32f),new Vector2(.845f,.79f));
         viewport.gameObject.AddComponent<Image>().color=Color.clear;
         viewport.gameObject.AddComponent<RectMask2D>();
         rows=Rect("Save cards",viewport,new Vector2(0,1),Vector2.one);rows.pivot=new Vector2(.5f,1);
         var scroll=viewport.gameObject.AddComponent<ScrollRect>();scroll.viewport=viewport;scroll.content=rows;scroll.horizontal=false;scroll.movementType=ScrollRect.MovementType.Clamped;scroll.scrollSensitivity=45;
-        Artwork("Start selected save","playStart",paper,new Vector2(.326f,.148f),new Vector2(.468f,.251f),()=>{if(selected!=null&&!saves.Syncing)saves.StartGame(selected,false);});
-        Artwork("Delete selected save","playDelete",paper,new Vector2(.521f,.148f),new Vector2(.664f,.251f),()=>{
-            if(selected==null||saves.Syncing||newGameDialog!=null)return;
-            var chosen=selected;
-            var box=CreateFolderDialog("Delete this saved game?");
-            Text(box,chosen.name,new Vector2(.18f,.42f),new Vector2(.8f,.64f),30).richText=false;
-            Button(box,"CANCEL",new Vector2(.2f,.17f),new Vector2(.45f,.3f),CloseDialog);
-            Button(box,"DELETE",new Vector2(.53f,.17f),new Vector2(.78f,.3f),()=>{chosen.values.RemoveAll(v=>v.key=="SaveDeleted");chosen.values.Add(new GameSaveValue{key="SaveDeleted",integer=1});saves.Repository.Commit(chosen);selected=null;CloseDialog();Refresh();saves.SyncCloud();});
-        });
+        Artwork("Start selected save","playStart",paper,new Vector2(.326f,.148f),new Vector2(.468f,.251f),()=>{});
+        Artwork("Delete selected save","playDelete",paper,new Vector2(.521f,.148f),new Vector2(.664f,.251f),()=>{});
         status=Text(paper,"",new Vector2(.16f,.265f),new Vector2(.8f,.305f),20);
     }
     private void Refresh()
@@ -119,7 +176,7 @@ public sealed class GameSaveMenu : MonoBehaviour
         else background.color=new Color32(255,244,210,255);
         Text(box,title,new Vector2(.17f,.66f),new Vector2(.85f,.8f),32);return box;
     }
-    private void CloseDialog(){Destroy(newGameDialog);newGameDialog=null;}
+    private void CloseDialog(){if(newGameDialog!=null)newGameDialog.SetActive(false);newGameDialog=null;}
     private void CreateGame()
     {
         if (saves.Syncing) return;
@@ -129,6 +186,24 @@ public sealed class GameSaveMenu : MonoBehaviour
     private void ShowNewGameDialog()
     {
         if(newGameDialog!=null)return;
+        if(createDialogLayout!=null)
+        {
+            newGameDialog=createDialogLayout;newGameDialog.SetActive(true);
+            if(createSetup!=null)
+            {
+                foreach(var button in createSetup.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                    Bind(button.transform,button.name=="Button"?(UnityEngine.Events.UnityAction)createSetup.OnCreateButtonPressed:CloseDialog);
+                createSetup.singlePlayerToggle.isOn=true;
+                createSetup.gameNameInput.text="Game "+(saves.Repository.Slots.Count(s=>s.Int("SaveDeleted",0)==0)+1);
+            }
+            else
+            {
+                var existingBox=createDialogLayout.transform.Find("Creation style dialog");
+                Bind(existingBox.Find("START GAME"),CreateGame);Bind(existingBox.Find("CANCEL"),CloseDialog);
+                nameInput.text="Game "+(saves.Repository.Slots.Count+1);
+            }
+            return;
+        }
         var original=sourceHost!=null?sourceHost.transform.Find("createpanel"):null;
         if(original!=null)
         {
@@ -136,7 +211,7 @@ public sealed class GameSaveMenu : MonoBehaviour
             newGameDialog=shade.gameObject;shade.gameObject.AddComponent<Image>().color=new Color(0,0,0,.6f);
             var panel=Instantiate(original.gameObject,shade,false);panel.SetActive(true);
             var rect=panel.GetComponent<RectTransform>();rect.anchorMin=rect.anchorMax=new Vector2(.5f,.5f);rect.anchoredPosition=Vector2.zero;rect.localScale=Vector3.one;
-            var setup=shade.gameObject.AddComponent<GameSetupMenu>();
+            var setup=shade.gameObject.AddComponent<GameSetupMenu>();createSetup=setup;createDialogLayout=shade.gameObject;
             setup.gameNameInput=panel.GetComponentInChildren<TMP_InputField>(true);
             setup.singlePlayerToggle=panel.GetComponentsInChildren<Toggle>(true).First(t=>t.name=="Single");
             setup.multiPlayerToggle=panel.GetComponentsInChildren<Toggle>(true).First(t=>t.name=="Multi");
@@ -150,16 +225,16 @@ public sealed class GameSaveMenu : MonoBehaviour
                 else button.onClick.AddListener(CloseDialog);
             }
             setup.singlePlayerToggle.isOn=true;
-            setup.gameNameInput.text="Game "+(saves.Repository.Slots.Count(s=>s.Int("SaveDeleted",0)==0)+1);
+            setup.gameNameInput.text="Game "+(saves!=null?saves.Repository.Slots.Count(s=>s.Int("SaveDeleted",0)==0)+1:1);
             return;
         }
-        var box=CreateFolderDialog("NAME YOUR NEW GAME");
+        var box=CreateFolderDialog("NAME YOUR NEW GAME");createDialogLayout=newGameDialog;
         Text(box,"Your commercial checkpoints save automatically.",new Vector2(.18f,.48f),new Vector2(.84f,.62f),24);
         var field=Rect("Save name",box,new Vector2(.18f,.35f),new Vector2(.84f,.46f));field.gameObject.AddComponent<Image>().color=new Color32(237,213,167,255);
-        var input=field.gameObject.AddComponent<TMP_InputField>();var text=Text(field,"",new Vector2(.03f,0),new Vector2(.97f,1),25);text.richText=false;input.textViewport=field;input.textComponent=text;input.characterLimit=40;input.text="Game "+(saves.Repository.Slots.Count+1);nameInput=input;
+        var input=field.gameObject.AddComponent<TMP_InputField>();var text=Text(field,"",new Vector2(.03f,0),new Vector2(.97f,1),25);text.richText=false;input.textViewport=field;input.textComponent=text;input.characterLimit=40;input.text="Game "+(saves!=null?saves.Repository.Slots.Count+1:1);nameInput=input;
         Button(box,"START GAME",new Vector2(.53f,.17f),new Vector2(.8f,.3f),CreateGame);
         Button(box,"CANCEL",new Vector2(.19f,.17f),new Vector2(.46f,.3f),CloseDialog);
-        input.Select();
+        if(Application.isPlaying) input.Select();
     }
     private static RectTransform Rect(string name, Transform parent, Vector2 min, Vector2 max)
     {
@@ -172,6 +247,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private static TextMeshProUGUI Text(Transform parent, string value, Vector2 min, Vector2 max, float size)
     {
         var text = Rect("Label", parent, min, max).gameObject.AddComponent<TextMeshProUGUI>();
+        text.font = TMP_Settings.defaultFontAsset;
         text.text = value; text.fontSize = size; text.color = new Color32(75,43,19,255);
         text.alignment = TextAlignmentOptions.MidlineLeft;
         text.enableAutoSizing = true; text.fontSizeMin = size * .75f; text.fontSizeMax = size;

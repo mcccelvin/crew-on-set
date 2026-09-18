@@ -47,12 +47,33 @@ public class ShopTerminal : MonoBehaviour
     private int level3LightItemIndex = -1;
     private List<GameObject> level3LightCards = new List<GameObject>();
     private bool useLevel3LightPlaceholder = false;
+    private bool megaphoneSoldOut = false;
+    private int megaphoneItemIndex = -1;
+    private readonly List<GameObject> megaphoneCards = new List<GameObject>();
 
     // Player & Component Tracking
     private PlayerController playerController;
     private GameObject mainPlayerUI;
     private CrosshairUIClicker crosshairClicker;
     private bool isTerminalActive = false;
+
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        foreach(var canvas in new[] {worldSpaceCanvas,screenSpaceCanvas})
+        {
+            CreateLevel2CameraShopCard(canvas);CreateLevel3LightShopCard(canvas);CreateMegaphoneShopCard(canvas,-1);
+            int temporaryIndex=availableItems.Count;
+            availableItems.Add(new ShopItem {itemName="LIGHT STRIP",price=ProductionKit.Prices[0]});
+            try {CreateStripShopCard(canvas,temporaryIndex);} finally {availableItems.RemoveAt(temporaryIndex);}
+            foreach(var title in new[] {"LEVEL 2 CAMERA","LEVEL 3 SOFT LIGHT","DIRECTOR MEGAPHONE","LIGHT STRIP"})
+            {
+                var card=FindShopItemCard(FindShopText(canvas,title),canvas);
+                if(card!=null)card.gameObject.SetActive(false);
+            }
+        }
+    }
+#endif
 
     private void Awake()
     {
@@ -78,6 +99,7 @@ public class ShopTerminal : MonoBehaviour
         }
 
         ProductionKitShop.Setup(this);
+        SetupMegaphone();
         RestoreOwnedEquipment();
         crosshairClicker = FindObjectOfType<CrosshairUIClicker>();
         UpdateTotalUI();
@@ -105,14 +127,42 @@ public class ShopTerminal : MonoBehaviour
             int owned = PlayerPrefs.GetInt("OwnedEquipment." + item.itemName, 0);
             int present = 0;
             foreach (Player.Equipment.Equipment equipment in FindObjectsOfType<Player.Equipment.Equipment>(true))
-                if (equipment.name == item.prefabToSpawn.name + "(Clone)") present++;
+                if (item.itemName == "DIRECTOR MEGAPHONE" ? equipment is Player.Equipment.ActorMegaphoneItem : equipment.name == item.prefabToSpawn.name + "(Clone)") present++;
             for (int i = present; i < owned; i++)
             {
-                var restored = Instantiate(item.prefabToSpawn, deliveryZone.position + new Vector3((i % 3 - 1) * .45f, .5f + (i / 3) * .25f, .25f), deliveryZone.rotation);
+                var restored = CreateDeliveredItem(item, deliveryZone.position + new Vector3((i % 3 - 1) * .45f, .5f + (i / 3) * .25f, .25f));
+                if (item.itemName == "DIRECTOR MEGAPHONE") Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(restored);
                 if (restored.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
             }
         }
+        if (megaphoneItemIndex >= 0 && PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) > 0) MarkMegaphoneSoldOut();
         PlayerPrefs.Save();
+    }
+
+    private GameObject CreateDeliveredItem(ShopItem item, Vector3 position)
+    {
+        if (item.itemName == "DIRECTOR MEGAPHONE")
+        {
+            // Activate the visible table prop as the purchased equipment.
+            foreach (Transform candidate in FindObjectsOfType<Transform>(true))
+            {
+                if (candidate.name != "LowDirectorMegaPhone" ||
+                    candidate.GetComponent<Player.Equipment.ActorMegaphoneItem>() != null) continue;
+                candidate.gameObject.SetActive(true);
+                Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(candidate.gameObject);
+                return candidate.gameObject;
+            }
+        }
+        return Instantiate(item.prefabToSpawn, position, deliveryZone.rotation);
+    }
+
+    private void SetupMegaphone()
+    {
+        if (CampaignProgression.GetCurrentLevel() < 4) return;
+        megaphoneItemIndex = availableItems.FindIndex(item => item != null && item.itemName == "DIRECTOR MEGAPHONE");
+        if (megaphoneItemIndex < 0) return;
+        CreateMegaphoneShopCard(worldSpaceCanvas, megaphoneItemIndex);
+        CreateMegaphoneShopCard(screenSpaceCanvas, megaphoneItemIndex);
     }
 
     public void MarkCameraSoldOut()
@@ -232,7 +282,20 @@ public class ShopTerminal : MonoBehaviour
 
     private void CreateLevel3LightShopCard(Canvas shopCanvas)
     {
-        if (shopCanvas == null || FindShopText(shopCanvas, "LEVEL 3 SOFT LIGHT") != null) return;
+        if (shopCanvas == null) return;
+        var existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 3 SOFT LIGHT"),shopCanvas);
+        if(existingCard!=null)
+        {
+            foreach(var button in existingCard.GetComponentsInChildren<Button>(true))
+            {
+                if(!IsCartButton(button))continue;
+                button.onClick=new Button.ButtonClickedEvent();
+                button.onClick.AddListener(()=>AddItemToCartByIndex(level3LightItemIndex));
+                button.enabled=true;button.interactable=true;
+            }
+            if(!level3LightCards.Contains(existingCard.gameObject))level3LightCards.Add(existingCard.gameObject);
+            existingCard.gameObject.SetActive(true);return;
+        }
 
         TextMeshProUGUI originalLightText = FindShopText(shopCanvas, "160 LED PANEL");
         Transform originalLightCard = FindShopItemCard(originalLightText, shopCanvas);
@@ -274,7 +337,17 @@ public class ShopTerminal : MonoBehaviour
 
     public void CreateStripShopCard(Canvas canvas, int index)
     {
-        if(canvas==null || FindShopText(canvas,"LIGHT STRIP")!=null)return;
+        if(canvas==null)return;
+        var existing=FindShopItemCard(FindShopText(canvas,"LIGHT STRIP"),canvas);
+        if(existing!=null)
+        {
+            foreach(var button in existing.GetComponentsInChildren<Button>(true))
+            {
+                if(!IsCartButton(button))continue;
+                button.onClick=new Button.ButtonClickedEvent();button.onClick.AddListener(()=>AddItemToCartByIndex(index));button.interactable=true;
+            }
+            existing.gameObject.SetActive(true);return;
+        }
         var original=FindShopItemCard(FindShopText(canvas,"160 LED PANEL"),canvas) as RectTransform;
         var sd=FindShopItemCard(FindShopText(canvas,"SD CARD"),canvas) as RectTransform;
         if(original==null)return;
@@ -298,15 +371,79 @@ public class ShopTerminal : MonoBehaviour
         var icon=card.GetComponentsInChildren<Image>(true);
         foreach(var image in icon)if(image.sprite!=null && image.GetComponent<Button>()==null && image.transform!=card.transform)
         {
-            if(image.rectTransform.rect.height>40 && image.rectTransform.rect.width>40)
+            if(Application.isPlaying && image.rectTransform.rect.height>40 && image.rectTransform.rect.width>40)
                 availableItems[index].prefabToSpawn.GetComponent<ProductionKit>().EquipmentIcon=image.sprite;
         }
         card.SetActive(true);
     }
 
+    private void CreateMegaphoneShopCard(Canvas canvas, int index)
+    {
+        if (canvas == null) return;
+        var existingCard=FindShopItemCard(FindShopText(canvas,"DIRECTOR MEGAPHONE"),canvas);
+        if(existingCard!=null)
+        {
+            foreach(var button in existingCard.GetComponentsInChildren<Button>(true))
+            {
+                if(!IsCartButton(button))continue;
+                button.onClick=new Button.ButtonClickedEvent();
+                button.onClick.AddListener(()=>AddItemToCartByIndex(index));
+                button.enabled=true;button.interactable=true;
+            }
+            if(!megaphoneCards.Contains(existingCard.gameObject))megaphoneCards.Add(existingCard.gameObject);
+            existingCard.gameObject.SetActive(true);return;
+        }
+        var source = FindShopItemCard(FindShopText(canvas, "SD CARD"), canvas) as RectTransform;
+        if (source == null) return;
+        var card = Instantiate(source.gameObject, source.parent);
+        card.name = "Director Megaphone";
+        var rect = card.GetComponent<RectTransform>();
+        rect.anchoredPosition = source.anchoredPosition + new Vector2(0f, -source.rect.height - 15f);
+        foreach (var text in card.GetComponentsInChildren<TextMeshProUGUI>(true))
+        {
+            if (text.text == "SD CARD") text.text = "DIRECTOR MEGAPHONE";
+            else if (text.text.Contains("SD card") || text.text.Contains("SD Card")) text.text = "Handheld actor cues\nPose, turn and rehearse without the tablet.";
+            else if (text.text.Replace(",", "").Trim() == "150") text.text = ProductionEconomy.Megaphone.ToString("N0");
+            else if (text.text.Contains("SOLD OUT")) text.text = "+ ADD TO CART";
+        }
+        foreach (var button in card.GetComponentsInChildren<Button>(true))
+        {
+            if (!IsCartButton(button)) continue;
+            button.onClick = new Button.ButtonClickedEvent();
+            button.onClick.AddListener(() => AddItemToCartByIndex(index));
+            button.interactable = true;
+        }
+        megaphoneCards.Add(card);
+        card.SetActive(true);
+    }
+
+    private void MarkMegaphoneSoldOut()
+    {
+        megaphoneSoldOut = true;
+        foreach (var card in megaphoneCards)
+        {
+            if (card == null) continue;
+            foreach (var button in card.GetComponentsInChildren<Button>(true)) if (IsCartButton(button)) button.interactable = false;
+            foreach (var text in card.GetComponentsInChildren<TextMeshProUGUI>(true)) if (text.text.Contains("ADD TO CART")) text.text = "SOLD OUT";
+        }
+    }
+
     private void CreateLevel2CameraShopCard(Canvas shopCanvas)
     {
-        if (shopCanvas == null || FindShopText(shopCanvas, "LEVEL 2 CAMERA") != null) return;
+        if (shopCanvas == null) return;
+        var existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 2 CAMERA"),shopCanvas);
+        if(existingCard!=null)
+        {
+            foreach(var button in existingCard.GetComponentsInChildren<Button>(true))
+            {
+                if(!IsCartButton(button))continue;
+                button.onClick=new Button.ButtonClickedEvent();
+                button.onClick.AddListener(()=>AddItemToCartByIndex(level2CameraItemIndex));
+                button.enabled=true;button.interactable=true;
+            }
+            if(!level2CameraCards.Contains(existingCard.gameObject))level2CameraCards.Add(existingCard.gameObject);
+            existingCard.gameObject.SetActive(true);return;
+        }
 
         TextMeshProUGUI originalCameraText = FindShopText(shopCanvas, "NONY FX");
         Transform originalCameraCard = FindShopItemCard(originalCameraText, shopCanvas);
@@ -479,15 +616,16 @@ public class ShopTerminal : MonoBehaviour
         if (itemIndex == 0 && cameraSoldOut) return;
         if (itemIndex == level2CameraItemIndex && level2CameraSoldOut) return;
         if (itemIndex == level3LightItemIndex && level3LightSoldOut) return;
+        if (itemIndex == megaphoneItemIndex && megaphoneSoldOut) return;
 
         if (itemIndex >= 0 && itemIndex < availableItems.Count)
         {
             ShopItem itemToAdd = availableItems[itemIndex];
 
             if (itemToAdd == null) return;
-            if ((itemIndex == 0 || itemIndex == level2CameraItemIndex || itemToAdd.itemName.Contains("CAMERA")) && shoppingCart.Contains(itemToAdd))
+            if ((itemIndex == 0 || itemIndex == level2CameraItemIndex || itemIndex == megaphoneItemIndex || itemToAdd.itemName.Contains("CAMERA")) && shoppingCart.Contains(itemToAdd))
             {
-                Debug.LogWarning("You can only buy ONE camera!");
+                GameFeedback.Show("Already in your cart: " + itemToAdd.itemName);
                 return;
             }
 
@@ -569,17 +707,19 @@ public class ShopTerminal : MonoBehaviour
         bool boughtCameraThisTrip = false;
         bool boughtLevel2CameraThisTrip = false;
         bool boughtLevel3LightThisTrip = false;
+        bool boughtMegaphoneThisTrip = false;
 
         foreach (ShopItem item in shoppingCart)
         {
             if (item == availableItems[0]) boughtCameraThisTrip = true;
             if (level2CameraItemIndex >= 0 && item == availableItems[level2CameraItemIndex]) boughtLevel2CameraThisTrip = true;
             if (level3LightItemIndex >= 0 && item == availableItems[level3LightItemIndex]) boughtLevel3LightThisTrip = true;
+            if (megaphoneItemIndex >= 0 && item == availableItems[megaphoneItemIndex]) boughtMegaphoneThisTrip = true;
 
             if (item.prefabToSpawn != null && deliveryZone != null)
             {
                 Vector3 randomOffset = new Vector3(Random.Range(-0.2f, 0.2f), 0.5f, Random.Range(-0.2f, 0.2f));
-                GameObject spawnedItem = Instantiate(item.prefabToSpawn, deliveryZone.position + randomOffset, deliveryZone.rotation);
+                GameObject spawnedItem = CreateDeliveredItem(item, deliveryZone.position + randomOffset);
                 if (spawnedItem.TryGetComponent<Player.Equipment.SDCardItem>(out var card))
                 {
                     // Keep tiny cards visible and separated instead of dropping them among equipment.
@@ -600,6 +740,7 @@ public class ShopTerminal : MonoBehaviour
                     card.PrepareShopDelivery(position);
                 }
                 if (spawnedItem.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
+                if (item.itemName == "DIRECTOR MEGAPHONE") Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(spawnedItem);
                 if (!item.itemName.ToUpperInvariant().Contains("SD"))
                     PlayerPrefs.SetInt("OwnedEquipment." + item.itemName, PlayerPrefs.GetInt("OwnedEquipment." + item.itemName, 0) + 1);
                 if (level3LightItemIndex >= 0 && item == availableItems[level3LightItemIndex]) ConfigureLevel3Light(spawnedItem);
@@ -618,6 +759,12 @@ public class ShopTerminal : MonoBehaviour
         {
             MarkLevel3LightSoldOut();
             PlayerPrefs.SetInt("Level3LightPurchased", 1);
+            PlayerPrefs.Save();
+        }
+        if (boughtMegaphoneThisTrip)
+        {
+            MarkMegaphoneSoldOut();
+            PlayerPrefs.SetInt("MegaphonePurchased", 1);
             PlayerPrefs.Save();
         }
 

@@ -75,12 +75,12 @@ public class DirectorTerminal : MonoBehaviour
     private bool justGrabbed = false;
     private bool showPropCostWarningOnDrop = false;
     private bool hasShownPropCostWarning = false;
-    private Button poseActorButton;
+    [SerializeField] private Button poseActorButton;
     private DirectorColorFields colorFields;
-    private GameObject interiorPicker;
+    [SerializeField] private GameObject interiorPicker;
     private GameObject interiorPreview;
     private int previewStyle = -1;
-    private readonly TMP_Text[] interiorLabels = new TMP_Text[5];
+    [SerializeField] private TMP_Text[] interiorLabels = new TMP_Text[5];
     private static bool OwnsInterior(int style) => GameSavePrefs.GetInt("OwnedInterior." + style) == 1;
 
     private void RefreshInteriorLabels()
@@ -196,7 +196,8 @@ public class DirectorTerminal : MonoBehaviour
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
         CreatePoseActorButton();
-        colorFields = gameObject.AddComponent<DirectorColorFields>();
+        colorFields = GetComponent<DirectorColorFields>();
+        if(colorFields==null) colorFields = gameObject.AddComponent<DirectorColorFields>();
         colorFields.Initialize(this);
         UpdateStageButtonLabel();
 
@@ -416,6 +417,18 @@ public class DirectorTerminal : MonoBehaviour
         }
     }
 
+    private bool interiorButtonsBound;
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        if (tabletUI != null && spawnWallButton != null) { ShowInteriorPicker(); interiorPicker.SetActive(false); }
+        CreatePoseActorButton();
+        var fields=GetComponent<DirectorColorFields>();
+        if (fields == null) fields=gameObject.AddComponent<DirectorColorFields>();
+        fields.Initialize(this);
+    }
+#endif
+
     private void ShowInteriorPicker()
     {
         if (interiorPicker == null)
@@ -449,6 +462,20 @@ public class DirectorTerminal : MonoBehaviour
                     if(choice==4){CancelInteriorPreview();interiorPicker.SetActive(false);}
                     else if(choice==3) BuyOrUseInterior();
                     else PreviewInterior(choice);
+                });
+            }
+        }
+        if (!interiorButtonsBound)
+        {
+            interiorButtonsBound = true;
+            for (int i=0;i<interiorLabels.Length;i++)
+            {
+                int choice=i;
+                var button=interiorLabels[i].GetComponentInParent<Button>(true);
+                button.onClick = new Button.ButtonClickedEvent();
+                button.onClick.AddListener(() => {
+                    if(choice==4){CancelInteriorPreview();interiorPicker.SetActive(false);}
+                    else if(choice==3) BuyOrUseInterior(); else PreviewInterior(choice);
                 });
             }
         }
@@ -1443,7 +1470,13 @@ public class DirectorTerminal : MonoBehaviour
 
     private void CreatePoseActorButton()
     {
-        if (spawnWallButton == null || poseActorButton != null) return;
+        if(poseActorButton!=null)
+        {
+            poseActorButton.onClick.RemoveListener(PoseSelectedActor);
+            poseActorButton.onClick.AddListener(PoseSelectedActor);
+            UpdatePoseActorButton();return;
+        }
+        if (spawnWallButton == null) return;
 
         GameObject poseButtonObject = Instantiate(spawnWallButton, spawnWallButton.transform.parent);
         poseButtonObject.name = "Pose Actor Button";
@@ -1537,6 +1570,12 @@ public class CubeActor : MonoBehaviour
         currentPose++;
         if (currentPose > 2) currentPose = 0;
 
+        ApplyPose();
+    }
+
+    public void SetPose(int pose)
+    {
+        currentPose = Mathf.Clamp(pose, 0, 2);
         ApplyPose();
     }
 

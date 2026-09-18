@@ -294,6 +294,7 @@ public class EditorTutorialManager : MonoBehaviour
 
     public void AdvanceDialogue()
     {
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.TryAdvanceBossDialoguePage()) return;
         if (!isTutorialReady || isTransitioning || currentStep == EditorStep.ShowPostProductionTitle) return;
 
         if (currentStep == EditorStep.ExplainGokePostProduction) { StartCoroutine(TransitionToNextStep(EditorStep.DragVideoToTimeline, false)); return; }

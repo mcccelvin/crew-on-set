@@ -10,9 +10,18 @@ using System.Linq;
 [InitializeOnLoad]
 public static class StudioAssetMigration
 {
+    const string StudioFloorMaterialPath = "Assets/Studio/Equipments/StudioFloorPlanks034B.mat";
+
     static StudioAssetMigration() { EditorApplication.delayCall += ProcessRequest; }
     static void ProcessRequest()
     {
+        if (File.Exists("Assets/Editor/StudioFloorPlanks.request"))
+        {
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode) { EditorApplication.delayCall += ProcessRequest; return; }
+            try { ApplyFloorMaterialOnly(); File.Delete("Assets/Editor/StudioFloorPlanks.request"); }
+            catch (Exception e) { File.WriteAllText("Logs/StudioRedesign/floor-error.txt", e.ToString()); Debug.LogException(e); }
+            return;
+        }
         if (!File.Exists("Assets/Editor/StudioRedesign.request")) return;
         if (EditorApplication.isCompiling || EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode) { EditorApplication.delayCall += ProcessRequest; return; }
         try { Apply(); File.Delete("Assets/Editor/StudioRedesign.request"); }
@@ -84,6 +93,7 @@ public static class StudioAssetMigration
         var target = platform.bounds;
         var model = roots.FirstOrDefault(r => r.name == "Product Studio") ?? (GameObject)PrefabUtility.InstantiatePrefab(AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Product/STUDIOP.fbx"), scene);
         model.name = "Product Studio";
+        ApplyFloorRendererMaterial(model, AssetDatabase.LoadAssetAtPath<Material>(StudioFloorMaterialPath));
         var newStage = model.GetComponentsInChildren<Renderer>().First(r => r.name == "stage");
         model.transform.position += new Vector3(target.center.x - newStage.bounds.center.x, target.max.y - newStage.bounds.max.y, target.center.z - newStage.bounds.center.z);
         var reference = model.transform.Find("a.player ref"); if (reference != null) reference.gameObject.SetActive(false);
@@ -131,6 +141,81 @@ public static class StudioAssetMigration
         var player = roots.FirstOrDefault(r => r.name == "Player");
         if (player != null) player.transform.position = new Vector3(0, model.transform.position.y + .25f, model.transform.position.z - 2);
         EditorSceneManager.MarkSceneDirty(scene);
+    }
+
+    [MenuItem("Crew-On-Set/Studio/Apply Planks034B Studio Floor")]
+    public static void ApplyFloorMaterialOnly()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Stop Play mode first.");
+        Directory.CreateDirectory("Logs/StudioRedesign");
+        AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+        var material = AssetDatabase.LoadAssetAtPath<Material>(StudioFloorMaterialPath);
+        if (material == null) throw new InvalidOperationException("Missing " + StudioFloorMaterialPath);
+        // Standard uses metallic in red and smoothness (1 - roughness) in alpha.
+        string folder = "Assets/Studio/Equipments/";
+        var roughness = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
+        roughness.LoadImage(File.ReadAllBytes(folder + "Planks034B_2K-PNG_Roughness.png"));
+        var pixels = roughness.GetPixels32();
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(0, 0, 0, (byte)(255 - pixels[i].r));
+        roughness.SetPixels32(pixels);
+        roughness.Apply();
+        string packedPath = folder + "Planks034B_MetallicSmoothness.png";
+        File.WriteAllBytes(packedPath, roughness.EncodeToPNG());
+        UnityEngine.Object.DestroyImmediate(roughness);
+        AssetDatabase.ImportAsset(packedPath);
+        var importer = (TextureImporter)AssetImporter.GetAtPath(packedPath);
+        importer.sRGBTexture = false;
+        importer.SaveAndReimport();
+        material.SetTexture("_MetallicGlossMap", AssetDatabase.LoadAssetAtPath<Texture2D>(packedPath));
+        material.SetFloat("_GlossMapScale", 1f);
+        material.EnableKeyword("_METALLICGLOSSMAP");
+        EditorUtility.SetDirty(material);
+        var active = SceneManager.GetActiveScene();
+        foreach (string name in new[] { "SingleStudio", "MultiStudio" })
+        {
+            string path = "Assets/Scenes/" + name + ".unity";
+            var scene = SceneManager.GetSceneByPath(path);
+            bool opened = scene.IsValid() && scene.isLoaded;
+            if (!opened) scene = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
+            var model = scene.GetRootGameObjects().FirstOrDefault(r => r.name == "Product Studio");
+            if (model != null) ApplyFloorRendererMaterial(model, material);
+            EditorSceneManager.SaveScene(scene);
+            if (!opened) EditorSceneManager.CloseScene(scene, true);
+        }
+        if (active.IsValid()) SceneManager.SetActiveScene(active);
+        AssetDatabase.SaveAssets();
+        File.WriteAllText("Logs/StudioRedesign/floor-complete.txt", "Planks034B applied to Product Studio/Floor in both studio scenes.");
+    }
+
+    static void ApplyFloorRendererMaterial(GameObject model, Material material)
+    {
+        if (model == null || material == null) return;
+        var previousFloor = model.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "Floor.026");
+        if (previousFloor != null && PrefabUtility.IsPartOfPrefabInstance(previousFloor))
+        {
+            var serializedFloor = new SerializedObject(previousFloor);
+            var materialsProperty = serializedFloor.FindProperty("m_Materials");
+            if (materialsProperty != null)
+                for (int i = 0; i < materialsProperty.arraySize; i++)
+                {
+                    var slot = materialsProperty.GetArrayElementAtIndex(i);
+                    if (slot.prefabOverride && slot.objectReferenceValue == material)
+                        PrefabUtility.RevertPropertyOverride(slot, InteractionMode.AutomatedAction);
+                }
+        }
+        var floor = model.GetComponentsInChildren<Renderer>(true).FirstOrDefault(r => r.name == "Floor");
+        if (floor == null)
+        {
+            Debug.LogWarning("Product Studio/Floor was not found; leaving the studio floor unchanged.");
+            return;
+        }
+        var materials = floor.sharedMaterials;
+        if (materials == null || materials.Length == 0) materials = new[] { material };
+        else for (int i = 0; i < materials.Length; i++) materials[i] = material;
+        floor.sharedMaterials = materials;
+        PrefabUtility.RecordPrefabInstancePropertyModifications(floor);
+        EditorSceneManager.MarkSceneDirty(model.scene);
+        EditorUtility.SetDirty(floor);
     }
     [MenuItem("Crew-On-Set/Studio/Inspect Replacement Assets")]
     public static void Inspect()

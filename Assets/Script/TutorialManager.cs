@@ -995,6 +995,7 @@ public class TutorialManager : MonoBehaviour
 
     public void AdvanceDialogue()
     {
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.TryAdvanceBossDialoguePage()) return;
         if (isTransitioning) return;
 
         if (currentStep == TutorialStep.PostEditComplete) { StartCoroutine(TransitionToNextStep(TutorialStep.OfferLevel1, false)); return; }

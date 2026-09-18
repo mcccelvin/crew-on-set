@@ -191,6 +191,7 @@ public class GokeLevelManager : MonoBehaviour
 
     public void CloseBriefing()
     {
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.TryAdvanceBossDialoguePage()) return;
         if (awaitingFramingAcknowledgement)
         {
             var ui = TutorialUIManager.Instance;

@@ -35,3 +35,4 @@ MonoBehaviour:
     rotation: {x: 0, y: 0, z: 0}
   flowerTable: {fileID: 919132149155446097, guid: b711466301f508f4a87e5df8b286db87, type: 3}
   coffeeInterior: {fileID: 919132149155446097, guid: a411f49d25aae614b8586211e2358d93, type: 3}
+  coffeeActors: {fileID: 919132149155446097, guid: d362d7d7e3bf2fa46a02f108ef85cffc, type: 3}

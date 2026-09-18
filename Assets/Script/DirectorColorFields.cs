@@ -7,14 +7,27 @@ using UnityEngine.UI;
 public sealed class DirectorColorFields : MonoBehaviour
 {
     private DirectorTerminal terminal;
-    private readonly TMP_InputField[] rgb = new TMP_InputField[3];
-    private TMP_InputField hex;
+    [SerializeField] private TMP_InputField[] rgb = new TMP_InputField[3];
+    [SerializeField] private TMP_InputField hex;
     public bool IsEditing => (hex != null && hex.isFocused) ||
         (rgb[0] != null && rgb[0].isFocused) || (rgb[1] != null && rgb[1].isFocused) || (rgb[2] != null && rgb[2].isFocused);
 
+    private bool listenersBound;
     public void Initialize(DirectorTerminal owner)
     {
         terminal = owner;
+        if (hex != null)
+        {
+            if (!listenersBound)
+            {
+                listenersBound = true;
+                for (int i=0;i<rgb.Length;i++) { int channel=i; if(rgb[i]!=null) rgb[i].onEndEdit.AddListener(value => CommitChannel(channel,value)); }
+                hex.onEndEdit.AddListener(CommitHex);
+            }
+            Refresh(owner.CanUseColorSliders());
+            return;
+        }
+        listenersBound = true;
         TMP_Text[] labels = { owner.rValueText, owner.gValueText, owner.bValueText };
         for (int i = 0; i < labels.Length; i++)
         {

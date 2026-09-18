@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using Player.Manager;
 
 namespace Player.Interactor
@@ -223,7 +223,10 @@ namespace Player.Interactor
                         if (hotbar[i] == null)
                         {
                             hotbar[i] = item;
-                            item.OnPickedUp(HoldPoint);
+                            if (item is Equipment.ActorMegaphoneItem megaphone)
+                                megaphone.OnPickedUp(HoldPoint, PlayerCamera);
+                            else
+                                item.OnPickedUp(HoldPoint);
 
                             if (i != currentSlotIndex)
                             {
@@ -236,6 +239,7 @@ namespace Player.Interactor
                             }
 
                             if (hotbarUI != null) hotbarUI.UpdateSlot(i, item.EquipmentName, item.EquipmentIcon);
+                            if (item is Equipment.ActorMegaphoneItem) SwitchSlot(i);
 
                             if (TutorialManager.Instance != null)
                             {

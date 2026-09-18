@@ -19,20 +19,37 @@ public class HotbarUIManager : MonoBehaviour
     public TextMeshProUGUI equipmentGuideText;
 
     private string currentGuideText;
-    private RectTransform equipmentControlsRoot;
-    private readonly List<TextMeshProUGUI> controlLabels = new List<TextMeshProUGUI>();
-    private readonly List<TextMeshProUGUI> controlKeys = new List<TextMeshProUGUI>();
+    [SerializeField] private RectTransform equipmentControlsRoot;
+    [SerializeField] private List<TextMeshProUGUI> controlLabels = new List<TextMeshProUGUI>();
+    [SerializeField] private List<TextMeshProUGUI> controlKeys = new List<TextMeshProUGUI>();
     private bool showingEquipment;
     private static readonly Regex ControlPattern = new Regex(@"\[([^\]]+)\]\s*([^\[]*)");
     private bool isInteractionPrompt;
-    private GameObject directorPromptRoot;
-    private RectTransform directorPromptRect;
-    private CanvasGroup directorPromptGroup;
-    private Image directorPromptAccent;
-    private TextMeshProUGUI directorPromptKeyText;
-    private TextMeshProUGUI directorPromptTitleText;
-    private TextMeshProUGUI directorPromptActionText;
+    [SerializeField] private GameObject directorPromptRoot;
+    [SerializeField] private RectTransform directorPromptRect;
+    [SerializeField] private CanvasGroup directorPromptGroup;
+    [SerializeField] private Image directorPromptAccent;
+    [SerializeField] private TextMeshProUGUI directorPromptKeyText;
+    [SerializeField] private TextMeshProUGUI directorPromptTitleText;
+    [SerializeField] private TextMeshProUGUI directorPromptActionText;
     private float directorPromptVisibility;
+
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        CreateDirectorTabletPrompt();
+        // A reusable pool covers the largest equipment guide without runtime layout creation.
+        UpdateEquipmentGuide("[LMB] Select actor");
+        if (equipmentControlsRoot != null)
+        {
+            while (controlLabels.Count < 16) CreateControlRow(controlLabels.Count);
+            equipmentControlsRoot.sizeDelta = new Vector2(310, 628);
+            equipmentControlsRoot.gameObject.SetActive(false);
+        }
+        foreach (var image in slotBackgrounds)
+            if (image != null && image.GetComponent<Outline>() == null) image.gameObject.AddComponent<Outline>();
+    }
+#endif
 
     private void Start()
     {
@@ -260,6 +277,7 @@ public class HotbarUIManager : MonoBehaviour
 
     private void CreateDirectorTabletPrompt()
     {
+        if (directorPromptRoot != null) return;
         if (equipmentGuideText == null) return;
 
         Transform parent = equipmentGuideText.transform.parent;

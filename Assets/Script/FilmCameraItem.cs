@@ -30,9 +30,9 @@ namespace Player.Equipment
         private Image trackingSquareImage;
         private Vector3[] trackingCorners = new Vector3[8];
         private RaycastHit[] trackingHits = new RaycastHit[16];
-        private GameObject ruleOfThirdsGrid;
-        private Image[] ruleOfThirdsIntersections = new Image[4];
-        private TMP_Text ruleOfThirdsInstructionText;
+        [SerializeField] private GameObject ruleOfThirdsGrid;
+        [SerializeField] private Image[] ruleOfThirdsIntersections = new Image[4];
+        [SerializeField] private TMP_Text ruleOfThirdsInstructionText;
         private bool isLevel2Camera = false;
 
         [Header("--- LENS BLUR (DEPTH OF FIELD) ---")]
@@ -212,10 +212,31 @@ namespace Player.Equipment
             if (pixelRecorder != null) pixelRecorder.filmCamera = filmCamera;
         }
 
+#if UNITY_EDITOR
+        public void BakeHierarchyUI()
+        {
+            if(filmUICanvas==null)
+                foreach(var canvas in FindObjectsOfType<Canvas>(true))
+                    if(canvas.gameObject.scene==gameObject.scene)
+                        foreach(var rect in canvas.GetComponentsInChildren<RectTransform>(true))
+                            if(rect.name=="Cam Pov") filmUICanvas=rect.gameObject;
+            CreateRuleOfThirdsGrid();
+        }
+#endif
+
         private void CreateRuleOfThirdsGrid()
         {
             if (filmUICanvas == null || ruleOfThirdsGrid != null) return;
 
+            var authoredGrid=filmUICanvas.transform.Find("Rule Of Thirds Grid");
+            if(authoredGrid!=null)
+            {
+                ruleOfThirdsGrid=authoredGrid.gameObject;
+                string[] names={"Lower Left Power Point","Upper Left Power Point","Lower Right Power Point","Upper Right Power Point"};
+                for(int i=0;i<4;i++)ruleOfThirdsIntersections[i]=authoredGrid.Find(names[i]).GetComponent<Image>();
+                ruleOfThirdsInstructionText=authoredGrid.Find("Rule Of Thirds Lesson Panel/Rule Of Thirds Instruction").GetComponent<TMP_Text>();
+                return;
+            }
             ruleOfThirdsGrid = new GameObject("Rule Of Thirds Grid", typeof(RectTransform));
             ruleOfThirdsGrid.transform.SetParent(filmUICanvas.transform, false);
 

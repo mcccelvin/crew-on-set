@@ -124,11 +124,15 @@ public class ClipInspector : MonoBehaviour
         }
     }
 
-    private RectTransform keptRangeFill;
+    [SerializeField] private RectTransform keptRangeFill;
+
+#if UNITY_EDITOR
+    public void BakeHierarchyUI() { BuildWorkspace(); }
+#endif
 
     private void BuildWorkspace()
     {
-        if (workspaceBuilt || trimTrack == null) return;
+        if (workspaceBuilt || trimTrack == null || keptRangeFill != null) return;
         workspaceBuilt = true;
         // Keep all scene-authored positions, artwork, preview and close button.
         var fill = new GameObject("Kept Video Range", typeof(RectTransform), typeof(Image));

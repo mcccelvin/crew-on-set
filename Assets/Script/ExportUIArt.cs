@@ -68,13 +68,17 @@ public sealed class ExportUIArt : ScriptableObject
     }
     public static void OutlineText(TMPro.TextMeshProUGUI text)
     {
+        if(text.font==null)text.font=TMPro.TMP_Settings.defaultFontAsset;
         text.color=Color.white;text.fontStyle=TMPro.FontStyles.Bold;
+        if(text.fontSharedMaterial==null)return;
         if(text.fontSharedMaterial!=null)
         {
             var material=new Material(text.fontSharedMaterial);
             var shader=Shader.Find("TextMeshPro/Distance Field");if(shader!=null)material.shader=shader;
-            material.EnableKeyword("OUTLINE_ON");text.fontMaterial=material;
+            material.EnableKeyword("OUTLINE_ON");
+            material.SetColor("_OutlineColor",Color.black);material.SetFloat("_OutlineWidth",.22f);
+            text.fontSharedMaterial=material;
         }
-        text.outlineColor=Color.black;text.outlineWidth=.22f;text.UpdateMeshPadding();
+        text.UpdateMeshPadding();
     }
 }

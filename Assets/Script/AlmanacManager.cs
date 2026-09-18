@@ -18,279 +18,6 @@ public class KnowledgeEntry
     public bool isUnlocked = false;
 }
 
-public class AlmanacGuidePlayer : MonoBehaviour
-{
-    private const int previewLayer = 30;
-    private const float guideDuration = 12f;
-
-    private RawImage previewImage;
-    private TextMeshProUGUI captionText;
-    private TextMeshProUGUI playPauseText;
-    private GameObject previewRoot;
-    private GameObject subjectGroup;
-    private Camera guideCamera;
-    private RenderTexture guideTexture;
-    private List<Material> guideMaterials = new List<Material>();
-    private bool isGuideOpen = false;
-    private bool isPlaying = false;
-    private float playbackTime = 0f;
-
-    public void Initialize(RawImage targetPreviewImage, TextMeshProUGUI targetCaptionText, TextMeshProUGUI targetPlayPauseText)
-    {
-        previewImage = targetPreviewImage;
-        captionText = targetCaptionText;
-        playPauseText = targetPlayPauseText;
-    }
-
-    public void OpenGuide(GameObject subjectPrefab)
-    {
-        if (previewRoot == null) CreateGuideScene(subjectPrefab);
-
-        isGuideOpen = true;
-        isPlaying = true;
-        playbackTime = 0f;
-
-        if (guideCamera != null) guideCamera.enabled = true;
-        if (previewImage != null) previewImage.texture = guideTexture;
-
-        UpdateGuideFrame();
-        UpdatePlayPauseText();
-    }
-
-    public void CloseGuide()
-    {
-        isGuideOpen = false;
-        isPlaying = false;
-        if (guideCamera != null) guideCamera.enabled = false;
-        UpdatePlayPauseText();
-    }
-
-    public void TogglePlayPause()
-    {
-        if (!isGuideOpen) return;
-
-        isPlaying = !isPlaying;
-        UpdatePlayPauseText();
-    }
-
-    public void Replay()
-    {
-        if (!isGuideOpen) return;
-
-        playbackTime = 0f;
-        isPlaying = true;
-        UpdateGuideFrame();
-        UpdatePlayPauseText();
-    }
-
-    private void Update()
-    {
-
-        if (!isGuideOpen || !isPlaying) return;
-
-        playbackTime += Time.unscaledDeltaTime;
-        if (playbackTime >= guideDuration) playbackTime = 0f;
-        UpdateGuideFrame();
-    }
-
-    private void UpdateGuideFrame()
-    {
-        if (subjectGroup == null) return;
-
-        float horizontalPosition = 0f;
-
-        if (playbackTime < 3f)
-        {
-            horizontalPosition = 0f;
-            if (captionText != null) captionText.text = "<color=#FF6B6B>NOT THE REQUESTED COMPOSITION:</color> The product is centered and ignores the Rule of Thirds brief.";
-        }
-        else if (playbackTime < 5f)
-        {
-            float movementProgress = Mathf.SmoothStep(0f, 1f, (playbackTime - 3f) / 2f);
-            horizontalPosition = Mathf.Lerp(0f, -2.05f, movementProgress);
-            if (captionText != null) captionText.text = "Move the product toward a vertical grid line while keeping the important label visible.";
-        }
-        else if (playbackTime < 9f)
-        {
-            horizontalPosition = -2.05f;
-            if (captionText != null) captionText.text = "<color=#65F28B>STRONG COMPOSITION:</color> The product sits on the left third with useful open space on the right.";
-        }
-        else
-        {
-            horizontalPosition = -2.05f;
-            if (captionText != null) captionText.text = "Keep the main detail close to a grid intersection, then confirm the product remains fully visible before recording.";
-        }
-
-        subjectGroup.transform.localPosition = new Vector3(horizontalPosition, 0f, 0f);
-        subjectGroup.transform.localRotation = Quaternion.Euler(0f, Mathf.Sin(playbackTime * 0.8f) * 4f, 0f);
-    }
-
-    private void UpdatePlayPauseText()
-    {
-        if (playPauseText != null) playPauseText.text = isPlaying ? "PAUSE" : "PLAY";
-    }
-
-    private void CreateGuideScene(GameObject subjectPrefab)
-    {
-        previewRoot = new GameObject("Almanac Rule of Thirds Preview");
-        previewRoot.transform.position = new Vector3(0f, -1000f, 0f);
-        SetLayerRecursively(previewRoot, previewLayer);
-
-        guideTexture = new RenderTexture(640, 360, 24, RenderTextureFormat.ARGB32);
-        guideTexture.name = "Rule of Thirds Guide Texture";
-        guideTexture.Create();
-
-        GameObject cameraObject = new GameObject("Guide Camera", typeof(Camera));
-        cameraObject.transform.SetParent(previewRoot.transform, false);
-        cameraObject.transform.localPosition = new Vector3(0f, 2.1f, -8f);
-        cameraObject.transform.LookAt(previewRoot.transform.TransformPoint(new Vector3(0f, 1.35f, 0f)));
-        cameraObject.layer = previewLayer;
-
-        guideCamera = cameraObject.GetComponent<Camera>();
-        guideCamera.clearFlags = CameraClearFlags.SolidColor;
-        guideCamera.backgroundColor = new Color(0.08f, 0.08f, 0.09f, 1f);
-        guideCamera.orthographic = true;
-        guideCamera.orthographicSize = 3.2f;
-        guideCamera.cullingMask = 1 << previewLayer;
-        guideCamera.targetTexture = guideTexture;
-
-        CreatePreviewPrimitive("Red Commercial Backdrop", PrimitiveType.Cube, previewRoot.transform, new Vector3(0f, 2.5f, 2.6f), new Vector3(12f, 7f, 0.25f), new Color(0.55f, 0.045f, 0.055f));
-        CreatePreviewPrimitive("Studio Floor", PrimitiveType.Cube, previewRoot.transform, new Vector3(0f, -0.15f, 0f), new Vector3(12f, 0.3f, 8f), new Color(0.55f, 0.42f, 0.25f));
-
-        subjectGroup = new GameObject("Animated Product");
-        subjectGroup.transform.SetParent(previewRoot.transform, false);
-        subjectGroup.layer = previewLayer;
-
-        CreatePreviewPrimitive("Product Pedestal", PrimitiveType.Cube, subjectGroup.transform, new Vector3(0f, 0.15f, 0f), new Vector3(1.8f, 0.3f, 1.5f), new Color(0.72f, 0.72f, 0.7f));
-
-        if (subjectPrefab != null) CreateGameProduct(subjectPrefab);
-        else CreateFallbackProduct();
-
-        CreateGuideLight("Guide Key Light", 1.25f, new Vector3(35f, -35f, 0f));
-        CreateGuideLight("Guide Fill Light", 0.45f, new Vector3(25f, 145f, 0f));
-    }
-
-    private void CreateGameProduct(GameObject subjectPrefab)
-    {
-        GameObject subjectObject = Instantiate(subjectPrefab, subjectGroup.transform);
-        subjectObject.name = "Goke Product From Game";
-        subjectObject.transform.localPosition = Vector3.zero;
-        subjectObject.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
-        SetLayerRecursively(subjectObject, previewLayer);
-
-        foreach (MonoBehaviour behaviour in subjectObject.GetComponentsInChildren<MonoBehaviour>(true)) behaviour.enabled = false;
-        foreach (Collider subjectCollider in subjectObject.GetComponentsInChildren<Collider>(true)) subjectCollider.enabled = false;
-        foreach (Rigidbody subjectBody in subjectObject.GetComponentsInChildren<Rigidbody>(true))
-        {
-            subjectBody.isKinematic = true;
-            subjectBody.useGravity = false;
-        }
-
-        Renderer[] subjectRenderers = subjectObject.GetComponentsInChildren<Renderer>(true);
-        if (subjectRenderers.Length == 0)
-        {
-            Destroy(subjectObject);
-            CreateFallbackProduct();
-            return;
-        }
-
-        Bounds subjectBounds = subjectRenderers[0].bounds;
-        for (int rendererIndex = 1; rendererIndex < subjectRenderers.Length; rendererIndex++) subjectBounds.Encapsulate(subjectRenderers[rendererIndex].bounds);
-
-        if (subjectBounds.size.y > 0.001f)
-        {
-            float targetScale = 1.8f / subjectBounds.size.y;
-            subjectObject.transform.localScale *= targetScale;
-
-            subjectBounds = subjectRenderers[0].bounds;
-            for (int rendererIndex = 1; rendererIndex < subjectRenderers.Length; rendererIndex++) subjectBounds.Encapsulate(subjectRenderers[rendererIndex].bounds);
-        }
-
-        Vector3 desiredCenter = subjectGroup.transform.TransformPoint(new Vector3(0f, 1.3f, 0f));
-        subjectObject.transform.position += desiredCenter - subjectBounds.center;
-    }
-
-    private void CreateFallbackProduct()
-    {
-        GameObject product = CreatePreviewPrimitive("Goke Guide Can", PrimitiveType.Cylinder, subjectGroup.transform, new Vector3(0f, 1.15f, 0f), new Vector3(0.6f, 0.9f, 0.6f), new Color(0.75f, 0.03f, 0.04f));
-        product.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
-
-        GameObject label = CreatePreviewPrimitive("Goke Label", PrimitiveType.Cube, product.transform, new Vector3(0f, 0f, -0.51f), new Vector3(0.65f, 0.22f, 0.03f), Color.white);
-        label.transform.localRotation = Quaternion.identity;
-    }
-
-    private GameObject CreatePreviewPrimitive(string objectName, PrimitiveType primitiveType, Transform parent, Vector3 localPosition, Vector3 localScale, Color color)
-    {
-        GameObject previewObject = GameObject.CreatePrimitive(primitiveType);
-        previewObject.name = objectName;
-        previewObject.transform.SetParent(parent, false);
-        previewObject.transform.localPosition = localPosition;
-        previewObject.transform.localScale = localScale;
-        previewObject.layer = previewLayer;
-
-        Collider previewCollider = previewObject.GetComponent<Collider>();
-        if (previewCollider != null) Destroy(previewCollider);
-
-        Renderer previewRenderer = previewObject.GetComponent<Renderer>();
-        if (previewRenderer != null)
-        {
-            Material previewMaterial = CreateGuideMaterial(color);
-            previewRenderer.sharedMaterial = previewMaterial;
-        }
-
-        return previewObject;
-    }
-
-    private Material CreateGuideMaterial(Color color)
-    {
-        Shader guideShader = Shader.Find("Standard");
-        if (guideShader == null) guideShader = Shader.Find("Universal Render Pipeline/Lit");
-
-        Material guideMaterial = new Material(guideShader);
-        guideMaterial.color = color;
-        guideMaterials.Add(guideMaterial);
-        return guideMaterial;
-    }
-
-    private void CreateGuideLight(string lightName, float intensity, Vector3 rotation)
-    {
-        GameObject lightObject = new GameObject(lightName, typeof(Light));
-        lightObject.transform.SetParent(previewRoot.transform, false);
-        lightObject.transform.localRotation = Quaternion.Euler(rotation);
-        lightObject.layer = previewLayer;
-
-        Light guideLight = lightObject.GetComponent<Light>();
-        guideLight.type = LightType.Directional;
-        guideLight.intensity = intensity;
-        guideLight.cullingMask = 1 << previewLayer;
-    }
-
-    private void SetLayerRecursively(GameObject targetObject, int targetLayer)
-    {
-        targetObject.layer = targetLayer;
-        foreach (Transform child in targetObject.transform) SetLayerRecursively(child.gameObject, targetLayer);
-    }
-
-    private void OnDestroy()
-    {
-        if (guideCamera != null) guideCamera.targetTexture = null;
-
-        if (guideTexture != null)
-        {
-            guideTexture.Release();
-            Destroy(guideTexture);
-        }
-
-        if (previewRoot != null) Destroy(previewRoot);
-
-        foreach (Material guideMaterial in guideMaterials)
-        {
-            if (guideMaterial != null) Destroy(guideMaterial);
-        }
-        guideMaterials.Clear();
-    }
-}
-
 [System.Serializable]
 public class AchievementEntry
 {
@@ -337,12 +64,12 @@ public partial class AlmanacManager : MonoBehaviour
     public List<AchievementEntry> achievements = new List<AchievementEntry>();
 
     private bool isAlmanacOpen = false;
-    private Button closeButton;
-    private Button allKnowledgeButton;
-    private Button equipmentKnowledgeButton;
-    private Button techniquesKnowledgeButton;
-    private GameObject techniqueGuidePanel;
-    private AlmanacGuidePlayer ruleOfThirdsGuidePlayer;
+    [SerializeField] private Button closeButton;
+    [SerializeField] private Button allKnowledgeButton;
+    [SerializeField] private Button equipmentKnowledgeButton;
+    [SerializeField] private Button techniquesKnowledgeButton;
+    [SerializeField] private GameObject techniqueGuidePanel;
+    [SerializeField] private AlmanacGuidePlayer ruleOfThirdsGuidePlayer;
     private int knowledgeCategoryFilter = 0;
     private HashSet<string> stagedHiddenKnowledge = new HashSet<string>();
     private Player.Manager.InputManager inputManager;
@@ -384,6 +111,7 @@ public partial class AlmanacManager : MonoBehaviour
         EnsureEquipmentAndTechniqueEntries();
         RemoveLegacyKnowledgeEntries();
         BuildAlmanacUI();
+        BindBookButtons();
         BuildKnowledgeFilters();
         LoadAlmanacData();
         RestoreKnowledgeProgress();
@@ -876,6 +604,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void EnsureEquipmentAndTechniqueEntries()
     {
+        AddKnowledgeEntry("actor_megaphone", "EQUIPMENT - DIRECTOR MEGAPHONE", "LEVEL 4 EQUIPMENT - 900 B-COINS\n\nA handheld cue tool for directing a hired Actor from the studio floor.\n\nHOW TO USE\n- Buy it from the Equipment Shop and pick it up with [E].\n- Aim at an Actor and press [LMB] to select them.\n- Press [Z] Neutral, [X] Wave, or [C] Action.\n- Arrow keys nudge the actor; [R] turns them.\n- [B/N] save walk marks, [K] rehearses, [J] returns to START, and [H] clears the route.\n- The megaphone controls the selected Actor without reopening the Director Tablet.", "Equipment", 4, 5);
         AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, poses, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- From Level 4 use CHOOSE SET for a plain backdrop, Cafe Corner or Coffee Interior. Earlier levels use ADD WALL. Select the wall, then adjust the RGB sliders, type 0-255 in the number fields, or enter a HEX color such as #FF6600. Press Enter to apply.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Select an actor and use POSE ACTOR to change pose.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
         AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 1,200 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Hold [PgUp/PgDn] while carrying it to raise/lower the existing stand.\n- The always-on guide shows visible-beam haze; setup view only, never in the recording.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
         AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "LEVEL 1 EQUIPMENT - 4,000 B-COINS\n\nFEATURES\n- Production camera with a 15-60 degree zoom range.\n- Continuous autofocus and a subject-tracking viewfinder HUD.\n- Displays focus distance, REC status, recording time, and subject position.\n- Supports zoom and pedestal-height adjustment.\n\nHOW TO USE\n- Pick it up with [E] and press [C] to insert a blank SD Card.\n- Press [LMB] to open or close the viewfinder.\n- Use [Scroll] to zoom and [Q/E] to change camera height.\n- Press [R] to start or stop recording.\n- Hold [Ctrl] with WASD for slow, eased camera movement; mouse look becomes gentler. Release WASD before releasing Ctrl for a smooth stop.\n- Press [G] to drop it. Zoom and height lock during recording; the first tutorial still requires a stationary take.", "Equipment", 1, 20);
@@ -1370,7 +1099,7 @@ public partial class AlmanacManager : MonoBehaviour
 
         Button closeGuideButton = CreateButton("Close Guide Button", techniqueGuidePanel.transform, "BACK TO GUIDES");
         SetRect(closeGuideButton.GetComponent<RectTransform>(), new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-125f, -42f), new Vector2(220f, 52f));
-        closeGuideButton.onClick.AddListener(CloseTechniqueGuide);
+
 
         GameObject videoFrame = CreatePanel("Video Frame", techniqueGuidePanel.transform, Color.black);
         SetRect(videoFrame.GetComponent<RectTransform>(), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -335f), new Vector2(930f, 520f));
@@ -1406,8 +1135,7 @@ public partial class AlmanacManager : MonoBehaviour
 
         ruleOfThirdsGuidePlayer = techniqueGuidePanel.AddComponent<AlmanacGuidePlayer>();
         ruleOfThirdsGuidePlayer.Initialize(previewImage, captionText, playPauseButton.GetComponentInChildren<TextMeshProUGUI>());
-        playPauseButton.onClick.AddListener(ruleOfThirdsGuidePlayer.TogglePlayPause);
-        replayButton.onClick.AddListener(ruleOfThirdsGuidePlayer.Replay);
+
 
         techniqueGuidePanel.SetActive(false);
     }

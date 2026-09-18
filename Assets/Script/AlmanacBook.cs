@@ -5,8 +5,8 @@ using System.Collections.Generic;
 
 public partial class AlmanacManager
 {
-    private TextMeshProUGUI bookEntryTitle,bookLeftText,bookRightText,bookHeading,bookPageNumber;
-    private Button bookPrevious,bookNext,bookVideo;
+    [SerializeField] private TextMeshProUGUI bookEntryTitle,bookLeftText,bookRightText,bookHeading,bookPageNumber;
+    [SerializeField] private Button bookPrevious,bookNext,bookVideo;
     private int bookPage,bookCategory;
     private readonly List<string> bookBodies=new List<string>();
     private readonly List<KnowledgeEntry> bookEntries=new List<KnowledgeEntry>();
@@ -20,8 +20,8 @@ public partial class AlmanacManager
     private bool navigationOverrideSorting, navigationBlocksRaycasts, navigationTasksVisible;
     private int navigationSortingOrder;
     private bool navigationAwaitingSpace;
-    private Button navigationLightingButton;
-    private GameObject navigationFrame;
+    [SerializeField] private Button navigationLightingButton;
+    [SerializeField] private GameObject navigationFrame;
     private readonly List<CanvasGroup> navigationButtonGates = new List<CanvasGroup>();
 
     private Button NavigationTarget()
@@ -38,7 +38,7 @@ public partial class AlmanacManager
 
     private void ClearNavigationFocus()
     {
-        if (navigationFrame != null) { navigationFrame.SetActive(false); Destroy(navigationFrame); }
+        if (navigationFrame != null) navigationFrame.SetActive(false);
         foreach (var gate in navigationButtonGates)
         {
             if (gate == null) continue;
@@ -54,7 +54,7 @@ public partial class AlmanacManager
         ClearNavigationFocus();
         if (UnityEngine.EventSystems.EventSystem.current != null)
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
-        foreach (var button in almanacCanvas.GetComponentsInChildren<Button>(true))
+        foreach (var button in Application.isPlaying ? almanacCanvas.GetComponentsInChildren<Button>(true) : new Button[0])
         {
             if (button == target || button == closeButton) continue;
             var gate = button.gameObject.AddComponent<CanvasGroup>();
@@ -63,6 +63,12 @@ public partial class AlmanacManager
             navigationButtonGates.Add(gate);
         }
         if (target == null) return;
+        if (navigationFrame != null)
+        {
+            navigationFrame.transform.SetParent(target.transform, false);
+            navigationFrame.SetActive(true);
+            return;
+        }
         navigationFrame = new GameObject("Almanac tutorial square", typeof(RectTransform));
         var frame = navigationFrame.GetComponent<RectTransform>();
         frame.SetParent(target.transform, false);
@@ -168,6 +174,40 @@ public partial class AlmanacManager
         if (navigationGroup != null) navigationGroup.blocksRaycasts = navigationBlocksRaycasts;
         navigationUI = null;
     }
+    private GameObject boundBookCanvas;
+    private void BindBookButtons()
+    {
+        if (bookEntryTitle == null || boundBookCanvas == almanacCanvas) return;
+        boundBookCanvas = almanacCanvas;
+        bookPrevious.onClick.AddListener(() => { bookPage--; RefreshBookPage(); });
+        bookNext.onClick.AddListener(() => { bookPage++; RefreshBookPage(); NavigationAction(3); });
+        bookVideo.onClick.AddListener(ShowRuleOfThirdsGuide);
+        equipmentKnowledgeButton.onClick.AddListener(() => { bookPage=0; bookCategory=0; ShowEquipmentKnowledge(); NavigationAction(0); });
+        techniquesKnowledgeButton.onClick.AddListener(() => { bookPage=0; bookCategory=0; ShowTechniqueKnowledge(); NavigationAction(2); });
+        var book = equipmentKnowledgeButton.transform.parent;
+        for (int i=0;i<BookCategories.Length;i++)
+        {
+            int category=i;
+            book.Find("Category " + BookCategories[i]).GetComponent<Button>().onClick.AddListener(() =>
+            { bookCategory=category; bookPage=0; OpenTab(1); RefreshBookPage(); NavigationAction(1); });
+        }
+        if (techniqueGuidePanel != null && ruleOfThirdsGuidePlayer != null)
+        {
+            techniqueGuidePanel.transform.Find("Close Guide Button").GetComponent<Button>().onClick.AddListener(CloseTechniqueGuide);
+            techniqueGuidePanel.transform.Find("Play Pause Button").GetComponent<Button>().onClick.AddListener(ruleOfThirdsGuidePlayer.TogglePlayPause);
+            techniqueGuidePanel.transform.Find("Replay Button").GetComponent<Button>().onClick.AddListener(ruleOfThirdsGuidePlayer.Replay);
+        }
+    }
+#if UNITY_EDITOR
+    public void BakeHierarchyUI()
+    {
+        BuildIllustratedBook();
+        SetNavigationFocus(bookNext);
+        ClearNavigationFocus();
+        almanacCanvas.SetActive(false);
+    }
+#endif
+
     private void BuildIllustratedBook()
     {
         if(almanacCanvas==null||bookEntryTitle!=null)return;
@@ -184,18 +224,18 @@ public partial class AlmanacManager
         knowledgeCategoryFilter=1;
         equipmentKnowledgeButton=BookButton(root.transform,"Equipment tab","EQUIPMENTS","psdTab",new Vector2(-493,487),new Vector2(236,73));
         techniquesKnowledgeButton=BookButton(root.transform,"Techniques tab","TECHNIQUES","psdTab",new Vector2(-244,487),new Vector2(236,73));
-        equipmentKnowledgeButton.onClick.AddListener(()=>{OpenTab(1);bookPage=0;bookCategory=0;});
-        techniquesKnowledgeButton.onClick.AddListener(()=>{OpenTab(1);bookPage=0;bookCategory=0;});
+
+
         closeButton=BookButton(root.transform,"Close book","","close",new Vector2(820,440),new Vector2(86,99));
         bookPrevious=BookButton(root.transform,"Previous page","","left",new Vector2(-813,49),new Vector2(62,93));
         bookNext=BookButton(root.transform,"Next page","","right",new Vector2(898,49),new Vector2(62,93));
-        bookPrevious.onClick.AddListener(()=>{bookPage--;RefreshBookPage();});bookNext.onClick.AddListener(()=>{bookPage++;RefreshBookPage();NavigationAction(3);});
+
         for(int i=0;i<BookCategories.Length;i++)
         {
             int category=i;
             var button=BookButton(root.transform,"Category "+BookCategories[i],"",new[]{"psdDirector","psdLight","psdAudio","psdCamera","psdEdit"}[i],new Vector2(780,215-i*108),new Vector2(122,82));
             if (category == 1) navigationLightingButton = button;
-            button.onClick.AddListener(()=>{bookCategory=category;bookPage=0;OpenTab(1);RefreshBookPage();NavigationAction(1);});
+
         }
         bookHeading=BookText(knowledgePanel.transform,"Section",new Vector2(-365,338),new Vector2(610,80),60);
         bookEntryTitle=BookText(knowledgePanel.transform,"Entry title",new Vector2(-365,262),new Vector2(595,70),30);
@@ -207,7 +247,7 @@ public partial class AlmanacManager
         bookRightText.alignment=TextAlignmentOptions.TopLeft;
         bookPageNumber=BookText(knowledgePanel.transform,"Page number",new Vector2(360,-365),new Vector2(500,35),20);
         bookVideo=BookButton(knowledgePanel.transform,"Watch guide","WATCH GUIDE","blueButton",new Vector2(-360,-357),new Vector2(270,52));
-        bookVideo.onClick.AddListener(ShowRuleOfThirdsGuide);
+
         // Preserve profile, milestones and the interactive guide without crowding the two main tabs.
         var other=CreatePanel("Other book pages",root.transform,Color.clear);SetStretchRect(other.GetComponent<RectTransform>(),Vector2.zero,Vector2.one,new Vector2(95,70),new Vector2(-95,-100));
         BuildPlayerInfoPanel(other.transform);BuildAchievementsPanel(other.transform);
@@ -215,8 +255,7 @@ public partial class AlmanacManager
         achievementsTabBtn=BookButton(root.transform,"Milestones","MILESTONES","psdTab",new Vector2(-235,-413),new Vector2(230,40));
         BuildTechniqueGuidePanel();
         other.GetComponent<Image>().raycastTarget=false;
-        equipmentKnowledgeButton.onClick.AddListener(() => { ShowEquipmentKnowledge(); NavigationAction(0); });
-        techniquesKnowledgeButton.onClick.AddListener(() => { ShowTechniqueKnowledge(); NavigationAction(2); });
+
         OpenTab(1);RefreshBookPage();
     }
     private Button BookButton(Transform parent,string name,string label,string artwork,Vector2 position,Vector2 size)

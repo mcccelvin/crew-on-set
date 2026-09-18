@@ -16,6 +16,20 @@ public sealed class StageInterior : MonoBehaviour
             if (renderer.name.StartsWith("Screen", System.StringComparison.OrdinalIgnoreCase)) { screen = renderer; break; }
         if (screen == null) return;
         Bounds bounds = screen.bounds;
+        // Replace the entire backdrop visually, while retaining its ownership/selection root.
+        if (style == 2)
+        {
+            var imported = ProductModelCatalog.CreateFurniture(false,
+                new Vector3(bounds.size.x, bounds.size.y, bounds.size.z));
+            if (imported != null)
+            {
+                foreach (var renderer in wall.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
+                foreach (var collider in wall.GetComponentsInChildren<Collider>()) collider.enabled = false;
+                imported.transform.position = new Vector3(bounds.center.x, bounds.min.y + .03f, bounds.center.z);
+                imported.transform.SetParent(wall.transform, true);
+                return;
+            }
+        }
         var host = new GameObject(Title(style) + " Furniture");
         host.transform.SetParent(wall.transform, true);
         host.transform.position = new Vector3(bounds.center.x, bounds.min.y + .03f, bounds.center.z);
@@ -30,15 +44,6 @@ public sealed class StageInterior : MonoBehaviour
         // Shrink only for unusually small authored stages; leave the front and centre clear for filming.
         float scale = Mathf.Min(1f, width / 5.5f, depth / 3.5f);
         host.transform.localScale *= Mathf.Max(.15f, scale);
-        if (style == 2)
-        {
-            var imported = ProductModelCatalog.CreateFurniture(false, new Vector3(5.5f, 3, 3.5f));
-            if (imported != null)
-            {
-                imported.transform.SetParent(host.transform, false);
-                return;
-            }
-        }
         var wood = interior.Material(new Color(.25f,.12f,.055f));
         var cream = interior.Material(new Color(.85f,.76f,.6f));
         var dark = interior.Material(new Color(.08f,.085f,.09f));

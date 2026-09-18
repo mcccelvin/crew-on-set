@@ -14,7 +14,7 @@ Read the row relevant to the task, then search its entry points. Paths below are
 | Terrari / level 3 | `Level3Manager.cs`, `LamborminiEditLesson.cs` | `LamborminiBrief.cs`, `LamborminiShowroom.cs`, `LamborminiVehicleVisual.cs`; `Docs/AutomotiveSimulation.md` |
 | Level 4 / actors | `CampaignLevelManager.cs`, `ActorBot.cs` | `Docs/Level4Tutorial.md`, `Docs/ActorBots.md` |
 | Stage / director tablet | `DirectorTerminal.cs`, `UIDragProp.cs` | `StageInterior.cs`, `ImportedProductVisual.cs`; `Docs/DirectorTablet.md`, `Docs/StageInteriors.md`, `Docs/ProductModels.md` |
-| Equipment shop / delivery | `ShopManager.cs`, `ShopTerminal.cs`, `EquipmentInteractor.cs` | `ProductionKit.cs`, `ProductionKitShop.cs`, `ProductionEconomy.cs` |
+| Equipment shop / delivery | `ShopManager.cs`, `ShopTerminal.cs`, `EquipmentInteractor.cs`, `ActorMegaphoneItem.cs` | `ProductionKit.cs`, `ProductionKitShop.cs`, `ProductionEconomy.cs` |
 | Lighting / grip | `FilmLightItem.cs`, `StageLightStrip.cs`, `StudioLightHaze.cs` | `ProductionLightModifiers.cs`, `ProductionExposureMonitor.cs`, `AutomotiveGrip.cs` |
 | Camera / SD / recordings | `FilmCameraItem.cs`, `ComputerStation.cs`, `ComputerUIManager.cs` | Follow recording and inventory callers before changing media transfer |
 | Editing / playback | `EditorManager.cs`, `TruePixelPlayer.cs`, `CommercialCompiler.cs` | `EditorTutorialManager.cs`, `DraggableClip.cs`, `ClipInspector.cs`, `ProjectDataManager.cs` |
@@ -32,6 +32,12 @@ Unless a full path is given, filenames above are under `Assets/Script`.
 - `PauseManager` owns pausing and cursor restoration. `SharedOptionsPanel` owns settings drafts and UI. `GameOptions` owns applying settings; `MainMenuOptionsHost` owns the main-menu entry point.
 - Tutorial/level managers orchestrate steps; equipment and editor components perform actions; grading checks the result. When changing a rule, check its tutorial instructions and grader together.
 - `ExportUIArt` resolves catalog keys to sprites. Artwork lives in `Assets/UI/UI-EXPORT`, including `PSD Pieces`. Preserve authored art rather than adding a second UI on top.
+
+## Authored UI
+
+Static UI is saved in the scenes and equipment prefab rather than rebuilt on Play. `Assets/Editor/AuthoredUIMigration.cs` owns the one-time migration (`Crew-On-Set/UI/Save UI into Scene Hierarchy`) and backs up scenes under `Logs/AuthoredUI`. Root screen UI is grouped under `UI`; world-space screens and internal lookup paths remain in place. UI controllers serialize layout references and bind runtime listeners independently. `SettingsLayout`, `PlayerEditTools`, `AlmanacGuidePlayer`, and `CircularSliderKnob` have matching script files so Unity can serialize their components.
+
+Clip cards, timeline ticks, save cards, achievements, and prop-bank entries are data-driven and still populate dynamically. Do not globally disable Instantiate or remove UI controllers. Existing builders remain as compatibility fallbacks for unmigrated scenes. Keep the scene/prefab references when editing layouts; repeat migration only when deliberately adding missing layouts.
 
 ## Scene flow and serialization
 
