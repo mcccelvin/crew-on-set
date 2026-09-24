@@ -16,6 +16,7 @@ public class TutorialHighlighter : MonoBehaviour
     public Color dimColor = Color.black;
 
     private RectTransform targetElement;
+    private RectTransform worldTarget;
     private CanvasGroup frameCanvasGroup;
     private Canvas myCanvas;
     private readonly Vector3[] targetCorners = new Vector3[4];
@@ -123,6 +124,7 @@ public class TutorialHighlighter : MonoBehaviour
 
     public void HighlightElement(RectTransform uiElementToHighlight)
     {
+        if (targetElement == uiElementToHighlight && targetElement != null && highlightFrame != null && highlightFrame.gameObject.activeSelf) return;
         HideHighlight();
 
         if (uiElementToHighlight == null)
@@ -141,6 +143,35 @@ public class TutorialHighlighter : MonoBehaviour
         if (dimmerGroup != null) dimmerGroup.gameObject.SetActive(true);
 
         TrackTarget();
+    }
+
+    public void HighlightWorldBounds(Bounds bounds, Camera camera)
+    {
+        if (camera == null || myCanvas == null || highlightFrame == null) return;
+        Vector2 min = new Vector2(float.MaxValue, float.MaxValue);
+        Vector2 max = new Vector2(float.MinValue, float.MinValue);
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 corner = bounds.center + Vector3.Scale(bounds.extents,
+                new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            Vector3 screen = camera.WorldToScreenPoint(corner);
+            if (screen.z <= camera.nearClipPlane) { HideHighlight(); return; }
+            min = Vector2.Min(min, screen); max = Vector2.Max(max, screen);
+        }
+        if (max.x < 0 || max.y < 0 || min.x > Screen.width || min.y > Screen.height) { HideHighlight(); return; }
+        if (worldTarget == null)
+        {
+            worldTarget = new GameObject("Tutorial World Target", typeof(RectTransform)).GetComponent<RectTransform>();
+            worldTarget.SetParent(highlightFrame.parent, false);
+            worldTarget.anchorMin = worldTarget.anchorMax = new Vector2(.5f, .5f);
+        }
+        var parent = worldTarget.parent as RectTransform;
+        var uiCamera = myCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : myCanvas.worldCamera;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, min, uiCamera, out var localMin);
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, max, uiCamera, out var localMax);
+        worldTarget.localPosition = (localMin + localMax) * .5f;
+        worldTarget.sizeDelta = localMax - localMin;
+        HighlightElement(worldTarget);
     }
 
     public void HideHighlight()

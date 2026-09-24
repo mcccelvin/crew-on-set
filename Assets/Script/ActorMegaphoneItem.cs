@@ -11,6 +11,11 @@ namespace Player.Equipment
         private ActorBot selectedActor;
         private Camera playerCamera;
         private int commandCount;
+        private ActorBot previewActor;
+        private Vector3 previewPosition;
+        private bool previewValid;
+        public bool IsRepositioning { get; private set; }
+        private const string Controls = "[LMB] Select Actor / Aim at chair, machine or product | [O] Stop / Return product\n[Z/X/C] Neutral/Wave/Action | [ARROWS] Move | [R] Turn | [B/N] Marks | [K] Walk [J] Reset [H] Clear | [G] Drop";
 
         public bool HasSelectedActor => selectedActor != null;
         public int CommandCount => commandCount;
@@ -23,7 +28,7 @@ namespace Player.Equipment
             if (megaphone == null) megaphone = item.AddComponent<ActorMegaphoneItem>();
 
             megaphone.EquipmentName = "DIRECTOR MEGAPHONE";
-            megaphone.EquipmentControls = "[LMB] Select Actor | [Z] Neutral [X] Wave [C] Action\n[ARROWS] Move | [R] Turn | [B/N] Marks | [K] Rehearse | [J] Reset | [H] Clear | [G] Drop";
+            megaphone.EquipmentControls = Controls + "\n[T] Reposition: aim at floor, [LMB] place";
             megaphone.HoldPositionOffset = new Vector3(.45f, -.35f, 1.0f);
             megaphone.HoldRotationOffset = new Vector3(-90f, 0f, 0f);
 
@@ -57,6 +62,7 @@ namespace Player.Equipment
         public override void OnPickedUp(Transform holdPoint)
         {
             if (holdPoint == null) return;
+            CancelReposition();
             base.OnPickedUp(holdPoint);
             selectedActor = null;
             commandCount = 0;
@@ -73,7 +79,7 @@ namespace Player.Equipment
             // Follow camera movement and look rotation, including while switching slots.
             if (playerCamera != null) transform.SetParent(playerCamera.transform, true);
             FitHeldModelInView();
-            EquipmentControls = "[LMB] Select Actor | [Z] Neutral [X] Wave [C] Action\n[ARROWS] Move | [R] Turn | [B/N] Marks | [K] Rehearse | [J] Reset | [H] Clear | [G] Drop";
+            EquipmentControls = Controls;
             GameFeedback.Show("MEGAPHONE READY\nAim at an Actor and press [LMB] to select them.");
         }
 
@@ -100,6 +106,27 @@ namespace Player.Equipment
 
         public override void OnUse(Camera camera)
         {
+            if (IsRepositioning)
+            {
+                var lesson = CampaignLevelManager.Instance;
+                if (lesson != null && !lesson.CanUseContract4PracticeAction("megaphone.place")) return;
+                UpdatePositionPreview(camera != null ? camera : playerCamera);
+                if (previewValid && selectedActor != null)
+                {
+                    selectedActor.MoveBy(Vector3.zero);
+                    selectedActor.transform.position = previewPosition;
+                    CancelReposition();
+                    commandCount++;
+                    GameFeedback.Show("ACTOR REPOSITIONED");
+                    return;
+                }
+                GameFeedback.Show("Aim at a clear floor spot near the actor's current floor height.");
+                return;
+            }
+            var practice = CampaignLevelManager.Instance;
+            if (practice != null && practice.IsContract4PracticeActive &&
+                !practice.CanUseContract4PracticeAction("megaphone.select") &&
+                !practice.CanUseContract4PracticeAction("megaphone.seat")) return;
             playerCamera = camera != null ? camera : playerCamera != null ? playerCamera : Camera.main;
             if (playerCamera == null) return;
 
@@ -108,47 +135,78 @@ namespace Player.Equipment
             if (Physics.Raycast(ray, out RaycastHit hit, 10f, ~0, QueryTriggerInteraction.Ignore))
                 target = hit.collider.GetComponentInParent<ActorBot>();
 
-            if (target == null)
+            if (target == null && selectedActor != null)
             {
-                float nearestDistance = 4f;
-                foreach (var candidate in Object.FindObjectsOfType<ActorBot>())
+                var furniture = Contract4Interactable.FindCommandTarget(ray, 10f, transform.root);
+                if (furniture != null)
                 {
-                    float distance = Vector3.Distance(playerCamera.transform.position, candidate.transform.position);
-                    if (distance < nearestDistance) { nearestDistance = distance; target = candidate; }
+                    if (practice != null && practice.IsContract4PracticeActive &&
+                        (furniture.action != Contract4Interactable.Action.Sit ||
+                         !practice.CanUseContract4PracticeAction("megaphone.seat"))) return;
+                    if (selectedActor.PerformFurnitureAction(furniture)) commandCount++;
+                    return;
                 }
             }
 
             if (target == null)
             {
-                GameFeedback.Show("AIM AT AN ACTOR\nMove closer or point the megaphone at the actor.");
+                GameFeedback.Show(selectedActor == null ? "AIM AT AN ACTOR\nClick their body to select them." : "Aim at a chair, coffee machine or product, then click to command the selected actor.");
                 return;
             }
 
+            if (practice != null && practice.IsContract4PracticeActive &&
+                !practice.CanUseContract4PracticeAction("megaphone.select")) return;
+
             selectedActor = target;
-            GameFeedback.Show("ACTOR SELECTED\nUse [Z] Neutral, [X] Wave, [C] Action, or the movement keys.");
+            GameFeedback.Show("ACTOR SELECTED\nAim at a chair, machine or product and click. [Z/X/C] Poses | [O] Stop / Return product.");
+        }
+
+        public string GetAimPrompt(Camera camera)
+        {
+            if (IsRepositioning) return "Aim at clear floor: [LMB] place actor | [T] cancel";
+            if (camera == null) return Controls;
+            var ray = new Ray(camera.transform.position, camera.transform.forward);
+            if (Physics.Raycast(ray, out var hit, 10f, ~0, QueryTriggerInteraction.Ignore) && hit.collider.GetComponentInParent<ActorBot>() != null)
+                return "[LMB] Select this actor";
+            var target = Contract4Interactable.FindCommandTarget(ray, 10f, transform.root);
+            if (target != null)
+                return selectedActor == null ? "Select an actor first: aim at them and click [LMB]" :
+                    "[LMB] " + (target.action == Contract4Interactable.Action.Product ? "Selected actor: hold this product" : target.action == Contract4Interactable.Action.Sit ? "Seat selected actor here" : "Selected actor: use this machine") + " | [O] Stop / Return product";
+            return Controls + "\n[T] Reposition selected actor";
         }
 
         public override void OnHeldUpdate(InputManager input)
         {
-            if (selectedActor == null || Keyboard.current == null) return;
+            if (selectedActor == null) { CancelReposition(); return; }
+            if (Keyboard.current == null) return;
+            var practice = CampaignLevelManager.Instance;
+            bool gated = practice != null && practice.IsContract4PracticeActive;
             var keys = Keyboard.current;
+            if (keys.tKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.reposition") || practice.CanUseContract4PracticeAction("megaphone.place")))
+            {
+                if (IsRepositioning) CancelReposition();
+                else { IsRepositioning = true; previewActor = selectedActor; }
+                GameFeedback.Show(IsRepositioning ? "REPOSITION ACTOR\nAim to move the transparent preview. [LMB] place, [T] cancel." : "Reposition cancelled.");
+            }
+            if (IsRepositioning) { UpdatePositionPreview(playerCamera); return; }
+            if (keys.oKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.stop"))) { selectedActor.ReleaseProduct(); selectedActor.StopFurnitureAction(); commandCount++; }
 
-            if (keys.zKey.wasPressedThisFrame) CuePose(0, "NEUTRAL");
-            if (keys.xKey.wasPressedThisFrame) CuePose(1, "WAVE");
-            if (keys.cKey.wasPressedThisFrame) CuePose(2, "ACTION");
-            if (keys.rKey.wasPressedThisFrame) { selectedActor.transform.Rotate(0f, 15f, 0f, Space.World); commandCount++; }
-            if (keys.bKey.wasPressedThisFrame) { selectedActor.SetStartMark(); commandCount++; GameFeedback.Show("START MARK SAVED"); }
-            if (keys.nKey.wasPressedThisFrame) { selectedActor.SetEndMark(); commandCount++; }
-            if (keys.kKey.wasPressedThisFrame) { selectedActor.RehearseWalk(); commandCount++; }
-            if (keys.jKey.wasPressedThisFrame) { selectedActor.ReturnToStartMark(); commandCount++; }
-            if (keys.hKey.wasPressedThisFrame) { selectedActor.ClearWalk(); commandCount++; }
+            if (keys.zKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.z"))) CuePose(0, "NEUTRAL");
+            if (keys.xKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.x"))) CuePose(1, "WAVE");
+            if (keys.cKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.c"))) CuePose(2, "ACTION");
+            if (keys.rKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.turn"))) { selectedActor.transform.Rotate(0f, 15f, 0f, Space.World); commandCount++; }
+            if (keys.bKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.mark.start"))) { selectedActor.SetStartMark(); commandCount++; GameFeedback.Show("START MARK SAVED"); }
+            if (keys.nKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.mark.end"))) { selectedActor.SetEndMark(); commandCount++; }
+            if (keys.kKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.walk.rehearse"))) { selectedActor.RehearseWalk(); commandCount++; }
+            if (keys.jKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.walk.return"))) { selectedActor.ReturnToStartMark(); commandCount++; }
+            if (keys.hKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.walk.clear"))) { selectedActor.ClearWalk(); commandCount++; }
 
             Vector3 nudge = Vector3.zero;
             if (keys.upArrowKey.wasPressedThisFrame) nudge += Vector3.forward;
             if (keys.downArrowKey.wasPressedThisFrame) nudge += Vector3.back;
             if (keys.leftArrowKey.wasPressedThisFrame) nudge += Vector3.left;
             if (keys.rightArrowKey.wasPressedThisFrame) nudge += Vector3.right;
-            if (nudge != Vector3.zero) { selectedActor.MoveBy(nudge * .25f); commandCount++; }
+            if (nudge != Vector3.zero && (!gated || practice.CanUseContract4PracticeAction("megaphone.move"))) { selectedActor.MoveBy(nudge * .25f); commandCount++; }
         }
 
         private void CuePose(int pose, string label)
@@ -159,5 +217,43 @@ namespace Player.Equipment
             commandCount++;
             GameFeedback.Show("ACTOR CUE: " + label);
         }
+
+        private void UpdatePositionPreview(Camera view)
+        {
+            previewValid = false;
+            if (view != null && selectedActor != null)
+            {
+                var hits = Physics.RaycastAll(view.transform.position, view.transform.forward, 20f, ~0, QueryTriggerInteraction.Ignore);
+                System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+                foreach (var hit in hits)
+                {
+                    if (hit.collider.transform.IsChildOf(transform.root) || hit.collider.GetComponentInParent<ActorBot>() != null) continue;
+                    if (hit.normal.y < .7f || Mathf.Abs(hit.point.y - selectedActor.transform.position.y) > .5f) break;
+                    previewPosition = new Vector3(hit.point.x, selectedActor.transform.position.y, hit.point.z);
+                    previewValid = true;
+                    previewActor = selectedActor;
+                    previewActor.ShowPlacementPreview(previewPosition);
+                    break;
+                }
+            }
+            if (!previewValid && previewActor != null) previewActor.HidePlacementPreview();
+        }
+
+        private void CancelReposition()
+        {
+            if (previewActor != null) previewActor.ClearPlacementPreview();
+            previewActor = null;
+            previewValid = false;
+            IsRepositioning = false;
+        }
+
+        public override void OnDropped(Camera camera)
+        {
+            CancelReposition();
+            base.OnDropped(camera);
+        }
+
+        private void OnDisable() { CancelReposition(); }
+        private void OnDestroy() { CancelReposition(); }
     }
 }

@@ -79,6 +79,7 @@ public sealed class GameFeedback : MonoBehaviour
 
     public static void Show(string text, bool error = false)
     {
+        GameplayAudioManager.Feedback(text, error);
         GameFeedback feedback = EnsureInstance();
         if (feedback.panel == null) feedback.BuildNotification();
         string[] lines = (text ?? "").Split(new[] { '\n' }, 2);

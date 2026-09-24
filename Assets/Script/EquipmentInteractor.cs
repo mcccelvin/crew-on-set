@@ -73,13 +73,25 @@ namespace Player.Interactor
 
             if (Cursor.visible || Cursor.lockState != CursorLockMode.Locked) return;
 
+            var setAction = GetComponent<Contract4PlayerAction>();
+            if (setAction != null && setAction.IsActive)
+            {
+                if (inputManager.Interact || inputManager.Drop) setAction.Finish();
+                return;
+            }
             HandleHotbarInput();
             HandleHoverText();
 
             Equipment.FilmCameraItem heldCamera = currentEquipment as Equipment.FilmCameraItem;
             bool isUsingCamera = heldCamera != null && heldCamera.IsCameraViewActive();
-
             if (inputManager.Interact && !isUsingCamera) { TryPickupOrInteract(); return; }
+
+            var practice = CampaignLevelManager.Instance;
+            if (practice != null && practice.IsContract4PracticeActive)
+            {
+                if (!(currentEquipment is Equipment.ActorMegaphoneItem)) return;
+                if (inputManager.Drop) return;
+            }
             if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
 
             if (inputManager.ConsumeUse())
@@ -122,8 +134,20 @@ namespace Player.Interactor
 
         private void HandleHoverText()
         {
+            if (currentEquipment is Equipment.ActorMegaphoneItem megaphone)
+            {
+                if (hotbarUI != null) hotbarUI.UpdateEquipmentGuide(megaphone.GetAimPrompt(PlayerCamera));
+                return;
+            }
             Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
             string targetText = "";
+
+            var furniture = FindFurnitureTarget(ray);
+            if (furniture != null)
+            {
+                if (hotbarUI != null) hotbarUI.UpdateGuideText(furniture.Prompt);
+                return;
+            }
 
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
@@ -147,6 +171,10 @@ namespace Player.Interactor
                 else if (hit.collider.GetComponentInParent<ShopTerminal>() != null)
                 {
                     targetText = "[E] Shop Terminal";
+                }
+                else if (hit.collider.GetComponentInParent<Contract4Interactable>() != null)
+                {
+                    targetText = hit.collider.GetComponentInParent<Contract4Interactable>().Prompt;
                 }
                 else if (hit.collider.GetComponentInParent<IInteractable>() != null)
                 {
@@ -187,9 +215,44 @@ namespace Player.Interactor
             if (hotbarUI != null) hotbarUI.HighlightSlot(currentSlotIndex);
         }
 
+        private Contract4Interactable FindFurnitureTarget(Ray ray)
+        {
+            // Keep directly aimed equipment and terminals ahead of assisted furniture selection.
+            if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
+            {
+                var direct = hit.collider.GetComponentInParent<Contract4Interactable>();
+                if (direct != null && CampaignProgression.GetCurrentLevel() >= 4) return direct;
+                if (hit.collider.GetComponentInParent<IInteractable>() != null ||
+                    hit.collider.GetComponentInParent<Equipment.Equipment>() != null ||
+                    hit.collider.GetComponentInParent<ComputerStation>() != null ||
+                    hit.collider.GetComponentInParent<DirectorTerminal>() != null ||
+                    hit.collider.GetComponentInParent<ShopTerminal>() != null) return null;
+            }
+            return Contract4Interactable.FindTarget(ray, PickupRange, transform);
+        }
+
         private void TryPickupOrInteract()
         {
             Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
+
+            var practice = CampaignLevelManager.Instance;
+            if (practice != null && practice.IsContract4PracticeActive)
+            {
+                bool allowed = false;
+                if (Physics.Raycast(ray, out RaycastHit practiceHit, PickupRange))
+                {
+                    allowed = (practice.CanUseContract4PracticeAction("tablet.open") &&
+                               practiceHit.collider.GetComponentInParent<DirectorTerminal>() != null) ||
+                              (practice.CanUseContract4PracticeAction("shop.purchase") &&
+                               practiceHit.collider.GetComponentInParent<ShopTerminal>() != null) ||
+                              (practice.CanUseContract4PracticeAction("megaphone.pickup") &&
+                               practiceHit.collider.GetComponentInParent<Equipment.ActorMegaphoneItem>() != null);
+                }
+                if (!allowed) return;
+            }
+
+            var furniture = practice == null || !practice.IsContract4PracticeActive ? FindFurnitureTarget(ray) : null;
+            if (furniture != null) { furniture.OnInteract(gameObject); return; }
 
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {

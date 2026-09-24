@@ -118,7 +118,7 @@ public class CampaignLevelManager : MonoBehaviour
         string hint = card.videoDuration < 5f ? "Record at least 5 seconds for the edit." :
             !card.requiredSubjectsVisible ? "Retake: keep both subjects fully visible throughout." :
             !card.usedSoftLight ? "Retake: power and aim the Soft Light at both subjects." :
-            string.IsNullOrEmpty(card.actorPose) || card.actorPose == "Neutral" ? "Retake: choose Wave or Action on the tablet." :
+            string.IsNullOrEmpty(card.actorPose) || card.actorPose == "Neutral" ? "Retake: cue a performance with the megaphone." :
             Mathf.Abs(card.screenDirection) <= .1f ? "Retake: separate the Actor and coffee in the frame." :
             "Collect this card. Keep the same pose and screen side.";
         GameFeedback.Show(size + " TAKE SAVED\n" + hint);
@@ -204,6 +204,14 @@ public class CampaignLevelManager : MonoBehaviour
                 currentStep == CampaignLevelStep.ActorPosed);
     }
 
+    public bool IsContract4PracticeActive => activeLevel == 4 && coffeeLessonStarted && practiceLesson != null;
+
+    public bool CanUseContract4PracticeAction(string action)
+    {
+        if (!IsContract4PracticeActive) return true;
+        return !practiceLesson.IsExplaining && practiceLesson.CurrentPermission == action;
+    }
+
     public void OnDirectorTerminalOpened()
     {
         if (!IsActorIntroductionActive() || practiceLesson != null) return;
@@ -215,7 +223,7 @@ public class CampaignLevelManager : MonoBehaviour
                 TutorialUIManager.Instance.SetupTasks(new string[]
                 {
                     "- Select the placed actor",
-                    "- Click POSE ACTOR to choose a performance"
+                    "- Close the tablet; use the Director Megaphone for performances"
                 });
             }
             else if (currentStep == CampaignLevelStep.ActorPosed)
@@ -272,7 +280,7 @@ public class CampaignLevelManager : MonoBehaviour
     {
         if (activeLevel < 4 || practiceLesson != null) return;
 
-        if (currentStep == CampaignLevelStep.ActorPosed)
+        if (currentStep == CampaignLevelStep.ActorPosed || currentStep == CampaignLevelStep.ActorPlaced)
         {
             ShowActorPracticeComplete();
             return;
@@ -285,7 +293,7 @@ public class CampaignLevelManager : MonoBehaviour
             TutorialUIManager.Instance.SetupTasks(new string[]
             {
                 "- Open the Director Terminal",
-                "- Place one actor and choose a pose"
+                "- Place one actor, then close the tablet"
             });
         }
     }
@@ -321,7 +329,6 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (currentStep == CampaignLevelStep.ActorPracticeComplete)
         {
-            if (activeLevel == 4 && ShowMegaphoneIntroduction()) return;
             ShowContractIntroduction();
             return;
         }
@@ -466,7 +473,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("In <color=yellow>Level 4</color>, we will add an Actor to the product story. Keep your camera and Soft Light from the previous job. We will practice hiring, placing and posing the Actor, then learn wide, medium and close-up shots together. Each shot has a purpose; you do not need a dolly or extra lighting equipment.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Before your next brief, let's practice sets, actor blocking, and directing with the megaphone.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
@@ -483,7 +490,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Let's hire an Actor bot. Rookie costs 750, Trained 2,250, and Expert 4,500 B-Coins at the default rates. Better actors deliver smoother, more expressive gestures. Every tier can meet the brief. We'll place one on a mark and choose their repeating action together.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue(activeLevel == 4 ? "Let's add a practice chair and a free practice actor. Then buy the Director Megaphone at the Equipment Shop to try performance cues." : "Hire one actor with the tablet. Rookie, Trained and Expert offer different performance polish. Any tier can meet the brief; check the card's price.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -491,6 +498,7 @@ public class CampaignLevelManager : MonoBehaviour
     {
         currentStep = CampaignLevelStep.PracticeActor;
         isBriefingOpen = false;
+        if (activeLevel == 4) { StartActorEnvironmentLesson(); return; }
         var director = FindObjectOfType<DirectorTerminal>();
         Transform target = null;
         if (tutorialManager != null && tutorialManager.availableTargets != null)
@@ -525,17 +533,18 @@ public class CampaignLevelManager : MonoBehaviour
         steps.Add(new GuidedPracticeLesson.Step(
             "Look at the Director Tablet and press <color=red>[E]</color> to open it.",
             "[E] Open the Director Tablet",
-            () => director != null && director.IsTerminalActive()));
+            () => director != null && director.IsTerminalActive(), () => GuideCoffee(director, "tablet")));
         steps.Add(new GuidedPracticeLesson.Step(
             "Choose one Actor card. Move the Actor onto the stage and click to place them. Leave space for the product.",
             "Choose one Actor card, then click the stage to place them",
+            () => currentStep == CampaignLevelStep.ActorPlaced || currentStep == CampaignLevelStep.ActorPosed,
+            () => GuideCoffee(director, director != null && director.IsPlacingProp() ? "stage" : "actor")));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "The tablet places and repositions actors. Performances and walking cues belong to the Director Megaphone, which we will use after placement.",
+            "Actor placed: ready for megaphone direction",
             () => currentStep == CampaignLevelStep.ActorPlaced || currentStep == CampaignLevelStep.ActorPosed));
         steps.Add(new GuidedPracticeLesson.Step(
-            "Select your Actor and click <color=yellow>POSE ACTOR</color>. Wave starts an animated greeting; Action starts a product-presentation gesture. The bot performs automatically while staying on its mark. Choose an action that keeps the coffee visible.",
-            "Select the Actor and click POSE ACTOR",
-            () => currentStep == CampaignLevelStep.ActorPosed));
-        steps.Add(new GuidedPracticeLesson.Step(
-            "Good. Close the tablet with <color=red>[E]</color> and look at the pose from the studio. Keep that pose consistent when you change camera angles.",
+            "Close the tablet with <color=red>[E]</color>. We will direct the actor from the studio using the megaphone.",
             "[E] Close the Director Tablet",
             () => director != null && !director.IsTerminalActive()));
         if (tutorialManager != null) tutorialManager.PointLineAt("director");
@@ -564,7 +573,7 @@ public class CampaignLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.SetDynamicGlow("director", false);
-            TutorialUIManager.Instance.ShowBossDialogue("Now our scene has someone in it. Leave the product visible, and keep the Actor's pose and screen side consistent when you change shots.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue(activeLevel == 4 ? "Practice complete! Actors can also hold products: select an actor, aim at a product and click. [O] returns it. Now let's meet your client." : "Now our scene has someone in it. Leave the product visible, and keep the Actor\'s pose and screen side consistent when you change shots.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -574,10 +583,10 @@ public class CampaignLevelManager : MonoBehaviour
         if (ui == null) return false;
         string[] pages =
         {
-            "Before we accept, meet the <color=yellow>Director Megaphone</color>. At the Equipment Shop, add it to your cart and click CONFIRM. It costs 900 B-Coins and stays yours for future jobs.",
-            "After buying, pick up the megaphone on the director table with <color=yellow>[E]</color>. It equips automatically. Later, press its hotbar number <color=yellow>[1-5]</color> to hold it again. <color=yellow>[G]</color> drops it.",
-            "Aim at your Actor and click <color=yellow>[LMB]</color> to select them. Use <color=yellow>[Z]</color> for Neutral, <color=yellow>[X]</color> for Wave, or <color=yellow>[C]</color> for Action. You can direct them without opening the tablet.",
-            "Arrow keys move the selected Actor; <color=yellow>[R]</color> turns them. Save START with <color=yellow>[B]</color>, move them, then save END with <color=yellow>[N]</color>. <color=yellow>[K]</color> rehearses, <color=yellow>[J]</color> resets and <color=yellow>[H]</color> clears the walk. We'll practice after building the set."
+            "The Director Megaphone cues performances. Buy it at the shop for 900 B-Coins. Your camera and Soft Light can be reused.",
+            "Press [E] to collect the megaphone from the director table. Its hotbar number equips it again; [G] drops it.",
+            "Aim at your actor and click [LMB]. [X] cues Wave, [C] cues Action, and [Z] returns to Neutral.",
+            "With an actor selected, aim at a stool or machine and click to cue them. [O] stops the action. We'll practice blocking and walk marks next."
         };
         if (megaphoneIntroductionPage >= pages.Length) return false;
         ui.ShowBossDialogue(pages[megaphoneIntroductionPage++], ui.posePoint, true, false);
@@ -634,6 +643,12 @@ public class CampaignLevelManager : MonoBehaviour
 
     public void AcceptContract()
     {
+        if (activeLevel == 4)
+        {
+            FindObjectOfType<DirectorTerminal>()?.ClearContract4PracticeProps();
+            featureActor = null;
+            observedActorActions = 0;
+        }
         string acceptedKey = CampaignProgression.GetAcceptedKey(activeLevel);
         int upfrontPayment = ProductionEconomy.Advance(activeLevel);
 
@@ -763,110 +778,157 @@ public class CampaignLevelManager : MonoBehaviour
         }
 
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
-        if (activeLevel == 4 && !DevTutorialBypass.Disabled && !coffeeLessonStarted)
-            StartCoffeeProductionLesson();
+        // The actor lesson runs before the contract offer; gameplay starts freely here.
     }
 
-    private void StartCoffeeProductionLesson()
+    private void GuideCoffee(DirectorTerminal director, string key)
+    {
+        var highlighter = TutorialHighlighter.Instance;
+        RectTransform ui = null;
+        Transform world = null;
+        Bounds? furnitureBounds = null;
+        var shop = FindObjectOfType<ShopTerminal>();
+        if (key == "shop" || key == "cart" || key == "checkout")
+        {
+            if (shop != null && shop.IsTerminalActive())
+                ui = key == "checkout" && shop.TutorialMegaphoneInCart && tutorialManager != null ? tutorialManager.shopCheckoutBtnRect : shop.GetTutorialCartTarget("DIRECTOR MEGAPHONE");
+            else if (shop != null) world = shop.transform;
+        }
+        else if (key == "megaphone")
+        {
+            foreach (var item in FindObjectsOfType<Player.Equipment.ActorMegaphoneItem>())
+                if (item.GetComponentInParent<Player.PlayerController.PlayerController>() == null) { world = item.transform; break; }
+        }
+        else if (key == "performer" || key == "seat" || key == "machine")
+        {
+            var held = HeldMegaphone();
+            var actor = held != null && held.HasSelectedActor ? held.SelectedActor : FindObjectOfType<ActorBot>();
+            if (actor != null) world = actor.transform;
+            if (key != "performer" && held != null && held.HasSelectedActor)
+            {
+                float nearest = float.MaxValue;
+                foreach (var item in FindObjectsOfType<Contract4Interactable>())
+                {
+                    if (item.action != (key == "seat" ? Contract4Interactable.Action.Sit : Contract4Interactable.Action.Machine)) continue;
+                    var collider = item.GetComponent<Collider>();
+                    if (collider == null || !collider.enabled) continue;
+                    float distance = (item.Bounds.center - actor.transform.position).sqrMagnitude;
+                    if (distance >= nearest) continue;
+                    nearest = distance; furnitureBounds = item.Bounds; world = item.transform;
+                }
+            }
+        }
+        else if (key != "none" && director != null)
+        {
+            if (director.IsTerminalActive()) ui = director.GetTutorialTarget(key);
+            else world = director.transform;
+        }
+        tutorialManager?.PointLineAtTransform(world);
+        if (highlighter == null) return;
+        if (ui != null && ui.gameObject.activeInHierarchy) { highlighter.HighlightElement(ui); return; }
+        if (world != null)
+        {
+            Bounds bounds = furnitureBounds ?? new Bounds(world.position, Vector3.one * .4f);
+            if (!furnitureBounds.HasValue)
+            {
+                bool first = true;
+                foreach (var renderer in world.GetComponentsInChildren<Renderer>())
+                {
+                    if (!renderer.enabled || (!(renderer is MeshRenderer) && !(renderer is SkinnedMeshRenderer))) continue;
+                    if (first) bounds = renderer.bounds; else bounds.Encapsulate(renderer.bounds);
+                    first = false;
+                }
+            }
+            highlighter.HighlightWorldBounds(bounds, Camera.main);
+            return;
+        }
+        highlighter.HideHighlight();
+    }
+
+    private void StartActorEnvironmentLesson()
     {
         coffeeLessonStarted = true;
         var director = FindObjectOfType<DirectorTerminal>();
+        var shop = FindObjectOfType<ShopTerminal>();
+        GuidedPracticeLesson.Step Teach(string message, string task, System.Func<bool> done, string target, string permission = null)
+        {
+            if (permission == null)
+                permission = target == "tablet" ? "tablet.open" : target == "none" ? "tablet.close" :
+                    target == "set" ? "tablet.choose" : target == "practice-preview" ? "tablet.preview" :
+                    target == "buy" ? "tablet.use" : target == "chair" ? "tablet.chair" : target == "actor" ? "tablet.actor" :
+                    target == "stage" ? (task.Contains("[T]") ? "tablet.move" : "tablet.place") :
+                    target == "megaphone" ? "megaphone.pickup" :
+                    target == "cart" || target == "checkout" ? "shop.purchase" :
+                    target == "seat" ? "megaphone.seat" :
+                    task.Contains("[LMB]") || task.StartsWith("Equip megaphone") ? "megaphone.select" :
+                    task.Contains("[X]") ? "megaphone.pose.x" : task.Contains("[C]") ? "megaphone.pose.c" :
+                    task.Contains("[Z]") ? "megaphone.pose.z" : task.Contains("[R]") ? "megaphone.turn" :
+                    task.Contains("[B]") ? "megaphone.mark.start" : task.Contains("[N]") ? "megaphone.mark.end" :
+                    task.Contains("[K]") ? "megaphone.walk.rehearse" : task.Contains("[J]") ? "megaphone.walk.return" :
+                    task.Contains("[H]") ? "megaphone.walk.clear" : task.Contains("[O]") ? "megaphone.stop" : "megaphone.use";
+            return new GuidedPracticeLesson.Step(message, task, done, () => GuideCoffee(director, target), permission);
+        }
+        bool Placing() => director != null && director.IsPlacingProp();
+        bool Pose(string pose)
+        {
+            var held = HeldMegaphone();
+            var actor = held != null && held.SelectedActor != null ? held.SelectedActor.GetComponent<CubeActor>() : null;
+            return actor != null && actor.GetPoseName() == pose;
+        }
         var steps = new System.Collections.Generic.List<GuidedPracticeLesson.Step>
         {
-            new GuidedPracticeLesson.Step(
-                "Let's build a welcoming coffee scene. Open the Director Tablet, use <color=yellow>CHOOSE SET</color>. Preview Cafe Corner, Coffee Interior, or Plain Backdrop for free. Inspect the set in the tablet, then click BUY SET to own it. Click USE SET to place your purchase. Reopen CHOOSE SET to switch between owned sets for free; only one set is active. CANCEL spends nothing. Furnished interiors start warm brown. You can still paint the wall and floor with HEX <color=yellow>#80502E</color>. Warm surroundings suggest a comfortable morning; the product must still stand out.",
-                "CHOOSE SET, then use a warm brown (try #80502E)",
-                () => director != null && director.HasWall() && IsCoffeeBrown(director.currentWallColor)),
-            new GuidedPracticeLesson.Step(
-                "Place <color=yellow>one KAPE KULTURA PRODUCT</color> beside <color=yellow>one Actor</color>. Keep the Actor from our practice, or place a replacement. Select the Actor and use POSE ACTOR for Wave or Action. Separate them enough that neither hides the other, then close the tablet.",
-                "Place 1 coffee + 1 posed Actor; close the tablet",
-                () => CoffeeSubjectsReady() && director != null && !director.IsTerminalActive()),
-            new GuidedPracticeLesson.Step(
-                "The <color=yellow>Director Megaphone</color> lets you cue an Actor from the floor, without reopening the tablet. Visit the Equipment Shop and buy one for 900 B-Coins. Click ADD TO CART, then CONFIRM. Close the shop. Your purchase activates the megaphone on the director table and stays owned in future jobs.",
-                "Buy the DIRECTOR MEGAPHONE from the Equipment Shop",
-                HasOwnedMegaphone),
-            new GuidedPracticeLesson.Step(
-                "Close the shop, then press <color=yellow>[E]</color> at the megaphone on the director table. It equips automatically; use its hotbar number [1-5] to equip it again later. Aim at the Actor and press <color=yellow>[LMB]</color>. The selected Actor remains your target while you carry the tool. If you cannot select them, move closer and aim at their body.",
-                "Hold the megaphone and press [LMB] while aiming at the Actor",
-                () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor),
-            new GuidedPracticeLesson.Step(
-                "Now direct the performance from the floor: <color=yellow>[Z]</color> Neutral, <color=yellow>[X]</color> Wave, <color=yellow>[C]</color> Action, arrow keys nudge the actor, and <color=yellow>[R]</color> turns them. <color=yellow>[B/N/K/J/H]</color> save marks, rehearse, reset and clear a walk. Try Wave or Action so the actor performs for the camera.",
-                "Use the megaphone to cue Wave or Action",
-                () => HeldMegaphone() != null && HeldMegaphone().CommandCount > 0 && FindObjectOfType<CubeActor>() != null && FindObjectOfType<CubeActor>().GetPoseName() != "Neutral"),
-            new GuidedPracticeLesson.Step(
-                "Your Actor is an autonomous performer. <color=yellow>Rookie</color> uses smaller, slower gestures; <color=yellow>Trained</color> is smoother; <color=yellow>Expert</color> is more expressive. The card shows the hire fee before you buy. Higher skill buys performance polish, not an automatic better grade. Keep your current Actor: every tier can meet this brief.",
-                "Keep your hired Actor; all skill tiers can meet the contract",
-                () => true),
-            new GuidedPracticeLesson.Step(
-                "Let's try both animated actions. Reopen the tablet, select your Actor and click <color=yellow>POSE ACTOR</color> until you see <color=yellow>Wave</color>. Watch the greeting. Click again for <color=yellow>Action</color>: a product-presentation gesture. Neutral returns to idle breathing. The Actor stays on its mark while performing.",
-                "On the tablet, try Wave and Action on the same Actor",
-                ObserveActorActions),
-            new GuidedPracticeLesson.Step(
-                "<color=yellow>Blocking</color> means choosing where the performer stands and faces. With the Actor selected, press <color=red>[R]</color> to turn 15 degrees. Aim the performance toward the camera without hiding the coffee. This changes the stage direction; it does not change the selected action.",
-                "Select the Actor and press [R] to turn",
-                ObserveActorTurn),
-            new GuidedPracticeLesson.Step(
-                "Now select the Actor and press <color=red>[T]</color>. Move them a little, then click the stage to place them. Leave space beside the coffee so animated hands do not block it. You can refine this placement before filming; keep it fixed across your three takes.",
-                "[T] Move the Actor, then click to place them",
-                () => ObserveActorMove() && director != null && !director.IsPlacingProp()),
-            new GuidedPracticeLesson.Step(
-                "Let's plan a short walk through your interior. Keep the tablet open and select the Actor. Their current position will be START: press <color=yellow>[B]</color> to save it. Choose an open area beside the coffee, away from furniture.",
-                "Select the Actor and press [B] to save START",
-                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().HasStartMark),
-            new GuidedPracticeLesson.Step(
-                "Press <color=yellow>[T]</color>, move the Actor along a clear route, and click to place them at least a little farther away. Select them again and press <color=yellow>[N]</color> to save END. Keep the coffee visible along the entire route; walking through it would spoil the commercial.",
-                "[T] Move and place the Actor, then [N] save END",
-                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().HasWalk && director != null && !director.IsPlacingProp()),
-            new GuidedPracticeLesson.Step(
-                "With the Actor selected, press <color=yellow>[K]</color> to rehearse. Watch them walk from START to END before filming. If furniture blocks the path, move the end position with T, save it with N and try K again. A clear route makes the performance look intentional.",
-                "[K] Rehearse and let the Actor reach END",
-                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().WalkCompleted),
-            new GuidedPracticeLesson.Step(
-                "Now press <color=yellow>[J]</color> with the Actor selected to return to START. Each recording repeats this walk, helping your Wide, Medium and Close-Up shots match. <color=yellow>[H]</color> clears the route if you later prefer a stationary performance. Keep the same route and action between takes.",
-                "Select the Actor and press [J] to return to START",
-                () => featureActor != null && featureActor.GetComponent<ActorBot>() != null && featureActor.GetComponent<ActorBot>().ReturnedAfterWalk),
-            new GuidedPracticeLesson.Step(
-                "Choose Wave or Action for the commercial, then close the tablet with <color=red>[E]</color>. Each recording restarts that animation from the beginning to help matching shots. Keep the same action and screen side in every take. Pause also pauses the bot. Watch a full gesture before recording and leave room around the moving hands.",
-                "Choose Wave or Action, then [E] close the tablet",
-                () => CoffeeSubjectsReady() && director != null && !director.IsTerminalActive()),
-            new GuidedPracticeLesson.Step(
-                "Reuse your Soft Light from delivery. Pick it up with E and select its hotbar slot. Left Click switches power on. The controls on the right show its live values. We will build a window-like Key first; extra lights are not required for this brief.",
-                "Hold your Soft Light and turn it on with Left Click",
-                () => HeldCoffeeLight() != null && HeldCoffeeLight().IsPoweredOn()),
-            new GuidedPracticeLesson.Step(
-                "Hold Q to raise the head or E to lower it. Try +0.50 m extension. Place the source a little above the subjects and use Up/Down to aim it down. Height changes shadow direction; tilt points the beam. Check both the face and coffee instead of copying one height for every scene.",
-                "[Q up / E down] Try +0.50 m height extension",
-                () => HeldCoffeeLight() != null && Mathf.Abs(HeldCoffeeLight().HeightExtension - .5f) <= .08f),
-            new GuidedPracticeLesson.Step(
-                "Scroll changes light output. Start at 75%, then use V/B for at least 50% diffusion. Diffusion spreads the beam and softens shadow edges; it is different from simply making the light dimmer. Preserve a gentle shadow side so the actor and product keep their shape.",
-                "[Scroll] 75% intensity; [V/B] at least 50% diffusion",
-                () => HeldCoffeeLight() != null && Mathf.Abs(HeldCoffeeLight().intensityPercent - 75) <= 3 && HeldCoffeeLight().GetDiffusionPercent() >= 50),
-            new GuidedPracticeLesson.Step(
-                "Z/X changes color temperature: lower Kelvin is warmer, higher is cooler. Try 4400K for a warm-neutral starting point. Check skin and packaging: warm atmosphere should not hide their real colors. You can fine-tune these settings after practice.",
-                "[Z/X] Try 4400K",
-                () => HeldCoffeeLight() != null && Mathf.Abs(HeldCoffeeLight().GetColorTemperature() - 4400) <= 200),
-            new GuidedPracticeLesson.Step(
-                "Try <color=yellow>motivated lighting</color>: let the Soft Light suggest a window beside the scene. Place it in front and to one side, power it on, and aim between the Actor and coffee. Start near 75% output and at least 50% diffusion. The broad highlight should reveal detail while leaving a gentle shadow on the far side.",
-                "[G] Place the Soft Light; aim at both the Actor and coffee",
-                CoffeeLightReady),
-            new GuidedPracticeLesson.Step(
-                "<color=yellow>WIDE</color> establishes where we are. <color=yellow>MEDIUM</color> connects the Actor to the coffee. <color=yellow>CLOSE-UP</color> gives the product emphasis. In this game, even the close shot must keep both subjects fully inside the frame. The camera's focus readout now names your shot size. Move or zoom to change it.",
-                "Plan a Wide, Medium and Close-Up of the same scene",
-                () => true),
-            new GuidedPracticeLesson.Step(
-                "Stay on the same side of the Actor-product line so they do not swap screen sides: this is <color=yellow>continuity</color>. Record about 6 seconds per shot, holding still with both visible and the Soft Light aimed at them. Use a fresh SD card for each take and collect the recorded cards. Check the WIDE / MEDIUM / CLOSE-UP readout before recording.",
-                "Record all 3 sizes: same pose/side, both visible, Soft Light on",
-                () => HasCoffeeCoverage(GetCoffeeFootage(false))),
-            new GuidedPracticeLesson.Step(
-                "You have matching coverage. Insert those cards into the computer. In the editor, try Wide -> Medium -> Close-Up, trimmed to <color=yellow>5 seconds each</color>, joined from 0 for a 15-second story. The order moves from context to connection to product. Add exactly 2 readable animated graphics; choose motion, transition and music in Branding. For a warm grade try Brightness 1.05, Contrast 1.15 and Saturation 1.15. Preview before export.",
-                "Insert the matching Wide, Medium and Close-Up cards into the computer",
-                () => HasCoffeeCoverage(GetCoffeeFootage(true)))
+            Teach("Let's try a small practice set. Open the highlighted tablet with [E].", "[E] Open the Director Tablet",
+                () => director != null && director.IsTerminalActive(), "tablet"),
+            Teach("Click CHAIR in Elements. This is our free practice chair.", "Click CHAIR in Elements",
+                () => Placing(), "chair"),
+            Teach("Move the chair onto the stage and click to place it. Leave room beside it for an actor.", "Click the stage to place the chair",
+                () => director != null && director.TutorialChairPlaced && !Placing(), "stage"),
+            Teach("Click an Actor card. We provide a practice actor before the client brief.", "Click an Actor card",
+                () => Placing() || FindObjectOfType<CubeActor>() != null, "actor"),
+            Teach("Move the actor onto a clear patch beside the chair, then click. This is blocking: planning a performer's position.", "Click the stage to place the Actor",
+                () => !Placing() && FindObjectOfType<CubeActor>() != null, "stage"),
+            Teach("Close the tablet with [E]. The tablet places actors; the megaphone cues performances.", "[E] Close the tablet",
+                () => director != null && !director.IsTerminalActive(), "none"),
+            Teach("Visit the Equipment Shop and buy the Director Megaphone for 900 B-Coins. Checkout delivers it to the studio.", "Buy the Director Megaphone and confirm checkout",
+                () => shop != null && shop.MegaphonePurchasedThisSession, "checkout"),
+            Teach("Pick up the delivered megaphone with [E]. It will equip in your hotbar.", "[E] Collect and equip the delivered megaphone",
+                () => HeldMegaphone() != null, "megaphone"),
+            Teach("Aim at your actor and click [LMB]. Selecting an actor tells the megaphone who to direct.", "[LMB] Select the highlighted Actor",
+                () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor, "performer"),
+            Teach("Press [X] to cue a wave. Watch how the gesture draws attention.", "[X] Cue Wave",
+                () => Pose("Wave"), "performer"),
+            Teach("Press [C] to cue Action. Watch the actor respond to your direction.", "[C] Cue Action",
+                () => { if (!Pose("Action")) return false; featureActor = HeldMegaphone().SelectedActor.GetComponent<CubeActor>(); actorFeatureRotation = featureActor.transform.rotation; actorFeaturePosition = featureActor.transform.position; return true; }, "performer"),
+            Teach("Press [Z] to return to Neutral. Resetting the actor helps you prepare the next cue.", "[Z] Cue Neutral",
+                () => Pose("Neutral"), "performer"),
+            Teach("Press [R] to turn your selected actor toward the camera.", "[R] Turn the Actor", ObserveActorTurn, "performer"),
+            Teach("Keep the megaphone equipped. Press [T] to reposition your selected actor.", "[T] Reposition Actor with megaphone", () => HeldMegaphone() != null && HeldMegaphone().IsRepositioning, "performer", "megaphone.reposition"),
+            Teach("Aim at a nearby clear floor spot and click to place the actor. Leave room for gestures.", "[LMB] Place Actor on clear floor", () => ObserveActorMove() && HeldMegaphone() != null && !HeldMegaphone().IsRepositioning, "performer", "megaphone.place"),
+            Teach("Equip the megaphone and click your actor again.", "Equip megaphone; [LMB] select Actor", () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor, "performer"),
+            Teach("Press [B] to save START. Marks help an actor repeat movement between takes.", "[B] Save START",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>().HasStartMark, "performer"),
+            Teach("Press [T] on the megaphone to choose where the walk ends.", "[T] Reposition Actor toward END", () => HeldMegaphone() != null && HeldMegaphone().IsRepositioning, "performer", "megaphone.reposition"),
+            Teach("Aim at clear floor at least half a metre away and click to place the actor at END.", "[LMB] Place Actor at END", () => HeldMegaphone() != null && !HeldMegaphone().IsRepositioning, "performer", "megaphone.place"),
+            Teach("Equip the megaphone and select the actor.", "Equip megaphone; [LMB] select Actor", () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor, "performer"),
+            Teach("Press [N] to save END. You now have a repeatable route.", "[N] Save END",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>().HasWalk, "performer"),
+            Teach("Press [K] and watch the whole walk. Rehearsal reveals blocking problems before filming.", "[K] Rehearse; wait for the Actor to reach END",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>().WalkCompleted, "performer"),
+            Teach("Press [J] to return the actor to START for another take.", "[J] Return to START",
+                () => featureActor != null && featureActor.GetComponent<ActorBot>().ReturnedAfterWalk, "performer"),
+            Teach("Press [H] to clear the walking route before furniture practice.", "[H] Clear the Actor's walking route",
+                () => featureActor != null && !featureActor.GetComponent<ActorBot>().HasWalk, "performer"),
+            Teach("Select the actor with your megaphone. Aim at the highlighted chair and click [LMB] to seat them.", "[LMB] Cue the Actor to sit on the highlighted chair",
+                () => Pose("Sitting"), "seat"),
+            Teach("Press [O] to stop sitting. The actor returns to their previous mark.", "[O] Stop sitting",
+                () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor && HeldMegaphone().SelectedActor.FurniturePoseName == null, "performer")
         };
         practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
         {
             practiceLesson = null;
             TutorialUIManager.Instance?.HideTasks();
-            if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
+            tutorialManager?.PointLineAtTransform(null);
+            ShowActorPracticeComplete();
         });
     }
 
@@ -887,13 +949,13 @@ public class CampaignLevelManager : MonoBehaviour
         return null;
     }
 
-    private static bool CoffeeSubjectsReady()
+    private static bool CoffeeSubjectsReady(bool requirePose = true)
     {
         int products = 0;
         foreach (var product in FindObjectsOfType<CampaignProduct>())
             if (product.campaignLevel == 4) products++;
         var actors = FindObjectsOfType<CubeActor>();
-        return products == 1 && actors.Length == 1 && actors[0].GetPoseName() != "Neutral";
+        return products == 1 && actors.Length == 1 && (!requirePose || actors[0].GetPoseName() != "Neutral");
     }
 
     private static Player.Equipment.FilmLightItem HeldCoffeeLight()
@@ -938,7 +1000,7 @@ public class CampaignLevelManager : MonoBehaviour
     }
 
     // Match the grader's evidence; accept any complete matching trio, not just the first takes.
-    internal static bool HasCoffeeCoverage(System.Collections.Generic.IEnumerable<FootageData> clips)
+    internal static bool HasCoffeeCoverage(System.Collections.Generic.IEnumerable<FootageData> clips, int requiredCoverage = 14)
     {
         var groups = new System.Collections.Generic.Dictionary<string, int>();
         foreach (var clip in clips)
@@ -949,7 +1011,7 @@ public class CampaignLevelManager : MonoBehaviour
             string key = clip.actorPose + (clip.screenDirection > 0 ? ":right" : ":left");
             groups.TryGetValue(key, out int coverage);
             coverage |= 1 << clip.shotType;
-            if (coverage == 14) return true;
+            if ((coverage & requiredCoverage) == requiredCoverage) return true;
             groups[key] = coverage;
         }
         return false;
@@ -1043,5 +1105,3 @@ public class CampaignLevelManager : MonoBehaviour
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
     }
 }
-
-

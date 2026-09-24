@@ -13,9 +13,8 @@ public sealed class SharedOptionsPanel
     private GameObject page;
     private readonly Button[] tabs=new Button[3];
     private int section,quality,fps;
-    private float sensitivity,volume;
+    private float sensitivity,volume,sfxVolume,musicVolume;
     private bool fullscreen;
-    private bool originalFullscreen;
     public bool IsOpen=>root.activeSelf;
     public GameObject Root=>root;
 
@@ -72,15 +71,29 @@ public sealed class SharedOptionsPanel
                 }
             }
         }
+        // Upgrade scene-authored panels as well as the runtime fallback, retaining their artwork.
+        layout.controlsHelp.text="WASD — MOVE    •    MOUSE — LOOK\nSHIFT — SPRINT    •    CTRL — SILENT SLOW WALK\nSPACE — JUMP    •    E — INTERACT    •    G — DROP\nP — ALMANAC    •    TAB — CONTRACT    •    ESC — BACK";
+        page=layout.pages[1];
+        foreach(var label in page.GetComponentsInChildren<TMP_Text>(true))
+            if(label.text.StartsWith("Controls all game audio."))
+            {
+                label.text="Press SAVE to apply audio changes.";
+                label.rectTransform.anchoredPosition=new Vector2(0,-185);
+                label.rectTransform.sizeDelta=new Vector2(950,50);
+            }
+        if(layout.sfx==null)layout.sfx=MakeSlider("SOUND EFFECTS",58,0,1,out layout.sfxValue);
+        if(layout.music==null)layout.music=MakeSlider("MUSIC",-52,0,1,out layout.musicValue);
         for(int i=0;i<3;i++) {int index=i;Bind(tabs[i],()=>{section=index;Refresh();});}
         Bind(layout.save,()=>Close(true));Bind(layout.close,()=>Close(false));
-        Bind(layout.reset,()=>{sensitivity=1;volume=1;fullscreen=true;quality=Mathf.Min(2,QualitySettings.names.Length-1);fps=60;Refresh();});
+        Bind(layout.reset,()=>{sensitivity=1;volume=1;sfxVolume=1;musicVolume=1;fullscreen=true;quality=1;fps=60;Refresh();});
         Bind(layout.controls,()=>layout.controlsHelp.gameObject.SetActive(true));
-        Bind(layout.choices[0],()=>{fullscreen=!fullscreen;GameOptions.ApplyFullscreen(fullscreen);Refresh();});
-        Bind(layout.choices[1],()=>{quality=(quality+1)%QualitySettings.names.Length;Refresh();});
+        Bind(layout.choices[0],()=>{fullscreen=!fullscreen;Refresh();});
+        Bind(layout.choices[1],()=>{quality=(quality+1)%3;Refresh();});
         Bind(layout.choices[2],()=>{fps=fps==30?60:fps==60?120:fps==120?-1:30;Refresh();});
         layout.sensitivity.onValueChanged.RemoveAllListeners();layout.sensitivity.onValueChanged.AddListener(v=>{sensitivity=Mathf.Pow(10,v);layout.sensitivityValue.text=sensitivity.ToString("0.00")+"x";});
         layout.volume.onValueChanged.RemoveAllListeners();layout.volume.onValueChanged.AddListener(v=>{volume=v;layout.volumeValue.text=Mathf.RoundToInt(v*100)+"%";});
+        layout.sfx.onValueChanged.RemoveAllListeners();layout.sfx.onValueChanged.AddListener(v=>{sfxVolume=v;layout.sfxValue.text=Mathf.RoundToInt(v*100)+"%";});
+        layout.music.onValueChanged.RemoveAllListeners();layout.music.onValueChanged.AddListener(v=>{musicVolume=v;layout.musicValue.text=Mathf.RoundToInt(v*100)+"%";});
         foreach(var p in layout.pages) p.SetActive(false);
         root.SetActive(false);
     }
@@ -99,9 +112,9 @@ public sealed class SharedOptionsPanel
     public void Open()
     {
         sensitivity=GameOptions.MouseSensitivityMultiplier;volume=PlayerPrefs.GetFloat("Options.MasterVolume",1);
-        fullscreen=PlayerPrefs.GetInt(GameOptions.FullscreenKey,Screen.fullScreen?1:0)==1;
-        originalFullscreen=fullscreen;
-        quality=Mathf.Clamp(PlayerPrefs.GetInt("Options.Quality",QualitySettings.GetQualityLevel()),0,QualitySettings.names.Length-1);
+        sfxVolume=GameOptions.SfxVolume;musicVolume=GameOptions.MusicVolume;
+        fullscreen=Application.isEditor ? PlayerPrefs.GetInt(GameOptions.FullscreenKey,1)==1 : Screen.fullScreen;
+        quality=GameOptions.SavedQualityPreset;
         fps=PlayerPrefs.GetInt("Options.FPS",60);section=0;root.SetActive(true);Refresh();Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
     }
     public void Close(bool save)
@@ -110,10 +123,11 @@ public sealed class SharedOptionsPanel
         if(save)
         {
             PlayerPrefs.SetFloat(GameOptions.SensitivityKey,sensitivity);PlayerPrefs.SetFloat("Options.MasterVolume",volume);
-            PlayerPrefs.SetInt(GameOptions.FullscreenKey,fullscreen?1:0);PlayerPrefs.SetInt("Options.Quality",quality);PlayerPrefs.SetInt("Options.FPS",fps);PlayerPrefs.Save();
-            AudioListener.volume=volume;GameOptions.ApplyFullscreen(fullscreen);QualitySettings.SetQualityLevel(quality);QualitySettings.vSyncCount=0;Application.targetFrameRate=fps;
+            PlayerPrefs.SetFloat(GameOptions.SfxKey,sfxVolume);PlayerPrefs.SetFloat(GameOptions.MusicKey,musicVolume);
+            PlayerPrefs.SetInt(GameOptions.FullscreenKey,fullscreen?1:0);PlayerPrefs.SetInt("Options.Quality",GameOptions.QualityIndex(quality));PlayerPrefs.SetInt("Options.FPS",fps);
+            AudioListener.volume=volume;GameOptions.ApplyFullscreen(fullscreen);QualitySettings.SetQualityLevel(GameOptions.QualityIndex(quality));QualitySettings.vSyncCount=0;Application.targetFrameRate=fps;
+            PlayerPrefs.Save();
         }
-        if(!save&&fullscreen!=originalFullscreen)GameOptions.ApplyFullscreen(originalFullscreen);
         root.SetActive(false);if(UnityEngine.EventSystems.EventSystem.current!=null)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);closed?.Invoke();
     }
     private void Refresh()
@@ -126,10 +140,13 @@ public sealed class SharedOptionsPanel
         }
         layout.sensitivity.SetValueWithoutNotify(Mathf.Log10(Mathf.Max(GameOptions.MinimumMouseSensitivity,sensitivity)));
         layout.volume.SetValueWithoutNotify(volume);
+        layout.sfx.SetValueWithoutNotify(sfxVolume);layout.music.SetValueWithoutNotify(musicVolume);
+        layout.sfxValue.text=Mathf.RoundToInt(sfxVolume*100)+"%";
+        layout.musicValue.text=Mathf.RoundToInt(musicVolume*100)+"%";
         layout.sensitivityValue.text=sensitivity.ToString("0.00")+"x";
         layout.volumeValue.text=Mathf.RoundToInt(volume*100)+"%";
         layout.choices[0].GetComponentInChildren<TMP_Text>().text=(fullscreen?"ON":"OFF")+"  >";
-        layout.choices[1].GetComponentInChildren<TMP_Text>().text=QualitySettings.names[quality]+"  >";
+        layout.choices[1].GetComponentInChildren<TMP_Text>().text=GameOptions.QualityNames[quality]+"  >";
         layout.choices[2].GetComponentInChildren<TMP_Text>().text=(fps<0?"UNLIMITED":fps+" FPS")+"  >";
     }
     private static RectTransform Rect(string name,Transform parent,Vector2 pos,Vector2 size)

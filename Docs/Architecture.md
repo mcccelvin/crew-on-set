@@ -7,6 +7,7 @@ Read the row relevant to the task, then search its entry points. Paths below are
 | Save slots and accounts | `GameSaveManager.cs`, `GameSaveMenu.cs` | `GameSaveRepository.cs`, `GameSavePrefs.cs`, `LegacyGameSave.cs`, `SaveLoadPanelHost.cs`; `Docs/SaveGames.md` |
 | Login / registration | `Assets/UI/Scripts/AccountManager.cs` | Login assigns identity through `GameSaveManager.SetAccount`; account sign-in button is repurposed by `SaveLoadPanelHost` |
 | Menu routes / multiplayer | `SceneController.cs`, `Multiplayer/GameSetupMenu.cs` | `Multiplayer/LobbyManager.cs`; keep Photon host/join separate from single-player save slots |
+| Role-based crew studio | `Multiplayer/MultiplayerRoleManager.cs`, `Multiplayer/MultiplayerContractManager.cs` | `NetworkStudioFactory`, `NetworkStageObject`, `MultiplayerCrewController`, `RoleSelectionUI`; see `Docs/MultiplayerRoles.md`. Room-only budget/coverage, no career writes. |
 | Settings / pause | `PauseManager.cs`, `SharedOptionsPanel.cs` | `MainMenuOptionsHost.cs` attaches the same view in the main menu; `GameOptions.cs` applies global settings |
 | Campaign / rewards | `CampaignLevelManager.cs`, `CampaignProgression.cs`, `CareerManager.cs` | `ProductionEconomy.cs`, `ContractGrader.cs`; `Docs/ProductionEconomy.md` |
 | First commercial tutorial | `TutorialManager.cs` | `TutorialUIManager.cs` owns boss dialogue, hints and interaction restrictions |
@@ -35,6 +36,10 @@ Unless a full path is given, filenames above are under `Assets/Script`.
 
 ## Authored UI
 
+Settings audio controls are upgraded in-place by `SharedOptionsPanel` for existing authored layouts. `GameOptions` owns global SFX/music preferences and maps the three visible quality presets to existing Unity tier indices. SAVE applies all drafts; closing discards them. Gameplay, coffee actions, and commercial playback multiply their base volumes by the matching category setting. Multiplayer pause opens the same options panel.
+
+Gameplay audio: `GameplayAudioManager` installs automatically and owns UI/feedback cues, boss voice and contract background music. `GameplaySoundLibraryBuilder` generates `Resources/GameplaySounds.asset` from the original sound folders on editor reload and before builds. Recording and movement trigger cues directly; `CoffeeActionAudio` owns cancellable spatial machine sequences for players and actors. Master volume still comes from `GameOptions`. Imported sounds without a corresponding gameplay action are retained in the catalog for future hooks; this does not add audio capture to recorded commercials.
+
 Static UI is saved in the scenes and equipment prefab rather than rebuilt on Play. `Assets/Editor/AuthoredUIMigration.cs` owns the one-time migration (`Crew-On-Set/UI/Save UI into Scene Hierarchy`) and backs up scenes under `Logs/AuthoredUI`. Root screen UI is grouped under `UI`; world-space screens and internal lookup paths remain in place. UI controllers serialize layout references and bind runtime listeners independently. `SettingsLayout`, `PlayerEditTools`, `AlmanacGuidePlayer`, and `CircularSliderKnob` have matching script files so Unity can serialize their components.
 
 Clip cards, timeline ticks, save cards, achievements, and prop-bank entries are data-driven and still populate dynamically. Do not globally disable Instantiate or remove UI controllers. Existing builders remain as compatibility fallbacks for unmigrated scenes. Keep the scene/prefab references when editing layouts; repeat migration only when deliberately adding missing layouts.
@@ -50,3 +55,6 @@ Unity scenes and prefabs reference scripts by `.meta` GUID. Public methods can b
 Keep scene-facing components and saved data stable. Extract one responsibility at a time, retain original APIs, and validate that feature before continuing. The settings/save UI cleanup removed unreachable legacy builders and separated existing classes into matching files; it did not change scene assets, contracts, economy, saved data or SDKs. Larger tutorial managers remain intact and should be split only alongside focused tests for their step transitions.
 
 No exact token saving is guaranteed: the primary benefit is locating and reading fewer relevant files. Do not paste this whole map into every task.
+
+Sound editing: use Crew-On-Set > Edit Gameplay Sounds, or select Assets/Resources/GameplaySounds.asset. GameplaySoundLibraryEditor displays searchable named actions with editable clip variations. Display names may change freely; action keys preserve existing gameplay hooks. Empty Clips mute that action. Add Sound creates a custom entry; a new gameplay event must call GameplayAudioManager.Play with its key. Extra entries are imported assets with no built-in action mapping. The builder initializes named entries once and thereafter updates only the hidden discovery cache, preserving custom assignments through editor reloads and builds.
+

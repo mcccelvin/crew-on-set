@@ -178,6 +178,7 @@ public class TutorialUIManager : MonoBehaviour
 
     private void ShowBossDialoguePage(string message)
     {
+        GameplayAudioManager.Speak();
         if (bossRevealCoroutine != null)
         {
             StopCoroutine(bossRevealCoroutine);
@@ -233,6 +234,7 @@ public class TutorialUIManager : MonoBehaviour
 
     public void HideBossDialogue()
     {
+        GameplayAudioManager.StopVoice();
         if (bossRevealCoroutine != null)
         {
             StopCoroutine(bossRevealCoroutine);

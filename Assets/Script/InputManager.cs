@@ -11,8 +11,9 @@ namespace Player.Manager
         public Vector2 Look { get; private set; }
         public bool IsPointerLook => lookAction != null && lookAction.activeControl != null && lookAction.activeControl.device is UnityEngine.InputSystem.Pointer;
         public bool Run { get; private set; }
-        public bool CameraPrecisionHeld => CanReadGameplayAction() && Keyboard.current != null &&
-            (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed);
+        public bool SlowWalkHeld => isActiveAndEnabled && CanReadGameplayAction() &&
+            slowWalkAction != null && slowWalkAction.enabled && slowWalkAction.IsPressed();
+        public bool CameraPrecisionHeld => SlowWalkHeld;
         public bool Jump { get; private set; }
         public bool JumpPressedThisFrame { get; private set; }
         public float EquipmentAdjust { get; private set; }
@@ -41,6 +42,7 @@ namespace Player.Manager
         private InputAction moveAction;
         private InputAction lookAction;
         private InputAction runAction;
+        private InputAction slowWalkAction;
         private InputAction jumpAction;
         private InputAction interactAction;
         private InputAction dropAction;
@@ -137,6 +139,7 @@ namespace Player.Manager
             moveAction = playerMap.FindAction("Move");
             lookAction = playerMap.FindAction("Look");
             runAction = playerMap.FindAction("Run");
+            slowWalkAction = playerMap.FindAction("Slow Walk");
             jumpAction = playerMap.FindAction("Jump");
             interactAction = playerMap.FindAction("Interact");
             dropAction = playerMap.FindAction("Drop");

@@ -14,6 +14,8 @@ public partial class AlmanacManager
 
     private int navigationStep = -1;
     private const string NavigationLessonKey = "AlmanacGuideShown";
+    private const int NavigationLessonVersion = 2;
+    public bool IsNavigationLessonActive => navigationStep >= 0;
     private TutorialUIManager navigationUI;
     private Canvas navigationCanvas;
     private CanvasGroup navigationGroup;
@@ -22,7 +24,25 @@ public partial class AlmanacManager
     private bool navigationAwaitingSpace;
     [SerializeField] private Button navigationLightingButton;
     [SerializeField] private GameObject navigationFrame;
-    private readonly List<CanvasGroup> navigationButtonGates = new List<CanvasGroup>();
+    private struct NavigationButtonGate
+    {
+        public CanvasGroup group;
+        public bool interactable;
+        public bool blocksRaycasts;
+    }
+    private readonly List<NavigationButtonGate> navigationButtonGates = new List<NavigationButtonGate>();
+    private TutorialHighlighter navigationHighlighter;
+    private Canvas navigationHighlightCanvas;
+    private int navigationHighlightOrder;
+    private bool navigationHighlightOverride;
+    private GameObject navigationTaskPanel;
+    private TextMeshProUGUI navigationTaskText;
+    private static readonly string[] NavigationTasks = {
+        "Click EQUIPMENTS above the book",
+        "Click the LIGHTING ribbon on the right",
+        "Click TECHNIQUES above the book",
+        "Click the right arrow to turn the page"
+    };
 
     private Button NavigationTarget()
     {
@@ -38,31 +58,44 @@ public partial class AlmanacManager
 
     private void ClearNavigationFocus()
     {
+        if (navigationHighlighter != null) navigationHighlighter.HideHighlight();
+        if (navigationTaskPanel != null) navigationTaskPanel.SetActive(false);
         if (navigationFrame != null) navigationFrame.SetActive(false);
         foreach (var gate in navigationButtonGates)
         {
-            if (gate == null) continue;
-            gate.interactable = true;
-            gate.blocksRaycasts = true;
-            Destroy(gate);
+            if (gate.group == null) continue;
+            gate.group.interactable = gate.interactable;
+            gate.group.blocksRaycasts = gate.blocksRaycasts;
         }
         navigationButtonGates.Clear();
     }
 
-    private void SetNavigationFocus(Button target)
+    private void SetNavigationFocus(Button target, bool allowTargetClick = true)
     {
         ClearNavigationFocus();
         if (UnityEngine.EventSystems.EventSystem.current != null)
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
         foreach (var button in Application.isPlaying ? almanacCanvas.GetComponentsInChildren<Button>(true) : new Button[0])
         {
-            if (button == target || button == closeButton) continue;
-            var gate = button.gameObject.AddComponent<CanvasGroup>();
+            if ((button == target && allowTargetClick) || button == closeButton) continue;
+            // Reuse groups: Destroy is deferred and re-adding in the same frame fails.
+            var gate = button.GetComponent<CanvasGroup>();
+            if (gate == null) gate = button.gameObject.AddComponent<CanvasGroup>();
+            navigationButtonGates.Add(new NavigationButtonGate
+            {
+                group = gate,
+                interactable = gate.interactable,
+                blocksRaycasts = gate.blocksRaycasts
+            });
             gate.interactable = false;
             gate.blocksRaycasts = false;
-            navigationButtonGates.Add(gate);
         }
         if (target == null) return;
+        if (Application.isPlaying && navigationHighlighter != null)
+        {
+            navigationHighlighter.HighlightElement(target.GetComponent<RectTransform>());
+            return;
+        }
         if (navigationFrame != null)
         {
             navigationFrame.transform.SetParent(target.transform, false);
@@ -92,6 +125,7 @@ public partial class AlmanacManager
 
     private void UpdateNavigationLesson()
     {
+        if (navigationStep >= 0 && DevTutorialBypass.Disabled) { EndNavigationLesson(); return; }
         var keyboard = UnityEngine.InputSystem.Keyboard.current;
         if (!isAlmanacOpen || !navigationAwaitingSpace || navigationUI == null ||
             PauseManager.isPaused || !Application.isFocused || keyboard == null ||
@@ -100,15 +134,48 @@ public partial class AlmanacManager
         navigationUI.HideBossDialogue();
         if (navigationStep >= 4) { EndNavigationLesson(); return; }
         SetNavigationFocus(NavigationTarget());
+        ShowNavigationTask();
+    }
+
+    private void ShowNavigationTask()
+    {
+        if (navigationTaskPanel == null)
+        {
+            navigationTaskPanel = CreatePanel("Almanac tutorial task", almanacCanvas.transform, new Color(0, 0, 0, .75f));
+            navigationTaskPanel.GetComponent<Image>().raycastTarget = false;
+            var rect = navigationTaskPanel.GetComponent<RectTransform>();
+            rect.pivot = new Vector2(0, 1);
+            SetRect(rect, new Vector2(0, 1), new Vector2(0, 1), new Vector2(20, -135), new Vector2(330, 90));
+            var canvas = navigationTaskPanel.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            var bookCanvas = almanacCanvas.GetComponent<Canvas>();
+            canvas.sortingLayerID = bookCanvas != null ? bookCanvas.sortingLayerID : 0;
+            canvas.sortingOrder = bookCanvas != null ? bookCanvas.sortingOrder + 2 : 62;
+            navigationTaskText = CreateText("Instruction", navigationTaskPanel.transform, "", 24, TextAlignmentOptions.MidlineLeft);
+            navigationTaskText.color = Color.white;
+            SetStretchRect(navigationTaskText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 8), new Vector2(-12, -8));
+        }
+        navigationTaskText.text = NavigationTasks[navigationStep];
+        navigationTaskPanel.SetActive(true);
     }
 
     private void BeginNavigationLesson()
     {
         var ui = TutorialUIManager.Instance;
         if (DevTutorialBypass.Disabled || ui == null || ui.bossHUDCanvas == null ||
-            GameSavePrefs.GetInt(NavigationLessonKey, 0) == 1) return;
+            GameSavePrefs.GetInt(NavigationLessonKey, 0) >= NavigationLessonVersion) return;
 
         navigationUI = ui;
+        navigationHighlighter = TutorialHighlighter.Instance;
+        navigationHighlightCanvas = navigationHighlighter != null ? navigationHighlighter.GetComponentInParent<Canvas>() : null;
+        if (navigationHighlightCanvas != null)
+        {
+            navigationHighlightOrder = navigationHighlightCanvas.sortingOrder;
+            navigationHighlightOverride = navigationHighlightCanvas.overrideSorting;
+            navigationHighlightCanvas.overrideSorting = true;
+            var bookCanvas = almanacCanvas.GetComponent<Canvas>();
+            navigationHighlightCanvas.sortingOrder = bookCanvas != null ? bookCanvas.sortingOrder + 1 : 61;
+        }
         navigationTasksVisible = ui.taskPanel != null && ui.taskPanel.activeSelf;
         navigationCanvas = ui.bossHUDCanvas.GetComponent<Canvas>();
         navigationGroup = ui.bossHUDCanvas.GetComponent<CanvasGroup>();
@@ -118,16 +185,13 @@ public partial class AlmanacManager
             navigationSortingOrder = navigationCanvas.sortingOrder;
             navigationCanvas.overrideSorting = true;
             var bookCanvas = almanacCanvas.GetComponent<Canvas>();
-            navigationCanvas.sortingOrder = Mathf.Max(navigationSortingOrder, bookCanvas != null ? bookCanvas.sortingOrder + 1 : 61);
+            navigationCanvas.sortingOrder = Mathf.Max(navigationSortingOrder, bookCanvas != null ? bookCanvas.sortingOrder + 3 : 63);
         }
         if (navigationGroup != null)
         {
             navigationBlocksRaycasts = navigationGroup.blocksRaycasts;
             navigationGroup.blocksRaycasts = false;
         }
-        // One introduction per career, including when the player closes it early.
-        GameSavePrefs.SetInt(NavigationLessonKey, 1);
-        GameSavePrefs.Save();
         navigationStep = 0;
         ShowNavigationLesson();
     }
@@ -151,16 +215,28 @@ public partial class AlmanacManager
             "You've got it! Read at your own pace. Press P or the red X to close. You can reopen the Almanac with P whenever you need a reminder."
         };
         navigationAwaitingSpace = true;
-        SetNavigationFocus(null);
+        SetNavigationFocus(null, false);
         navigationUI.ShowBossDialogue(instructions[Mathf.Min(navigationStep, 4)] + "\n\nPress [SPACE] to continue.", navigationUI.poseOpenHand, true, false);
     }
 
     private void EndNavigationLesson()
     {
         if (navigationStep < 0) return;
+        if (navigationStep >= 4)
+        {
+            GameSavePrefs.SetInt(NavigationLessonKey, NavigationLessonVersion);
+            GameSavePrefs.Save();
+        }
         navigationStep = -1;
         navigationAwaitingSpace = false;
         ClearNavigationFocus();
+        if (navigationHighlightCanvas != null)
+        {
+            navigationHighlightCanvas.sortingOrder = navigationHighlightOrder;
+            navigationHighlightCanvas.overrideSorting = navigationHighlightOverride;
+        }
+        navigationHighlighter = null;
+        navigationHighlightCanvas = null;
         if (navigationUI != null)
         {
             navigationUI.HideBossDialogue();
@@ -179,8 +255,8 @@ public partial class AlmanacManager
     {
         if (bookEntryTitle == null || boundBookCanvas == almanacCanvas) return;
         boundBookCanvas = almanacCanvas;
-        bookPrevious.onClick.AddListener(() => { bookPage--; RefreshBookPage(); });
-        bookNext.onClick.AddListener(() => { bookPage++; RefreshBookPage(); NavigationAction(3); });
+        bookPrevious.onClick.AddListener(() => TurnBookPage(-1));
+        bookNext.onClick.AddListener(() => TurnBookPage(1));
         bookVideo.onClick.AddListener(ShowRuleOfThirdsGuide);
         equipmentKnowledgeButton.onClick.AddListener(() => { bookPage=0; bookCategory=0; ShowEquipmentKnowledge(); NavigationAction(0); });
         techniquesKnowledgeButton.onClick.AddListener(() => { bookPage=0; bookCategory=0; ShowTechniqueKnowledge(); NavigationAction(2); });
@@ -189,7 +265,7 @@ public partial class AlmanacManager
         {
             int category=i;
             book.Find("Category " + BookCategories[i]).GetComponent<Button>().onClick.AddListener(() =>
-            { bookCategory=category; bookPage=0; OpenTab(1); RefreshBookPage(); NavigationAction(1); });
+            { bookCategory=category; bookPage=0; OpenTab(1); RefreshBookPage(); if (category == 1) NavigationAction(1); });
         }
         if (techniqueGuidePanel != null && ruleOfThirdsGuidePlayer != null)
         {
@@ -273,8 +349,104 @@ public partial class AlmanacManager
     {
         var text=CreateText(name,parent,"",font,TextAlignmentOptions.Center);SetRect(text.rectTransform,Vector2.one*.5f,Vector2.one*.5f,position,size);text.color=new Color(.08f,.065f,.04f);text.enableAutoSizing=true;text.fontSizeMin=20;text.fontSizeMax=font;return text;
     }
+    private Coroutine pageTurn;
+    private GameObject turningPaper;
+    private bool applyingPageTurn;
+
+    private void CancelPageTurn()
+    {
+        if (pageTurn != null) StopCoroutine(pageTurn);
+        pageTurn = null;
+        if (turningPaper != null)
+        {
+            turningPaper.SetActive(false);
+            Destroy(turningPaper);
+        }
+        turningPaper = null;
+    }
+
+    private void TurnBookPage(int direction)
+    {
+        if (pageTurn != null || !isAlmanacOpen) return;
+        int next = bookPage + direction;
+        if (next < 0 || next >= bookBodies.Count) return;
+        pageTurn = StartCoroutine(AnimateBookPage(direction, next));
+    }
+
+    private void CopyTurningText(TextMeshProUGUI source, Transform paper)
+    {
+        var copy = Instantiate(source, source.transform.parent);
+        copy.transform.SetParent(paper, true);
+        copy.raycastTarget = false;
+    }
+
+    private System.Collections.IEnumerator AnimateBookPage(int direction, int next)
+    {
+        // Keep the illustrated cover and rings still; only the paper turns.
+        turningPaper = CreatePanel("Turning Almanac page", knowledgePanel.transform, new Color32(238, 207, 151, 255));
+        var paper = turningPaper.GetComponent<RectTransform>();
+        paper.anchorMin = paper.anchorMax = Vector2.one * .5f;
+        paper.pivot = new Vector2(direction > 0 ? 0 : 1, .5f);
+        paper.anchoredPosition = new Vector2(0, 10);
+        paper.sizeDelta = new Vector2(665, 815);
+        var image = turningPaper.GetComponent<Image>();
+        image.raycastTarget = false;
+        var shadow = turningPaper.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0, 0, 0, .22f);
+        shadow.effectDistance = new Vector2(-direction * 14, -3);
+        if (direction > 0) CopyTurningText(bookRightText, paper);
+        else
+        {
+            CopyTurningText(bookHeading, paper);
+            CopyTurningText(bookEntryTitle, paper);
+            CopyTurningText(bookLeftText, paper);
+        }
+        bookPrevious.interactable = bookNext.interactable = false;
+        bool swapped = false;
+        float elapsed = 0f;
+        while (elapsed < .42f && isAlmanacOpen && knowledgePanel != null && knowledgePanel.activeInHierarchy)
+        {
+            float progress = Mathf.SmoothStep(0f, 1f, elapsed / .42f);
+            if (!swapped && progress >= .5f)
+            {
+                // Replace content while the leaf is edge-on, avoiding mirrored text.
+                paper.localScale = Vector3.one;
+                paper.localRotation = Quaternion.identity;
+                foreach (Transform child in paper) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+                bookPage = next;
+                applyingPageTurn = true;
+                RefreshBookPage();
+                applyingPageTurn = false;
+                paper.pivot = new Vector2(direction > 0 ? 1 : 0, .5f);
+                if (direction > 0)
+                {
+                    CopyTurningText(bookHeading, paper);
+                    CopyTurningText(bookEntryTitle, paper);
+                    CopyTurningText(bookLeftText, paper);
+                }
+                else CopyTurningText(bookRightText, paper);
+                swapped = true;
+                bookPrevious.interactable = bookNext.interactable = false;
+            }
+            float lift = Mathf.Sin(progress * Mathf.PI);
+            paper.localScale = new Vector3(Mathf.Max(.015f, Mathf.Abs(Mathf.Cos(progress * Mathf.PI))), 1f + lift * .015f, 1f);
+            paper.localRotation = Quaternion.Euler(0, 0, direction * lift * (swapped ? -2f : 2f));
+            image.color = Color.Lerp(new Color32(238, 207, 151, 255), new Color32(186, 149, 97, 255), lift * .45f);
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+        bool completed = isAlmanacOpen && knowledgePanel != null && knowledgePanel.activeInHierarchy;
+        pageTurn = null;
+        if (turningPaper != null) { turningPaper.SetActive(false); Destroy(turningPaper); }
+        turningPaper = null;
+        if (completed) bookPage = next;
+        if (bookEntryTitle != null) RefreshBookPage();
+        if (completed && direction > 0) NavigationAction(3);
+    }
+
     private void RefreshBookPage()
     {
+        if (!applyingPageTurn) CancelPageTurn();
         bookBodies.Clear();bookEntries.Clear();var entries=new List<KnowledgeEntry>();
         foreach(var entry in database)
         {

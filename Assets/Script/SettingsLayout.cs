@@ -12,5 +12,7 @@ public sealed class SettingsLayout : MonoBehaviour
     public TMP_Text controlsHelp;
     public Slider sensitivity, volume;
     public TMP_Text sensitivityValue, volumeValue;
+    public Slider sfx, music;
+    public TMP_Text sfxValue, musicValue;
     public Button[] choices = new Button[3];
 }

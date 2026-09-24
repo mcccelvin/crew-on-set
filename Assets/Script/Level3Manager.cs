@@ -484,7 +484,7 @@ public class Level3Manager : MonoBehaviour
                         : !hasCorrectTilt
                             ? "Set the tilt to -10 degrees with the arrow keys."
                             : !hasCorrectTemperature
-                                ? "Set color temperature to 3200K with Z and K."
+                                ? "Set color temperature to 3200K with Z and X."
                                 : !hasCorrectDiffusion
                                     ? "Set diffusion to 75% with V and B."
                                     : "Stand on the SOFT KEY marker before pressing G.";
@@ -1101,8 +1101,10 @@ internal sealed class GuidedPracticeLesson
         public string message;
         public string task;
         public System.Func<bool> done;
-        public Step(string message, string task, System.Func<bool> done)
-        { this.message = message; this.task = task; this.done = done; }
+        public System.Action guide;
+        public string permission;
+        public Step(string message, string task, System.Func<bool> done, System.Action guide = null, string permission = null)
+        { this.message = message; this.task = task; this.done = done; this.guide = guide; this.permission = permission; }
     }
 
     private readonly TutorialManager tutorial;
@@ -1116,6 +1118,7 @@ internal sealed class GuidedPracticeLesson
     private bool stationLocked;
     private bool released;
     public bool IsExplaining { get; private set; }
+    public string CurrentPermission => !released && index < steps.Count ? steps[index].permission : null;
     public bool ReadyToPlace => index == steps.Count - 1 && !IsExplaining;
 
     public GuidedPracticeLesson(TutorialManager tutorial, List<Step> steps, System.Action complete = null, Transform station = null)
@@ -1182,7 +1185,8 @@ internal sealed class GuidedPracticeLesson
             guideLine.SetPosition(1, GuideEndpoint(station, true));
         }
         if (IsExplaining || index >= steps.Count || PauseManager.isPaused) return;
-        CampaignGuidance.HighlightPracticeControl(steps[index].task);
+        if (steps[index].guide != null) steps[index].guide();
+        else CampaignGuidance.HighlightPracticeControl(steps[index].task);
         if (steps[index].done == null || !steps[index].done())
         { stableSince = -1f; return; }
         if (stableSince < 0f) stableSince = Time.time;
@@ -1324,8 +1328,8 @@ internal sealed class GuidedPracticeLesson
             steps.Add(new Step("Negative tilt points down; positive tilt points up. Press Down Arrow to tilt down to -10 degrees with <color=red>[Up/Down]</color>. Aim the light onto the subject.",
                 "[Up/Down] Set tilt to -10 degrees",
                 () => heldLight() != null && Mathf.Abs(heldLight().GetCurrentTilt() + 10f) <= 2.5f));
-            steps.Add(new Step("Hold <color=red>[Z]</color> to lower Kelvin or <color=red>[K]</color> to raise it. Set 3200K for a warm automotive look. Lower numbers look warmer; higher numbers look cooler.",
-                "[Z/K] Set temperature to 3200K",
+            steps.Add(new Step("Hold <color=red>[Z]</color> to lower Kelvin or <color=red>[X]</color> to raise it. Set 3200K for a warm automotive look. Lower numbers look warmer; higher numbers look cooler.",
+                "[Z/X] Set temperature to 3200K",
                 () => heldLight() != null && Mathf.Abs(heldLight().GetColorTemperature() - 3200f) <= 250f));
             steps.Add(new Step("Use <color=red>[V/B]</color> to set diffusion to 75%. Diffusion softens shadow edges and spreads the reflection.",
                 "[V/B] Set diffusion to 75%",
@@ -1366,6 +1370,13 @@ internal static class CampaignGuidance
     public static void Update(TutorialManager tutorial, string step, int level)
     {
         if (tutorial == null || PauseManager.isPaused) return;
+        // The Almanac owns the shared spotlight throughout its navigation lesson.
+        if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsNavigationLessonActive)
+        {
+            highlighted = null;
+            previousStep = null;
+            return;
+        }
         if (previousStep == step && Time.unscaledTime < nextRefresh) return;
         bool changed = previousStep != step;
         previousStep = step;

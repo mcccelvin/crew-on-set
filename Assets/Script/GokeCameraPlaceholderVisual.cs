@@ -2,10 +2,10 @@ using UnityEngine;
 
 public class GokeCameraPlaceholderVisual : MonoBehaviour
 {
-    private void Awake()
+    private void Start()
     {
-        // Keep this legacy component compatible with existing prefab references.
-        // The prefab already contains the real camera mesh; do not replace it.
-        enabled = false;
+        var camera = GetComponentInParent<Player.Equipment.FilmCameraItem>();
+        if (camera != null && camera.EquipmentName == "Level 2 Camera")
+            EquipmentModelVisuals.Camera(camera.transform);
     }
 }

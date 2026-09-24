@@ -9,12 +9,18 @@ public class MultiplayerPauseManager : MonoBehaviour
 
     [Header("UI References")]
     public GameObject pauseMenuCanvas;
+    private SharedOptionsPanel options;
+    private UnityEngine.UI.Button optionsButton;
 
     void Start()
     {
         // Force the game to unpause and hide the menu when the scene loads
         isPaused = false;
         if (pauseMenuCanvas != null) pauseMenuCanvas.SetActive(false);
+        if (pauseMenuCanvas != null)
+            foreach (var button in pauseMenuCanvas.GetComponentsInChildren<UnityEngine.UI.Button>(true))
+                if (button.name == "Option" || button.name == "Options")
+                { optionsButton = button; button.onClick.AddListener(OpenOptions); break; }
     }
 
     void Update()
@@ -23,6 +29,7 @@ public class MultiplayerPauseManager : MonoBehaviour
         Keyboard keyboard = Keyboard.current;
         if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
         {
+            if (options != null && options.IsOpen) { options.Close(false); return; }
             if (isPaused) Resume();
             else Pause();
         }
@@ -30,6 +37,7 @@ public class MultiplayerPauseManager : MonoBehaviour
 
     public void Resume()
     {
+        options?.Close(false);
         pauseMenuCanvas.SetActive(false);
         isPaused = false;
 
@@ -55,6 +63,7 @@ public class MultiplayerPauseManager : MonoBehaviour
     // --- Wire this to your "Exit" or "Main Menu" UI Button ---
     public void ExitToMain()
     {
+        options?.Close(false);
         // We MUST disconnect from the room before switching scenes
         if (PhotonNetwork.InRoom)
         {
@@ -65,12 +74,24 @@ public class MultiplayerPauseManager : MonoBehaviour
         SceneManager.LoadScene(0);
     }
 
+    public void OpenOptions()
+    {
+        if (!isPaused || pauseMenuCanvas == null) return;
+        if (options == null) options = new SharedOptionsPanel(pauseMenuCanvas.transform, () => {});
+        options.Open();
+    }
+
+    private void OnDestroy()
+    {
+        if (optionsButton != null) optionsButton.onClick.RemoveListener(OpenOptions);
+    }
+
     private void EnableLocalPlayerControls(bool state)
     {
         // --- THE FIX: We are now searching for your new SimpleMultiplayerPlayer script! ---
-        SimpleMultiplayerPlayer[] players = FindObjectsOfType<SimpleMultiplayerPlayer>();
+        MultiplayerPlayerController[] players = FindObjectsOfType<MultiplayerPlayerController>();
 
-        foreach (SimpleMultiplayerPlayer player in players)
+        foreach (MultiplayerPlayerController player in players)
         {
             // Only disable the WASD controls if it is OUR character!
             if (player.photonView.IsMine)

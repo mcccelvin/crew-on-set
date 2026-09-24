@@ -570,7 +570,7 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 830070642}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ColorSliderBridge, Assembly-CSharp
         m_MethodName: OnPropColorChanged
         m_Mode: 1
@@ -2046,7 +2046,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1418601750}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ComputerUIManager, Assembly-CSharp
         m_MethodName: OnRecordingsFolderClicked
         m_Mode: 1
@@ -4250,7 +4250,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1931677654}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: MultiplayerPauseManager, Assembly-CSharp
         m_MethodName: Resume
         m_Mode: 1
@@ -5396,7 +5396,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1931677654}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: MultiplayerPauseManager, Assembly-CSharp
         m_MethodName: ExitToMain
         m_Mode: 1
@@ -8772,7 +8772,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -9656,7 +9656,6 @@ GameObject:
   - component: {fileID: 271881383}
   - component: {fileID: 271881386}
   - component: {fileID: 271881385}
-  - component: {fileID: 271881384}
   m_Layer: 5
   m_Name: HotbarUI
   m_TagString: Untagged
@@ -9690,81 +9689,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &271881384
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 271881382}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 3cad54e1dee110e40a880467cd916f65, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  slotBackgrounds:
-  - {fileID: 1349748221}
-  - {fileID: 1580240573}
-  - {fileID: 754848572}
-  - {fileID: 1132350277}
-  - {fileID: 260013207}
-  slotTexts:
-  - {fileID: 206057613}
-  - {fileID: 1873146977}
-  - {fileID: 1477527419}
-  - {fileID: 617409170}
-  - {fileID: 355588263}
-  slotIcons:
-  - {fileID: 1920141380}
-  - {fileID: 1220914146}
-  - {fileID: 1524768626}
-  - {fileID: 322192818}
-  - {fileID: 1480345118}
-  activeColor: {r: 1, g: 1, b: 1, a: 0.2}
-  inactiveColor: {r: 0, g: 0, b: 0, a: 0.4}
-  equipmentGuideText: {fileID: 1884370666}
-  equipmentControlsRoot: {fileID: 1054766238}
-  controlLabels:
-  - {fileID: 143592258}
-  - {fileID: 1149905693}
-  - {fileID: 100300074}
-  - {fileID: 860493751}
-  - {fileID: 1734459168}
-  - {fileID: 200753079}
-  - {fileID: 1513766111}
-  - {fileID: 50458678}
-  - {fileID: 519768092}
-  - {fileID: 1238214751}
-  - {fileID: 1670631676}
-  - {fileID: 1837447339}
-  - {fileID: 519197209}
-  - {fileID: 498878031}
-  - {fileID: 983280366}
-  - {fileID: 1160297912}
-  controlKeys:
-  - {fileID: 1981097645}
-  - {fileID: 96069536}
-  - {fileID: 670282524}
-  - {fileID: 1119646282}
-  - {fileID: 1409632260}
-  - {fileID: 1610887465}
-  - {fileID: 2003930563}
-  - {fileID: 2035482330}
-  - {fileID: 466318262}
-  - {fileID: 380242061}
-  - {fileID: 459512684}
-  - {fileID: 530845777}
-  - {fileID: 589871500}
-  - {fileID: 1899170443}
-  - {fileID: 293149194}
-  - {fileID: 21571075}
-  directorPromptRoot: {fileID: 848615236}
-  directorPromptRect: {fileID: 848615237}
-  directorPromptGroup: {fileID: 848615240}
-  directorPromptAccent: {fileID: 68077383}
-  directorPromptKeyText: {fileID: 1988219387}
-  directorPromptTitleText: {fileID: 1548573758}
-  directorPromptActionText: {fileID: 933937034}
 --- !u!114 &271881385
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -10105,7 +10029,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1418601750}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ComputerUIManager, Assembly-CSharp
         m_MethodName: OnEditorAppClicked
         m_Mode: 1
@@ -11374,7 +11298,6 @@ GameObject:
   - component: {fileID: 307014005}
   - component: {fileID: 307014008}
   - component: {fileID: 307014007}
-  - component: {fileID: 307014006}
   m_Layer: 0
   m_Name: pointA
   m_TagString: Untagged
@@ -11397,23 +11320,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 7456547606643971504}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &307014006
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 307014004}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow:
-  - {fileID: 307014004}
 --- !u!23 &307014007
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -21756,7 +21662,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: CancelPurchase
         m_Mode: 1
@@ -22222,7 +22128,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -22412,7 +22318,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1741057703}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: TutorialManager, Assembly-CSharp
         m_MethodName: OnFirstContractAccepted
         m_Mode: 1
@@ -23785,7 +23691,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -23844,7 +23750,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 767385440}
-  - component: {fileID: 767385441}
   m_Layer: 0
   m_Name: ShopTerminal
   m_TagString: Untagged
@@ -23869,24 +23774,6 @@ Transform:
   - {fileID: 1306836458}
   m_Father: {fileID: 1553205236}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &767385441
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 767385439}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow:
-  - {fileID: 1901354119988823818}
-  - {fileID: 306435745540432046}
 --- !u!1 &769200860
 GameObject:
   m_ObjectHideFlags: 0
@@ -23898,7 +23785,6 @@ GameObject:
   - component: {fileID: 769200861}
   - component: {fileID: 769200863}
   - component: {fileID: 769200862}
-  - component: {fileID: 769200864}
   m_Layer: 5
   m_Name: RawImage
   m_TagString: Untagged
@@ -23960,28 +23846,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 769200860}
   m_CullTransparentMesh: 1
---- !u!114 &769200864
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 769200860}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2a46abb6eafa7ba4184cadcb48ec7a48, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  computerScreen: {fileID: 769200862}
-  framesPerSecond: 24
-  playButtonUI: {fileID: 890959725}
-  pauseButtonUI: {fileID: 2097593258}
-  playheadLine: {fileID: 0}
-  timelineArea: {fileID: 0}
-  exportProgressBar: {fileID: 940522731}
-  loadingPanel: {fileID: 1352783730}
-  loadingText: {fileID: 1352783732}
-  isFinished: 0
 --- !u!1 &770302386
 GameObject:
   m_ObjectHideFlags: 0
@@ -25877,61 +25741,6 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
   m_PrefabInstance: {fileID: 1821005465}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &830070633
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 830070632}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c2d3ee8d46ca04047a573d8d8058f9be, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  topDownCamera: {fileID: 1784099625}
-  viewportUI: {fileID: 2144439880}
-  tabletUI: {fileID: 1932841035}
-  selectionIndicatorText: {fileID: 1075908249}
-  rSlider: {fileID: 19462224}
-  gSlider: {fileID: 946963087}
-  bSlider: {fileID: 1390762373}
-  rValueText: {fileID: 1094794404}
-  gValueText: {fileID: 1009426958}
-  bValueText: {fileID: 1275857829}
-  bCoinsText: {fileID: 82784038}
-  propUIContainer: {fileID: 297509554}
-  uiPropCardPrefab: {fileID: 8227713459403940597, guid: 9e237db360fc2d14e8e285106b0080ba, type: 3}
-  propDatabase:
-  - levelName: Tutorial
-    progressLevel: 0
-    allowedProps:
-    - {fileID: 6486331874127914014, guid: 3238d4490033d1340b7d027abc51f70f, type: 3}
-    - {fileID: 701984343092087960, guid: 7cccaff8b35059b4593fc51d144794d5, type: 3}
-  - levelName: 'Stage 1: Goke Cola'
-    progressLevel: 2
-    allowedProps:
-    - {fileID: 599128863737958254, guid: 98bce5863c56db6498aefe6d21a20718, type: 3}
-    - {fileID: 701984343092087960, guid: 7cccaff8b35059b4593fc51d144794d5, type: 3}
-  actorHireCost: 750
-  carSpawnCost: 2500
-  moveableLayer:
-    serializedVersion: 2
-    m_Bits: 64
-  dragHeight: 0
-  wallPrefab: {fileID: 1101223020254634347, guid: f0e5483ae6f5d6e47b47448d7c840963, type: 3}
-  spawnPoint: {fileID: 1398813954}
-  spawnWallButton: {fileID: 1356130731}
-  colorControlPanel: {fileID: 830070632}
-  currentWallColor: {r: 1, g: 1, b: 1, a: 1}
-  poseActorButton: {fileID: 1307040761}
-  interiorPicker: {fileID: 2070666829}
-  interiorLabels:
-  - {fileID: 1347049551}
-  - {fileID: 626730272}
-  - {fileID: 1034370885}
-  - {fileID: 1016819905}
-  - {fileID: 424863860}
 --- !u!4 &830070637 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
@@ -25958,55 +25767,6 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.065084025, y: 0.11324981, z: 0.08919137}
   m_Center: {x: 0.008381805, y: 0.06613276, z: 0}
---- !u!114 &830070642
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 830070632}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 33fcb1f58fb32064ebfff6dd549ed509, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  director: {fileID: 830070633}
-  rSlider: {fileID: 19462224}
-  gSlider: {fileID: 946963087}
-  bSlider: {fileID: 1390762373}
---- !u!114 &830070645
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 830070632}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow: []
---- !u!114 &830070646
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 830070632}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6146ff8b29704f4aa4d2bd9b81ae7687, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  rgb:
-  - {fileID: 1845297321}
-  - {fileID: 1516369864}
-  - {fileID: 1659712204}
-  hex: {fileID: 276414598}
 --- !u!1 &830878351
 GameObject:
   m_ObjectHideFlags: 0
@@ -27770,7 +27530,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1928836674}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: HelpDesk, Assembly-CSharp
         m_MethodName: StartGameSequence
         m_Mode: 1
@@ -27829,7 +27589,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 876315839}
-  - component: {fileID: 876315840}
   m_Layer: 0
   m_Name: Contract UI Manager
   m_TagString: Untagged
@@ -27852,33 +27611,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1829758321}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &876315840
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 876315838}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 74acfe0a753844469c10b4a22ddf9981, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  contractCanvas: {fileID: 959949077}
-  offerPanel: {fileID: 234541861}
-  qualificationsPanel: {fileID: 1111694912}
-  acceptButton: {fileID: 1831258775}
-  declineButton: {fileID: 0}
-  declineMessageText: {fileID: 0}
-  briefAcceptButton: {fileID: 853586781}
-  folderTitles:
-  - {fileID: 925232200}
-  - {fileID: 1844863148}
-  - {fileID: 1318690144}
-  selectionStatus: {fileID: 829257723}
-  briefTitle: {fileID: 1718284507}
-  briefBody: {fileID: 189900094}
-  briefScroll: {fileID: 1120078362}
 --- !u!64 &878538764
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -28190,7 +27922,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1418601750}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ComputerUIManager, Assembly-CSharp
         m_MethodName: OnVideoPlayButtonClicked
         m_Mode: 1
@@ -30161,7 +29893,7 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 830070642}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ColorSliderBridge, Assembly-CSharp
         m_MethodName: OnPropColorChanged
         m_Mode: 1
@@ -30389,7 +30121,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -30596,7 +30328,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: ConfirmPurchase
         m_Mode: 1
@@ -31006,7 +30738,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -33086,7 +32818,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -33875,7 +33607,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1418601750}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ComputerUIManager, Assembly-CSharp
         m_MethodName: OnBackButtonClicked
         m_Mode: 1
@@ -33936,7 +33668,6 @@ GameObject:
   - component: {fileID: 1084825089}
   - component: {fileID: 1084825092}
   - component: {fileID: 1084825091}
-  - component: {fileID: 1084825090}
   m_Layer: 0
   m_Name: pointC
   m_TagString: Untagged
@@ -33959,23 +33690,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 7456547606643971504}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1084825090
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1084825088}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow:
-  - {fileID: 1084825088}
 --- !u!23 &1084825091
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -37197,7 +36911,6 @@ GameObject:
   - component: {fileID: 1165236662}
   - component: {fileID: 1165236665}
   - component: {fileID: 1165236664}
-  - component: {fileID: 1165236663}
   m_Layer: 0
   m_Name: pointB
   m_TagString: Untagged
@@ -37220,23 +36933,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 7456547606643971504}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1165236663
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1165236661}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow:
-  - {fileID: 1165236661}
 --- !u!23 &1165236664
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -41955,7 +41651,7 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f497d0cc8b955b94886a3d59edb11f87, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 1928836674}
+      addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: f497d0cc8b955b94886a3d59edb11f87, type: 3}
       insertIndex: -1
       addedObject: {fileID: 1928836675}
@@ -42176,7 +41872,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: CancelPurchase
         m_Mode: 1
@@ -42774,7 +42470,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1345249310}
-  - component: {fileID: 1345249309}
   m_Layer: 0
   m_Name: SceneController
   m_TagString: Untagged
@@ -42782,18 +42477,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1345249309
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1345249308}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c0c75873aba2d744fb6917d789044ae0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
 --- !u!4 &1345249310
 Transform:
   m_ObjectHideFlags: 0
@@ -43481,7 +43164,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 830070633}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: DirectorTerminal, Assembly-CSharp
         m_MethodName: SpawnWall
         m_Mode: 1
@@ -44316,7 +43999,7 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 830070642}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ColorSliderBridge, Assembly-CSharp
         m_MethodName: OnPropColorChanged
         m_Mode: 1
@@ -45122,7 +44805,6 @@ GameObject:
   - component: {fileID: 1418601749}
   - component: {fileID: 1418601748}
   - component: {fileID: 1418601747}
-  - component: {fileID: 1418601750}
   m_Layer: 5
   m_Name: Computer UI
   m_TagString: Untagged
@@ -45214,24 +44896,6 @@ Canvas:
   m_SortingLayerID: 0
   m_SortingOrder: 0
   m_TargetDisplay: 0
---- !u!114 &1418601750
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1418601745}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c8d47d7625909754bb43b876e0a72f4c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  recordingsGridPanel: {fileID: 2107430297}
-  videoPlayerPanel: {fileID: 913531855}
-  gridContentContainer: {fileID: 65318386}
-  clipCardPrefab: {fileID: 7481829929675026942, guid: 3713ea879c50d144c8281b3bcffc8eab, type: 3}
-  pixelPlayer: {fileID: 769200864}
-  playerTitleText: {fileID: 1795474269}
 --- !u!1 &1419279505
 GameObject:
   m_ObjectHideFlags: 0
@@ -46033,7 +45697,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 830070633}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: DirectorTerminal, Assembly-CSharp
         m_MethodName: ClearStage
         m_Mode: 1
@@ -47176,8 +46840,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1478287056}
-  - component: {fileID: 1478287057}
-  - component: {fileID: 1478287061}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -47200,67 +46862,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1478287057
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1478287054}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1e13af89e711e704bb307dfb40503936, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  playerMoney: 0
-  currentActiveJob: None
-  moneyTextHUD: {fileID: 239244676}
---- !u!114 &1478287061
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1478287054}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb1ab08bcf7821c4bbc6ef85774f483a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  bookEntryTitle: {fileID: 1911814077}
-  bookLeftText: {fileID: 559768492}
-  bookRightText: {fileID: 816524268}
-  bookHeading: {fileID: 1620679264}
-  bookPageNumber: {fileID: 1501106261}
-  bookPrevious: {fileID: 1377441429}
-  bookNext: {fileID: 1573607811}
-  bookVideo: {fileID: 302534358}
-  navigationLightingButton: {fileID: 233090382}
-  navigationFrame: {fileID: 873906121}
-  almanacCanvas: {fileID: 796979580}
-  playerInfoTabBtn: {fileID: 1865222839}
-  knowledgeTabBtn: {fileID: 0}
-  achievementsTabBtn: {fileID: 1754034619}
-  playerInfoPanel: {fileID: 1994789618}
-  knowledgePanel: {fileID: 151263708}
-  achievementsPanel: {fileID: 40676908}
-  playerNameText: {fileID: 663709522}
-  playerMoneyText: {fileID: 1695123373}
-  totalJobsText: {fileID: 41108489}
-  currentLevelText: {fileID: 32047191}
-  activeContractText: {fileID: 2072455268}
-  knowledgeListContainer: {fileID: 0}
-  knowledgeEntryPrefab: {fileID: 0}
-  database: []
-  achievementListContainer: {fileID: 1735923961}
-  achievementEntryPrefab: {fileID: 0}
-  achievements: []
-  closeButton: {fileID: 1251924673}
-  allKnowledgeButton: {fileID: 0}
-  equipmentKnowledgeButton: {fileID: 116047517}
-  techniquesKnowledgeButton: {fileID: 51647904}
-  techniqueGuidePanel: {fileID: 1923310365}
-  ruleOfThirdsGuidePlayer: {fileID: 1923310367}
 --- !u!1 &1479930979
 GameObject:
   m_ObjectHideFlags: 0
@@ -49156,7 +48757,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1418601750}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ComputerUIManager, Assembly-CSharp
         m_MethodName: SendToEditor
         m_Mode: 1
@@ -49807,7 +49408,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -50747,7 +50348,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -52485,7 +52086,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1604897169}
-  - component: {fileID: 1604897170}
   m_Layer: 0
   m_Name: Notifications Manager
   m_TagString: Untagged
@@ -52509,22 +52109,6 @@ Transform:
   - {fileID: 2056154826}
   m_Father: {fileID: 1829758321}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1604897170
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1604897168}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fcb1164bd70016e4b8ab573cd6559afb, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  panel: {fileID: 1078096570}
-  message: {fileID: 193253335}
-  heading: {fileID: 1364037504}
-  badge: {fileID: 195443211}
 --- !u!1 &1607165046
 GameObject:
   m_ObjectHideFlags: 0
@@ -56782,7 +56366,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -57266,7 +56850,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: ConfirmPurchase
         m_Mode: 1
@@ -57854,8 +57438,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1741057705}
-  - component: {fileID: 1741057704}
-  - component: {fileID: 1741057703}
   - component: {fileID: 1741057706}
   m_Layer: 0
   m_Name: TutorialManager
@@ -57864,104 +57446,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 0
---- !u!114 &1741057703
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1741057702}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 634475e8496090f4d8041a53cdb21bf7, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  stageSpawnPoint: {fileID: 0}
-  cameraPrefab: {fileID: 5028973457159641910, guid: b6acbc35844f3164284d516ab19a4f1b, type: 3}
-  lightPrefab: {fileID: 2422303196290211474, guid: 87baa9a470d30d84d8ca6327f9f885ce, type: 3}
-  sdCardPrefab: {fileID: 5512013885041339088, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}
-  deliveryZone: {fileID: 490806474}
-  spacePromptText: {fileID: 929839411}
-  firstContractPanel: {fileID: 959949077}
-  preProductionTitleCard: {fileID: 7508827392646270568}
-  productionTitleCard: {fileID: 7404522572366481945}
-  objectiveLine: {fileID: 1741057706}
-  lineHeightOffset: 0.5
-  availableTargets:
-  - targetName: director
-    targetTransform: {fileID: 830070637}
-  - targetName: shop
-    targetTransform: {fileID: 767385440}
-  - targetName: pointA
-    targetTransform: {fileID: 307014005}
-  - targetName: pointC
-    targetTransform: {fileID: 1084825089}
-  acceptContractButtonRect: {fileID: 0}
-  spawnWallButtonRect: {fileID: 1356130732}
-  redColorSliderRect: {fileID: 1756671768}
-  cubePropCardRect: {fileID: 80455837}
-  flowerPropCardRect: {fileID: 706094613}
-  shopLightAddToCartBtnRect: {fileID: 767036856}
-  shopCameraAddToCartBtnRect: {fileID: 1054507674}
-  shopSDCardAddToCartBtnRect: {fileID: 1698183838}
-  shopCheckoutBtnRect: {fileID: 957755289}
-  compFolderRect: {fileID: 45679543}
-  compClipCardRect: {fileID: 6232967238986215828}
-  compPlayBtnRect: {fileID: 890959726}
-  compBackBtnRect: {fileID: 1080186905}
-  compEditorAppRect: {fileID: 279586718}
-  compConfirmBtnRect: {fileID: 1521129951}
-  stageWalkTriggerCircle: {fileID: 307014004}
-  cubePlacementTarget: {fileID: 1165236661}
-  cameraWalkTriggerCircle: {fileID: 1084825088}
-  currentStep: 0
---- !u!114 &1741057704
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1741057702}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 444cd1089c5c05248a691bab1b8333f2, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  bossHUDCanvas: {fileID: 154929616392703657}
-  bossText: {fileID: 7544899629835086346}
-  bossPortraitDisplay: {fileID: 8441663902941621366}
-  okButton: {fileID: 0}
-  skipButton: {fileID: 0}
-  dialogueCharactersPerSecond: 72
-  dialogueReadingPause: 0.45
-  maximumDialogueRevealTime: 3.25
-  bossEmphasisColor: '#7A3E12'
-  dialoguePageMaxVisibleCharacters: 230
-  dialoguePageMinimumVisibleCharacters: 90
-  poseBoss: {fileID: 21300000, guid: cc8a59fa07cc1d748b5ca8ecb5bc3ef4, type: 3}
-  poseChill: {fileID: 21300000, guid: e12c4a2ed4d28ab44972433ade44e3aa, type: 3}
-  poseEndWave: {fileID: 21300000, guid: a2f96ce8e2a2e654c87e30c6f547104e, type: 3}
-  poseHappy: {fileID: 21300000, guid: 804bf6e6f077fc7418cfdc65391f92e2, type: 3}
-  poseOpenHand: {fileID: 21300000, guid: 1e688eb665d016f44939a116deaab27d, type: 3}
-  posePointUp: {fileID: 21300000, guid: 6e35c65baa24fc346bd105cbe3fc6cef, type: 3}
-  posePoint: {fileID: 21300000, guid: 9a616bd547fde8440aa8c08ada7925d9, type: 3}
-  poseSmile: {fileID: 21300000, guid: c4ba4ae48e1cc8a42ab72a51e4f65bc5, type: 3}
-  taskPanel: {fileID: 7136458401575071678}
-  taskOpenView: {fileID: 0}
-  taskClosedView: {fileID: 0}
-  newTaskNotification: {fileID: 2396150005178781103}
-  taskRows: []
-  defaultDiamondIcon: {fileID: 0}
-  completedCheckIcon: {fileID: 0}
-  activeTextColor: {r: 1, g: 1, b: 1, a: 1}
-  completedTextColor: {r: 0.6, g: 0.6, b: 0.6, a: 1}
-  directorTerminalGlow: {fileID: 830070645}
-  shopTerminalGlow: {fileID: 767385441}
-  computerGlow: {fileID: 919132147722266429}
-  stageGlow: {fileID: 8638809293657734622}
-  pointAGlow: {fileID: 307014006}
-  pointBGlow: {fileID: 0}
-  pointCGlow: {fileID: 0}
 --- !u!4 &1741057705
 Transform:
   m_ObjectHideFlags: 0
@@ -59918,19 +59402,19 @@ PrefabInstance:
     m_AddedComponents:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 830070633}
+      addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
       insertIndex: -1
       addedObject: {fileID: 830070638}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 830070642}
+      addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 830070645}
+      addedObject: {fileID: 0}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 830070646}
+      addedObject: {fileID: 0}
   m_SourcePrefab: {fileID: 100100000, guid: 2a0b962fea977854fab886991ab211e4, type: 3}
 --- !u!1 &1826303500
 GameObject:
@@ -64149,7 +63633,6 @@ GameObject:
   - component: {fileID: 1923310366}
   - component: {fileID: 1923310369}
   - component: {fileID: 1923310368}
-  - component: {fileID: 1923310367}
   m_Layer: 0
   m_Name: Technique Video Guide
   m_TagString: Untagged
@@ -64181,21 +63664,6 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &1923310367
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1923310365}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 807787b5e5c3eca44bc551e3007b4392, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  previewImage: {fileID: 1831298912}
-  captionText: {fileID: 460155623}
-  playPauseText: {fileID: 829391060}
 --- !u!114 &1923310368
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -64239,21 +63707,6 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: f497d0cc8b955b94886a3d59edb11f87, type: 3}
   m_PrefabInstance: {fileID: 1321124389}
   m_PrefabAsset: {fileID: 0}
---- !u!114 &1928836674
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 474937274}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fb254efb84e6b7a45b55e39bde3b7f23, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  helpDeskUICanvas: {fileID: 439899364}
-  objectToSpawnPrefab: {fileID: 6486331874127914014, guid: 3238d4490033d1340b7d027abc51f70f, type: 3}
-  stageSpawnPoint: {fileID: 0}
 --- !u!65 &1928836675
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -64405,8 +63858,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1931677651}
   - component: {fileID: 1931677652}
-  - component: {fileID: 1931677653}
-  - component: {fileID: 1931677654}
   m_Layer: 0
   m_Name: NetworkManager
   m_TagString: Untagged
@@ -64442,32 +63893,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   playerPrefab: {fileID: 4740275260879685415, guid: 22b6fab56e8db024f84e8d5d22f14429, type: 3}
---- !u!114 &1931677653
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1931677648}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 35f8df80ba17c0d4597a5b12bd9b98a5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  codeText: {fileID: 1870625712}
---- !u!114 &1931677654
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1931677648}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: aaec55cfc18523a4ca644a7f7dcd7203, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  pauseMenuCanvas: {fileID: 1479930979}
 --- !u!1 &1932841035
 GameObject:
   m_ObjectHideFlags: 0
@@ -67186,7 +66611,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 2789177862416350890}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ShopTerminal, Assembly-CSharp
         m_MethodName: AddItemToCartByIndex
         m_Mode: 3
@@ -69804,7 +69229,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 1418601750}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: ComputerUIManager, Assembly-CSharp
         m_MethodName: CloseComputerUI
         m_Mode: 1
@@ -69854,22 +69279,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2074105982}
   m_CullTransparentMesh: 1
---- !u!114 &2076834262
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 919132147722266428}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 26ee4ca070dca5847bbccdff7329921a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  sdCardPrefab: {fileID: 5512013885041339088, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}
-  ejectPoint: {fileID: 1754451539}
-  computerUICanvas: {fileID: 1418601745}
-  clipListText: {fileID: 0}
 --- !u!65 &2076834263
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -70398,7 +69807,7 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls:
-      - m_Target: {fileID: 769200864}
+      - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: TruePixelPlayer, Assembly-CSharp
         m_MethodName: TogglePlayPause
         m_Mode: 1
@@ -72279,29 +71688,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 2144725061}
   m_CullTransparentMesh: 1
---- !u!114 &21891614438055600
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 7930596903738211258}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e1afd7b698bd50f46a04fff7c5fa81a5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  highlightFrame: {fileID: 5503574671227650847}
-  padding: 30
-  pulseSpeed: 4
-  backgroundDarkness: 0.8
-  dimColor: {r: 0, g: 0, b: 0, a: 1}
-  dimmerGroup: {fileID: 1874168040}
-  dimmerPanels:
-  - {fileID: 687703342}
-  - {fileID: 822099669}
-  - {fileID: 955381542}
-  - {fileID: 1811255108}
 --- !u!4 &65236912597831684
 Transform:
   m_ObjectHideFlags: 0
@@ -72745,9 +72131,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 543450651910274438}
-  - component: {fileID: 2076834262}
   - component: {fileID: 2076834263}
-  - component: {fileID: 919132147722266429}
   m_Layer: 0
   m_Name: EditorPlayground
   m_TagString: Untagged
@@ -72755,26 +72139,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &919132147722266429
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 919132147722266428}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow:
-  - {fileID: 4238715221268399921}
-  - {fileID: 8567732727670122607}
-  - {fileID: 3709388192074707291}
-  - {fileID: 5847127907432230847}
 --- !u!1 &919132148000440320
 GameObject:
   m_ObjectHideFlags: 0
@@ -73268,7 +72632,6 @@ GameObject:
   - component: {fileID: 2789177862416350886}
   - component: {fileID: 1870859403313437088}
   - component: {fileID: 1671456252625223082}
-  - component: {fileID: 2789177862416350890}
   m_Layer: 0
   m_Name: kiosk
   m_TagString: Untagged
@@ -73689,40 +73052,6 @@ Transform:
   - {fileID: 490806474}
   m_Father: {fileID: 767385440}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &2789177862416350890
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1901354119988823818}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7d10c9f7fb7f49348ab5f050b7de721c, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  availableItems:
-  - itemName: NONY FX
-    price: 4000
-    prefabToSpawn: {fileID: 5028973457159641910, guid: b6acbc35844f3164284d516ab19a4f1b, type: 3}
-  - itemName: 160 LED PANEL
-    price: 1200
-    prefabToSpawn: {fileID: 2422303196290211474, guid: 87baa9a470d30d84d8ca6327f9f885ce, type: 3}
-  - itemName: SD CARD
-    price: 150
-    prefabToSpawn: {fileID: 5512013885041339088, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}
-  - itemName: DIRECTOR MEGAPHONE
-    price: 900
-    prefabToSpawn: {fileID: 919132149155446097, guid: 48a6a8083747aa54fa2eebfb46d88b93, type: 3}
-  worldSpaceCanvas: {fileID: 1306836461}
-  screenSpaceCanvas: {fileID: 1344512090}
-  totalCostTexts:
-  - {fileID: 1620593894}
-  - {fileID: 1855668340}
-  cameraCartButtons: []
-  cameraCartTexts: []
-  deliveryZone: {fileID: 490806474}
-  level3LightPrefab: {fileID: 0}
 --- !u!222 &2917677484274884793
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -74819,7 +74148,6 @@ GameObject:
   - component: {fileID: 8638809293657734621}
   - component: {fileID: 2022587819473184639}
   - component: {fileID: 743382837}
-  - component: {fileID: 8638809293657734622}
   m_Layer: 0
   m_Name: stage
   m_TagString: Untagged
@@ -76337,7 +75665,6 @@ GameObject:
   - component: {fileID: 6520238638867215837}
   - component: {fileID: 6151892851380823518}
   - component: {fileID: 8929994920490098128}
-  - component: {fileID: 21891614438055600}
   m_Layer: 0
   m_Name: TutorialHighlightCanvas
   m_TagString: Untagged
@@ -76595,23 +75922,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5335359188726105653}
   m_Mesh: {fileID: -8356671696667151869, guid: 9442b7e74e11921418b84bdb3a8a5baa, type: 3}
---- !u!114 &8638809293657734622
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 5335359188726105653}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: ca4256a5bf3e70a479fae27b56cd6c74, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  glowColor: {r: 0, g: 1, b: 0, a: 1}
-  pulseSpeed: 2
-  maxIntensity: 1.5
-  extraPartsToGlow:
-  - {fileID: 1563160903}
 --- !u!1 &8690805054975693724
 GameObject:
   m_ObjectHideFlags: 0

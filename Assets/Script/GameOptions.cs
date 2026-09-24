@@ -9,6 +9,24 @@ public static class GameOptions
 {
     public const string SensitivityKey = "Options.MouseSensitivityMultiplier";
     public const string FullscreenKey = "Options.Fullscreen";
+    public const string SfxKey = "Options.SfxVolume";
+    public const string MusicKey = "Options.MusicVolume";
+    public static float SfxVolume => Mathf.Clamp01(PlayerPrefs.GetFloat(SfxKey, 1f));
+    public static float MusicVolume => Mathf.Clamp01(PlayerPrefs.GetFloat(MusicKey, 1f));
+    public static readonly string[] QualityNames = { "Low", "Medium", "High" };
+    public static int QualityIndex(int preset)
+    {
+        int index = System.Array.IndexOf(QualitySettings.names, QualityNames[Mathf.Clamp(preset, 0, 2)]);
+        return index >= 0 ? index : Mathf.Clamp(preset, 0, QualitySettings.names.Length - 1);
+    }
+    public static int SavedQualityPreset
+    {
+        get
+        {
+            int index = PlayerPrefs.GetInt("Options.Quality", QualitySettings.GetQualityLevel());
+            return index <= QualityIndex(0) ? 0 : index <= QualityIndex(1) ? 1 : 2;
+        }
+    }
     public const float MinimumMouseSensitivity = 0.01f;
     public const float MaximumMouseSensitivity = 3f;
     public static float MouseSensitivityMultiplier => Mathf.Clamp(PlayerPrefs.GetFloat(SensitivityKey, 1f), MinimumMouseSensitivity, MaximumMouseSensitivity);
@@ -18,7 +36,7 @@ public static class GameOptions
     {
         if (PlayerPrefs.HasKey(FullscreenKey)) ApplyFullscreen(PlayerPrefs.GetInt(FullscreenKey) == 1);
         AudioListener.volume=Mathf.Clamp01(PlayerPrefs.GetFloat("Options.MasterVolume",1));
-        if(PlayerPrefs.HasKey("Options.Quality"))QualitySettings.SetQualityLevel(Mathf.Clamp(PlayerPrefs.GetInt("Options.Quality"),0,QualitySettings.names.Length-1));
+        if(PlayerPrefs.HasKey("Options.Quality"))QualitySettings.SetQualityLevel(QualityIndex(SavedQualityPreset));
         if(PlayerPrefs.HasKey("Options.FPS")){QualitySettings.vSyncCount=0;Application.targetFrameRate=PlayerPrefs.GetInt("Options.FPS",60);}
     }
 

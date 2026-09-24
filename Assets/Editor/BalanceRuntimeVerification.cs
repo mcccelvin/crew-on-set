@@ -17,14 +17,27 @@ public static class BalanceRuntimeVerification
             if (text.name == "Quantity" && text.transform.parent != null && text.transform.parent.name == "BCoins") labels++;
         if (labels == 0) return;
         GameFeedback.RefreshBalance();
-        string expected = Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0)).ToString("N0");
+        string expected = Mathf.Max(0, GameSavePrefs.GetInt("PlayerMoney", 0)).ToString("N0");
         bool matches = true;
         foreach (TMP_Text text in Object.FindObjectsOfType<TMP_Text>(true))
             if (text.name == "Quantity" && text.transform.parent != null && text.transform.parent.name == "BCoins")
                 matches &= text.text == expected;
-        System.IO.File.WriteAllText("C:/Users/mckel/OneDrive/Documents/Kelvin/balance-fix/runtime-check.txt",
-            "HUD labels: " + labels + "\nSaved balance: " + expected + "\nHUD matches save: " + matches);
         SessionState.SetBool("BalanceRuntimeVerification_20260910_v1", true);
         EditorApplication.update -= Verify;
+        try
+        {
+            string directory = System.IO.Path.Combine(Application.persistentDataPath, "balance-fix");
+            System.IO.Directory.CreateDirectory(directory);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(directory, "runtime-check.txt"),
+                "HUD labels: " + labels + "\nSaved balance: " + expected + "\nHUD matches save: " + matches);
+        }
+        catch (System.IO.IOException exception)
+        {
+            Debug.LogWarning("Could not save balance verification report: " + exception.Message);
+        }
+        catch (System.UnauthorizedAccessException exception)
+        {
+            Debug.LogWarning("Could not save balance verification report: " + exception.Message);
+        }
     }
 }

@@ -168,7 +168,7 @@ public static class StudioLightingBaker
             target.useColorTemperature = false;
             target.colorTemperature = 6570f;
             target.intensity = 1f;
-            target.range = 30f;
+            target.range = 30f * ProductModelCatalog.SingleStudioEnvironmentScale;
             target.spotAngle = 30f;
             target.innerSpotAngle = 21.80208f;
             target.bounceIntensity = 1f;
@@ -180,7 +180,7 @@ public static class StudioLightingBaker
             Undo.RecordObject(target.transform, "Restore Original Studio Light Transform");
             float x = lightName.EndsWith("1", StringComparison.Ordinal) ? -5f : 5f;
             float z = lightName[0] == 'A' ? 7.42f : lightName[0] == 'B' ? 17.42f : 27.42f;
-            target.transform.localPosition = new Vector3(x, 9.48f, z);
+            target.transform.position = new Vector3(x, 9.48f, z) * ProductModelCatalog.SingleStudioEnvironmentScale;
             target.transform.localRotation = Quaternion.identity;
             target.transform.localScale = Vector3.one;
             EditorUtility.SetDirty(target);

@@ -77,6 +77,7 @@ namespace Player.Equipment
         public void MarkAsUsed()
         {
             isUsedCard = true;
+            usedCardIcon = EquipmentIconArt.Get("RECORDED SD CARD", usedCardIcon);
 
             if (usedCardIcon != null)
             {

@@ -3,7 +3,7 @@ using Photon.Pun;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
-public class SimpleMultiplayerPlayer : MonoBehaviourPun
+public class MultiplayerPlayerController : MonoBehaviourPun
 {
     [Header("Setup")]
     public Camera playerCamera;
@@ -29,10 +29,15 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
     void Start()
     {
         cc = GetComponent<CharacterController>();
+        // The network prefab must never run the legacy career interactor.
+        foreach (var component in GetComponentsInChildren<MonoBehaviour>(true))
+            if (component != this && component.GetType().Namespace != "Photon.Pun" &&
+                (component.GetType().Name.Contains("Interact") || component.GetType().Name == "CrosshairUIClicker" || component.GetType().Name == "TruePixelPlayer")) component.enabled = false;
 
         // If this is my friend's clone, turn off their camera!
         if (!photonView.IsMine)
         {
+            cc.enabled = false;
             if (playerCamera != null) playerCamera.gameObject.SetActive(false);
 
             AudioListener listener = GetComponentInChildren<AudioListener>();
@@ -40,6 +45,10 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
         }
         else
         {
+            var duplicateCollider = GetComponent<CapsuleCollider>();
+            if (duplicateCollider != null) duplicateCollider.enabled = false;
+            var crew = gameObject.AddComponent<MultiplayerCrewController>();
+            crew.View = playerCamera;
             // If it IS me, lock the mouse to the screen
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -50,7 +59,7 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
     {
         // Ignore everything if this isn't my character
         if (!photonView.IsMine) return;
-        bool controlsAllowed = Application.isFocused && !MultiplayerPauseManager.isPaused && Cursor.lockState == CursorLockMode.Locked;
+        bool controlsAllowed = Application.isFocused && !RoleSelectionUI.Open && Cursor.lockState == CursorLockMode.Locked;
         if (!controlsAllowed) jumpBuffer = 0f;
 
         // --- 1. LOOK AROUND (MOUSE) ---
@@ -85,7 +94,8 @@ public class SimpleMultiplayerPlayer : MonoBehaviourPun
 
         moveInput = Vector2.ClampMagnitude(moveInput, 1f);
         bool running = controlsAllowed && keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
-        float speed = Mathf.Max(0f, running ? runSpeed : walkSpeed);
+        bool slowWalk = controlsAllowed && keyboard != null && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed);
+        float speed = Mathf.Max(0f, slowWalk ? 1.25f : running ? runSpeed : walkSpeed);
         Vector3 move = (transform.right * moveInput.x + transform.forward * moveInput.y) * speed;
 
         // --- 3. GRAVITY ---

@@ -14,25 +14,66 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   products:
   - level: 1
+    displayName: 
     model: {fileID: 919132149155446097, guid: e0ccc2196a693fc4b963747d303b2650, type: 3}
     size: 1
     rotation: {x: 0, y: 0, z: 0}
   - level: 2
+    displayName: 
     model: {fileID: 919132149155446097, guid: 0f87943582b0e994abd388ab9eb894a1, type: 3}
     size: 0.35
     rotation: {x: 0, y: 180, z: 0}
   - level: 3
+    displayName: 
     model: {fileID: 919132149155446097, guid: 04a20a804de186c4695418f2433b5044, type: 3}
     size: 5.25
     rotation: {x: 0, y: 90, z: 0}
   - level: 4
+    displayName: KAPE KULTURA PRODUCT
     model: {fileID: 919132149155446097, guid: 6832ddba1b0b3434a8df9756b1488a17, type: 3}
     size: 0.45
     rotation: {x: 0, y: 180, z: 0}
   - level: 5
+    displayName: 
     model: {fileID: 919132149155446097, guid: fef84c2bebef8154da5359c90e659da3, type: 3}
     size: 1.1
     rotation: {x: 0, y: 0, z: 0}
+  - level: 4
+    displayName: CUP OF COFFEE
+    model: {fileID: 919132149155446097, guid: 0fffd572e5733254e87d90815606ba23, type: 3}
+    size: 0.15
+    rotation: {x: 0, y: 0, z: 0}
+  greenScreens:
+  - name: Green Screen Backdrop
+    coffeeInteriorEntry: 0
+    model: {fileID: 1101223020254634347, guid: f0e5483ae6f5d6e47b47448d7c840963, type: 3}
+    position: {x: 0, y: 0, z: 0}
+    size: 0.6166667
+    scale: {x: 1.16, y: 1, z: 1}
+    rotation: {x: 0, y: 0, z: 0}
+  - name: Coffee Interior
+    coffeeInteriorEntry: 1
+    model: {fileID: 919132149155446097, guid: a411f49d25aae614b8586211e2358d93, type: 3}
+    position: {x: 0, y: 0, z: 0}
+    size: 1
+    scale: {x: 1.65, y: 1, z: 1.65}
+    rotation: {x: 0, y: 0, z: 0}
+  activeGreenScreen: 0
   flowerTable: {fileID: 919132149155446097, guid: b711466301f508f4a87e5df8b286db87, type: 3}
   coffeeInterior: {fileID: 919132149155446097, guid: a411f49d25aae614b8586211e2358d93, type: 3}
-  coffeeActors: {fileID: 919132149155446097, guid: d362d7d7e3bf2fa46a02f108ef85cffc, type: 3}
+  coffeeInteriorScale: {x: 1.65, y: 1, z: 1.65}
+  preserveCoffeeInteriorScale: 1
+  coffeeBackWallHeightMultiplier: 1
+  practiceChair: {fileID: 919132149155446097, guid: b0e26ad212f52f84cbe2026ba5f37926, type: 3}
+  practiceChairHeight: 0.95
+  practiceChairRotation: {x: 0, y: 180, z: 0}
+  practiceChairSeatOffset: {x: 0, y: 0.46, z: 0}
+  coffeeInteriorMaxHeight: 3.145
+  coffeeActors: {fileID: 0}
+  coffeeActorModels:
+  - {fileID: 919132149155446097, guid: 55ca859362539874da6599098ffe1e51, type: 3}
+  - {fileID: 919132149155446097, guid: 310fa46aa1bf6924983e65887d538f7b, type: 3}
+  - {fileID: 919132149155446097, guid: 33cd3818a644ad04b8bb3b7a5adf504a, type: 3}
+  - {fileID: 919132149155446097, guid: 4aad56a68c3e89d4bba453a5e4831531, type: 3}
+  coffeeActorScale: 0.8
+  coffeeInteriorRotation: {x: 0, y: 0, z: 0}

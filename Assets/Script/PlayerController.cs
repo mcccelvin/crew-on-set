@@ -11,6 +11,12 @@ namespace Player.PlayerController
         [SerializeField] private float AnimBlendSpeed = 8.9f;
         [SerializeField] private Transform CameraRoot;
         [SerializeField] private Transform Camera;
+        [Header("Character Appearance")]
+        [SerializeField] private GameObject CharacterModel;
+        [SerializeField] private Transform CharacterHoldPoint;
+        [SerializeField, Min(0.5f)] private float CharacterHeight = ProductModelCatalog.StandardCharacterHeight;
+        private Animator characterAnimator;
+        private bool appearanceInitialized;
         [SerializeField] private float UpperLimit = -40f;
         [SerializeField] private float LowerLimit = 70f;
         [SerializeField] private float MouseSensitivity = 21.9f;
@@ -30,6 +36,8 @@ namespace Player.PlayerController
         private InputManager inputManager;
         private Animator animator;
         private bool grounded = false;
+        private float nextFootstep;
+        private bool audioGroundSampled;
         private bool hasAnimator;
         private int xVelHash, yVelHash, zVelHash, jumpHash, groundHash, fallingHash;
         private float xRotation;
@@ -43,25 +51,38 @@ namespace Player.PlayerController
         private float coyoteCounter;
         private Collider bodyCollider;
         private readonly RaycastHit[] groundHits = new RaycastHit[16];
-        private bool MovementAllowed => canMove && inputManager != null && inputManager.isActiveAndEnabled && inputManager.CanReadGameplayAction();
+        public bool StationaryAction { get; set; }
+        private bool MovementAllowed => !StationaryAction && canMove && inputManager != null && inputManager.isActiveAndEnabled && inputManager.CanReadGameplayAction();
+
+        public void SyncLookToCamera()
+        {
+            if (Camera == null) return;
+            targetYaw = cameraYaw = Camera.eulerAngles.y;
+            xRotation = cameraPitch = Mathf.Clamp(Mathf.DeltaAngle(0f, Camera.eulerAngles.x), UpperLimit, LowerLimit);
+            yawVelocity = pitchVelocity = 0f;
+            lookInitialized = true;
+        }
 
         private const float walkSpeed = 5f;
         private const float runSpeed = 8f;
         private Vector2 currentVelocity;
         private Player.Interactor.EquipmentInteractor equipmentInteractor;
         private bool precisionWasActive;
+        private bool SlowWalkActive => MovementAllowed && inputManager.SlowWalkHeld;
         private bool CameraPrecisionActive => MovementAllowed && inputManager.CameraPrecisionHeld &&
             equipmentInteractor != null && equipmentInteractor.GetHeldItem() is Equipment.FilmCameraItem;
 
         private void OnEnable()
         {
-            hasAnimator = TryGetComponent<Animator>(out animator);
+            animator = appearanceInitialized ? characterAnimator : GetComponent<Animator>();
+            hasAnimator = animator != null && animator.runtimeAnimatorController != null;
             // Physics owns locomotion; animation must never overwrite body motion.
             if (hasAnimator) animator.applyRootMotion = false;
             playerRigidbody = GetComponent<Rigidbody>();
             inputManager = GetComponent<InputManager>();
             bodyCollider = GetComponent<Collider>();
             equipmentInteractor = GetComponent<Player.Interactor.EquipmentInteractor>();
+            InitializeAppearance();
             precisionWasActive = false;
 
             if (playerRigidbody != null)
@@ -78,12 +99,90 @@ namespace Player.PlayerController
             groundHash = Animator.StringToHash("Grounded");
         }
 
+        private void InitializeAppearance()
+        {
+            if (appearanceInitialized || CharacterModel == null) return;
+            var oldRenderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+            var visual = Instantiate(CharacterModel, transform, false);
+            visual.name = "Player Character Visual";
+            var rig = visual.GetComponentInChildren<Animator>();
+            var renderers = visual.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+            {
+                Debug.LogError("Player character needs a visible mesh. Keeping the original player.", this);
+                visual.SetActive(false);
+                Destroy(visual);
+                return;
+            }
+
+            // Fit the complete imported character, including clothing, without scaling physics.
+            Bounds bounds = renderers[0].bounds;
+            foreach (var part in renderers) bounds.Encapsulate(part.bounds);
+            visual.transform.localScale *= CharacterHeight * Mathf.Abs(transform.lossyScale.y) / Mathf.Max(.001f, bounds.size.y);
+            bounds = renderers[0].bounds;
+            foreach (var part in renderers) bounds.Encapsulate(part.bounds);
+            var capsule = bodyCollider as CapsuleCollider;
+            float feet = capsule != null ? capsule.center.y - capsule.height * .5f : 0f;
+            Vector3 bottom = transform.InverseTransformPoint(new Vector3(bounds.center.x, bounds.min.y, bounds.center.z));
+            visual.transform.localPosition += new Vector3(-bottom.x, feet - bottom.y, -bottom.z);
+            foreach (var collider in visual.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+            foreach (var camera in visual.GetComponentsInChildren<UnityEngine.Camera>(true)) camera.enabled = false;
+            foreach (var light in visual.GetComponentsInChildren<Light>(true)) light.enabled = false;
+            foreach (var body in visual.GetComponentsInChildren<Rigidbody>(true)) body.isKinematic = true;
+
+            // Mesh-only models can replace the appearance. Retarget locomotion only
+            // when the imported model actually supplies a valid Humanoid avatar.
+            bool canAnimate = rig != null && rig.avatar != null && rig.avatar.isValid && rig.avatar.isHuman;
+            if (canAnimate)
+            {
+                rig.enabled = true;
+                rig.runtimeAnimatorController = animator != null ? animator.runtimeAnimatorController : null;
+                rig.applyRootMotion = false;
+                rig.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            }
+            else if (rig != null) rig.enabled = false;
+            if (animator != null && animator != rig) animator.enabled = false;
+            foreach (var part in renderers)
+            {
+                part.gameObject.layer = oldRenderers.Length > 0 ? oldRenderers[0].gameObject.layer : gameObject.layer;
+                if (oldRenderers.Length > 0) part.shadowCastingMode = oldRenderers[0].shadowCastingMode;
+            }
+            foreach (var part in oldRenderers) part.enabled = false;
+            characterAnimator = animator = canAnimate ? rig : null;
+            hasAnimator = canAnimate && rig.runtimeAnimatorController != null;
+            if (canAnimate) rig.Rebind();
+            appearanceInitialized = true;
+
+            if (capsule != null)
+            {
+                capsule.height = CharacterHeight;
+                capsule.center = new Vector3(0f, feet + CharacterHeight * .5f, 0f);
+            }
+            // Keep the view stable during animation, just ahead of the face.
+            Vector3 eye = transform.TransformPoint(new Vector3(0f, feet + CharacterHeight * .92f, .3f));
+            if (CameraRoot != null) CameraRoot.position = eye;
+            if (Camera != null) Camera.position = eye;
+            if (CharacterHoldPoint != null)
+                CharacterHoldPoint.position = transform.TransformPoint(new Vector3(0f, feet + CharacterHeight * .7f, .636f));
+        }
+
         private void FixedUpdate()
         {
             if (PauseManager.isPaused || playerRigidbody == null) return;
+            // A seated action owns the body and physics; LateUpdate still handles looking.
+            if (StationaryAction) return;
             if (lookInitialized && canLook && playerRigidbody != null)
                 playerRigidbody.MoveRotation(Quaternion.Euler(0f, cameraYaw, 0f));
+            bool wasGrounded = grounded;
             SampleGround();
+            if (audioGroundSampled && !wasGrounded && grounded) GameplayAudioManager.Play("Player_Land");
+            audioGroundSampled = true;
+            float groundSpeed = Vector3.ProjectOnPlane(playerRigidbody.velocity, Vector3.up).magnitude;
+            if (grounded && MovementAllowed && inputManager.Run && !SlowWalkActive && inputManager.Move.sqrMagnitude > .01f && groundSpeed > .2f && Time.time >= nextFootstep)
+            {
+                GameplayAudioManager.Play("Player_Footstep_" + Random.Range(1, 11).ToString("00"));
+                nextFootstep = Time.time + Mathf.Clamp(.9f / groundSpeed, .25f, .55f);
+            }
             HandleJump();
             Move();
         }
@@ -114,8 +213,8 @@ namespace Player.PlayerController
         {
             bool allowed = MovementAllowed;
             Vector2 currentInput = allowed ? Vector2.ClampMagnitude(inputManager.Move, 1f) : Vector2.zero;
-            bool precision = CameraPrecisionActive;
-            // Ctrl takes priority over sprint while a camera is equipped.
+            bool precision = SlowWalkActive;
+            // Quiet walking takes priority over sprint with any equipment or empty hands.
             float targetSpeed = precision ? 1.25f : (allowed && inputManager.Run ? runSpeed : walkSpeed);
             Vector3 desiredVelocity = playerRigidbody.rotation * new Vector3(currentInput.x * targetSpeed, 0f, currentInput.y * targetSpeed);
             Vector3 horizontalVelocity = Vector3.ProjectOnPlane(playerRigidbody.velocity, Vector3.up);

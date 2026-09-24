@@ -17,6 +17,32 @@ public class LevelPropBank
 
 public class DirectorTerminal : MonoBehaviour
 {
+    private GameObject BackdropPrefab => ProductModelCatalog.GetActiveGreenScreen()?.model ?? wallPrefab;
+
+    // Match SingleStudio's authored environment reduction; actors retain human height.
+    private GameObject InstantiateStudioBackdrop()
+    {
+        var settings = ProductModelCatalog.GetActiveGreenScreen();
+        var backdrop = Instantiate(settings != null ? settings.model : wallPrefab,
+            spawnPoint.position, spawnPoint.rotation * Quaternion.Euler(settings != null ? settings.rotation : Vector3.zero));
+        // Catalog entries store their complete size so unrelated scene changes
+        // cannot add another scale multiplier when the set is recreated.
+        if (settings == null && gameObject.scene.name == "SingleStudio")
+            backdrop.transform.localScale *= ProductModelCatalog.SingleStudioBackdropScale;
+        if (settings != null)
+            backdrop.transform.localScale = Vector3.Scale(backdrop.transform.localScale,
+                new Vector3(Mathf.Max(.01f, settings.scale.x), Mathf.Max(.01f, settings.scale.y),
+                    Mathf.Max(.01f, settings.scale.z))) * Mathf.Max(.01f, settings.size);
+        foreach (var filter in backdrop.GetComponentsInChildren<MeshFilter>())
+            if (filter.sharedMesh != null && filter.GetComponent<Collider>() == null)
+                filter.gameObject.AddComponent<MeshCollider>().sharedMesh = filter.sharedMesh;
+        // Keep fitting axes aligned to the stage's world footprint regardless of FBX rotation.
+        var placement = new GameObject(backdrop.name);
+        placement.transform.position = spawnPoint.position;
+        backdrop.transform.SetParent(placement.transform, true);
+        return placement;
+    }
+
     [Header("Cameras & UI")]
     public Camera topDownCamera;
     public RectTransform viewportUI;
@@ -80,8 +106,82 @@ public class DirectorTerminal : MonoBehaviour
     [SerializeField] private GameObject interiorPicker;
     private GameObject interiorPreview;
     private int previewStyle = -1;
+    public bool TutorialPickerOpen => interiorPicker != null && interiorPicker.activeInHierarchy;
+    public int TutorialPreviewStyle => previewStyle;
+    public bool TutorialPreviewOwned => previewStyle >= 0 && OwnsInterior(previewStyle);
+    public int TutorialSetApplied { get; private set; }
+    public bool TutorialChairPlaced { get; private set; }
+    private readonly System.Collections.Generic.List<GameObject> contract4PracticeProps = new System.Collections.Generic.List<GameObject>();
+
+    public void ClearContract4PracticeProps()
+    {
+        foreach (var item in contract4PracticeProps)
+        {
+            if (item == null) continue;
+            var actor = item.GetComponent<ActorBot>();
+            if (actor != null) actor.StopFurnitureAction();
+            if (selectedObject == item) { selectedObject = null; selectedRenderers = null; }
+            if (draggedObject == item)
+            {
+                draggedObject = null;
+                draggedColliders = null;
+                draggedRenderers = null;
+                showPropCostWarningOnDrop = false;
+            }
+            item.SetActive(false);
+            Destroy(item);
+        }
+        contract4PracticeProps.Clear();
+        TutorialChairPlaced = false;
+        if (selectedObject == null && selectionIndicatorText != null) selectionIndicatorText.text = "Selected: None";
+        UpdatePoseActorButton();
+    }
+    public RectTransform GetTutorialTarget(string key)
+    {
+        if (!isTerminalActive || tabletUI == null) return null;
+        if (key == "set") return spawnWallButton != null ? spawnWallButton.transform as RectTransform : null;
+        if (key == "preview" || key == "practice-preview" || key == "buy")
+        {
+            int index = key == "preview" ? 2 : key == "practice-preview" ? 1 : 3;
+            var label = interiorLabels[index];
+            var button = label != null ? label.GetComponentInParent<Button>() : null;
+            return button != null ? button.transform as RectTransform : null;
+        }
+        if (key == "stage") return viewportUI;
+        if (key == "color")
+            foreach (var input in tabletUI.GetComponentsInChildren<TMP_InputField>())
+                if (input.name == "HEX Input") return input.transform as RectTransform;
+        if (propUIContainer != null)
+            foreach (var label in propUIContainer.GetComponentsInChildren<TMP_Text>())
+                if ((key == "actor" && label.text.StartsWith("ACTOR A")) ||
+                    (key == "chair" && label.text.StartsWith("CHAIR")) ||
+                    (key == "product" && label.text.StartsWith("KAPE KULTURA PRODUCT")))
+                {
+                    Transform card = label.transform;
+                    while (card.parent != null && card.parent != propUIContainer) card = card.parent;
+                    return card as RectTransform;
+                }
+        return null;
+    }
     [SerializeField] private TMP_Text[] interiorLabels = new TMP_Text[5];
+    private static bool IsActorPractice => CampaignLevelManager.Instance != null &&
+        CampaignLevelManager.Instance.GetActiveLevel() == 4 && CampaignLevelManager.Instance.IsActorIntroductionActive();
     private static bool OwnsInterior(int style) => GameSavePrefs.GetInt("OwnedInterior." + style) == 1;
+    private const string SelectedInteriorKey = "Studio.SelectedInterior";
+
+    private void RestoreOwnedInterior()
+    {
+        if (currentWall != null || BackdropPrefab == null || spawnPoint == null) return;
+        int style = GameSavePrefs.GetInt(SelectedInteriorKey, 0);
+        if (style != 2 || !OwnsInterior(2)) style = 0;
+        if (!OwnsInterior(style)) return;
+        currentWall = InstantiateStudioBackdrop();
+        RaiseBackdropFloorAboveStage();
+        currentWallColor = style == 2 ? new Color(128f / 255, 80f / 255, 46f / 255) : Color.white;
+        ApplyColorToWall(currentWallColor);
+        StageInterior.Furnish(currentWall, style);
+        SyncSlidersToColor(currentWallColor);
+    }
 
     private void RefreshInteriorLabels()
     {
@@ -92,6 +192,7 @@ public class DirectorTerminal : MonoBehaviour
 
     private void BuyOrUseInterior()
     {
+        if (!CanUseContract4Practice("tablet.use")) return;
         if (previewStyle < 0) return;
         if (OwnsInterior(previewStyle)) { SelectInterior(previewStyle); return; }
         if (CareerManager.Instance == null || !CareerManager.Instance.TrySpendMoney(StageInterior.Cost(previewStyle))) return;
@@ -99,6 +200,12 @@ public class DirectorTerminal : MonoBehaviour
         GameSavePrefs.Save();
         GameSaveManager.Instance?.SaveCheckpoint();
         RefreshInteriorLabels();
+        if (previewStyle == 0)
+        {
+            SelectInterior(0);
+            GameFeedback.Show("PLAIN BACKDROP PURCHASED - placed on stage.");
+            return;
+        }
         GameFeedback.Show("SET PURCHASED - " + StageInterior.Title(previewStyle) + "\nChoose USE SET to place it. Owned sets can be reused for free.");
     }
 
@@ -110,11 +217,13 @@ public class DirectorTerminal : MonoBehaviour
     }
     private void PreviewInterior(int style)
     {
+        if (style == 1) return; // Retired Cafe Corner; chairs are Elements now.
+        if (!CanUseContract4Practice("tablet.preview")) return;
         CancelInteriorPreview();
-        if(wallPrefab==null||spawnPoint==null)return;
+        if(BackdropPrefab==null||spawnPoint==null)return;
         GameObject placedWall = currentWall;
         if (placedWall != null) placedWall.SetActive(false);
-        interiorPreview=Instantiate(wallPrefab,spawnPoint.position,spawnPoint.rotation);
+        interiorPreview=InstantiateStudioBackdrop();
         interiorPreview.name="Unpurchased set preview";
         // Use the exact purchased-set alignment and paint without registering a purchase.
         currentWall = interiorPreview;
@@ -147,11 +256,11 @@ public class DirectorTerminal : MonoBehaviour
 
     public GameObject CreatePracticeWall(Color wallColor)
     {
-        if (wallPrefab == null || spawnPoint == null) return null;
+        if (BackdropPrefab == null || spawnPoint == null) return null;
 
         if (currentWall != null) Destroy(currentWall);
 
-        currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
+        currentWall = InstantiateStudioBackdrop();
         RaiseBackdropFloorAboveStage();
         currentWall.name = "Goke Practice Wall";
         currentWallColor = wallColor;
@@ -181,10 +290,20 @@ public class DirectorTerminal : MonoBehaviour
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
         SyncSlidersToColor(Color.white);
+        RestoreOwnedInterior();
     }
 
     private void Start()
     {
+        // Older automatic editor verification could leave an unowned prefab clone
+        // in the scene after an exception. Only player placement should create a set.
+        if (BackdropPrefab != null)
+            foreach (var root in gameObject.scene.GetRootGameObjects())
+                if (root != currentWall && root.name == BackdropPrefab.name + "(Clone)")
+                {
+                    root.SetActive(false);
+                    Destroy(root);
+                }
         if (tabletUI != null) tabletUI.SetActive(false);
         if (selectionIndicatorText != null)
         {
@@ -200,6 +319,8 @@ public class DirectorTerminal : MonoBehaviour
         if(colorFields==null) colorFields = gameObject.AddComponent<DirectorColorFields>();
         colorFields.Initialize(this);
         UpdateStageButtonLabel();
+
+        RestoreOwnedInterior();
 
         Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
         foreach (Canvas canvas in allCanvases)
@@ -230,15 +351,9 @@ public class DirectorTerminal : MonoBehaviour
         ActorBot actorBot = selectedObject != null ? selectedObject.GetComponent<ActorBot>() : null;
         if (actorBot != null)
         {
-            if(keyboard!=null&&keyboard.bKey.wasPressedThisFrame){actorBot.SetStartMark();GameFeedback.Show("START MARK saved. Move the actor to the end position, then press N.");}
-            if(keyboard!=null&&keyboard.nKey.wasPressedThisFrame){actorBot.SetEndMark();}
-            if(keyboard!=null&&keyboard.kKey.wasPressedThisFrame)actorBot.RehearseWalk();
-            if(keyboard!=null&&keyboard.jKey.wasPressedThisFrame)actorBot.ReturnToStartMark();
-            if(keyboard!=null&&keyboard.hKey.wasPressedThisFrame)actorBot.ClearWalk();
-            if (keyboard != null && keyboard.rKey.wasPressedThisFrame) actorBot.transform.Rotate(0, 15, 0, Space.World);
             if (selectionIndicatorText != null)
                 selectionIndicatorText.text = ActorBot.TierName(actorBot.SkillTier) + " ACTOR | " +
-                    actorBot.GetComponent<CubeActor>().GetPoseName() + " | R: turn\nB: start | N: end | K: walk | J: reset | H: clear walk";
+                    actorBot.GetComponent<CubeActor>().GetPoseName() + " | T: reposition\nUse the Director Megaphone for actions and movement cues.";
         }
 
         AutomotiveGrip grip = selectedObject != null ? selectedObject.GetComponent<AutomotiveGrip>() : null;
@@ -291,8 +406,10 @@ public class DirectorTerminal : MonoBehaviour
 
         bool isWall = IsWallObject(selectedObject);
 
-        if (keyboard != null && keyboard.tKey.wasPressedThisFrame && selectedObject != null && !isWall)
+        if (keyboard != null && keyboard.tKey.wasPressedThisFrame && selectedObject != null && !isWall &&
+            CanUseContract4Practice("tablet.move"))
         {
+            if (actorBot != null) actorBot.StopFurnitureAction();
             draggedObject = selectedObject;
             draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
             draggedRenderers = selectedRenderers;
@@ -372,6 +489,7 @@ public class DirectorTerminal : MonoBehaviour
 
     public void SpawnWall()
     {
+        if (!CanUseContract4Practice("tablet.choose")) return;
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
         if (CampaignProgression.GetCurrentLevel() >= 4 && tabletUI != null && spawnWallButton != null)
         {
@@ -383,12 +501,14 @@ public class DirectorTerminal : MonoBehaviour
 
     public void SelectInterior(int style)
     {
+        if (style == 1) return;
+        if (!CanUseContract4Practice("tablet.use")) return;
         if (style < 0 || style > 2 || (style != 0 && CampaignProgression.GetCurrentLevel() < 4)) return;
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
 
         bool reusable = CampaignProgression.GetCurrentLevel() >= 4;
         if (reusable && !OwnsInterior(style)) return;
-        if ((currentWall == null || reusable) && wallPrefab != null && spawnPoint != null)
+        if ((currentWall == null || reusable) && BackdropPrefab != null && spawnPoint != null)
         {
             if (!reusable && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(StageInterior.Cost(style)))
             {
@@ -402,13 +522,20 @@ public class DirectorTerminal : MonoBehaviour
                 currentWall.SetActive(false);
                 Destroy(currentWall);
             }
-            currentWall = Instantiate(wallPrefab, spawnPoint.position, spawnPoint.rotation);
+            currentWall = InstantiateStudioBackdrop();
             RaiseBackdropFloorAboveStage();
             if (spawnWallButton != null) spawnWallButton.SetActive(reusable);
 
             currentWallColor = style == 0 ? Color.white : new Color(128f/255,80f/255,46f/255);
             ApplyColorToWall(currentWallColor);
             StageInterior.Furnish(currentWall, style);
+            if (OwnsInterior(style))
+            {
+                GameSavePrefs.SetInt(SelectedInteriorKey, style);
+                GameSavePrefs.Save();
+                GameSaveManager.Instance?.SaveCheckpoint();
+            }
+            TutorialSetApplied++;
 
             SyncSlidersToColor(currentWallColor);
 
@@ -471,7 +598,18 @@ public class DirectorTerminal : MonoBehaviour
             for (int i=0;i<interiorLabels.Length;i++)
             {
                 int choice=i;
+                if (interiorLabels[i] == null) continue;
                 var button=interiorLabels[i].GetComponentInParent<Button>(true);
+                if (button == null) continue;
+                button.gameObject.SetActive(i != 1);
+                if (i != 1)
+                {
+                    int row = i == 0 ? 0 : i - 1;
+                    var optionRect = button.transform as RectTransform;
+                    optionRect.anchorMin = new Vector2(.04f, .76f - row * .21f);
+                    optionRect.anchorMax = new Vector2(.96f, .94f - row * .21f);
+                    optionRect.offsetMin = optionRect.offsetMax = Vector2.zero;
+                }
                 button.onClick = new Button.ButtonClickedEvent();
                 button.onClick.AddListener(() => {
                     if(choice==4){CancelInteriorPreview();interiorPicker.SetActive(false);}
@@ -519,7 +657,7 @@ public class DirectorTerminal : MonoBehaviour
         // The exported floor sits below the old wall anchor. Align in world space:
         // the studio's Stage hierarchy is rotated and scaled non-uniformly.
         if (currentWall == null || spawnPoint == null) return;
-        Renderer platform = spawnPoint.GetComponentInParent<Renderer>();
+        Renderer platform = StageInterior.FindStagePlatform();
         if (platform == null)
         {
             GameObject stage = GameObject.Find("Stage");
@@ -531,10 +669,16 @@ public class DirectorTerminal : MonoBehaviour
         foreach (Renderer screen in currentWall.GetComponentsInChildren<Renderer>())
         {
             if (!screen.name.StartsWith("Screen", System.StringComparison.OrdinalIgnoreCase)) continue;
+            // Keep the authored spawn anchor in X/Z. Renderer bounds must not
+            // recenter the backdrop whenever the set is recreated.
             float lift = platform.bounds.max.y + 0.025f - screen.bounds.min.y;
             if (Mathf.Abs(lift) > 0.001f) currentWall.transform.position += Vector3.up * lift;
             break;
         }
+        var settings = ProductModelCatalog.GetActiveGreenScreen();
+        if (settings != null) currentWall.transform.position += settings.position;
+        StageInterior.FitInsideStage(currentWall, platform.bounds,
+            settings != null ? settings.position : Vector3.zero, true);
         GroundBackdropStands();
     }
 
@@ -570,6 +714,14 @@ public class DirectorTerminal : MonoBehaviour
     public void ClearStage()
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("ClearStage")) return;
+
+        if (OwnsInterior(0) || OwnsInterior(2))
+        {
+            CancelInteriorPreview();
+            ClearAllProps();
+            RestoreOwnedInterior();
+            return;
+        }
 
         if (currentWall != null)
         {
@@ -747,6 +899,7 @@ public class DirectorTerminal : MonoBehaviour
 
     private void TrySelect3DObject()
     {
+        if (!CanUseContract4Practice("tablet.move")) return;
         Ray ray = GetMouseRay();
         RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
@@ -801,12 +954,15 @@ public class DirectorTerminal : MonoBehaviour
 
     private void TryDelete3DObject()
     {
+        if (!CanUseContract4Practice("tablet.delete")) return;
         Ray ray = GetMouseRay();
         RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
         foreach (RaycastHit hit in hits)
         {
+            if (currentWall != null && (OwnsInterior(0) || OwnsInterior(2)) &&
+                hit.transform.IsChildOf(currentWall.transform)) continue;
             Rigidbody rb = FindPropRoot(hit.collider);
             if (rb != null && rb.gameObject.layer == LayerMask.NameToLayer("Props"))
             {
@@ -833,6 +989,10 @@ public class DirectorTerminal : MonoBehaviour
 
     public void StartDraggingNewProp(GameObject prefab3D)
     {
+        var practice = CampaignLevelManager.Instance;
+        if (practice != null && practice.IsContract4PracticeActive &&
+            (!practice.CanUseContract4PracticeAction("tablet.actor") || prefab3D == null ||
+             prefab3D.GetComponentInChildren<CubeActor>() == null)) return;
         if (draggedObject != null) return;
 
         showPropCostWarningOnDrop = false;
@@ -925,12 +1085,17 @@ public class DirectorTerminal : MonoBehaviour
 
     public void StartDraggingStageItem(string itemName, bool isActor, int itemIndex)
     {
+        bool isChair = !isActor && itemIndex == -4;
+        var practice = CampaignLevelManager.Instance;
+        if (practice != null && practice.IsContract4PracticeActive &&
+            !(isChair ? practice.CanUseContract4PracticeAction("tablet.chair") :
+                isActor && practice.CanUseContract4PracticeAction("tablet.actor"))) return;
         if (draggedObject != null) return;
 
         showPropCostWarningOnDrop = false;
 
-        int itemCost = isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle;
-        if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost))
+        int itemCost = isChair ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle;
+        if (!(IsActorPractice && (isChair || (isActor && FindObjectOfType<CubeActor>() == null))) && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost))
         {
             if (TutorialManager.Instance != null)
             {
@@ -946,8 +1111,11 @@ public class DirectorTerminal : MonoBehaviour
 
         if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
 
-        GameObject wrapper = isActor ? CreateCubeActor(itemName, itemIndex) :
+        GameObject wrapper = isChair ? ProductModelCatalog.CreatePracticeChair() : isActor ? CreateCubeActor(itemName, itemIndex) :
             itemIndex == -1 ? StageLightStrip.Create() : itemIndex <= -2 ? AutomotiveGrip.Create(itemIndex == -2) : CreateCubeCar(itemName);
+        if (wrapper == null) return;
+        if (practice != null && practice.IsContract4PracticeActive && (isChair || isActor))
+            contract4PracticeProps.Add(wrapper);
         wrapper.transform.position = spawnPos;
 
         foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
@@ -972,7 +1140,7 @@ public class DirectorTerminal : MonoBehaviour
         UpdatePoseActorButton();
     }
 
-    public void StartDraggingCampaignProduct(string itemName, int campaignLevel)
+    public void StartDraggingCampaignProduct(string itemName, int campaignLevel, string modelName = null)
     {
         if (draggedObject != null) return;
 
@@ -990,7 +1158,7 @@ public class DirectorTerminal : MonoBehaviour
 
         if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
 
-        GameObject wrapper = CreateCubeCampaignProduct(itemName, campaignLevel);
+        GameObject wrapper = CreateCubeCampaignProduct(itemName, campaignLevel, modelName);
         wrapper.transform.position = spawnPos;
 
         foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
@@ -1045,10 +1213,15 @@ public class DirectorTerminal : MonoBehaviour
 
     public void DropDraggedProp()
     {
+        var practice = CampaignLevelManager.Instance;
+        if (practice != null && practice.IsContract4PracticeActive &&
+            !practice.CanUseContract4PracticeAction("tablet.place") &&
+            !practice.CanUseContract4PracticeAction("tablet.move")) return;
         if (draggedObject != null)
         {
             if (TutorialManager.Instance != null && !TutorialManager.Instance.CanPlaceTutorialProp(draggedObject)) return;
             GameObject placedObject = draggedObject;
+            if (placedObject.name == "Practice Chair") TutorialChairPlaced = true;
             bool shouldShowPropCostWarning = showPropCostWarningOnDrop;
             draggedObject = null;
             draggedColliders = null;
@@ -1067,7 +1240,6 @@ public class DirectorTerminal : MonoBehaviour
             if (shouldShowPropCostWarning && TutorialManager.Instance != null)
             {
                 hasShownPropCostWarning = true;
-                TutorialManager.Instance.ShowTimedWarning("Spawned Prop! (-250 B-Coins)", 3f);
             }
         }
     }
@@ -1152,6 +1324,8 @@ public class DirectorTerminal : MonoBehaviour
         Rigidbody[] allRBs = FindObjectsOfType<Rigidbody>();
         foreach (Rigidbody rb in allRBs)
         {
+            if (currentWall != null && (OwnsInterior(0) || OwnsInterior(2)) &&
+                rb.transform.IsChildOf(currentWall.transform)) continue;
             if (rb.gameObject.layer == LayerMask.NameToLayer("Props")) Destroy(rb.gameObject);
         }
 
@@ -1234,6 +1408,7 @@ public class DirectorTerminal : MonoBehaviour
 
         if (currentLevel >= 4)
         {
+            CreateStageItemCard("CHAIR", false, -4);
             CreateStageItemCard("ACTOR A", true, 0);
             CreateStageItemCard("ACTOR B", true, 1);
             CreateStageItemCard("ACTOR C", true, 2);
@@ -1251,12 +1426,28 @@ public class DirectorTerminal : MonoBehaviour
 
         }
 
-        if (currentLevel == 4) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
+        if (currentLevel == 4)
+        {
+            var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
+            bool added = false;
+            if (catalog != null && catalog.products != null)
+            {
+                foreach (var product in catalog.products)
+                {
+                    if (product == null || product.level != 4 || product.model == null) continue;
+                    string label = string.IsNullOrEmpty(product.displayName) ? product.model.name : product.displayName;
+                    CreateCampaignProductCard(label, 4, product.model.name);
+                    added = true;
+                }
+            }
+            if (!added) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
+        }
         if (currentLevel == 5) CreateCampaignProductCard("HARAYA PRODUCT", 5);
     }
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
+        if (!CanUseContract4Practice("tablet.open")) return;
         if (isTerminalActive)
         {
             Cursor.lockState = CursorLockMode.None;
@@ -1299,11 +1490,13 @@ public class DirectorTerminal : MonoBehaviour
 
     public void CloseTerminal()
     {
-        CancelInteriorPreview();
+        if (!CanUseContract4Practice("tablet.close")) return;
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("DirectorTerminal"))
         {
             return;
         }
+
+        CancelInteriorPreview();
 
         isTerminalActive = false;
         if (interiorPicker != null) interiorPicker.SetActive(false);
@@ -1319,6 +1512,11 @@ public class DirectorTerminal : MonoBehaviour
 
         ApplyCursorStateAfterTerminal();
         StartCoroutine(RecheckCursorAfterTerminalClose());
+    }
+
+    private static bool CanUseContract4Practice(string action)
+    {
+        return CampaignLevelManager.Instance == null || CampaignLevelManager.Instance.CanUseContract4PracticeAction(action);
     }
 
     private void RestorePlayerAfterTerminal()
@@ -1368,7 +1566,7 @@ public class DirectorTerminal : MonoBehaviour
         if (cardText != null)
         {
             cardText.text = itemName + (isActor ? "\n" + ActorBot.TierName(itemIndex) : "") + "\n" +
-                (isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle) + " B";
+                (IsActorPractice && !isActor && itemIndex == -4 ? 0 : !isActor && itemIndex == -4 ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle) + " B";
             if (isActor)
             {
                 cardText.enableAutoSizing = true;
@@ -1378,12 +1576,12 @@ public class DirectorTerminal : MonoBehaviour
         }
     }
 
-    private void CreateCampaignProductCard(string itemName, int campaignLevel)
+    private void CreateCampaignProductCard(string itemName, int campaignLevel, string modelName = null)
     {
         GameObject newUICard = Instantiate(uiPropCardPrefab, propUIContainer);
         UIDragCampaignProduct dragScript = newUICard.GetComponent<UIDragCampaignProduct>();
         if (dragScript == null) dragScript = newUICard.AddComponent<UIDragCampaignProduct>();
-        dragScript.Setup(itemName, campaignLevel, this);
+        dragScript.Setup(itemName, campaignLevel, this, modelName);
 
         TextMeshProUGUI cardText = newUICard.GetComponentInChildren<TextMeshProUGUI>();
         if (cardText != null) cardText.text = itemName + "\n" + ProductionEconomy.Prop + " B";
@@ -1419,9 +1617,9 @@ public class DirectorTerminal : MonoBehaviour
         return imported != null ? imported : LamborminiVehicleVisual.Create(carName);
     }
 
-    private GameObject CreateCubeCampaignProduct(string productName, int campaignLevel)
+    private GameObject CreateCubeCampaignProduct(string productName, int campaignLevel, string modelName = null)
     {
-        GameObject imported = ProductModelCatalog.Create(campaignLevel, productName + "_Wrapper");
+        GameObject imported = ProductModelCatalog.Create(campaignLevel, productName + "_Wrapper", modelName);
         if (imported != null) return imported;
         GameObject product = new GameObject(productName + "_Wrapper");
         CampaignProduct campaignProduct = product.AddComponent<CampaignProduct>();
@@ -1509,20 +1707,19 @@ public class DirectorTerminal : MonoBehaviour
         CubeActor cubeActor = selectedObject.GetComponent<CubeActor>();
         if (cubeActor == null) return;
 
-        cubeActor.CyclePose();
+        GameFeedback.Show("Use the Director Megaphone to direct actor actions.");
         if (selectionIndicatorText != null)
         {
             selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "") + " - " + cubeActor.GetPoseName();
         }
 
-        if (CampaignLevelManager.Instance != null) CampaignLevelManager.Instance.OnActorPosed(cubeActor);
     }
 
     private void UpdatePoseActorButton()
     {
         if (poseActorButton == null) return;
 
-        poseActorButton.gameObject.SetActive(CampaignProgression.GetCurrentLevel() >= 4);
+        poseActorButton.gameObject.SetActive(false);
         poseActorButton.interactable = selectedObject != null && selectedObject.GetComponent<CubeActor>() != null;
     }
 
@@ -1587,6 +1784,8 @@ public class CubeActor : MonoBehaviour
 
     public string GetPoseName()
     {
+        var bot = GetComponent<ActorBot>();
+        if (bot != null && bot.FurniturePoseName != null) return bot.FurniturePoseName;
         if (currentPose == 1) return "Wave";
         if (currentPose == 2) return "Action";
         return "Neutral";
@@ -1644,12 +1843,14 @@ public class UIDragStageItem : MonoBehaviour, IPointerClickHandler
 
 public class UIDragCampaignProduct : MonoBehaviour, IPointerClickHandler
 {
+    private string modelName;
     private string itemName;
     private int campaignLevel;
     private DirectorTerminal terminal;
 
-    public void Setup(string displayName, int level, DirectorTerminal term)
+    public void Setup(string displayName, int level, DirectorTerminal term, string selectedModelName = null)
     {
+        modelName = selectedModelName;
         itemName = displayName;
         campaignLevel = level;
         terminal = term;
@@ -1660,7 +1861,6 @@ public class UIDragCampaignProduct : MonoBehaviour, IPointerClickHandler
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (terminal != null) terminal.StartDraggingCampaignProduct(itemName, campaignLevel);
+        if (terminal != null) terminal.StartDraggingCampaignProduct(itemName, campaignLevel, modelName);
     }
 }
-

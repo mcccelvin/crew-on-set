@@ -48,6 +48,9 @@ public class ShopTerminal : MonoBehaviour
     private List<GameObject> level3LightCards = new List<GameObject>();
     private bool useLevel3LightPlaceholder = false;
     private bool megaphoneSoldOut = false;
+    public bool MegaphonePurchasedThisSession { get; private set; }
+    private bool RequiresPracticeMegaphonePurchase => CampaignProgression.GetCurrentLevel() == 4 &&
+        PlayerPrefs.GetInt(CampaignProgression.GetAcceptedKey(4), 0) == 0 && !DevTutorialBypass.Disabled;
     private int megaphoneItemIndex = -1;
     private readonly List<GameObject> megaphoneCards = new List<GameObject>();
 
@@ -77,6 +80,12 @@ public class ShopTerminal : MonoBehaviour
 
     private void Awake()
     {
+        // The authored studio prop is delivery stock, not free equipment.
+        foreach (Transform candidate in FindObjectsOfType<Transform>(true))
+            if (candidate.name == "LowDirectorMegaPhone" &&
+                candidate.GetComponent<Player.Equipment.ActorMegaphoneItem>() == null)
+                candidate.gameObject.SetActive(false);
+
         foreach (var item in availableItems)
             if (item != null) item.price = ProductionEconomy.EquipmentPrice(item.itemName, item.price);
     }
@@ -101,12 +110,41 @@ public class ShopTerminal : MonoBehaviour
         ProductionKitShop.Setup(this);
         SetupMegaphone();
         RestoreOwnedEquipment();
+        RefreshEquipmentIcons();
         crosshairClicker = FindObjectOfType<CrosshairUIClicker>();
         UpdateTotalUI();
     }
 
+    private void RefreshEquipmentIcons()
+    {
+        foreach (Canvas canvas in new[] { worldSpaceCanvas, screenSpaceCanvas })
+        {
+            if (canvas == null) continue;
+            foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
+                if (EquipmentIconArt.Get(label.text) != null)
+                {
+                    Transform card = label.transform.parent;
+                    while (card != null && card != canvas.transform && card.GetComponentInChildren<Button>(true) == null)
+                        card = card.parent;
+                    if (card != canvas.transform) EquipmentIconArt.Apply(card, label.text);
+                }
+        }
+    }
+
     public static int OwnedPanelLights => PlayerPrefs.GetInt("OwnedEquipment.160 LED PANEL",
         CampaignProgression.GetCurrentLevel() >= 2 ? 1 : 0);
+
+    public void ProvideActorPracticeMegaphone()
+    {
+        if (RequiresPracticeMegaphonePurchase && !MegaphonePurchasedThisSession) return;
+        // Retain the public UnityEvent entry point, but only restore purchased equipment.
+        if (PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) <= 0) return;
+        if (FindObjectOfType<Player.Equipment.ActorMegaphoneItem>() != null || deliveryZone == null) return;
+        var item = availableItems.Find(candidate => candidate != null && candidate.itemName == "DIRECTOR MEGAPHONE");
+        if (item == null || item.prefabToSpawn == null) return;
+        var spawned = CreateDeliveredItem(item, deliveryZone.position + Vector3.up * .3f);
+        Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(spawned);
+    }
 
     public void RestoreOwnedEquipment()
     {
@@ -121,6 +159,7 @@ public class ShopTerminal : MonoBehaviour
         foreach (ShopItem item in availableItems)
         {
             if (item == null || item.prefabToSpawn == null || item.itemName.ToUpperInvariant().Contains("SD")) continue;
+            if (item.itemName == "DIRECTOR MEGAPHONE" && RequiresPracticeMegaphonePurchase && !MegaphonePurchasedThisSession) continue;
             if(item.prefabToSpawn.GetComponent<ProductionKit>() != null &&
                 !ProductionKitShop.HasEquipmentLesson(CampaignProgression.GetCurrentLevel())) continue;
             if (item.itemName == "LEVEL 2 CAMERA" || item.itemName.ToUpperInvariant().Contains("SOFT LIGHT")) continue; // Existing upgrade restoration owns these.
@@ -135,7 +174,8 @@ public class ShopTerminal : MonoBehaviour
                 if (restored.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
             }
         }
-        if (megaphoneItemIndex >= 0 && PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) > 0) MarkMegaphoneSoldOut();
+        if (megaphoneItemIndex >= 0 && PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) > 0 &&
+            (!RequiresPracticeMegaphonePurchase || MegaphonePurchasedThisSession)) MarkMegaphoneSoldOut();
         PlayerPrefs.Save();
     }
 
@@ -143,13 +183,15 @@ public class ShopTerminal : MonoBehaviour
     {
         if (item.itemName == "DIRECTOR MEGAPHONE")
         {
-            // Activate the visible table prop as the purchased equipment.
+            // Deliver the hidden studio model only after purchase or owned-item restoration.
             foreach (Transform candidate in FindObjectsOfType<Transform>(true))
             {
                 if (candidate.name != "LowDirectorMegaPhone" ||
                     candidate.GetComponent<Player.Equipment.ActorMegaphoneItem>() != null) continue;
-                candidate.gameObject.SetActive(true);
+                candidate.SetParent(null, true);
+                candidate.position = position;
                 Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(candidate.gameObject);
+                candidate.gameObject.SetActive(true);
                 return candidate.gameObject;
             }
         }
@@ -282,6 +324,8 @@ public class ShopTerminal : MonoBehaviour
 
     private void CreateLevel3LightShopCard(Canvas shopCanvas)
     {
+        try
+        {
         if (shopCanvas == null) return;
         var existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 3 SOFT LIGHT"),shopCanvas);
         if(existingCard!=null)
@@ -325,6 +369,8 @@ public class ShopTerminal : MonoBehaviour
         }
 
         level3LightCards.Add(level3LightCard);
+        }
+        finally { RefreshEquipmentIcons(); }
     }
 
     private void PositionLevel3LightCard(RectTransform level3LightCard, RectTransform originalLightCard)
@@ -337,6 +383,8 @@ public class ShopTerminal : MonoBehaviour
 
     public void CreateStripShopCard(Canvas canvas, int index)
     {
+        try
+        {
         if(canvas==null)return;
         var existing=FindShopItemCard(FindShopText(canvas,"LIGHT STRIP"),canvas);
         if(existing!=null)
@@ -375,10 +423,14 @@ public class ShopTerminal : MonoBehaviour
                 availableItems[index].prefabToSpawn.GetComponent<ProductionKit>().EquipmentIcon=image.sprite;
         }
         card.SetActive(true);
+        }
+        finally { RefreshEquipmentIcons(); }
     }
 
     private void CreateMegaphoneShopCard(Canvas canvas, int index)
     {
+        try
+        {
         if (canvas == null) return;
         var existingCard=FindShopItemCard(FindShopText(canvas,"DIRECTOR MEGAPHONE"),canvas);
         if(existingCard!=null)
@@ -415,6 +467,8 @@ public class ShopTerminal : MonoBehaviour
         }
         megaphoneCards.Add(card);
         card.SetActive(true);
+        }
+        finally { RefreshEquipmentIcons(); }
     }
 
     private void MarkMegaphoneSoldOut()
@@ -430,6 +484,8 @@ public class ShopTerminal : MonoBehaviour
 
     private void CreateLevel2CameraShopCard(Canvas shopCanvas)
     {
+        try
+        {
         if (shopCanvas == null) return;
         var existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 2 CAMERA"),shopCanvas);
         if(existingCard!=null)
@@ -474,6 +530,8 @@ public class ShopTerminal : MonoBehaviour
         }
 
         level2CameraCards.Add(level2CameraCard);
+        }
+        finally { RefreshEquipmentIcons(); }
     }
 
     private void PositionLevel2CameraCard(RectTransform level2CameraCard, RectTransform originalCameraCard)
@@ -567,6 +625,9 @@ public class ShopTerminal : MonoBehaviour
         return null;
     }
 
+    public bool TutorialMegaphoneInCart => shoppingCart.Exists(item =>
+        string.Equals(item.itemName, "DIRECTOR MEGAPHONE", System.StringComparison.OrdinalIgnoreCase));
+
     private TextMeshProUGUI FindShopTextInternal(Canvas shopCanvas, string textToFind)
     {
         if (shopCanvas == null) return null;
@@ -613,6 +674,9 @@ public class ShopTerminal : MonoBehaviour
 
     public void AddItemToCartByIndex(int itemIndex)
     {
+        var practice = CampaignLevelManager.Instance;
+        if (practice != null && practice.IsContract4PracticeActive &&
+            (!practice.CanUseContract4PracticeAction("shop.purchase") || itemIndex != megaphoneItemIndex)) return;
         if (itemIndex == 0 && cameraSoldOut) return;
         if (itemIndex == level2CameraItemIndex && level2CameraSoldOut) return;
         if (itemIndex == level3LightItemIndex && level3LightSoldOut) return;
@@ -654,6 +718,10 @@ public class ShopTerminal : MonoBehaviour
 
     public void ConfirmPurchase()
     {
+        var practice = CampaignLevelManager.Instance;
+        if (practice != null && practice.IsContract4PracticeActive &&
+            (!practice.CanUseContract4PracticeAction("shop.purchase") || shoppingCart.Count != 1 ||
+             megaphoneItemIndex < 0 || !CartContainsItem(megaphoneItemIndex))) return;
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
             GokeLevelManager.EnsureEquipmentAdvance();
         if (TutorialManager.Instance != null &&
@@ -763,6 +831,8 @@ public class ShopTerminal : MonoBehaviour
         }
         if (boughtMegaphoneThisTrip)
         {
+            MegaphonePurchasedThisSession = true;
+            PlayerPrefs.SetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 1);
             MarkMegaphoneSoldOut();
             PlayerPrefs.SetInt("MegaphonePurchased", 1);
             PlayerPrefs.Save();
@@ -789,7 +859,7 @@ public class ShopTerminal : MonoBehaviour
         if (equipment != null)
         {
             equipment.EquipmentName = "Level 3 Soft Light";
-            equipment.EquipmentControls = "[LMB] Power  |  [SCROLL] Intensity  |  [UP/DOWN] Tilt  |  [Z/K] Kelvin  |  [V/B] Diffusion  |  [G] Drop";
+            equipment.EquipmentControls = "[LMB] Power  |  [SCROLL] Intensity  |  [UP/DOWN] Tilt  |  [Z/X] Kelvin  |  [V/B] Diffusion  |  [G] Drop";
             equipment.HoldPositionOffset = new Vector3(0.45f, -0.35f, 1.05f);
             equipment.HoldRotationOffset = new Vector3(0f, -90f, 0f);
         }
@@ -869,6 +939,8 @@ public class ShopTerminal : MonoBehaviour
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
+        if (CampaignLevelManager.Instance != null &&
+            !CampaignLevelManager.Instance.CanUseContract4PracticeAction("shop.purchase")) return;
         ProductionKitShop.Setup(this);
         isTerminalActive = true;
         playerController = pController;
@@ -891,6 +963,10 @@ public class ShopTerminal : MonoBehaviour
 
     public void CloseTerminal()
     {
+        var practice = CampaignLevelManager.Instance;
+        if (practice != null && practice.IsContract4PracticeActive &&
+            !practice.CanUseContract4PracticeAction("shop.purchase") &&
+            !practice.CanUseContract4PracticeAction("megaphone.pickup")) return;
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ShopTerminal")) return;
         if (GokeLevelManager.Instance != null &&
             GokeLevelManager.Instance.IsEquipmentIntroductionActive() &&
@@ -924,4 +1000,3 @@ public class ShopTerminal : MonoBehaviour
         return isTerminalActive;
     }
 }
-

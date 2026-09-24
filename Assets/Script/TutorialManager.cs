@@ -735,7 +735,15 @@ public class TutorialManager : MonoBehaviour
     public void PointLineAtTransform(Transform target)
     {
         lineTarget = target;
-        if (objectiveLine != null) { objectiveLine.useWorldSpace = true; objectiveLine.positionCount = 2; objectiveLine.enabled = target != null; }
+        if (objectiveLine == null) return;
+        objectiveLine.useWorldSpace = true;
+        objectiveLine.positionCount = 2;
+        objectiveLine.enabled = target != null && playerTransform != null;
+        if (objectiveLine.enabled)
+        {
+            objectiveLine.SetPosition(0, GuidedPracticeLesson.GuideEndpoint(playerTransform, true));
+            objectiveLine.SetPosition(1, GuidedPracticeLesson.GuideEndpoint(target, false));
+        }
     }
 
     private void PointLineAtIdentifier(string targetIdentifier)
@@ -1981,7 +1989,7 @@ public class TutorialManager : MonoBehaviour
         {
             case TutorialStep.Intro: ui.ShowBossDialogue("Hey, welcome to Crew-On-Set! I run the studio, but you can call me Boss. I'll be here to guide you through your first commercial.", ui.poseHappy, true, true); break;
             case TutorialStep.WaitForPrompt: ui.ShowBossDialogue("First day on set? Let me show you around.\n<color=red>[SPACE]</color> Show me the ropes   <color=red>[TAB]</color> Skip the tutorial", ui.posePoint, true, true); break;
-            case TutorialStep.LearnMovement: ui.ShowBossDialogue("Take a look around. Use <color=red>[WASD]</color> to walk, <color=red>[SPACE]</color> to jump, and <color=red>[SHIFT]</color> to sprint. Give each a try.", ui.posePoint, true, false); break;
+            case TutorialStep.LearnMovement: ui.ShowBossDialogue("Use <color=red>[WASD]</color> to walk, <color=red>[SPACE]</color> to jump, and <color=red>[SHIFT]</color> to sprint. Hold <color=red>[CTRL]</color> for slow, silent footsteps—handy on set.", ui.posePoint, true, false); break;
             case TutorialStep.GameExplanation: ui.ShowBossDialogue(explanationPages[currentExplanationPage], ui.poseBoss, true, true); break;
             case TutorialStep.OfferFirstContract: ui.ShowBossDialogue("Here's our first job: an Artisan Flower Vase commercial. Click <color=red>SELECT</color> to open the brief. Read what the client needs, then close the folder to begin.", ui.poseOpenHand, true, false); break;
             case TutorialStep.SetTrainingObjectAndMoney:

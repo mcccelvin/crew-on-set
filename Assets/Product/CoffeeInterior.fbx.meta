@@ -32,7 +32,7 @@ ModelImporter:
     extraExposedTransformPaths: []
     extraUserProperties: []
     clipAnimations: []
-    isReadable: 0
+    isReadable: 1
   meshes:
     lODScreenPercentages: []
     globalScale: 1
@@ -106,4 +106,4 @@ ModelImporter:
   additionalBone: 0
   userData: 
   assetBundleName: 
-  assetBundleVariant: 
+  assetBundleVariant:

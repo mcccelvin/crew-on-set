@@ -1769,6 +1769,7 @@ namespace Player.Equipment
                 }
 
                 recordingStartTime = Time.time;
+                GameplayAudioManager.Play("Start Recording");
                 recordingCampaignLevel = CampaignProgression.GetCurrentLevel();
                 totalCameraScoreAccumulated = 0f;
                 totalLightingScoreAccumulated = 0f;
@@ -1787,6 +1788,7 @@ namespace Player.Equipment
                 if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
 
                 generatedFileName = pixelRecorder.StopRecording();
+                GameplayAudioManager.Play("Stop Recording");
                 finalDuration = Time.time - recordingStartTime;
 
                 if (framesSampled > 0)

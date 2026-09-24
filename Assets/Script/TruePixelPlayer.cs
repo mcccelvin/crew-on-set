@@ -64,6 +64,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void Update()
     {
+        if (editorialAudioSource != null) editorialAudioSource.volume = .5f * GameOptions.MusicVolume;
         if (preloadedFrames.Count == 0) return;
 
         float frameInterval = 1f / Mathf.Max(1f, framesPerSecond);
@@ -602,7 +603,7 @@ public class TruePixelPlayer : MonoBehaviour
         editorialAudioSource.playOnAwake = false;
         editorialAudioSource.loop = false;
         editorialAudioSource.spatialBlend = 0f;
-        editorialAudioSource.volume = 0.5f;
+        editorialAudioSource.volume = 0.5f * GameOptions.MusicVolume;
         editorialAudioStarted = false;
         editorialAudioPaused = false;
         preparedMusicMode = musicMode;
@@ -880,6 +881,7 @@ public class CommercialPresentation : MonoBehaviour
     public void SetPlaybackState(bool isPlaying, int frameIndex, float playbackFramesPerSecond)
     {
         if (audioSource == null || audioSource.clip == null) return;
+        audioSource.volume = .32f * GameOptions.MusicVolume;
 
         float targetTime = frameIndex / Mathf.Max(1f, playbackFramesPerSecond);
         targetTime = Mathf.Clamp(targetTime, 0f, Mathf.Max(0f, audioSource.clip.length - 0.01f));
@@ -958,7 +960,7 @@ public class CommercialPresentation : MonoBehaviour
         audioSource.playOnAwake = false;
         audioSource.loop = false;
         audioSource.spatialBlend = 0f;
-        audioSource.volume = 0.32f;
+        audioSource.volume = 0.32f * GameOptions.MusicVolume;
 
         presentationRoot.gameObject.SetActive(false);
     }

@@ -68,6 +68,7 @@ namespace Player.Equipment
         public TMP_Text diffusionText;
 
         private bool isLightOn = false;
+        private bool hasSoftLightModel;
         private float currentTilt = 0f;
         private Transform headPivot;
         private Quaternion neutralBeamRotation;
@@ -114,7 +115,7 @@ namespace Player.Equipment
                 " | [SCROLL] Intensity " + Mathf.RoundToInt(intensityPercent) + "%" +
                 " | [ARROWS] Tilt " + currentTilt.ToString("+0;-0;0") + "°" +
                 " | [Q UP / E DOWN] Height +" + heightExtension.ToString("F2") + " m | [G] Drop";
-            if (HasAdvancedFeatures()) EquipmentControls += " | [Z / K] Temperature " + Mathf.RoundToInt(colorTemperature) + "K | [V / B] Diffusion " + Mathf.RoundToInt(diffusionPercent) + "%";
+            if (HasAdvancedFeatures()) EquipmentControls += " | [Z / X] Temperature " + Mathf.RoundToInt(colorTemperature) + "K | [V / B] Diffusion " + Mathf.RoundToInt(diffusionPercent) + "%";
         }
 
         protected override void Awake()
@@ -244,7 +245,7 @@ namespace Player.Equipment
                 if (heightInput != 0) AdjustStandHeight(heightInput * .6f * Time.deltaTime);
 
             }
-            if (!isLightOn) return;
+            if (input == null) return;
 
             float scroll = input.EquipmentAdjust;
             if (scroll > 0) AdjustIntensity(5f);
@@ -257,6 +258,8 @@ namespace Player.Equipment
                 if (input.LightTemperature != 0f) AdjustColorTemperature(input.LightTemperature * colorTemperatureStep);
                 if (input.LightDiffusion != 0f) AdjustDiffusion(input.LightDiffusion * diffusionStep);
             }
+
+            if (!isLightOn) return;
         }
 
         public bool IsPoweredOn()
@@ -276,7 +279,7 @@ namespace Player.Equipment
 
         public float GetColorTemperature()
         {
-            return isFixedKelvin ? fixedColorTemperature : colorTemperature;
+            return HasAdvancedFeatures() ? colorTemperature : fixedColorTemperature;
         }
 
         public float GetDiffusionPercent()
@@ -286,11 +289,14 @@ namespace Player.Equipment
 
         public bool HasAdvancedFeatures()
         {
-            return !isFixedKelvin && !forcesHardLight;
+            // Level 3's Kelvin and diffusion controls remain available after the guided lesson.
+            return EquipmentName == "Level 3 Soft Light" || (!isFixedKelvin && !forcesHardLight);
         }
 
         public void RefreshAdvancedFeatures()
         {
+            if (!hasSoftLightModel && EquipmentName == "Level 3 Soft Light")
+                hasSoftLightModel = EquipmentModelVisuals.SoftLight(transform, headPivot, originalStand, spotlight);
             UpdateLightOutput();
             RefreshPlacementControls();
             UpdateLightUI();
@@ -574,7 +580,7 @@ namespace Player.Equipment
             CreateFeatureText("Header", "LEVEL 3 SOFT LIGHT", new Vector2(0f, 50f), 25f, Color.white, TextAlignmentOptions.Center);
             temperatureText = CreateFeatureText("Temperature", "", new Vector2(-205f, 12f), 22f, Color.white, TextAlignmentOptions.Left);
             diffusionText = CreateFeatureText("Diffusion", "", new Vector2(-205f, -22f), 22f, Color.white, TextAlignmentOptions.Left);
-            CreateFeatureText("Controls", "[Z / K] TEMPERATURE     [V / B] DIFFUSION", new Vector2(0f, -58f), 17f, Color.white, TextAlignmentOptions.Center);
+            CreateFeatureText("Controls", "[Z / X] TEMPERATURE     [V / B] DIFFUSION", new Vector2(0f, -58f), 17f, Color.white, TextAlignmentOptions.Center);
         }
 
         private void RemoveAdvancedFeatureBackground()

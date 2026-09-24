@@ -37,6 +37,8 @@ namespace Player.Equipment
         public virtual void OnPickedUp(Transform holdPoint)
         {
             if (holdPoint == null || hasPickupState) return;
+            EquipmentIcon = EquipmentIconArt.Get(this is SDCardItem sd && sd.isUsedCard
+                ? "RECORDED SD CARD" : EquipmentName, EquipmentIcon);
             worldScaleBeforePickup = transform.lossyScale;
             hasPickupState = true;
             itemColliders = GetComponentsInChildren<Collider>(true);

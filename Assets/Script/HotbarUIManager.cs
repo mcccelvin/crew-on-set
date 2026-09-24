@@ -174,7 +174,7 @@ public class HotbarUIManager : MonoBehaviour
         {
             string[] fields = source.Split('|');
             source = "[LMB] Toggle power | [SCROLL] Intensity | [ARROWS] Tilt | [Q UP / E DOWN] Height +" + fields[1] + " m | [G] Drop";
-            if (controls.Contains("ADVANCED")) source += " | [Z / K] Temperature | [V / B] Diffusion";
+            if (controls.Contains("ADVANCED")) source += " | [Z / X] Temperature | [V / B] Diffusion";
         }
         var matches = ControlPattern.Matches(source);
         for (int i = 0; i < matches.Count; i++)
