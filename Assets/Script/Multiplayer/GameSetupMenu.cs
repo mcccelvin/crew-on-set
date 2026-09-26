@@ -21,9 +21,14 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     [Header("Scene Names")]
     public int singlePlayerScene = 2;
     public int multiplayerScene = 8;
+    private static string loadingRoom;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetRoomLoad() { loadingRoom = null; }
 
     private void Start()
     {
+        if (!PhotonNetwork.InRoom) loadingRoom = null;
         // Clear the error text when the menu opens
         if (errorText != null) errorText.text = "";
 
@@ -90,7 +95,9 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
         }
 
         Debug.Log("Attempting to join room: " + codeToJoin);
-        PhotonNetwork.JoinRoom(codeToJoin);
+        if (errorText != null) errorText.text = "Joining room " + codeToJoin + "...";
+        if (!PhotonNetwork.JoinRoom(codeToJoin) && errorText != null)
+            errorText.text = "Could not start joining. Wait for the connection, then try again.";
     }
 
     // --- PUN 2 CALLBACKS ---
@@ -98,19 +105,33 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         Debug.Log("Successfully connected to room!");
-        if (PhotonNetwork.IsMasterClient) PhotonNetwork.LoadLevel(multiplayerScene);
+        if (errorText != null) errorText.text = "Joined. Opening the crew lobby...";
+        Application.runInBackground = true;
+        // There are two menu components; only dispatch the host's scene load once.
+        if (PhotonNetwork.IsMasterClient && loadingRoom != PhotonNetwork.CurrentRoom.Name)
+        {
+            loadingRoom = PhotonNetwork.CurrentRoom.Name;
+            PhotonNetwork.LoadLevel(multiplayerScene);
+        }
     }
 
     // If Photon cannot find the room code, this runs automatically!
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
         Debug.Log("Failed to join: " + message);
-        if (errorText != null) errorText.text = "Room not found! Check the code.";
+        if (errorText != null) errorText.text = "Could not join: " + message;
     }
 
     public override void OnCreateRoomFailed(short returnCode, string message)
     {
         if (errorText != null) errorText.text = "Failed to create room. Try again.";
+    }
+
+    public override void OnLeftRoom() { loadingRoom = null; }
+    public override void OnDisconnected(DisconnectCause cause)
+    {
+        loadingRoom = null;
+        if (errorText != null) errorText.text = "Disconnected: " + cause + ". Reconnect and try again.";
     }
 
     // --- RANDOM CODE GENERATOR ---

@@ -32,17 +32,15 @@ public sealed class DevTutorialBypass : MonoBehaviour
 
     public static void ToggleFastBossDialogue()
     {
-        if (!Application.isEditor && !Debug.isDebugBuild) return;
         FastBossDialogue = !FastBossDialogue;
         if (FastBossDialogue && TutorialUIManager.Instance != null)
             TutorialUIManager.Instance.CompleteBossRevealForTesting();
         GameFeedback.Show(FastBossDialogue ? "FAST DIALOGUE ON\nInstant dialogue and practice waits; tasks remain active" :
             "FAST DIALOGUE OFF\nNormal Boss dialogue restored");
     }
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Install()
     {
-        if (!Application.isEditor && !Debug.isDebugBuild) return;
         if (FindObjectOfType<DevTutorialBypass>() != null) return;
         var host = new GameObject("Dev Tutorial Bypass");
         DontDestroyOnLoad(host);
@@ -50,7 +48,7 @@ public sealed class DevTutorialBypass : MonoBehaviour
     }
     private void Update()
     {
-        if (!Application.isEditor && !Debug.isDebugBuild) return;
+        if (!Application.isFocused) return;
         if (Keyboard.current != null && Keyboard.current.f4Key.wasPressedThisFrame) ToggleFastBossDialogue();
         if (Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
         {

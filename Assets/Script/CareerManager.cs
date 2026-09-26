@@ -227,7 +227,6 @@ public class CareerManager : MonoBehaviour
 
     public static void HandleDevCheats(Keyboard keyboard)
     {
-        if (!Application.isEditor && !Debug.isDebugBuild) return;
         if (keyboard == null || !Application.isFocused || lastCheatInputFrame == Time.frameCount) return;
         lastCheatInputFrame = Time.frameCount;
 
@@ -265,13 +264,20 @@ public class CareerManager : MonoBehaviour
             string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             // Editor/review scenes require an existing take and cannot start an empty career.
             if (scene == "Editor" || scene == "ReviewScene") scene = "SingleStudio";
+            if (Photon.Pun.PhotonNetwork.InRoom)
+            {
+                // The multiplayer leave callback returns to the menu after disconnecting the room.
+                Photon.Pun.PhotonNetwork.LeaveRoom();
+                return;
+            }
+            Cursor.lockState = scene == "SingleStudio" ? CursorLockMode.Locked : CursorLockMode.None;
+            Cursor.visible = scene != "SingleStudio";
             UnityEngine.SceneManagement.SceneManager.LoadScene(scene);
         }
     }
 
     public static void ResetCareerForTesting()
     {
-        if (!Application.isEditor && !Debug.isDebugBuild) return;
         foreach (TruePixelPlayer player in FindObjectsOfType<TruePixelPlayer>(true)) player.StopTape();
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
         CrossSceneData.finalGrades = default;

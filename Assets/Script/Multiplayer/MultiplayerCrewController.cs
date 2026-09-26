@@ -45,7 +45,7 @@ public sealed class MultiplayerCrewController : MonoBehaviour
     {
         var crew = Crew; var key = Keyboard.current; var mouse = Mouse.current;
         if (crew == null || crew.State == null || View == null || key == null || mouse == null) return;
-        if (RoleSelectionUI.Open || crew.State.phase == "lobby" || !Application.isFocused) { if (Placement != null) Cancel(); return; }
+        if (RoleSelectionUI.Open || (crew.State.phase != "build" && crew.State.phase != "review") || !Application.isFocused) { if (Placement != null) Cancel(); return; }
         var selected = crew.Object(Selected);
         if (selected == null && reposition) Cancel();
         if (key.tKey.wasPressedThisFrame)
@@ -83,7 +83,7 @@ public sealed class MultiplayerCrewController : MonoBehaviour
         Hint = target != null ? "LMB select " + crew.Object(target.Id)?.kind + " | T reposition | Tab crew menu" : "Tab crew menu | LMB select | T reposition";
         if (mouse.leftButton.wasPressedThisFrame && target != null)
         {
-            if (selected?.kind == "actor" && crew.HasRole(CrewRole.Director) && target.Id != Selected)
+            if (selected?.kind == "actor" && crew.HasRole(CrewRole.Director) && MultiplayerRoomActions.Equipped(crew.State, PhotonNetwork.LocalPlayer.ActorNumber, "megaphone") && target.Id != Selected)
             {
                 var interaction = hit.collider.GetComponentInParent<Contract4Interactable>();
                 int index = System.Array.IndexOf(target.GetComponentsInChildren<Contract4Interactable>(), interaction);
@@ -93,18 +93,16 @@ public sealed class MultiplayerCrewController : MonoBehaviour
         }
         if (key.hKey.wasPressedThisFrame) Selected = 0;
         if (key.deleteKey.wasPressedThisFrame && selected != null) Command("delete");
-        if (selected?.kind == "actor" && crew.HasRole(CrewRole.Director))
+        if (selected?.kind == "actor" && crew.HasRole(CrewRole.Director) && MultiplayerRoomActions.Equipped(crew.State, PhotonNetwork.LocalPlayer.ActorNumber, "megaphone"))
         {
-            if (key.zKey.wasPressedThisFrame) Command("pose", 0);
-            if (key.xKey.wasPressedThisFrame) Command("pose", 1);
-            if (key.cKey.wasPressedThisFrame) Command("pose", 2);
+            if (key.zKey.wasPressedThisFrame) Command("pose", (selected.performance + 1) % 3);
             if (key.bKey.wasPressedThisFrame) Command("startMark");
             if (key.nKey.wasPressedThisFrame) Command("endMark");
             if (key.kKey.wasPressedThisFrame) Command("walk");
             if (key.jKey.wasPressedThisFrame) Command("return");
             if (key.oKey.wasPressedThisFrame) Command("stop");
         }
-        if (selected?.kind == "light" && crew.HasRole(CrewRole.Lighting))
+        if (selected?.kind == "light" && crew.HasRole(CrewRole.AVTechnician))
         {
             float kelvin = selected.kelvin, intensity = selected.intensity;
             if (key.zKey.wasPressedThisFrame) kelvin -= 100;
@@ -115,7 +113,7 @@ public sealed class MultiplayerCrewController : MonoBehaviour
                 crew.Send(new CrewCommand { action = "light", id = Selected, value = key.fKey.wasPressedThisFrame ? (selected.powered ? 0 : 1) : (selected.powered ? 1 : 0),
                     number = kelvin, number2 = intensity, index = (int)selected.diffusion, rotation = selected.rotation });
         }
-        if (crew.HasRole(CrewRole.Camera))
+        if (crew.HasRole(CrewRole.Camera) && MultiplayerRoomActions.Equipped(crew.State, PhotonNetwork.LocalPlayer.ActorNumber, "camera"))
         {
             View.fieldOfView = Mathf.Clamp(View.fieldOfView - mouse.scroll.ReadValue().y * .025f, 15, 90);
             if (key.rKey.wasPressedThisFrame) Command("record");

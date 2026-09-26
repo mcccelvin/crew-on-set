@@ -117,10 +117,8 @@ public class CampaignLevelManager : MonoBehaviour
         string size = card.shotType == 1 ? "WIDE" : card.shotType == 2 ? "MEDIUM" : "CLOSE-UP";
         string hint = card.videoDuration < 5f ? "Record at least 5 seconds for the edit." :
             !card.requiredSubjectsVisible ? "Retake: keep both subjects fully visible throughout." :
-            !card.usedSoftLight ? "Retake: power and aim the Soft Light at both subjects." :
-            string.IsNullOrEmpty(card.actorPose) || card.actorPose == "Neutral" ? "Retake: cue a performance with the megaphone." :
-            Mathf.Abs(card.screenDirection) <= .1f ? "Retake: separate the Actor and coffee in the frame." :
-            "Collect this card. Keep the same pose and screen side.";
+            CoffeeStoryRules.Beat(card.actorPose) == 0 ? "Retake: hold Wave, Action (or Using Machine), or Sitting for the whole take." :
+            "Collect this card. Next, record a different story beat.";
         GameFeedback.Show(size + " TAKE SAVED\n" + hint);
     }
 
@@ -410,7 +408,7 @@ public class CampaignLevelManager : MonoBehaviour
         {
             if (activeLevel == 4)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Those guides are there whenever you need them. Press <color=red>[P]</color> for a reminder on posing, matching shots, or soft natural light.", TutorialUIManager.Instance.poseHappy, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Those guides are there whenever you need them. Press <color=red>[P]</color> for a reminder on actor story beats and elliptical editing.", TutorialUIManager.Instance.poseHappy, true, false);
             }
             else
             {
@@ -427,8 +425,8 @@ public class CampaignLevelManager : MonoBehaviour
         {
             TutorialUIManager.Instance.SetupTasks(new string[]
             {
-                "- Review Wide, Medium, and Close-Up coverage",
-                "- Review Continuity and soft natural lighting",
+                "- Review greeting, coffee moment and seated break",
+                "- Review the 15-second story edit",
                 "- Press <color=red>[TAB]</color> when finished"
             });
         }
@@ -585,7 +583,7 @@ public class CampaignLevelManager : MonoBehaviour
         {
             "The Director Megaphone cues performances. Buy it at the shop for 900 B-Coins. Your camera and Soft Light can be reused.",
             "Press [E] to collect the megaphone from the director table. Its hotbar number equips it again; [G] drops it.",
-            "Aim at your actor and click [LMB]. [X] cues Wave, [C] cues Action, and [Z] returns to Neutral.",
+            "Aim at your actor and click [LMB]. Press [Z] to cycle Neutral, Wave, Action, then back to Neutral.",
             "With an actor selected, aim at a stool or machine and click to cue them. [O] stops the action. We'll practice blocking and walk marks next."
         };
         if (megaphoneIntroductionPage >= pages.Length) return false;
@@ -601,7 +599,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("We've got a coffee brief from <color=yellow>Kape Kultura</color>: a brown set, coffee, an Actor, and soft light. They want three shot sizes that feel like one scene.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Kape Kultura wants a little story: greeting, coffee moment, seated break. Direct three different performances, then cut away the waiting. Your camera now unlocks exposure: F2, select ISO, Aperture or Shutter with Up/Down, then adjust with Left/Right. Watch the image brightness.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
         else
         {
@@ -694,7 +692,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Open <color=red>[P]</color> when we finish chatting. Actor Blocking, Shot Coverage, Continuity, and Soft Natural Lighting will help you plan this scene.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Open <color=red>[P]</color> when we finish chatting. Actor Blocking, the Coffee Story, and Elliptical Editing will help you plan this scene.", TutorialUIManager.Instance.posePoint, true, false);
         }
         else
         {
@@ -732,9 +730,9 @@ public class CampaignLevelManager : MonoBehaviour
             return new string[]
             {
                 "- Review Hiring, Blocking & Posing Actors",
-                "- Review Shot Coverage & Continuity",
-                "- Review Soft Natural Lighting",
-                "- Review the Warm Commercial Grade",
+                "- Review the Three-Beat Coffee Story",
+                "- Review the Closing Brand Graphic",
+                "- Review Elliptical Editing",
                 "- Press <color=red>[P]</color> or CLOSE when finished"
             };
         }
@@ -757,7 +755,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Let's make that coffee scene: brown set, product, and posed Actor. Keep the action consistent across wide, medium, and close-up shots. Press <color=red>[SPACE]</color> when you're ready.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Tell three moments: Wave hello, Action with coffee, then Sitting for a break. Film each separately with actor and coffee visible. Press <color=red>[SPACE]</color> when you're ready.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
@@ -895,9 +893,9 @@ public class CampaignLevelManager : MonoBehaviour
                 () => HeldMegaphone() != null, "megaphone"),
             Teach("Aim at your actor and click [LMB]. Selecting an actor tells the megaphone who to direct.", "[LMB] Select the highlighted Actor",
                 () => HeldMegaphone() != null && HeldMegaphone().HasSelectedActor, "performer"),
-            Teach("Press [X] to cue a wave. Watch how the gesture draws attention.", "[X] Cue Wave",
+            Teach("Press [Z] until Wave is selected. Watch how the gesture draws attention.", "[Z] Cycle to Wave",
                 () => Pose("Wave"), "performer"),
-            Teach("Press [C] to cue Action. Watch the actor respond to your direction.", "[C] Cue Action",
+            Teach("Press [Z] again to select Action. Watch the actor respond to your direction.", "[Z] Cycle to Action",
                 () => { if (!Pose("Action")) return false; featureActor = HeldMegaphone().SelectedActor.GetComponent<CubeActor>(); actorFeatureRotation = featureActor.transform.rotation; actorFeaturePosition = featureActor.transform.position; return true; }, "performer"),
             Teach("Press [Z] to return to Neutral. Resetting the actor helps you prepare the next cue.", "[Z] Cue Neutral",
                 () => Pose("Neutral"), "performer"),
@@ -1002,19 +1000,14 @@ public class CampaignLevelManager : MonoBehaviour
     // Match the grader's evidence; accept any complete matching trio, not just the first takes.
     internal static bool HasCoffeeCoverage(System.Collections.Generic.IEnumerable<FootageData> clips, int requiredCoverage = 14)
     {
-        var groups = new System.Collections.Generic.Dictionary<string, int>();
+        int coverage = 0;
         foreach (var clip in clips)
-        {
-            if (clip == null || clip.campaignLevel != 4 || string.IsNullOrEmpty(clip.fileName) ||
-                !clip.requiredSubjectsVisible || !clip.usedSoftLight || string.IsNullOrEmpty(clip.actorPose) ||
-                clip.actorPose == "Neutral" || Mathf.Abs(clip.screenDirection) <= .1f || clip.shotType < 1 || clip.shotType > 3) continue;
-            string key = clip.actorPose + (clip.screenDirection > 0 ? ":right" : ":left");
-            groups.TryGetValue(key, out int coverage);
-            coverage |= 1 << clip.shotType;
-            if ((coverage & requiredCoverage) == requiredCoverage) return true;
-            groups[key] = coverage;
-        }
-        return false;
+            if (clip != null && clip.campaignLevel == 4 && !string.IsNullOrEmpty(clip.fileName) && clip.requiredSubjectsVisible)
+            {
+                int beat = CoffeeStoryRules.Beat(clip.actorPose);
+                if (beat > 0) coverage |= 1 << beat;
+            }
+        return (coverage & requiredCoverage) == requiredCoverage;
     }
 
     private void ShowLevelTasks()
@@ -1054,8 +1047,7 @@ public class CampaignLevelManager : MonoBehaviour
         ShopTerminal shopTerminal = FindObjectOfType<ShopTerminal>();
         if (shopTerminal == null || shopTerminal.availableItems.Count < 2) return;
 
-        GameObject level2CameraPrefab = Resources.Load<GameObject>("Prefabs/Level 2 Camera Placeholder");
-        if (level2CameraPrefab != null) shopTerminal.RestoreLevel2Camera(level2CameraPrefab);
+        shopTerminal.RestoreProductionCamera();
 
         if (PlayerPrefs.GetInt("LamborminiContractGraded", 0) == 1 && PlayerPrefs.GetInt("Level3LightPurchased", 0) == 0)
         {
@@ -1105,3 +1097,5 @@ public class CampaignLevelManager : MonoBehaviour
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
     }
 }
+
+

@@ -48,6 +48,7 @@ public class ShopTerminal : MonoBehaviour
     private List<GameObject> level3LightCards = new List<GameObject>();
     private bool useLevel3LightPlaceholder = false;
     private bool megaphoneSoldOut = false;
+    private bool HasPurchasedMegaphone => PlayerPrefs.GetInt("MegaphonePurchased", 0) == 1;
     public bool MegaphonePurchasedThisSession { get; private set; }
     private bool RequiresPracticeMegaphonePurchase => CampaignProgression.GetCurrentLevel() == 4 &&
         PlayerPrefs.GetInt(CampaignProgression.GetAcceptedKey(4), 0) == 0 && !DevTutorialBypass.Disabled;
@@ -66,9 +67,7 @@ public class ShopTerminal : MonoBehaviour
         foreach(var canvas in new[] {worldSpaceCanvas,screenSpaceCanvas})
         {
             CreateLevel2CameraShopCard(canvas);CreateLevel3LightShopCard(canvas);CreateMegaphoneShopCard(canvas,-1);
-            int temporaryIndex=availableItems.Count;
-            availableItems.Add(new ShopItem {itemName="LIGHT STRIP",price=ProductionKit.Prices[0]});
-            try {CreateStripShopCard(canvas,temporaryIndex);} finally {availableItems.RemoveAt(temporaryIndex);}
+            HideRetiredShopCards(canvas);
             foreach(var title in new[] {"LEVEL 2 CAMERA","LEVEL 3 SOFT LIGHT","DIRECTOR MEGAPHONE","LIGHT STRIP"})
             {
                 var card=FindShopItemCard(FindShopText(canvas,title),canvas);
@@ -83,7 +82,7 @@ public class ShopTerminal : MonoBehaviour
         // The authored studio prop is delivery stock, not free equipment.
         foreach (Transform candidate in FindObjectsOfType<Transform>(true))
             if (candidate.name == "LowDirectorMegaPhone" &&
-                candidate.GetComponent<Player.Equipment.ActorMegaphoneItem>() == null)
+                (candidate.GetComponent<Player.Equipment.ActorMegaphoneItem>() == null || !HasPurchasedMegaphone))
                 candidate.gameObject.SetActive(false);
 
         foreach (var item in availableItems)
@@ -113,6 +112,30 @@ public class ShopTerminal : MonoBehaviour
         RefreshEquipmentIcons();
         crosshairClicker = FindObjectOfType<CrosshairUIClicker>();
         UpdateTotalUI();
+        RefreshShopPresentation();
+    }
+
+    public static string DisplayEquipmentName(string name)
+    {
+        return name == null ? "" : name.Replace("LEVEL 3 SOFT LIGHT", "BETTER LIGHTS").Replace("Level 3 Soft Light", "Better Lights");
+    }
+
+    private void RefreshShopPresentation()
+    {
+        foreach (var canvas in new[] { worldSpaceCanvas, screenSpaceCanvas })
+        {
+            if (canvas == null) continue;
+            HideRetiredShopCards(canvas);
+            foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
+            {
+                if (label.text.Trim() == "LEVEL 2 CAMERA" || label.text.Trim() == "LIGHT STRIP")
+                {
+                    var card = FindShopItemCard(label, canvas);
+                    if (card != null) card.gameObject.SetActive(false);
+                }
+                label.text = DisplayEquipmentName(label.text);
+            }
+        }
     }
 
     private void RefreshEquipmentIcons()
@@ -136,6 +159,7 @@ public class ShopTerminal : MonoBehaviour
 
     public void ProvideActorPracticeMegaphone()
     {
+        if (!HasPurchasedMegaphone) return;
         if (RequiresPracticeMegaphonePurchase && !MegaphonePurchasedThisSession) return;
         // Retain the public UnityEvent entry point, but only restore purchased equipment.
         if (PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) <= 0) return;
@@ -158,6 +182,7 @@ public class ShopTerminal : MonoBehaviour
         }
         foreach (ShopItem item in availableItems)
         {
+            if (item != null && item.itemName == "DIRECTOR MEGAPHONE" && !HasPurchasedMegaphone) continue;
             if (item == null || item.prefabToSpawn == null || item.itemName.ToUpperInvariant().Contains("SD")) continue;
             if (item.itemName == "DIRECTOR MEGAPHONE" && RequiresPracticeMegaphonePurchase && !MegaphonePurchasedThisSession) continue;
             if(item.prefabToSpawn.GetComponent<ProductionKit>() != null &&
@@ -174,7 +199,7 @@ public class ShopTerminal : MonoBehaviour
                 if (restored.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
             }
         }
-        if (megaphoneItemIndex >= 0 && PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) > 0 &&
+        if (megaphoneItemIndex >= 0 && HasPurchasedMegaphone && PlayerPrefs.GetInt("OwnedEquipment.DIRECTOR MEGAPHONE", 0) > 0 &&
             (!RequiresPracticeMegaphonePurchase || MegaphonePurchasedThisSession)) MarkMegaphoneSoldOut();
         PlayerPrefs.Save();
     }
@@ -221,54 +246,42 @@ public class ShopTerminal : MonoBehaviour
             if (txt != null) txt.text = "SOLD OUT";
     }
 
+    // Compatibility entry points retained for existing scene/event references.
     public int SetupLevel2Camera(GameObject cameraPrefab)
     {
-        if (cameraPrefab == null || availableItems.Count == 0) return -1;
-
-        level2CameraItemIndex = availableItems.FindIndex(item => item.itemName == "LEVEL 2 CAMERA");
-        if (level2CameraItemIndex == -1)
-        {
-            ShopItem level2Camera = new ShopItem();
-            level2Camera.itemName = "LEVEL 2 CAMERA";
-            level2Camera.price = ProductionEconomy.AdvancedCamera;
-            level2Camera.prefabToSpawn = cameraPrefab;
-            availableItems.Add(level2Camera);
-            level2CameraItemIndex = availableItems.Count - 1;
-        }
-        else
-        {
-            availableItems[level2CameraItemIndex].price = ProductionEconomy.AdvancedCamera;
-            availableItems[level2CameraItemIndex].prefabToSpawn = cameraPrefab;
-        }
-
-        CreateLevel2CameraShopCard(worldSpaceCanvas);
-        CreateLevel2CameraShopCard(screenSpaceCanvas);
-        MarkCameraSoldOut();
-
-        return level2CameraItemIndex;
+        RestoreProductionCamera();
+        return 0;
     }
 
-    public void RestoreLevel2Camera(GameObject cameraPrefab)
+    public void RestoreLevel2Camera(GameObject cameraPrefab) => RestoreProductionCamera();
+
+    public void RestoreProductionCamera()
     {
-        if (cameraPrefab == null) return;
+        MarkCameraSoldOut();
+        HideLegacyCameraCard(worldSpaceCanvas);
+        HideLegacyCameraCard(screenSpaceCanvas);
+        foreach (var camera in FindObjectsOfType<Player.Equipment.FilmCameraItem>(true))
+            if (camera.gameObject.scene.IsValid()) return;
+        if (deliveryZone == null || availableItems.Count == 0 || availableItems[0].prefabToSpawn == null) return;
+        Instantiate(availableItems[0].prefabToSpawn, deliveryZone.position + new Vector3(-.35f,.5f,0), deliveryZone.rotation);
+    }
 
-        SetupLevel2Camera(cameraPrefab);
-        MarkLevel2CameraSoldOut();
+    private void HideLegacyCameraCard(Canvas canvas)
+    {
+        HideRetiredShopCards(canvas);
+    }
 
-        PlayerPrefs.SetInt("Level2CameraPurchased", 1);
-        PlayerPrefs.Save();
-
-        Player.Equipment.FilmCameraItem[] existingCameras = FindObjectsOfType<Player.Equipment.FilmCameraItem>(true);
-        foreach (Player.Equipment.FilmCameraItem existingCamera in existingCameras)
+    public static void HideRetiredShopCards(Canvas canvas)
+    {
+        if (canvas == null) return;
+        // Baked copies and rebound buttons may no longer have persistent cart callbacks.
+        foreach (var node in canvas.GetComponentsInChildren<Transform>(true))
         {
-            if (existingCamera.EquipmentName == "Level 2 Camera") return;
+            string name = node.name.Replace("(Clone)", "").Trim();
+            if (name.Equals("Level 2 Camera", System.StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("Light Strip", System.StringComparison.OrdinalIgnoreCase))
+                node.gameObject.SetActive(false);
         }
-
-        if (deliveryZone == null) return;
-
-        Vector3 cameraPosition = deliveryZone.position + new Vector3(-0.35f, 0.5f, 0f);
-        GameObject restoredCamera = Instantiate(cameraPrefab, cameraPosition, deliveryZone.rotation);
-        restoredCamera.name = "Level 2 Camera";
     }
 
     public int SetupLevel3Light(GameObject lightPrefab, bool usePlaceholder)
@@ -383,48 +396,8 @@ public class ShopTerminal : MonoBehaviour
 
     public void CreateStripShopCard(Canvas canvas, int index)
     {
-        try
-        {
-        if(canvas==null)return;
-        var existing=FindShopItemCard(FindShopText(canvas,"LIGHT STRIP"),canvas);
-        if(existing!=null)
-        {
-            foreach(var button in existing.GetComponentsInChildren<Button>(true))
-            {
-                if(!IsCartButton(button))continue;
-                button.onClick=new Button.ButtonClickedEvent();button.onClick.AddListener(()=>AddItemToCartByIndex(index));button.interactable=true;
-            }
-            existing.gameObject.SetActive(true);return;
-        }
-        var original=FindShopItemCard(FindShopText(canvas,"160 LED PANEL"),canvas) as RectTransform;
-        var sd=FindShopItemCard(FindShopText(canvas,"SD CARD"),canvas) as RectTransform;
-        if(original==null)return;
-        var card=Instantiate(original.gameObject,original.parent);
-        card.name="LIGHT STRIP";
-        var rect=card.GetComponent<RectTransform>();
-        rect.anchoredPosition=(sd!=null?sd.anchoredPosition:original.anchoredPosition+new Vector2(original.rect.width+15,0))+new Vector2(0,-original.rect.height-15);
-        foreach(var text in card.GetComponentsInChildren<TextMeshProUGUI>(true))
-        {
-            if(text.text=="160 LED PANEL")text.text="LIGHT STRIP";
-            else if(text.text.Replace(",","").Trim()=="1200"||text.text.Trim()=="100")text.text=availableItems[index].price.ToString("N0");
-            else if(text.text.Contains("SOLD OUT"))text.text="+ ADD TO CART";
-        }
-        foreach(var button in card.GetComponentsInChildren<Button>(true))
-        {
-            if(!IsCartButton(button))continue;
-            button.onClick=new Button.ButtonClickedEvent();
-            button.onClick.AddListener(()=>AddItemToCartByIndex(index));button.interactable=true;
-        }
-        // Reuse the panel-light illustration as a temporary strip icon.
-        var icon=card.GetComponentsInChildren<Image>(true);
-        foreach(var image in icon)if(image.sprite!=null && image.GetComponent<Button>()==null && image.transform!=card.transform)
-        {
-            if(Application.isPlaying && image.rectTransform.rect.height>40 && image.rectTransform.rect.width>40)
-                availableItems[index].prefabToSpawn.GetComponent<ProductionKit>().EquipmentIcon=image.sprite;
-        }
-        card.SetActive(true);
-        }
-        finally { RefreshEquipmentIcons(); }
+        // Retain the entry point for existing serialized events; this card is retired.
+        HideRetiredShopCards(canvas);
     }
 
     private void CreateMegaphoneShopCard(Canvas canvas, int index)
@@ -484,54 +457,7 @@ public class ShopTerminal : MonoBehaviour
 
     private void CreateLevel2CameraShopCard(Canvas shopCanvas)
     {
-        try
-        {
-        if (shopCanvas == null) return;
-        var existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 2 CAMERA"),shopCanvas);
-        if(existingCard!=null)
-        {
-            foreach(var button in existingCard.GetComponentsInChildren<Button>(true))
-            {
-                if(!IsCartButton(button))continue;
-                button.onClick=new Button.ButtonClickedEvent();
-                button.onClick.AddListener(()=>AddItemToCartByIndex(level2CameraItemIndex));
-                button.enabled=true;button.interactable=true;
-            }
-            if(!level2CameraCards.Contains(existingCard.gameObject))level2CameraCards.Add(existingCard.gameObject);
-            existingCard.gameObject.SetActive(true);return;
-        }
-
-        TextMeshProUGUI originalCameraText = FindShopText(shopCanvas, "NONY FX");
-        Transform originalCameraCard = FindShopItemCard(originalCameraText, shopCanvas);
-        if (originalCameraCard == null) return;
-
-        GameObject level2CameraCard = Instantiate(originalCameraCard.gameObject, originalCameraCard.parent);
-        level2CameraCard.name = "Level 2 Camera";
-        PositionLevel2CameraCard(level2CameraCard.transform as RectTransform, originalCameraCard as RectTransform);
-
-        TextMeshProUGUI[] shopTexts = level2CameraCard.GetComponentsInChildren<TextMeshProUGUI>(true);
-        foreach (TextMeshProUGUI shopText in shopTexts)
-        {
-            if (shopText.text == "NONY FX") shopText.text = "LEVEL 2 CAMERA";
-            else if (shopText.text.Contains("Low End Camera")) shopText.text = "Level 2 Camera\n\nProfessional camera for Level 2.";
-            else if (shopText.text == "4,000" || shopText.text == "4000") shopText.text = ProductionEconomy.AdvancedCamera.ToString("N0");
-            else if (shopText.text == "SOLD OUT") shopText.text = "ADD TO CART";
-        }
-
-        Button[] cardButtons = level2CameraCard.GetComponentsInChildren<Button>(true);
-        foreach (Button cardButton in cardButtons)
-        {
-            if (!IsCartButton(cardButton)) continue;
-
-            cardButton.onClick = new Button.ButtonClickedEvent();
-            cardButton.onClick.AddListener(() => AddItemToCartByIndex(level2CameraItemIndex));
-            cardButton.enabled = true;
-            cardButton.interactable = true;
-        }
-
-        level2CameraCards.Add(level2CameraCard);
-        }
-        finally { RefreshEquipmentIcons(); }
+        HideLegacyCameraCard(shopCanvas);
     }
 
     private void PositionLevel2CameraCard(RectTransform level2CameraCard, RectTransform originalCameraCard)
@@ -635,7 +561,7 @@ public class ShopTerminal : MonoBehaviour
         TextMeshProUGUI[] shopTexts = shopCanvas.GetComponentsInChildren<TextMeshProUGUI>(true);
         foreach (TextMeshProUGUI shopText in shopTexts)
         {
-            if (shopText.text == textToFind) return shopText;
+            if (DisplayEquipmentName(shopText.text) == DisplayEquipmentName(textToFind)) return shopText;
         }
 
         return null;
@@ -674,10 +600,12 @@ public class ShopTerminal : MonoBehaviour
 
     public void AddItemToCartByIndex(int itemIndex)
     {
+        if (itemIndex < 0 || itemIndex >= availableItems.Count || availableItems[itemIndex] == null) return;
         var practice = CampaignLevelManager.Instance;
         if (practice != null && practice.IsContract4PracticeActive &&
             (!practice.CanUseContract4PracticeAction("shop.purchase") || itemIndex != megaphoneItemIndex)) return;
         if (itemIndex == 0 && cameraSoldOut) return;
+        if (availableItems[itemIndex].itemName == "LEVEL 2 CAMERA" || availableItems[itemIndex].itemName == "LIGHT STRIP") return;
         if (itemIndex == level2CameraItemIndex && level2CameraSoldOut) return;
         if (itemIndex == level3LightItemIndex && level3LightSoldOut) return;
         if (itemIndex == megaphoneItemIndex && megaphoneSoldOut) return;
@@ -939,6 +867,7 @@ public class ShopTerminal : MonoBehaviour
 
     public void OpenTerminal(GameObject pCam, PlayerController pController)
     {
+        RefreshShopPresentation();
         if (CampaignLevelManager.Instance != null &&
             !CampaignLevelManager.Instance.CanUseContract4PracticeAction("shop.purchase")) return;
         ProductionKitShop.Setup(this);
@@ -1000,3 +929,4 @@ public class ShopTerminal : MonoBehaviour
         return isTerminalActive;
     }
 }
+

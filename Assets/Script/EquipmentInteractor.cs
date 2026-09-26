@@ -154,7 +154,7 @@ namespace Player.Interactor
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
-                    targetText = $"[E] Pick Up {item.EquipmentName}";
+                    targetText = $"[E] Pick Up {ShopTerminal.DisplayEquipmentName(item.EquipmentName)}";
                 }
                 else if (hit.collider.GetComponentInParent<ComputerStation>() != null)
                 {
@@ -301,7 +301,7 @@ namespace Player.Interactor
                                 currentEquipment.gameObject.SetActive(true);
                             }
 
-                            if (hotbarUI != null) hotbarUI.UpdateSlot(i, item.EquipmentName, item.EquipmentIcon);
+                            if (hotbarUI != null) hotbarUI.UpdateSlot(i, ShopTerminal.DisplayEquipmentName(item.EquipmentName), item.EquipmentIcon);
                             if (item is Equipment.ActorMegaphoneItem) SwitchSlot(i);
 
                             if (TutorialManager.Instance != null)

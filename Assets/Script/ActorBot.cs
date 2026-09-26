@@ -161,6 +161,16 @@ public sealed class ActorBot : MonoBehaviour
     private Rigidbody heldBody;
     private bool heldWasKinematic;
     public bool IsHoldingProduct => heldProduct != null;
+    private readonly CoffeeCharacterMotion coffeeMotion = new CoffeeCharacterMotion();
+    public bool DrinkCoffee()
+    {
+        if (heldProduct == null || !heldProduct.IsCoffeeCup) return false;
+        walking = false;
+        performance = 2;
+        coffeeMotion.Drink(loop: true);
+        GameFeedback.Show("ACTOR: DRINK COFFEE");
+        return true;
+    }
 
     public bool HoldProduct(CampaignProduct item)
     {
@@ -171,6 +181,7 @@ public sealed class ActorBot : MonoBehaviour
         ReleaseProduct();
         if (!item.TryClaim(transform)) return false;
         heldProduct = item;
+        coffeeMotion.Bind(item.transform, transform);
         heldOriginalParent = item.transform.parent;
         heldPosition = item.transform.localPosition;
         heldRotation = item.transform.localRotation;
@@ -192,12 +203,13 @@ public sealed class ActorBot : MonoBehaviour
             foreach (var part in parts) bounds.Encapsulate(part.bounds);
             item.transform.position += hand.position + transform.forward * .06f - bounds.center;
         }
-        GameFeedback.Show("ACTOR HOLDING PRODUCT\n[O] Return product to its mark. You can film or seat the actor while holding it.");
+        GameFeedback.Show(item.IsCoffeeCup ? "ACTOR HOLDING COFFEE\n[Z] Cycle to Action to drink | [O] Return cup. You can also seat the actor." : "ACTOR HOLDING PRODUCT\n[O] Return product to its mark. You can film or seat the actor while holding it.");
         return true;
     }
 
     public void ReleaseProduct()
     {
+        coffeeMotion.Reset();
         if (heldProduct != null)
         {
             heldProduct.transform.SetParent(heldOriginalParent, false);
@@ -216,7 +228,7 @@ public sealed class ActorBot : MonoBehaviour
     }
     private Vector3 furnitureReturnPosition, furnitureVisualPosition;
     private Quaternion furnitureReturnRotation;
-    public string FurniturePoseName => !furnitureActive ? null :
+    public string FurniturePoseName => !furnitureActive ? (heldProduct != null && heldProduct.IsCoffeeCup && performance == 2 ? "Action" : null) :
         furniture != null && furniture.action == Contract4Interactable.Action.Sit ? "Sitting" : "Using Machine";
 
     public void PerformFurnitureAction(Contract4Interactable.Action action)
@@ -636,9 +648,11 @@ public sealed class ActorBot : MonoBehaviour
 
     public void SetPerformance(int action)
     {
+        coffeeMotion.Reset();
         StopFurnitureAction();
         performance = Mathf.Clamp(action, 0, 2);
         RestartTake();
+        if (performance == 2) DrinkCoffee();
     }
 
     public void RestartTake()
@@ -756,10 +770,7 @@ public sealed class ActorBot : MonoBehaviour
             SetMuscle("Right Forearm Stretch", -.6f);
             if (furniture.action == Contract4Interactable.Action.Sit)
             {
-                SetMuscle("Left Upper Leg Front-Back", .75f);
-                SetMuscle("Right Upper Leg Front-Back", .75f);
-                SetMuscle("Left Lower Leg Stretch", -.8f);
-                SetMuscle("Right Lower Leg Stretch", -.8f);
+                CoffeeCharacterMotion.SeatPose(ref pose, Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / .65f)));
             }
             else
             {
@@ -784,8 +795,22 @@ public sealed class ActorBot : MonoBehaviour
         if (furnitureActive && furniture != null && furniture.action == Contract4Interactable.Action.Sit)
         {
             var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
-            animator.transform.position += furniture.SeatPosition + Vector3.up * .08f - hips.position;
+            float blend = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / .65f));
+            // The hip joint is inside the pelvis, not the surface that rests on the chair.
+            // Scale the clearance to the actual actor rig so larger actors do not sink in.
+            float clearance = .08f;
+            foreach (bool left in new[] { true, false })
+            {
+                var upper = animator.GetBoneTransform(left ? HumanBodyBones.LeftUpperLeg : HumanBodyBones.RightUpperLeg);
+                var knee = animator.GetBoneTransform(left ? HumanBodyBones.LeftLowerLeg : HumanBodyBones.RightLowerLeg);
+                if (upper != null && knee != null)
+                    clearance = Mathf.Max(clearance, Mathf.Max(0f, hips.position.y - upper.position.y) + Vector3.Distance(upper.position, knee.position) * .25f);
+            }
+            animator.transform.position += (furniture.SeatPosition + Vector3.up * clearance - hips.position) * blend;
+            CoffeeCharacterMotion.SeatFeet(animator, transform, furniture.SeatPosition, blend);
         }
+        if (heldProduct != null && heldProduct.IsCoffeeCup)
+            coffeeMotion.ApplyCup(animator, transform, heldProduct.transform, Time.deltaTime);
     }
 
     private void SetMuscle(string name, float value)

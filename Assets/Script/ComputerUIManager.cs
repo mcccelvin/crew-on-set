@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections.Generic;
 using System.IO;
 using TMPro;
@@ -448,7 +448,7 @@ public class ComputerUIManager : MonoBehaviour
         if (softLight != null)
         {
             score += 35f;
-            feedback += "<color=green>+ Level 3 Soft Light is positioned on the set.</color>\n";
+            feedback += "<color=green>+ Better Lights is positioned on the set.</color>\n";
 
             if (softLight.intensityPercent >= 30f)
             {
@@ -473,81 +473,24 @@ public class ComputerUIManager : MonoBehaviour
         else
         {
             MarkRequiredSetupMissing();
-            feedback += "<color=red>- Bring the Level 3 Soft Light close to the vehicle.</color>\n";
+            feedback += "<color=red>- Bring the Better Lights close to the vehicle.</color>\n";
         }
     }
 
     private void GradeLevel4Stage(DirectorTerminal stage, ref float score, ref string feedback)
     {
         GetCampaignProduct(4, out int productCount);
-        CubeActor[] actors = FindObjectsOfType<CubeActor>();
-        FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
-
-        if (stage != null && stage.HasWall())
-        {
-            score += 10f;
-            feedback += "<color=green>+ Kape Kultura set and backdrop prepared.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += "<color=red>- Build a backdrop for the Kape Kultura daily-story set.</color>\n";
-        }
-
-        if (stage != null && stage.HasWall() && IsWarmBrown(stage.currentWallColor))
-        {
-            score += 20f;
-            feedback += "<color=green>+ Warm brown backdrop supports the coffee story.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += "<color=yellow>- Change the backdrop to a warm brown color.</color>\n";
-        }
-
-        if (productCount == 1)
-        {
-            score += 20f;
-            feedback += "<color=green>+ Kape Kultura product placed.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += $"<color=red>- Place exactly one Kape Kultura product. Found {productCount}.</color>\n";
-        }
-
-        if (actors.Length == 1)
-        {
-            score += 15f;
-            feedback += "<color=green>+ One actor hired for the daily routine.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += $"<color=red>- Hire exactly one actor. Found {actors.Length}.</color>\n";
-        }
-
-        if (actors.Length == 1 && actors[0].GetPoseName() != "Neutral")
-        {
-            score += 10f;
-            feedback += "<color=green>+ Actor performance pose prepared.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += "<color=yellow>- Select a clear action pose for the actor.</color>\n";
-        }
-
-        if (HasPoweredSoftLight(lights))
-        {
-            score += 25f;
-            feedback += "<color=green>+ Level 3 Soft Light is powered and ready.</color>\n";
-        }
-        else
-        {
-            MarkRequiredSetupMissing();
-            feedback += "<color=red>- Use and power the Level 3 Soft Light for this contract.</color>\n";
-        }
+        bool setReady = stage != null && stage.HasWall();
+        bool actorReady = FindObjectsOfType<CubeActor>().Length == 1;
+        bool productReady = productCount >= 1;
+        // Performance is judged from footage, not the actor's pose at ingestion time.
+        if (setReady) score += 30f;
+        if (actorReady) score += 35f;
+        if (productReady) score += 35f;
+        if (!setReady || !actorReady || !productReady) MarkRequiredSetupMissing();
+        feedback += setReady ? "+ Story set prepared; color is your choice.\n" : "- Choose the Plain Backdrop or Coffee Interior.\n";
+        feedback += actorReady ? "+ One lead actor ready.\n" : "- Hire exactly one lead actor.\n";
+        feedback += productReady ? "+ Coffee product ready.\n" : "- Add a Kape product or cup of coffee.\n";
     }
 
     private void GradeLevel5Stage(DirectorTerminal stage, ref float score, ref string feedback)
@@ -726,3 +669,4 @@ public class ComputerUIManager : MonoBehaviour
         return true;
     }
 }
+

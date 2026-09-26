@@ -88,6 +88,7 @@ public class EditorManager : MonoBehaviour
             AddGeneratedTerrariClip("TerrariOutro", "TERRARI OUTRO", ProvidedClipRole.TerrariOutro);
             gameObject.AddComponent<LamborminiEditLesson>();
         }
+        else if (EditingLevel == 4) gameObject.AddComponent<CoffeeStoryEditLesson>();
     }
 
     private void Update()
@@ -98,7 +99,7 @@ public class EditorManager : MonoBehaviour
             emptyPreviewMessage.gameObject.SetActive(texture == null || texture == Texture2D.blackTexture);
         }
         Keyboard keyboard = Keyboard.current;
-        if ((Application.isEditor || Debug.isDebugBuild) && keyboard != null && keyboard.f11Key.wasPressedThisFrame)
+        if (Application.isFocused && keyboard != null && keyboard.f11Key.wasPressedThisFrame)
         {
             GenerateCheatClip();
             GameFeedback.Show("CHEAT ACTIVATED\nTest clip added to the clip bank");
@@ -418,7 +419,7 @@ public class EditorManager : MonoBehaviour
         if (clipBankContainer != null) clipBankContainer.gameObject.SetActive(currentPhase == 0);
         if (brandingBinPanel != null) brandingBinPanel.SetActive(currentPhase == 1);
         if (colorGradingBin != null) colorGradingBin.SetActive(currentPhase == 2);
-        if (exportButton != null) exportButton.SetActive(currentPhase == 2 || CampaignProgression.GetCurrentLevel() == 2);
+        if (exportButton != null) exportButton.SetActive(currentPhase == 2 || CampaignProgression.GetCurrentLevel() == 2 || EditingLevel == 4);
         if (titleSafeGuide != null) titleSafeGuide.SetActive(currentPhase == 1 || currentPhase == 2);
         if (playerEditTools != null) playerEditTools.SetVisible(currentPhase == 1);
 
@@ -754,4 +755,5 @@ public class EditorManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 }
+
 

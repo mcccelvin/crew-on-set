@@ -95,7 +95,7 @@ public class PlayerEditTools : MonoBehaviour
         int level = CampaignProgression.GetCurrentLevel();
         if (level == 2) return "GOKE: INTRO 2s / FOOTAGE 6s / OUTRO 2s";
         if (level == 3) return "TERRARI: INTRO 2s • BACK 7s • SIDE 7s • OVERALL 7s • OUTRO 2s = 25s";
-        if (level == 4) return "KAPE TARGET: PULL OUT/PAN • FADE/SLIDE • FADE • CLEAN";
+        if (level == 4) return "KAPE STORY: WAVE > ACTION > SITTING | 15s | CLOSING BRAND | STYLE OPTIONAL";
         return "PRODUCT TARGET: PUSH IN • FADE/POP • FADE • CLEAN";
     }
 
@@ -303,3 +303,4 @@ internal static class EditorWorkspaceUI
         return button;
     }
 }
+

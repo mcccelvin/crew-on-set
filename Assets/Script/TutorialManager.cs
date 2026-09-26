@@ -1,4 +1,4 @@
-﻿using PlayerPrefs = GameSavePrefs;
+using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using UnityEngine;
 using TMPro;
@@ -2068,7 +2068,7 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.EquipCameraView: ui.ShowBossDialogue("With the camera selected, click <color=red>[Left Click]</color> to look through the viewfinder. This is what your audience will see.", ui.poseHappy, true, false); break;
 
-            case TutorialStep.PracticeCameraZoom: ui.ShowBossDialogue("Try zooming with the <color=red>[Scroll Wheel]</color>. Get a closer look, but leave room for the whole vase.", ui.posePointUp, true, false); break;
+            case TutorialStep.PracticeCameraZoom: ui.ShowBossDialogue("Autofocus keeps the vase sharp. Advanced settings unlock in later levels. Try zooming with <color=red>[Scroll]</color>, leaving room for the whole vase.", ui.posePointUp, true, false); break;
             case TutorialStep.PracticeCameraPedestal: ui.ShowBossDialogue("Let's try a different height. Hold <color=red>[Q]</color> or <color=red>[E]</color> to raise or lower the camera, and try both directions.", ui.posePoint, true, false); break;
             case TutorialStep.FrameSubject: ui.ShowBossDialogue("For our first shot, put the flower right in the center. Give it enough room so nothing gets cut off.", ui.posePointUp, true, false); break;
 
@@ -2447,3 +2447,4 @@ public class TutorialManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 }
+

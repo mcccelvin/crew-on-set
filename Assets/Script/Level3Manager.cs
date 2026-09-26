@@ -65,6 +65,7 @@ public class Level3Manager : MonoBehaviour
             new GuidedPracticeLesson.Step("Your Soft Light is placed at 3200K for a warm look. Now pick up your camera with <color=yellow>[E]</color> and select its hotbar slot. If it is already in your inventory, just equip it. We'll practice smooth movement before recording.","Pick up and equip your camera",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem),
             new GuidedPracticeLesson.Step("Next, pick up a blank SD card with <color=yellow>[E]</color>. It stores one recording. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect a blank SD card",()=>inventory != null && inventory.HasBlankSDCard()),
             new GuidedPracticeLesson.Step("Select your camera and click <color=yellow>Left Mouse Button</color> to open the viewfinder. Look through it to frame the lit subject before practicing movement.","Equip camera and click LMB to open the viewfinder",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive()),
+            new GuidedPracticeLesson.Step("White balance is now unlocked. Press F2, select White balance with Up/Down, then adjust with Left/Right. This changes the camera image: lower Kelvin cools it, higher warms it. Compare it with your warm light.","Adjust camera white balance in F2 settings",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem wbCamera && wbCamera.WhiteBalancePracticed),
             new GuidedPracticeLesson.Step("Keep the viewfinder open. Hold <color=yellow>Ctrl</color> while moving with WASD, and turn gently with the mouse. Ctrl slows walking and looking for a steady shot. Practice for five seconds while keeping the lit subject framed; then I'll come back. We are rehearsing, so do not record yet.","Keep viewfinder open; practice Ctrl + WASD for 5 seconds",()=>
             {
                 var keys = UnityEngine.InputSystem.Keyboard.current;
@@ -338,7 +339,7 @@ public class Level3Manager : MonoBehaviour
         {
             if (itemIndex != level3LightItemIndex)
             {
-                if (tutorialManager != null) tutorialManager.ShowWarning("Let's buy the Level 3 Soft Light first. That's the tool we're trying today.");
+                if (tutorialManager != null) tutorialManager.ShowWarning("Let's buy the Better Lights first. That's the tool we're trying today.");
                 return false;
             }
 
@@ -346,7 +347,7 @@ public class Level3Manager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Confirm the Level 3 Soft Light purchase" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Confirm the Better Lights purchase" });
             }
 
             return true;
@@ -367,7 +368,7 @@ public class Level3Manager : MonoBehaviour
 
         if (currentStep == Level3Step.BuyLight)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("We're still missing the Level 3 Soft Light. Add it to the cart first.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("We're still missing the Better Lights. Add it to the cart first.");
             return false;
         }
 
@@ -388,7 +389,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open LIGHTS", "- Add the Level 3 Soft Light to your cart" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open LIGHTS", "- Add the Better Lights to your cart" });
         }
     }
 
@@ -420,7 +421,7 @@ public class Level3Manager : MonoBehaviour
 
         if (light.EquipmentName != "Level 3 Soft Light")
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Grab the Level 3 Soft Light from delivery with [E]. We'll try it on the stage.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Grab the Better Lights from delivery with [E]. We'll try it on the stage.");
             return;
         }
 
@@ -542,7 +543,7 @@ public class Level3Manager : MonoBehaviour
         {
             TutorialUIManager.Instance.SetupTasks(new string[]
             {
-                "- Review the Level 3 Soft Light guide",
+                "- Review the Better Lights guide",
                 "- Review Soft Lighting for Reflective Surfaces",
                 "- Review Automotive Staging",
                 "- Press <color=red>[P]</color> or CLOSE when finished"
@@ -568,7 +569,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("For <color=yellow>Level 3</color>, create an orange supercar reveal in a dark showroom. Show three views: the back, the side, and an overall view with the full car visible. Soft highlights describe the curves; the dark background separates the orange paint.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Welcome to <color=yellow>Level 3</color>. First, practice softer lighting, camera white balance and smooth movement. Soft highlights reveal shape; white balance controls how warm or cool the camera image looks. We'll review the next job after practice.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -591,8 +592,7 @@ public class Level3Manager : MonoBehaviour
         ShopTerminal shopTerminal = FindObjectOfType<ShopTerminal>();
         if (shopTerminal == null || shopTerminal.availableItems.Count < 2) return;
 
-        GameObject level2CameraPrefab = Resources.Load<GameObject>("Prefabs/Level 2 Camera Placeholder");
-        if (level2CameraPrefab != null) shopTerminal.RestoreLevel2Camera(level2CameraPrefab);
+        shopTerminal.RestoreProductionCamera();
 
         bool usePlaceholder = shopTerminal.level3LightPrefab == null;
         GameObject lightPrefab = usePlaceholder ? shopTerminal.availableItems[1].prefabToSpawn : shopTerminal.level3LightPrefab;
@@ -628,7 +628,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Our new tool is the <color=yellow>Level 3 Soft Light</color>. We will use it warm at about 3200K so the Terrari paint feels rich. Output changes brightness, color temperature changes warmth, and diffusion softens reflections. While holding the light, hold Q to raise or E to lower its real stand, then G to place it. The setup-only beam guide never appears in recordings. After lighting the car, I will teach you to hold Ctrl for smooth camera movement. Open the equipment shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Our new tool is <color=yellow>Better Lights</color>. Practice at 3200K to see a warm light. Output changes brightness; diffusion softens reflections. Hold Q/E to adjust stand height, then G to place it. Your camera also unlocks white balance in F2 settings. It changes the camera image separately from the light. Open the equipment shop with <color=red>[E]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -642,7 +642,7 @@ public class Level3Manager : MonoBehaviour
 
         if (level3LightItemIndex == -1)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("The Level 3 Soft Light is missing from the Equipment Shop.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("The Better Lights is missing from the Equipment Shop.");
             ShowLightPickupIntroduction();
             return;
         }
@@ -653,7 +653,7 @@ public class Level3Manager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop", "- Buy the Level 3 Soft Light" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop", "- Buy the Better Lights" });
             TutorialUIManager.Instance.SetDynamicGlow("shop", true);
         }
 
@@ -682,7 +682,7 @@ public class Level3Manager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Pick up the Level 3 Soft Light from the delivery table" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Pick up the Better Lights from the delivery table" });
         }
 
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
@@ -791,13 +791,8 @@ public class Level3Manager : MonoBehaviour
 
     private void ShowContractIntroduction()
     {
-        currentStep = Level3Step.IntroduceContract;
-        isBriefingOpen = true;
-
-        if (TutorialUIManager.Instance != null)
-        {
-            TutorialUIManager.Instance.ShowBossDialogue("<color=yellow>Terrari</color> wants a 25-second reveal. Record three separate takes on three SD cards: back, side and overall, about 7 seconds each. The editor provides a 2-second Terrari intro and 2-second outro. Build a dark set, place the orange car, and use the warm Soft Light to reveal its shape. Use the Ctrl camera movement we practiced for steady moving shots.", TutorialUIManager.Instance.poseBoss, true, false);
-        }
+        // Present the offer first; the accepted callback owns the production briefing.
+        OfferContract();
     }
 
     private void OfferContract()
@@ -824,7 +819,7 @@ public class Level3Manager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Use the warm Soft Light we practiced with and your existing camera. Hold Ctrl for smooth camera movement when filming. Your production advance is 8,500 B-Coins. Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("A new contract is ready. Your production advance is " + ProductionEconomy.Advance(3).ToString("N0") + " B-Coins. Press <color=red>[SPACE]</color> to accept, then we'll discuss the job.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -853,7 +848,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("We've got the job. Place the car with the tablet and try our warm Soft Light settings: 75%, -10°, 3200K, and 75% diffusion. The brief's on <color=red>[TAB]</color>.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted! <color=yellow>Terrari</color> wants a 25-second reveal. Place the orange car on a dark set. Record back, side and overall views on three SD cards, about 7 seconds each. Use Better Lights at 75%, -10°, 3200K and 75% diffusion. Hold Ctrl for smooth camera movement. In editing, add the 2-second Terrari intro and 2-second outro. Press <color=red>[TAB]</color> to review the brief.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -960,7 +955,7 @@ public class Level3Manager : MonoBehaviour
         targetPosition = ClampPracticePointToStage(targetPosition, stageBounds);
         lightPosition = ClampPracticePointToStage(lightPosition, stageBounds);
 
-        lightingPracticeRoot = new GameObject("Level 3 Soft Light Practice");
+        lightingPracticeRoot = new GameObject("Better Lights Practice");
         lightingPracticeDirector = FindObjectOfType<DirectorTerminal>();
         if (lightingPracticeDirector != null)
         {
@@ -1113,6 +1108,7 @@ internal sealed class GuidedPracticeLesson
     private int index;
     private float stableSince = -1f;
     private readonly Transform station;
+    private readonly bool lockMovementAtStation;
     private Player.PlayerController.PlayerController stationPlayer;
     private LineRenderer guideLine;
     private bool stationLocked;
@@ -1121,12 +1117,13 @@ internal sealed class GuidedPracticeLesson
     public string CurrentPermission => !released && index < steps.Count ? steps[index].permission : null;
     public bool ReadyToPlace => index == steps.Count - 1 && !IsExplaining;
 
-    public GuidedPracticeLesson(TutorialManager tutorial, List<Step> steps, System.Action complete = null, Transform station = null)
+    public GuidedPracticeLesson(TutorialManager tutorial, List<Step> steps, System.Action complete = null, Transform station = null, bool lockMovementAtStation = true)
     {
         this.tutorial = tutorial;
         this.steps = steps;
         this.complete = complete;
         this.station = station;
+        this.lockMovementAtStation = lockMovementAtStation;
         stationPlayer = Object.FindObjectOfType<Player.PlayerController.PlayerController>();
         if (station != null && tutorial != null && tutorial.objectiveLine != null)
         {
@@ -1193,14 +1190,14 @@ internal sealed class GuidedPracticeLesson
         if (!DevTutorialBypass.PracticeDelayComplete(Time.time - stableSince, 0.5f)) return;
         if (index == 0 && station != null && stationPlayer != null)
         {
-            stationLocked = true;
-            stationPlayer.canMove = false;
+            stationLocked = lockMovementAtStation;
+            if (stationLocked) stationPlayer.canMove = false;
             CharacterController controller = stationPlayer.GetComponent<CharacterController>();
             bool wasEnabled = controller != null && controller.enabled;
-            if (wasEnabled) controller.enabled = false;
+            if (stationLocked && wasEnabled) controller.enabled = false;
             Vector3 position = stationPlayer.transform.position;
-            stationPlayer.transform.position = new Vector3(station.position.x, position.y, station.position.z);
-            if (wasEnabled) controller.enabled = true;
+            if (stationLocked) stationPlayer.transform.position = new Vector3(station.position.x, position.y, station.position.z);
+            if (stationLocked && wasEnabled) controller.enabled = true;
             if (guideLine != null) guideLine.enabled = false;
             foreach (Renderer visual in station.GetComponentsInChildren<Renderer>())
                 if (!(visual is LineRenderer)) visual.enabled = false;
@@ -1438,4 +1435,5 @@ internal static class CampaignGuidance
         highlighted = target;
     }
 }
+
 

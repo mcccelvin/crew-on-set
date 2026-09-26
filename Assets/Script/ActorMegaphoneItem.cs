@@ -15,7 +15,7 @@ namespace Player.Equipment
         private Vector3 previewPosition;
         private bool previewValid;
         public bool IsRepositioning { get; private set; }
-        private const string Controls = "[LMB] Select Actor / Aim at chair, machine or product | [O] Stop / Return product\n[Z/X/C] Neutral/Wave/Action | [ARROWS] Move | [R] Turn | [B/N] Marks | [K] Walk [J] Reset [H] Clear | [G] Drop";
+        private const string Controls = "[LMB] Select Actor / Aim at chair, machine or product | [O] Stop / Return product\n[Z] Cycle Neutral / Wave / Action (drink held coffee) | [ARROWS] Move | [R] Turn | [B/N] Marks | [K] Walk [J] Reset [H] Clear | [G] Drop";
 
         public bool HasSelectedActor => selectedActor != null;
         public int CommandCount => commandCount;
@@ -158,7 +158,7 @@ namespace Player.Equipment
                 !practice.CanUseContract4PracticeAction("megaphone.select")) return;
 
             selectedActor = target;
-            GameFeedback.Show("ACTOR SELECTED\nAim at a chair, machine or product and click. [Z/X/C] Poses | [O] Stop / Return product.");
+            GameFeedback.Show("ACTOR SELECTED\nAim at a chair, machine or product and click. [Z] Cycle animationss | [O] Stop / Return product.");
         }
 
         public string GetAimPrompt(Camera camera)
@@ -191,9 +191,16 @@ namespace Player.Equipment
             if (IsRepositioning) { UpdatePositionPreview(playerCamera); return; }
             if (keys.oKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.stop"))) { selectedActor.ReleaseProduct(); selectedActor.StopFurnitureAction(); commandCount++; }
 
-            if (keys.zKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.z"))) CuePose(0, "NEUTRAL");
-            if (keys.xKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.x"))) CuePose(1, "WAVE");
-            if (keys.cKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.c"))) CuePose(2, "ACTION");
+            if (keys.zKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.pose.z")))
+            {
+                var actor = selectedActor.GetComponent<CubeActor>();
+                if (actor != null)
+                {
+                    actor.CyclePose();
+                    commandCount++;
+                    GameFeedback.Show("ACTOR CUE: " + actor.GetPoseName() + " | [Z] Next animation");
+                }
+            }
             if (keys.rKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.turn"))) { selectedActor.transform.Rotate(0f, 15f, 0f, Space.World); commandCount++; }
             if (keys.bKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.mark.start"))) { selectedActor.SetStartMark(); commandCount++; GameFeedback.Show("START MARK SAVED"); }
             if (keys.nKey.wasPressedThisFrame && (!gated || practice.CanUseContract4PracticeAction("megaphone.mark.end"))) { selectedActor.SetEndMark(); commandCount++; }

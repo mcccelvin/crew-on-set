@@ -325,7 +325,7 @@ public class ContractUIManager : MonoBehaviour
         SetContractText("TERRARI",
             "CLIENT QUALIFICATIONS\n\n" +
             "SET - ADD WALL; choose a dark backdrop and place one orange Terrari\n" +
-            "LIGHT   - Use the Level 3 Soft Light for clean reflections\n" +
+            "LIGHT   - Use the Better Lights for clean reflections\n" +
             "CAMERA  - Three recordings on three SD cards: back, side, overall view\n" +
             "EDIT    - 2s Terrari intro + three different recordings + 2s outro; 25 seconds\n\n" +
             "UPFRONT PAYMENT: 8,500 B-COINS");
@@ -340,7 +340,7 @@ public class ContractUIManager : MonoBehaviour
             "- Centered and Rule of Thirds framing both work from any side; keep the overall view uncropped.\n" +
             "- Keep the camera low and avoid obstructing the vehicle.",
             "SOFT REFLECTIVE LIGHTING",
-            "Use the Level 3 Soft Light to shape the vehicle.\n\n" +
+            "Use the Better Lights to shape the vehicle.\n\n" +
             "- Aim the Soft Light at the visible body for each camera angle.\n" +
             "- Keep highlights clean across the body.\n" +
             "- Use your Soft Light from practice; keep readable paint detail and some shadow for shape.\n" +
@@ -360,43 +360,26 @@ public class ContractUIManager : MonoBehaviour
     private void ConfigureLevel4Contract()
     {
         SetContractText("KAPE KULTURA",
-            "CLIENT OBJECTIVE\n" +
-            "Create a warm, believable everyday coffee story.\n\n" +
-            "SET     - Warm brown backdrop\n" +
-            "STAGE   - Exactly one Kape product and one posed actor\n" +
-            "CAST    - Keep the same non-neutral pose across every clip\n" +
-            "CAMERA  - At least 3 clips: Wide, Medium, and Close-Up\n" +
-            "LIGHT   - Level 3 Soft Light in every selected clip\n" +
-            "EDIT    - 15 seconds, 2 animated graphics, player-selected motion, transition, music, and warm grade\n\n" +
+            "CLIENT OBJECTIVE\nTell a small coffee story through performance.\n\n" +
+            "SET - Plain Backdrop or Coffee Interior; your colors\n" +
+            "STAGE - One actor, coffee product and a usable chair\n" +
+            "STORY - Greeting, coffee moment, seated break\n" +
+            "RECORD - Three separate takes; keep actor and coffee visible\n" +
+            "EDIT - 15 seconds, joined cuts and a closing brand graphic\n\n" +
             "UPFRONT PAYMENT: 6,500 B-COINS");
-
-        SetQualificationSummary("STAGE: Brown set + 1 product + 1 posed actor     CAMERA: Wide, Medium & Close-Up\nLIGHT: Soft Light every clip     EDIT: 15 seconds + 2 graphics");
-
+        SetQualificationSummary("STAGE: Actor + coffee + chair     STORY: Wave > Action > Sitting\nEDIT: Three takes, 15 seconds, closing brand");
         SetQualificationText("KAPE KULTURA - SELECTED CONTRACT",
-            "COVERAGE & CONTINUITY",
-            "Record at least 3 clips: one Wide, one Medium, and one Close-Up.\n\n" +
-            "- Place exactly one actor and one coffee product.\n" +
-            "- Keep both visible in every selected shot.\n" +
-            "- Keep the actor on the same side of the product in every shot.\n" +
-            "- Choose a non-neutral pose and keep that same pose in every clip.\n" +
-            "- Do not change the actor-product set relationship.\n" +
-            "- Arrange the three shots into a clear 15-second story.",
-            "NATURAL LIGHT & WARM GRADE",
-            "Create a welcoming morning-commercial look.\n\n" +
-            "- Use a warm brown backdrop.\n" +
-            "- Use the Soft Light in every selected clip without flattening the actor.\n" +
-            "- Keep face and product detail readable.\n" +
-            "- Use exactly 2 graphics and choose their entrance animation.\n" +
-            "- Choose camera motion, an opening/closing transition, and music in Branding.\n" +
-            "- Preview the complete 15-second story before export.\n" +
-            "- Grade within Brightness 0.95-1.15, Contrast 1.05-1.30, and Saturation 1.05-1.30.");
-
-        SetPreviousContractText("TERRARI",
-            "PREVIOUS CONTRACT\n\n" +
-            "Hero vehicle staging\n" +
-            "Premium automotive composition\n" +
-            "Soft reflective lighting\n" +
-            "10-second commercial");
+            "DIRECT A THREE-BEAT STORY",
+            "1. Greeting: select the actor with the megaphone and press [Z] until Wave is selected.\n" +
+            "2. Coffee moment: press [Z] until Action is selected beside the product, optionally holding the cup. Using Machine also counts.\n" +
+            "3. Break: aim at a chair and cue Sitting.\n\n" +
+            "Record each as a separate take, at least 5 seconds. Keep the same performance throughout each take and both actor and coffee in frame. Choose your own shot sizes and lighting.",
+            "ELLIPTICAL EDITING",
+            "Cut away the waiting between moments: greeting, coffee moment, seated break.\n\n" +
+            "Use exactly three different takes in that order. Start at 0s; leave no gaps or overlaps. Each beat must last at least 2s; trim the whole story to 15s (within 0.5s).\n" +
+            "Add a brand graphic across the final 2s. Preview the result.\n\n" +
+            "No supplied intro/outro or fixed grade recipe. Music, animated graphics, transitions, set color and light model are creative choices.");
+        SetPreviousContractText("TERRARI", "PREVIOUS CONTRACT\n\nVehicle angles and reflective lighting\n25-second automotive commercial");
     }
 
     private void ConfigureLevel5Contract()
@@ -431,10 +414,10 @@ public class ContractUIManager : MonoBehaviour
 
         SetPreviousContractText("KAPE KULTURA",
             "PREVIOUS CONTRACT\n\n" +
-            "Warm brown set\n" +
-            "Actor and coffee product\n" +
-            "Wide, Medium, Close-Up continuity\n" +
-            "15-second warm commercial");
+            "Actor-led coffee story\n" +
+            "Greeting, coffee moment, seated break\n" +
+            "Elliptical editing\n" +
+            "15-second story with closing brand");
     }
 
     private void SetContractText(string title, string description)
@@ -864,3 +847,4 @@ public class ContractUIManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 }
+

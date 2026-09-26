@@ -343,6 +343,10 @@ MonoBehaviour:
     [R] Record | [Scroll] Zoom | [Q/E] Height'
   HoldPositionOffset: {x: -0.1, y: 0.1, z: 0}
   HoldRotationOffset: {x: 0, y: 0, z: 0}
+  heldCameraOffset: {x: 0.20, y: -0.22, z: 0.30}
+  raisedCameraOffset: {x: 0.16, y: -0.16, z: 0.30}
+  rightGripLocalPosition: {x: -0.01, y: 0.19, z: 0.55}
+  leftGripLocalPosition: {x: -0.22, y: 0.055, z: 0.40}
   filmCamera: {fileID: 6168680741594599856}
   filmUICanvas: {fileID: 0}
   sdCardPrefab: {fileID: 5512013885041339088, guid: 99a4488b76fa7a74abf340d81e58baf4, type: 3}

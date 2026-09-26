@@ -1,4 +1,4 @@
-﻿using PlayerPrefs = GameSavePrefs;
+using PlayerPrefs = GameSavePrefs;
 using System.Collections;
 using System.Collections.Generic;
 using Player.Equipment;
@@ -204,7 +204,7 @@ public class GokeLevelManager : MonoBehaviour
                 ui.SetupTasks(new[] { "[Left Click] Leave the viewfinder" });
             }
             if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
-            if (!cameraPracticeViewOpen) OnCameraViewExited("Level 2 Camera");
+            if (!cameraPracticeViewOpen) OnCameraViewExited("NONY FX Camera");
             return;
         }
         if (practiceLesson != null) { practiceLesson.Continue(); return; }
@@ -430,7 +430,7 @@ public class GokeLevelManager : MonoBehaviour
         {
             if (itemIndex != level2CameraItemIndex)
             {
-                if (tutorialManager != null) tutorialManager.ShowWarning("Let's get the Level 2 Camera into the cart first.");
+                if (tutorialManager != null) tutorialManager.ShowWarning("Let's get the NONY FX Camera into the cart first.");
                 return false;
             }
 
@@ -456,7 +456,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
+                bool alreadyOwnsCamera = true;
                 TutorialUIManager.Instance.SetupTasks(new string[] { alreadyOwnsCamera ? "- Confirm your SD Card purchase" : "- Confirm your Camera and SD Card purchase" });
             }
 
@@ -485,7 +485,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.BuyCamera)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("We're missing the Level 2 Camera. Add it before confirming.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("We're missing the NONY FX Camera. Add it before confirming.");
             return false;
         }
 
@@ -514,7 +514,7 @@ public class GokeLevelManager : MonoBehaviour
             }
             else
             {
-                bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
+                bool alreadyOwnsCamera = true;
                 tutorialManager.ShowWarning(alreadyOwnsCamera ? "Keep that SD Card in the order and click CONFIRM." : "Keep the camera and card in the order, then click CONFIRM.");
             }
         }
@@ -529,9 +529,9 @@ public class GokeLevelManager : MonoBehaviour
             return false;
         }
 
-        if (equipmentName != "Level 2 Camera")
+        if (!CameraFeatureUnlocks.IsCamera(equipmentName))
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("Select the Level 2 Camera and press [C] to load the SD Card first.");
+            if (tutorialManager != null) tutorialManager.ShowWarning("Select the NONY FX Camera and press [C] to load the SD Card first.");
             return false;
         }
 
@@ -554,7 +554,7 @@ public class GokeLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             if (currentStep == GokeLevelStep.BuyCamera)
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Add the Level 2 Camera to your cart", "- Add an SD Card before checkout" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Add the NONY FX Camera to your cart", "- Add an SD Card before checkout" });
             else
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Add a blank SD Card to your cart and confirm purchase" });
         }
@@ -616,7 +616,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("There's our camera gear on the delivery table. Pick up the <color=yellow>Level 2 Camera</color> with <color=red>[E]</color> first; we'll get the card next.", TutorialUIManager.Instance.posePoint, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("There's our camera gear on the delivery table. Pick up the <color=yellow>NONY FX Camera</color> with <color=red>[E]</color> first; we'll get the card next.", TutorialUIManager.Instance.posePoint, true, false);
         }
     }
 
@@ -639,7 +639,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Open EQUIPMENT", "- Review the Level 2 Camera features", "- Press <color=red>[P]</color> or CLOSE when finished" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Open EQUIPMENT", "- Review the NONY FX Camera features", "- Press <color=red>[P]</color> or CLOSE when finished" });
             }
             return;
         }
@@ -699,11 +699,11 @@ public class GokeLevelManager : MonoBehaviour
 
     public void OnCameraPickedUp(string equipmentName)
     {
-        if (equipmentName != "Level 2 Camera")
+        if (!CameraFeatureUnlocks.IsCamera(equipmentName))
         {
             if ((currentStep == GokeLevelStep.IntroducePickup || currentStep == GokeLevelStep.PickUpCamera) && tutorialManager != null)
             {
-                tutorialManager.ShowWarning("The Level 2 Camera is waiting on the delivery table. Pick it up with [E].");
+                tutorialManager.ShowWarning("The NONY FX Camera is waiting on the delivery table. Pick it up with [E].");
             }
             return;
         }
@@ -725,22 +725,22 @@ public class GokeLevelManager : MonoBehaviour
     public void OnCardInsertedToCamera(string equipmentName)
     {
         if (currentStep != GokeLevelStep.InsertSDCard) return;
-        if (equipmentName != "Level 2 Camera") return;
+        if (!CameraFeatureUnlocks.IsCamera(equipmentName)) return;
 
         currentStep = GokeLevelStep.IntroduceCameraView;
         isBriefingOpen = true;
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Let's try the Rule of Thirds. Click <color=red>[Left Click]</color> to open the viewfinder, put the product where two grid lines cross, and leave some breathing room beside it.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Let's try the Rule of Thirds. Click <color=red>[Left Click]</color> to open the viewfinder, open F2 settings and turn Grid ON, then put the product where two grid lines cross, and leave some breathing room beside it.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
     public void OnCameraViewEntered(string equipmentName)
     {
-        if (equipmentName == "Level 2 Camera") cameraPracticeViewOpen = true;
+        if (CameraFeatureUnlocks.IsCamera(equipmentName)) cameraPracticeViewOpen = true;
         if (currentStep != GokeLevelStep.IntroduceCameraView && currentStep != GokeLevelStep.OpenCameraView) return;
-        if (equipmentName != "Level 2 Camera") return;
+        if (!CameraFeatureUnlocks.IsCamera(equipmentName)) return;
 
         currentStep = GokeLevelStep.InspectCameraFeatures;
         isBriefingOpen = false;
@@ -754,7 +754,7 @@ public class GokeLevelManager : MonoBehaviour
             TutorialUIManager.Instance.SetupTasks(new string[]
             {
                 "- Frame the PRACTICE PRODUCT on a Rule of Thirds intersection",
-                "- Use the yellow power points as composition targets",
+                "- Press F2 and set Grid to ON before framing",
                 "- Move left or right to create intentional negative space",
                 "- Use <color=red>[Q/E]</color> for height and <color=red>[Scroll]</color> for shot size",
                 "- Hold the correct frame for 2 seconds"
@@ -766,7 +766,7 @@ public class GokeLevelManager : MonoBehaviour
     {
         if (!cameraPracticeViewOpen) return;
         if (currentStep != GokeLevelStep.InspectCameraFeatures || hasCompletedRuleOfThirdsPractice) return;
-        if (practiceLesson != null && !practiceLesson.ReadyToPlace) return;
+        if (practiceLesson != null && (practiceLesson.IsExplaining || practiceLesson.CurrentPermission != "camera.frame")) return;
 
         if (!hasCorrectComposition)
         {
@@ -781,6 +781,8 @@ public class GokeLevelManager : MonoBehaviour
         if (practiceLesson == null) ShowFramingSuccess();
     }
 
+    public bool ShowThirdsLessonGuide => currentStep == GokeLevelStep.InspectCameraFeatures && !hasCompletedRuleOfThirdsPractice;
+
     private void ShowFramingSuccess()
     {
         if (awaitingFramingAcknowledgement) return;
@@ -791,16 +793,16 @@ public class GokeLevelManager : MonoBehaviour
         if (ui != null)
         {
             ui.HideTasks();
-            ui.ShowBossDialogue("That's the frame! The product sits on a thirds intersection, so your eye goes straight to it. That space beside it gives our message room without covering the product.", ui.poseHappy, true, false);
+            ui.ShowBossDialogue("That's the frame! The product sits on a thirds intersection, so your eye goes straight to it. That space leaves room for our message. The tutorial guide will disappear; your grid stays available through F2 settings.", ui.poseHappy, true, false);
         }
     }
 
     public void OnCameraViewExited(string equipmentName)
     {
-        if (equipmentName == "Level 2 Camera") cameraPracticeViewOpen = false;
+        if (CameraFeatureUnlocks.IsCamera(equipmentName)) cameraPracticeViewOpen = false;
         if (awaitingFramingAcknowledgement) return;
         if (currentStep != GokeLevelStep.InspectCameraFeatures) return;
-        if (equipmentName != "Level 2 Camera") return;
+        if (!CameraFeatureUnlocks.IsCamera(equipmentName)) return;
 
         if (practiceLesson != null) return;
         if (!hasCompletedRuleOfThirdsPractice)
@@ -814,7 +816,7 @@ public class GokeLevelManager : MonoBehaviour
             {
                 TutorialUIManager.Instance.SetupTasks(new string[]
                 {
-                    "- Open the Level 2 Camera viewfinder again",
+                    "- Open the NONY FX Camera viewfinder again",
                     "- Complete the Rule of Thirds framing practice"
                 });
             }
@@ -838,8 +840,7 @@ public class GokeLevelManager : MonoBehaviour
         // Preserve money already paid by the previous advance implementation as outstanding debt.
         if (PlayerPrefs.GetInt("GokeEquipmentAdvancePaid", 0) > 0)
         { PlayerPrefs.SetInt("GokeEquipmentLoanIssued", 1); PlayerPrefs.Save(); return; }
-        int required = (PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1 ? 0 : ProductionEconomy.AdvancedCamera)
-            + ProductionEconomy.SDCard + Mathf.Max(0, 3 - ShopTerminal.OwnedPanelLights) * ProductionEconomy.PanelLight;
+        int required = ProductionEconomy.SDCard + Mathf.Max(0, 3 - ShopTerminal.OwnedPanelLights) * ProductionEconomy.PanelLight;
         int amount = Mathf.Max(0, required - PlayerPrefs.GetInt("PlayerMoney", 0));
         PlayerPrefs.SetInt("GokeEquipmentLoanIssued", 1);
         PlayerPrefs.SetInt("GokeEquipmentAdvancePaid", amount);
@@ -855,16 +856,16 @@ public class GokeLevelManager : MonoBehaviour
     {
         EnsureEquipmentAdvance();
         isBriefingOpen = false;
-        bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
+        bool alreadyOwnsCamera = true;
         currentStep = alreadyOwnsCamera ? GokeLevelStep.BuySDCard : GokeLevelStep.BuyCamera;
 
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
             if (alreadyOwnsCamera)
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy a blank SD Card for your Level 2 Camera" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy a blank SD Card for your NONY FX Camera" });
             else
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy the Level 2 Camera", "- Add an SD Card before checkout" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy the NONY FX Camera", "- Add an SD Card before checkout" });
             TutorialUIManager.Instance.SetDynamicGlow("shop", true);
         }
 
@@ -875,15 +876,8 @@ public class GokeLevelManager : MonoBehaviour
     {
         currentStep = GokeLevelStep.IntroduceCamera;
         isBriefingOpen = true;
-
         if (TutorialUIManager.Instance != null)
-        {
-            bool alreadyOwnsCamera = PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1;
-            string message = alreadyOwnsCamera
-                ? "Let's see that lighting through a camera. Your Level 2 Camera is at delivery; pick up a blank <color=yellow>SD Card</color> from the shop for our test."
-                : "Let's put that lighting to the test. Open the shop with <color=red>[E]</color> and buy the <color=yellow>Level 2 Camera</color> plus one blank <color=yellow>SD Card</color>.";
-            TutorialUIManager.Instance.ShowBossDialogue(message, TutorialUIManager.Instance.posePointUp, true, false);
-        }
+            TutorialUIManager.Instance.ShowBossDialogue("Your camera now has a thirds grid and manual focus. Keep using it! Buy one blank SD Card for practice. In the viewfinder, F2 opens settings; [ and ] pull focus.", TutorialUIManager.Instance.posePointUp, true, false);
     }
 
     private void ShowNextLevelPreparation()
@@ -957,7 +951,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac again", "- Open EQUIPMENT and review the Level 2 Camera" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac again", "- Open EQUIPMENT and review the NONY FX Camera" });
         }
     }
 
@@ -1466,6 +1460,8 @@ public class GokeLevelManager : MonoBehaviour
 
     private void StartCameraPickup()
     {
+        var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
+        if (held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem) hasPickedUpLevel2Camera = true;
         if (hasPickedUpLevel2Camera)
         {
             ShowSDCardPickupIntroduction();
@@ -1474,11 +1470,14 @@ public class GokeLevelManager : MonoBehaviour
 
         isBriefingOpen = false;
         currentStep = GokeLevelStep.PickUpCamera;
+        foreach (var camera in FindObjectsOfType<Player.Equipment.FilmCameraItem>(true))
+            if (camera.GetComponentInParent<Player.PlayerController.PlayerController>() != null)
+            { hasPickedUpLevel2Camera = true; ShowSDCardPickupIntroduction(); return; }
 
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Pick up the Level 2 Camera from the delivery table" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Pick up the NONY FX Camera from the delivery table" });
         }
     }
 
@@ -1520,7 +1519,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Select your Level 2 Camera and press <color=red>[C]</color> to insert the blank SD Card. We need that in before we can use the viewfinder or record.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Select your NONY FX Camera and press <color=red>[C]</color> to insert the blank SD Card. We need that in before we can use the viewfinder or record.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 
@@ -1532,7 +1531,7 @@ public class GokeLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Equip the Level 2 Camera", "- Press <color=red>[C]</color> to insert the SD Card" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Equip the NONY FX Camera", "- Press <color=red>[C]</color> to insert the SD Card" });
         }
     }
 
@@ -1549,23 +1548,31 @@ public class GokeLevelManager : MonoBehaviour
                 Color.green, "CAMERA");
             steps.Add(new GuidedPracticeLesson.Step(
                 "Bring the camera to the green CAMERA circle. The lights can stay where they are while we try our framing.",
-                "Equip the Level 2 Camera and stand on the CAMERA circle",
+                "Equip the NONY FX Camera and stand on the CAMERA circle",
                 () => GuidedPracticeLesson.AtMarker(cameraPracticeMarker)));
         }
         steps.Add(new GuidedPracticeLesson.Step(
-            "Click <color=red>[Left Click]</color> to open the viewfinder. Its grid divides the picture into thirds.",
-            "[Left Click] Open the Level 2 Camera viewfinder",
+            "Click <color=red>[Left Click]</color> to open the viewfinder. Next, enable the optional grid in F2 settings.",
+            "[Left Click] Open the NONY FX Camera viewfinder",
             () => cameraPracticeViewOpen));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Press F2 to open camera settings. Select Grid and press Right to turn it ON. Changes appear immediately. F2 closes settings.",
+            "[F2] Settings > Grid > ON",
+            () => { var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>(); return held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem camera && camera.GridEnabled; }));
         steps.Add(new GuidedPracticeLesson.Step(
             "Place the product where two grid lines cross. Use <color=red>[Scroll]</color> for size and <color=red>[Q/E]</color> for height. Leave room beside it for a message.",
             "Frame the product at a grid intersection and hold steady for 2 seconds",
-            () => hasCompletedRuleOfThirdsPractice));
+            () => hasCompletedRuleOfThirdsPractice, permission: "camera.frame"));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Manual focus lets you choose what is sharp. Hold [ or ] to pull focus, or open F2 and use the arrow keys. AF-C remains available. Watch the product become sharp.",
+            "Adjust manual focus with [ / ] or F2 settings",
+            () => { var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>(); return held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem camera && camera.ManualFocusPracticed; }));
         practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
         {
             practiceLesson = null;
             if (cameraPracticeMarker != null) cameraPracticeMarker.gameObject.SetActive(false);
             ShowFramingSuccess();
-        }, cameraPracticeMarker);
+        }, cameraPracticeMarker, lockMovementAtStation: false);
     }
 
     private void StartProductionTutorial()
@@ -1633,31 +1640,11 @@ public class GokeLevelManager : MonoBehaviour
 
     private void SetupLevel2Camera()
     {
-        GameObject level2CameraPrefab = Resources.Load<GameObject>("Prefabs/Level 2 Camera Placeholder");
         ShopTerminal shopTerminal = FindObjectOfType<ShopTerminal>();
-
-        if (shopTerminal != null && level2CameraPrefab != null)
-        {
-            if (PlayerPrefs.GetInt("Level2CameraPurchased", 0) == 1)
-            {
-                shopTerminal.RestoreLevel2Camera(level2CameraPrefab);
-                level2CameraItemIndex = shopTerminal.availableItems.FindIndex(item => item.itemName == "LEVEL 2 CAMERA");
-            }
-            else
-            {
-                level2CameraItemIndex = shopTerminal.SetupLevel2Camera(level2CameraPrefab);
-            }
-
-            sdCardItemIndex = shopTerminal.availableItems.FindIndex(item => item.itemName.Contains("SD"));
-            lightItemIndex = shopTerminal.availableItems.FindIndex(item => item.itemName == "160 LED PANEL");
-
-            if (sdCardItemIndex == -1) Debug.LogWarning("SD Card could not be found in the Equipment Shop.");
-            if (lightItemIndex == -1) Debug.LogWarning("160 LED Panel could not be found in the Equipment Shop.");
-        }
-        else
-        {
-            Debug.LogWarning("Level 2 Camera could not be added to the Equipment Shop.");
-        }
+        if (shopTerminal == null) return;
+        shopTerminal.RestoreProductionCamera();
+        sdCardItemIndex = shopTerminal.availableItems.FindIndex(item => item.itemName.Contains("SD"));
+        lightItemIndex = shopTerminal.availableItems.FindIndex(item => item.itemName == "160 LED PANEL");
     }
 
     private void CreateLightingPractice()
@@ -1866,3 +1853,4 @@ public class GokeLevelManager : MonoBehaviour
         }
     }
 }
+

@@ -162,6 +162,13 @@ public sealed class ProductModelCatalog : ScriptableObject
         var seat = new GameObject("Seat Anchor").transform;
         seat.SetParent(root.transform, false);
         seat.localPosition = catalog.practiceChairSeatOffset;
+        // The imported stool is resized above; its old fixed anchor can end up inside it.
+        // Keep the authored horizontal alignment and place the contact point on the seat.
+        var seatBounds = bounds;
+        foreach (var renderer in renderers)
+            if (renderer.name.IndexOf("seat", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            { seatBounds = renderer.bounds; break; }
+        seat.position = new Vector3(seat.position.x, Mathf.Max(seat.position.y, seatBounds.max.y), seat.position.z);
         seat.localRotation = Quaternion.Euler(catalog.practiceChairRotation);
         var interaction = root.AddComponent<Contract4Interactable>();
         interaction.action = Contract4Interactable.Action.Sit;

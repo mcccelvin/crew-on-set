@@ -185,7 +185,14 @@ public class TutorialUIManager : MonoBehaviour
             bossRevealCoroutine = null;
         }
 
-        if (bossHUDCanvas != null) bossHUDCanvas.SetActive(true);
+        if (bossHUDCanvas != null)
+        {
+            bossHUDCanvas.SetActive(true);
+            // Camera lessons can open dialogue while the viewfinder (order 150) is visible.
+            var dialogueCanvas = bossHUDCanvas.GetComponent<Canvas>() ?? bossHUDCanvas.AddComponent<Canvas>();
+            dialogueCanvas.overrideSorting = true;
+            dialogueCanvas.sortingOrder = Mathf.Max(dialogueCanvas.sortingOrder, 160);
+        }
         if (taskPanel != null) taskPanel.SetActive(false);
         if (bossText != null)
         {

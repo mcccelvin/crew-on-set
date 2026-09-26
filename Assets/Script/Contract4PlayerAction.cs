@@ -26,6 +26,7 @@ public sealed class Contract4PlayerAction : MonoBehaviour
     private float elapsed;
     private bool holdingProduct;
     private CampaignProduct claimedProduct;
+    private readonly CoffeeCharacterMotion coffeeMotion = new CoffeeCharacterMotion();
     public bool IsActive => target != null;
 
     public void Begin(Contract4Interactable item)
@@ -38,6 +39,7 @@ public sealed class Contract4PlayerAction : MonoBehaviour
         if (rig == null) { GameFeedback.Show("This action needs an active Humanoid character."); return; }
         if (item.action == Contract4Interactable.Action.Product)
         {
+            coffeeMotion.Bind(item.transform, transform);
             var product = item.GetComponent<CampaignProduct>();
             if (rig.GetBoneTransform(HumanBodyBones.RightHand) == null || product == null || !product.TryClaim(transform))
             { GameFeedback.Show("This product is unavailable or already held."); return; }
@@ -68,7 +70,7 @@ public sealed class Contract4PlayerAction : MonoBehaviour
             item.transform.SetParent(rig.GetBoneTransform(HumanBodyBones.RightHand), true);
             item.transform.localPosition = new Vector3(0, .04f, .08f);
             item.transform.localRotation = Quaternion.identity;
-            GameFeedback.Show("Holding product. [E] or [G]: return it to its mark.");
+            GameFeedback.Show(claimedProduct.IsCoffeeCup ? "Holding coffee. [C] Drink | [E/G] Return cup." : "Holding product. [E] or [G]: return it to its mark.");
             return;
         }
 
@@ -127,10 +129,7 @@ public sealed class Contract4PlayerAction : MonoBehaviour
         Muscle("Right Forearm Stretch", -.6f, weight);
         if (sit)
         {
-            Muscle("Left Upper Leg Front-Back", .75f, weight);
-            Muscle("Right Upper Leg Front-Back", .75f, weight);
-            Muscle("Left Lower Leg Stretch", -.8f, weight);
-            Muscle("Right Lower Leg Stretch", -.8f, weight);
+            CoffeeCharacterMotion.SeatPose(ref pose, weight);
         }
         else if (target.action == Contract4Interactable.Action.Machine)
         {
@@ -144,8 +143,15 @@ public sealed class Contract4PlayerAction : MonoBehaviour
             var hips = rig.GetBoneTransform(HumanBodyBones.Hips);
             Vector3 offset = (target.SeatPosition + Vector3.up * .08f - hips.position) * weight;
             rig.transform.position += offset;
+            CoffeeCharacterMotion.SeatFeet(rig, transform, target.SeatPosition, weight);
             if (cameraTransform != null)
                 cameraTransform.position = cameraTransform.parent.TransformPoint(cameraPosition) + offset;
+        }
+        if (holdingProduct && claimedProduct != null && claimedProduct.IsCoffeeCup)
+        {
+            var keys = UnityEngine.InputSystem.Keyboard.current;
+            if (keys != null && keys.cKey.wasPressedThisFrame && !Cursor.visible) coffeeMotion.Drink();
+            coffeeMotion.ApplyCup(rig, transform, target.transform, Time.deltaTime);
         }
         if (target.action == Contract4Interactable.Action.Machine && elapsed >= 3f)
         { Finish(); GameFeedback.Show("Coffee machine action complete."); }
@@ -154,6 +160,7 @@ public sealed class Contract4PlayerAction : MonoBehaviour
     public void Finish()
     {
         if (handler == null) return;
+        coffeeMotion.Reset();
         CoffeeActionAudio.End(gameObject);
         if (holdingProduct && target != null) GameplayAudioManager.Play("Mug on Table");
         if (holdingProduct)

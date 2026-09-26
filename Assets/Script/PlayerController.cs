@@ -16,6 +16,16 @@ namespace Player.PlayerController
         [SerializeField] private Transform CharacterHoldPoint;
         [SerializeField, Min(0.5f)] private float CharacterHeight = ProductModelCatalog.StandardCharacterHeight;
         private Animator characterAnimator;
+        private PlayerCameraPose cameraHoldingPose;
+        private UnityEngine.Camera heldViewCamera;
+        private float heldViewNearClip;
+
+        private void RestoreHeldViewClip()
+        {
+            if (heldViewCamera == null) return;
+            heldViewCamera.nearClipPlane = heldViewNearClip;
+            heldViewCamera = null;
+        }
         private bool appearanceInitialized;
         [SerializeField] private float UpperLimit = -40f;
         [SerializeField] private float LowerLimit = 70f;
@@ -189,6 +199,7 @@ namespace Player.PlayerController
 
         private void Update()
         {
+            if (!PauseManager.isPaused) cameraHoldingPose?.RestoreAnimation();
             if (inputManager == null) return;
             if (!MovementAllowed)
             {
@@ -207,6 +218,29 @@ namespace Player.PlayerController
         {
             if (PauseManager.isPaused) return;
             CamMovement();
+            var held = equipmentInteractor != null ? equipmentInteractor.GetHeldItem() as Equipment.FilmCameraItem : null;
+            if (StationaryAction || held == null || !held.transform.IsChildOf(transform))
+            {
+                cameraHoldingPose?.Reset();
+                RestoreHeldViewClip();
+                return;
+            }
+            if (Camera == null) return;
+            held.UpdateHandheldPose(Camera);
+            if (heldViewCamera == null)
+            {
+                heldViewCamera = Camera.GetComponent<UnityEngine.Camera>();
+                if (heldViewCamera != null)
+                {
+                    heldViewNearClip = heldViewCamera.nearClipPlane;
+                    heldViewCamera.nearClipPlane = Mathf.Min(heldViewNearClip, .025f);
+                }
+            }
+            if (animator != null && animator.isHuman && animator.avatar != null)
+            {
+                if (cameraHoldingPose == null) cameraHoldingPose = new PlayerCameraPose(animator);
+                cameraHoldingPose.Apply(held.RightHandGrip, held.LeftHandGrip, Camera.rotation);
+            }
         }
 
         private void Move()
@@ -330,6 +364,8 @@ namespace Player.PlayerController
 
         private void OnDisable()
         {
+            RestoreHeldViewClip();
+            cameraHoldingPose?.RestoreAnimation();
             jumpBufferCounter = coyoteCounter = 0f;
             currentVelocity = Vector2.zero;
             if (playerRigidbody != null)

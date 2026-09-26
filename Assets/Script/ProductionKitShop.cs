@@ -15,8 +15,7 @@ public sealed class ProductionKitShop : MonoBehaviour
         var catalog=shop.gameObject.AddComponent<ProductionKitShop>();catalog.shop=shop;catalog.Build();
     }
     // Reserved assets: enable only after a level has a dedicated guided lesson.
-    public static bool HasEquipmentLesson(int level) => level == 3 &&
-        Level3Manager.Instance != null && Level3Manager.Instance.RimEquipmentAvailable;
+    public static bool HasEquipmentLesson(int level) => false;
     public static bool HasCameraGripLesson(int level) => false;
     void Build()
     {

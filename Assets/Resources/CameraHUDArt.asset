@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: be452b7a4bf84f5cba2b4d01a5dd5979, type: 3}
+  m_Name: CameraHUDArt
+  m_EditorClassIdentifier: 
+  focusArea: {fileID: 2800000, guid: 4ab2f75eaa3057041b0b9cba1238479b, type: 3}
+  exposure: {fileID: 2800000, guid: 647b60a0dd46cd94684f7f2241aa41b5, type: 3}

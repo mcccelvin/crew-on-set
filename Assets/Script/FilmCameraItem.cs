@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace Player.Equipment
 {
     [DefaultExecutionOrder(100)]
-    public class FilmCameraItem : Equipment
+    public partial class FilmCameraItem : Equipment
     {
         [Header("Film Camera Settings")]
         [SerializeField] private Camera filmCamera;
@@ -149,10 +149,9 @@ namespace Player.Equipment
 
             if (trackingSquare != null) trackingSquareImage = trackingSquare.GetComponent<Image>();
             CacheTargetSubject();
-            isLevel2Camera = EquipmentName == "Level 2 Camera";
+            isLevel2Camera = CameraFeatureUnlocks.ManualFocus;
             if (isLevel2Camera)
             {
-                ConfigureLevel2Camera();
                 CreateRuleOfThirdsGrid();
             }
         }
@@ -407,12 +406,13 @@ namespace Player.Equipment
 
         private void OpenViewfinder(Camera playerCamera)
         {
-            HideCameraBody();
             isCameraActive = true;
             viewfinderAimCamera = playerCamera;
             viewfinderPoseInitialized = false;
+            MatchPlayerCameraLook(playerCamera);
+            HideCameraBody();
 
-            if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(isCameraActive);
+            RefreshGridVisibility();
 
             if (TutorialManager.Instance != null)
             {
@@ -426,12 +426,15 @@ namespace Player.Equipment
                 if (playerCamera != null) filmCamera.depth = playerCamera.depth + 1;
             }
             if (filmUICanvas != null) filmUICanvas.SetActive(isCameraActive);
+            OpenDynamicHUD();
 
             TogglePlayerUI(!isCameraActive);
         }
 
         private void CloseViewfinder()
         {
+            settingsOpen = false;
+            if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 0;
             CancelViewTransition();
             RestoreCameraBody();
             viewfinderPoseInitialized = false;
@@ -443,6 +446,7 @@ namespace Player.Equipment
             }
             lensControlsInitialized = false;
             bool ownedCameraView = isCameraActive;
+            if (ownedCameraView && dynamicHUD != null) dynamicHUD.Hide();
             isCameraActive = false;
             if (filmCamera != null) filmCamera.gameObject.SetActive(false);
             if (ruleOfThirdsGrid != null) ruleOfThirdsGrid.SetActive(false);
@@ -476,6 +480,7 @@ namespace Player.Equipment
                 lensControlsInitialized = false;
                 return;
             }
+            ReadCameraSettings();
             if (!lensControlsInitialized)
             {
                 targetFOV = filmCamera.fieldOfView;
@@ -522,10 +527,14 @@ namespace Player.Equipment
         {
             if (!isCameraActive || filmCamera == null || PauseManager.isPaused) return;
             UpdateStableViewfinderPose();
+            RefreshGridVisibility();
+            HideCameraBody();
             // Only advance lessons/recording checks when normal equipment input ran this frame.
             if (heldUpdateFrame != Time.frameCount) return;
             HandleSmoothAutoFocus();
+            ApplyCameraLook();
             UpdateCameraHUD();
+            RefreshDynamicHUD();
             UpdateTrackingSquare();
             UpdateRuleOfThirdsPractice();
 
@@ -560,7 +569,8 @@ namespace Player.Equipment
 
         private void UpdateRuleOfThirdsPractice()
         {
-            if (!isLevel2Camera || filmCamera == null || GokeLevelManager.Instance == null) return;
+            if (!CameraFeatureUnlocks.ManualFocus || filmCamera == null || GokeLevelManager.Instance == null) return;
+            if (!GridEnabled) { GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false); return; }
 
             if (targetSubject == null) CacheTargetSubject();
             if (targetSubject == null)
@@ -656,7 +666,7 @@ namespace Player.Equipment
 
         private void HandleSmoothAutoFocus()
         {
-            if (filmCamera == null) return;
+            if (filmCamera == null || ApplyManualFocus()) return;
 
             if (Physics.Raycast(filmCamera.transform.position, filmCamera.transform.forward, out RaycastHit hit, 100f))
             {
@@ -689,32 +699,21 @@ namespace Player.Equipment
                 return;
             }
             if (!opening) CloseViewfinder();
-            animationParent = transform.parent;
-            restingPosition = transform.localPosition;
-            restingRotation = transform.localRotation;
-            hasAnimationPose = true;
             viewTransition = StartCoroutine(AnimateViewTransition(playerCamera, opening));
         }
 
         private System.Collections.IEnumerator AnimateViewTransition(Camera playerCamera, bool opening)
         {
-            // Raise the held model toward the eye, without moving the player or recording lens.
-            Vector3 raisedPosition = animationParent.InverseTransformPoint(playerCamera.transform.position
-                + playerCamera.transform.forward * 0.32f - playerCamera.transform.up * 0.1f);
-            Quaternion raisedRotation = restingRotation * Quaternion.Euler(-6f, 0f, 0f);
-            float duration = opening ? 0.24f : 0.2f;
+            float duration = opening ? .24f : .2f;
             float elapsed = 0f;
             while (elapsed < duration)
             {
                 float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
-                float amount = opening ? t : 1f - t;
-                transform.localPosition = Vector3.Lerp(restingPosition, raisedPosition, amount);
-                transform.localRotation = Quaternion.Slerp(restingRotation, raisedRotation, amount);
+                holdingRaise = opening ? t : 1f - t;
                 yield return null;
-                // Pause freezes the animation too; it must not finish behind the pause menu.
                 if (!PauseManager.isPaused) elapsed += Time.deltaTime;
             }
-            RestoreHeldPose();
+            holdingRaise = opening ? 1f : 0f;
             viewTransition = null;
             if (opening) OpenViewfinder(playerCamera);
         }
@@ -731,6 +730,7 @@ namespace Player.Equipment
 
         private void CancelViewTransition()
         {
+            holdingRaise = 0f;
             if (viewTransition != null) StopCoroutine(viewTransition);
             viewTransition = null;
             RestoreHeldPose();
@@ -863,7 +863,7 @@ namespace Player.Equipment
                     if (viewPos.z > 0 && viewPos.x >= 0 && viewPos.x <= 1 && viewPos.y >= 0 && viewPos.y <= 1)
                     {
                         trackingSquare.gameObject.SetActive(true);
-                        trackingSquare.position = screenPos;
+                        if (dynamicHUD == null) trackingSquare.position = screenPos;
 
                         Bounds bounds = rends[0].bounds;
                         foreach (Renderer r in rends) bounds.Encapsulate(r.bounds);
@@ -882,7 +882,7 @@ namespace Player.Equipment
 
                         foreach (Vector3 corner in trackingCorners)
                         {
-                            Vector3 screenCorner = filmCamera.WorldToScreenPoint(corner);
+                            Vector3 screenCorner = dynamicHUD != null ? filmCamera.WorldToViewportPoint(corner) : filmCamera.WorldToScreenPoint(corner);
                             minX = Mathf.Min(minX, screenCorner.x);
                             minY = Mathf.Min(minY, screenCorner.y);
                             maxX = Mathf.Max(maxX, screenCorner.x);
@@ -891,12 +891,13 @@ namespace Player.Equipment
 
                         float width = maxX - minX;
                         float height = maxY - minY;
+                        if (dynamicHUD != null) dynamicHUD.PlaceTracking(trackingSquare, viewPos, width, height);
                         float padding = 40f;
 
                         width = Mathf.Clamp(width + padding, 50f, 800f);
                         height = Mathf.Clamp(height + padding, 50f, 800f);
 
-                        trackingSquare.sizeDelta = new Vector2(width, height);
+                        if (dynamicHUD == null) trackingSquare.sizeDelta = new Vector2(width, height);
 
                         Vector3 directionToTarget = targetCenter - filmCamera.transform.position;
                         float distToSub = Vector3.Distance(filmCamera.transform.position, targetCenter);
@@ -1286,7 +1287,8 @@ namespace Player.Equipment
             RecordProductionEvidence(groupViewport, allSubjectsVisible, level3Actor, productionBounds.center, campaignProduct.transform);
 
             totalCameraScoreAccumulated += Mathf.Clamp(cameraScore, 0f, 70f);
-            totalLightingScoreAccumulated += GradeLevel3Lighting(productionBounds.center);
+            // Level 4 assesses storytelling; it does not repeat the Level 3 lighting recipe.
+            totalLightingScoreAccumulated += 30f;
             framesSampled++;
         }
 
@@ -1537,7 +1539,9 @@ namespace Player.Equipment
 
             if (actor != null)
             {
-                recordedActorPose = actor.GetPoseName();
+                string pose = actor.GetPoseName();
+                if (recordingCampaignLevel != 4 || string.IsNullOrEmpty(recordedActorPose)) recordedActorPose = pose;
+                else if (recordedActorPose != pose) recordedActorPose = "Mixed";
                 recordedScreenDirectionAccumulated += GetActorScreenDirection(actor, continuityReference);
             }
         }
@@ -1821,6 +1825,8 @@ namespace Player.Equipment
 
         private void OnDestroy()
         {
+            if (dynamicHUD != null) Destroy(dynamicHUD.gameObject);
+            ReleaseCameraSettings();
             // The grid is parented to the shared HUD, not this equipment object.
             if (ruleOfThirdsGrid != null) Destroy(ruleOfThirdsGrid);
         }
@@ -1926,5 +1932,7 @@ namespace Player.Equipment
     }
 
 }
+
+
 
 

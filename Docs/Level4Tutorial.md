@@ -1,17 +1,14 @@
-# Level 4: actor and environment practice
+# Level 4: performance and elliptical editing
 
-`CampaignLevelManager.StartActorEnvironmentLesson` runs before the first Contract 4 offer. The existing guided lesson presents a short boss explanation, then highlights each target and waits for the player to perform the action.
+The pre-acceptance chair-and-actor lesson remains unchanged: place a chair and actor from Elements, purchase the megaphone, practise cues/movement and sitting. Machine interaction remains optional discovery. Acceptance removes practice actors and chair; the player builds the commercial independently.
 
-1. Open the tablet, choose CAFE CORNER, preview it, and use its chair-only practice setup.
-2. Add and place one actor beside the imported Chair.fbx chair. Practice contains no coffee machine.
-3. Close the tablet, buy the Director Megaphone from the Equipment Shop, confirm checkout, collect its delivery, and select the actor.
-4. Cue Wave, Action, Neutral and rotation.
-5. Reposition the actor through the tablet; use megaphone START/END marks to rehearse, reset, and clear a walk.
-6. Aim at the chair to cue sitting and stop with O. Machine interaction is left for discovery during contract gameplay.
-7. Finish practice, introduce the client, and offer Contract 4. Acceptance and the existing Almanac flow lead into independent commercial gameplay.
+Contract 4's distinct focus is a three-beat story, not Level 3's soft-light/color recipe:
 
-The practice does not prescribe product placement, colors, lighting, recording, or editing. Contract requirements and grading remain unchanged. Accepted checkpoints start gameplay without replaying this lesson.
+1. Choose Plain Backdrop or Coffee Interior, one actor, coffee product and usable chair. User-authored transforms and colors are preserved.
+2. Record separate takes of Wave, Action (or Using Machine), then Sitting. Keep the actor and coffee visible, and the same performance throughout each take. Record at least five seconds per take for trimming.
+3. Join three different takes in that order from 0s. Each beat lasts at least two seconds; no gaps or overlaps. Target 15 seconds, within 0.5s.
+4. Place a brand graphic across the final two seconds. Static graphics count. Shot sizes, light model, paint, music, transitions and grading are creative choices.
 
-`DirectorTerminal` exposes the Cafe Corner highlight and permits its use during actor practice without saving ownership. The first actor is free during practice. The tutorial gates actions to the current lesson step while leaving movement available. The megaphone is bought through the normal shop checkout, which records ownership and delivers it like other equipment.
+CoffeeStoryRules shares beat identification and editor/grader validation. FilmCameraItem records Mixed if the performance changes within a take. CoffeeStoryEditLesson introduces elliptical editing: omit the uneventful time between story moments.
 
-Validation: editor and standalone-player reference compilation. In-game highlight layout and the complete lesson require manual testing.
+Earlier levels and multiplayer-specific role/tutorial logic are not redesigned. No scenes, prefabs, product catalogs or set transforms are changed.

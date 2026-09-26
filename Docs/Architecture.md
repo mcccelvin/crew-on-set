@@ -1,5 +1,9 @@
 # Project map
 
+Camera viewfinder: `CameraHUDController`, `FilmCameraItem.HUD.cs` and `Editor/CameraHUDBuilder` own the dynamic CAM FX3 display and inset live image. `Resources/CameraHUDArt.asset` holds the exported PSD artwork references. See `Docs/CameraViewfinder.md` for single-player and multiplayer bindings and prefab authoring.
+
+Camera holding: `FilmCameraItem.Holding.cs` positions the physical camera from player aim and exposes adjustable grip offsets. `PlayerController.LateUpdate` applies `PlayerCameraPose` arm solving after locomotion/look and before the recording lens update. The procedural pose uses the existing humanoid bones; it needs no replacement animation clips or controller. Mounted cameras and stationary interactions skip the handheld pose.
+
 Read the row relevant to the task, then search its entry points. Paths below are relative to the project root. Most first-party gameplay code is still in `Assets/Script`; this map groups responsibilities without moving serialized assets.
 
 | Area | Start here | Related code / detail |
@@ -7,7 +11,7 @@ Read the row relevant to the task, then search its entry points. Paths below are
 | Save slots and accounts | `GameSaveManager.cs`, `GameSaveMenu.cs` | `GameSaveRepository.cs`, `GameSavePrefs.cs`, `LegacyGameSave.cs`, `SaveLoadPanelHost.cs`; `Docs/SaveGames.md` |
 | Login / registration | `Assets/UI/Scripts/AccountManager.cs` | Login assigns identity through `GameSaveManager.SetAccount`; account sign-in button is repurposed by `SaveLoadPanelHost` |
 | Menu routes / multiplayer | `SceneController.cs`, `Multiplayer/GameSetupMenu.cs` | `Multiplayer/LobbyManager.cs`; keep Photon host/join separate from single-player save slots |
-| Role-based crew studio | `Multiplayer/MultiplayerRoleManager.cs`, `Multiplayer/MultiplayerContractManager.cs` | `NetworkStudioFactory`, `NetworkStageObject`, `MultiplayerCrewController`, `RoleSelectionUI`; see `Docs/MultiplayerRoles.md`. Room-only budget/coverage, no career writes. |
+| Role-based crew studio | `Multiplayer/MultiplayerRoleManager.cs`, `Multiplayer/MultiplayerContractManager.cs` | `MultiplayerAuthoredUI` (Stations/Editor partials) connects copied singleplayer views to physical stations; `MultiplayerRoomActions` validates role commands. `Editor/MultiplayerAuthoredUIBuilder` generates `Resources/CrewUI` views/models, `MultiplayerUIReferences` stores bindings. `NetworkStudioFactory`/`NetworkStageObject` replicate equipment, actors and sets; `MultiplayerRecording` transfers rushes. See `Docs/MultiplayerRoles.md`. |
 | Settings / pause | `PauseManager.cs`, `SharedOptionsPanel.cs` | `MainMenuOptionsHost.cs` attaches the same view in the main menu; `GameOptions.cs` applies global settings |
 | Campaign / rewards | `CampaignLevelManager.cs`, `CampaignProgression.cs`, `CareerManager.cs` | `ProductionEconomy.cs`, `ContractGrader.cs`; `Docs/ProductionEconomy.md` |
 | First commercial tutorial | `TutorialManager.cs` | `TutorialUIManager.cs` owns boss dialogue, hints and interaction restrictions |
@@ -17,7 +21,7 @@ Read the row relevant to the task, then search its entry points. Paths below are
 | Stage / director tablet | `DirectorTerminal.cs`, `UIDragProp.cs` | `StageInterior.cs`, `ImportedProductVisual.cs`; `Docs/DirectorTablet.md`, `Docs/StageInteriors.md`, `Docs/ProductModels.md` |
 | Equipment shop / delivery | `ShopManager.cs`, `ShopTerminal.cs`, `EquipmentInteractor.cs`, `ActorMegaphoneItem.cs` | `ProductionKit.cs`, `ProductionKitShop.cs`, `ProductionEconomy.cs` |
 | Lighting / grip | `FilmLightItem.cs`, `StageLightStrip.cs`, `StudioLightHaze.cs` | `ProductionLightModifiers.cs`, `ProductionExposureMonitor.cs`, `AutomotiveGrip.cs` |
-| Camera / SD / recordings | `FilmCameraItem.cs`, `ComputerStation.cs`, `ComputerUIManager.cs` | Follow recording and inventory callers before changing media transfer |
+| Camera / SD / recordings | `FilmCameraItem.cs`, `FilmCameraItem.Settings.cs`, `CameraFeatureUnlocks.cs`, `ComputerStation.cs`, `ComputerUIManager.cs` | One career camera: L1 autofocus, L2 manual focus/thirds, L3 white balance, L4 exposure. F2 settings, arrows adjust, brackets pull focus. Settings use GameSavePrefs; camera-only URP overrides also affect recorded footage. Legacy camera IDs remain compatible; shop restores the base camera instead of selling upgrades. Follow recording and inventory callers before changing media transfer |
 | Editing / playback | `EditorManager.cs`, `TruePixelPlayer.cs`, `CommercialCompiler.cs` | `EditorTutorialManager.cs`, `DraggableClip.cs`, `ClipInspector.cs`, `ProjectDataManager.cs` |
 | Branding / color | `BrandingBinManager.cs`, `DraggableOverlay.cs`, `BrandingClip.cs` | `ColorGradingManager.cs`, `ContractGrader.cs`; timing must agree with playback and grading |
 | Gameplay HUD | `CareerManager.ConfigureGameplayHUD`, `HotbarUIManager` | Almanac PSD book icon above balance; P shortcut; dark slots with selected outline. Artwork key: `almanacHud`. |

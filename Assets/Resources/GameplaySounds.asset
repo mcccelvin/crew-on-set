@@ -112,31 +112,31 @@ MonoBehaviour:
   - name: Boss / Voice 1
     key: Voice 1
     variants:
-    - {fileID: 8300000, guid: 142f164f987e8c14e9439793a6db93d4, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Boss / Voice 2
     key: Voice 2
     variants:
-    - {fileID: 8300000, guid: ccbca774fb13306449dd7f2bbea30e3b, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Boss / Voice 3
     key: Voice 3
     variants:
-    - {fileID: 8300000, guid: aeb04a813036dea4591420e538168713, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Boss / Voice 4
     key: Voice 4
     variants:
-    - {fileID: 8300000, guid: 5296e2c492f5254479512ae946c1b567, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Boss / Voice 5
     key: Voice 5
     variants:
-    - {fileID: 8300000, guid: 126fe69e5862b78438ceb50a2d9ad6ed, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Boss / Voice 6
     key: Voice 6
     variants:
-    - {fileID: 8300000, guid: ee7a72a16b59a33488f9996fe907b25c, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Boss / Voice 7
     key: Voice 7
     variants:
-    - {fileID: 8300000, guid: e9171eb157642864fa360aa8bd42caf6, type: 3}
+    - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - name: Music / Level 1
     key: BG Music by Andrii
     variants:
@@ -282,6 +282,7 @@ MonoBehaviour:
   - {fileID: 8300000, guid: 274649b0e221539409070ebf6c18918b, type: 3}
   - {fileID: 8300000, guid: a3194b8bbc96ef84fab1f98f4b7dae3e, type: 3}
   - {fileID: 8300000, guid: ff697d3070687ce4583faa0561a145a2, type: 3}
+  - {fileID: 8300000, guid: ef220ed698070834fb9d7b2c2999210f, type: 3}
   - {fileID: 8300000, guid: 1bc4447c9082cd143ab26ca69ef19c67, type: 3}
   - {fileID: 8300000, guid: 12dda9707ab2e14478a6bdffce882608, type: 3}
   - {fileID: 8300000, guid: 04ba55d7f2f70cc41a3f7e5cb7b7c635, type: 3}

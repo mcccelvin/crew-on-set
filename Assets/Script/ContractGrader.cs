@@ -189,96 +189,19 @@ public class ContractGrader : MonoBehaviour
     {
         float pre = GetPreProductionScore(out string feedback);
         float prod = GetProductionScore(avgCam, avgLight);
+        var editor = EditorManager.Instance;
+        var story = CoffeeStoryRules.Evaluate(editor != null ? editor.timelineContainer : null,
+            editor != null ? editor.pixelsPerSecond : 40f);
         float post = 100f;
-        List<DraggableClip> clips = GetCampaignClips(4);
-
-        bool hasWideShot = HasShotType(clips, 1);
-        bool hasMediumShot = HasShotType(clips, 2);
-        bool hasCloseShot = HasShotType(clips, 3);
-        bool hasMinimumClips = clips.Count >= 3;
-        bool hasShotSequence = hasWideShot && hasMediumShot && hasCloseShot;
-        bool hasConsistentDirection = HasConsistentScreenDirection(clips);
-        bool hasVisibleSubjects = HaveVisibleRequiredSubjects(clips);
-        bool hasActorPose = HasConsistentActorPose(clips);
-        bool hasSoftLight = HasSoftLight(clips);
-        bool contractRequirementsMet = IsRequiredSetupComplete() && hasMinimumClips && hasShotSequence && hasConsistentDirection && hasVisibleSubjects && hasActorPose && hasSoftLight;
-
-        AddProductionFeedback(GameLevel.Level4, avgCam, avgLight, ref feedback);
-        feedback += "<color=white><b>--- POST-PRODUCTION ---</b></color>\n";
-
-        if (Mathf.Abs(totalSeconds - 15f) <= 1.5f) feedback += "<color=green>+ The daily-story commercial meets the 15-second brief.</color>\n";
-        else
-        {
-            post -= 15f;
-            feedback += $"<color=red>- Timing: Target 15.0 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
-        }
-
-        if (hasMinimumClips) feedback += "<color=green>+ At least three separate takes are used.</color>\n";
-        else
-        {
-            post -= 15f;
-            feedback += $"<color=red>- Coverage: Use at least 3 clips. Found {clips.Count}.</color>\n";
-        }
-
-        if (hasShotSequence) feedback += "<color=green>+ Establishing, medium action, and product close-up shots are present.</color>\n";
-        else
-        {
-            post -= 20f;
-            feedback += "<color=red>- Shot coverage: Include one wide, one medium, and one close-up shot.</color>\n";
-        }
-
-        if (hasConsistentDirection) feedback += "<color=green>+ Screen direction remains continuous across the action.</color>\n";
-        else
-        {
-            post -= 15f;
-            feedback += "<color=red>- Continuity: Keep the actor moving in the same screen direction across matching shots.</color>\n";
-        }
-
-        if (hasVisibleSubjects) feedback += "<color=green>+ Required subjects remain visible in every selected shot.</color>\n";
-        else
-        {
-            post -= 15f;
-            feedback += "<color=red>- Visibility: The actor or Kape Kultura product is missing or blocked in one or more shots.</color>\n";
-        }
-
-        if (hasActorPose) feedback += "<color=green>+ The actor keeps the same non-neutral action pose across the sequence.</color>\n";
-        else
-        {
-            post -= 10f;
-            feedback += "<color=red>- Match-on-action: Use the same non-neutral actor pose in every selected shot.</color>\n";
-        }
-
-        if (hasSoftLight) feedback += "<color=green>+ The Level 3 Soft Light remains consistent in every selected shot.</color>\n";
-        else
-        {
-            post -= 10f;
-            feedback += "<color=red>- Equipment: Use the Level 3 Soft Light in every Kape Kultura clip.</color>\n";
-        }
-
-        int logoCount = FindObjectsOfType<BrandingClip>(true).Length;
-        if (logoCount == 2) feedback += "<color=green>+ Correct 2-graphic Kape Kultura sequence.</color>\n";
-        else
-        {
-            post -= 15f;
-            feedback += $"<color=red>- Branding: Place 2 graphics. Found {logoCount}.</color>\n";
-        }
-
-        GradePlayerCreatedFinish(true, ref post, ref feedback);
-
-        ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
-        if (HasColorControls(grading))
-        {
-            GradeColorRange(grading.brightnessSlider.value, 0.95f, 1.15f, 10f, "Brightness", "Keep the café scene warm without losing highlight detail.", ref post, ref feedback);
-            GradeColorRange(grading.contrastSlider.value, 1.05f, 1.3f, 10f, "Contrast", "Use 1.05 to 1.30 for a natural daily-story image.", ref post, ref feedback);
-            GradeColorRange(grading.saturationSlider.value, 1.05f, 1.3f, 10f, "Saturation", "Use 1.05 to 1.30 for a warm Kape Kultura palette.", ref post, ref feedback);
-        }
-        else
-        {
-            post -= 30f;
-            feedback += "<color=red>- Color grade data is missing.</color>\n";
-        }
-
-        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(4), contractRequirementsMet);
+        feedback += "<color=white><b>--- COFFEE STORY EDIT ---</b></color>\n";
+        if (!story.beats) { post -= 40f; feedback += "- Use three distinct recordings in order: Wave greeting, Action (or Using Machine), then Sitting. Keep actor and coffee visible.\n"; }
+        else feedback += "+ Your performance has a beginning, middle and ending.\n";
+        if (!story.continuous) { post -= 20f; feedback += "- Join the three clips from 0s with no gaps or overlaps; keep each beat at least 2 seconds.\n"; }
+        if (!story.duration) { post -= 20f; feedback += "- Trim the story to 15 seconds (within 0.5s).\n"; }
+        if (!story.brand) { post -= 20f; feedback += "- Place a brand graphic over the final 2 seconds. Static graphics are welcome.\n"; }
+        feedback += "Shot sizes, set color, light model, music, transitions and color grade are creative choices, not repeated checklist requirements.\n";
+        bool complete = IsRequiredSetupComplete() && story.beats && story.continuous && story.duration && story.brand;
+        return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(4), complete);
     }
 
     private ProductionGrades GradeLevel5(float avgCam, float avgLight, float totalSeconds)
@@ -725,3 +648,4 @@ public class ContractGrader : MonoBehaviour
         };
     }
 }
+

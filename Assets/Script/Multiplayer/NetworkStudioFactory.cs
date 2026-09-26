@@ -8,6 +8,7 @@ public sealed class NetworkStudioFactory : MonoBehaviour
     public readonly Dictionary<int, NetworkStageObject> Objects = new Dictionary<int, NetworkStageObject>();
     public bool CanCreate(string kind)
     {
+        if (MultiplayerRoomActions.IsEquipment(kind)) return Resources.Load<GameObject>("CrewUI/" + kind) != null;
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         if (catalog == null) return false;
         switch (kind)
@@ -57,6 +58,28 @@ public sealed class NetworkStudioFactory : MonoBehaviour
     private GameObject Create(CrewObject item)
     {
         GameObject root = null;
+        if (MultiplayerRoomActions.IsEquipment(item.kind))
+        {
+            var prefab = Resources.Load<GameObject>("CrewUI/" + item.kind);
+            if (prefab == null) return null;
+            root = Instantiate(prefab); root.SetActive(true);
+            foreach (var rigidbody in root.GetComponentsInChildren<Rigidbody>()) { rigidbody.isKinematic = true; rigidbody.useGravity = false; }
+            if (root.GetComponentInChildren<Collider>() == null)
+            {
+                var bounds = BoundsOf(root); var box = root.AddComponent<BoxCollider>();
+                box.center = root.transform.InverseTransformPoint(bounds.center);
+                box.size = new Vector3(bounds.size.x / Mathf.Max(.001f, Mathf.Abs(root.transform.lossyScale.x)), bounds.size.y / Mathf.Max(.001f, Mathf.Abs(root.transform.lossyScale.y)), bounds.size.z / Mathf.Max(.001f, Mathf.Abs(root.transform.lossyScale.z)));
+            }
+            if (item.kind == "light")
+            {
+                foreach (var old in root.GetComponentsInChildren<Light>()) old.enabled = false;
+                var bounds = BoundsOf(root);
+                var lamp = new GameObject("Crew Spotlight").AddComponent<Light>();
+                lamp.transform.SetParent(root.transform, true); lamp.transform.position = bounds.center;
+                lamp.type = LightType.Spot; lamp.range = 20; lamp.shadows = LightShadows.Soft;
+            }
+            root.name = "Crew " + item.kind + " " + item.id; root.transform.SetParent(transform, true); return root;
+        }
         switch (item.kind)
         {
             case "actor":

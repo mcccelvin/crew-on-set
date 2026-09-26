@@ -3,6 +3,15 @@ using UnityEngine;
 public class CampaignProduct : MonoBehaviour
 {
     public int campaignLevel = 4;
+    public bool IsCoffeeCup
+    {
+        get
+        {
+            foreach (var part in GetComponentsInChildren<Transform>())
+                if (part.name.Replace(" ", "").ToLowerInvariant().Contains("cupofcoffee")) return true;
+            return false;
+        }
+    }
     public Transform Holder { get; private set; }
     public bool TryClaim(Transform holder)
     {

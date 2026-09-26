@@ -169,7 +169,9 @@ public class TruePixelRecorder : MonoBehaviour
     {
         // Use the same URP camera settings, lights and post-processing as the viewfinder.
         // The sRGB target stores display-ready bytes for JPEG and UI playback.
-        using (StudioLightHaze.HideForCapture())
+        var cameraItem = filmCamera.GetComponentInParent<Player.Equipment.FilmCameraItem>();
+        if (cameraItem != null) cameraItem.PrepareRecordingLook();
+        try
         {
             if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
             {
@@ -181,6 +183,10 @@ public class TruePixelRecorder : MonoBehaviour
                 filmCamera.targetTexture = captureTexture;
                 filmCamera.Render();
             }
+        }
+        finally
+        {
+            if (cameraItem != null) cameraItem.FinishRecordingLook();
         }
     }
 

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 // Known keys from the pre-slot game, retained for one-time local-career migration.
@@ -118,6 +118,9 @@ public static class LegacyGameSave
         if (PlayerPrefs.HasKey("LamborminiContractGraded")) values.Add(new GameSaveValue { key = "LamborminiContractGraded", kind = 0, integer = PlayerPrefs.GetInt("LamborminiContractGraded") });
         if (PlayerPrefs.HasKey("Level1RetryActive")) values.Add(new GameSaveValue { key = "Level1RetryActive", kind = 0, integer = PlayerPrefs.GetInt("Level1RetryActive") });
         if (PlayerPrefs.HasKey("Level1StartingBudgetGranted")) values.Add(new GameSaveValue { key = "Level1StartingBudgetGranted", kind = 0, integer = PlayerPrefs.GetInt("Level1StartingBudgetGranted") });
+        if (PlayerPrefs.HasKey("CameraControls.Manual")) values.Add(new GameSaveValue { key="CameraControls.Manual", kind=0, integer=PlayerPrefs.GetInt("CameraControls.Manual") });
+        foreach (string key in new[] {"CameraControls.Focus","CameraControls.WB","CameraControls.Tint","CameraControls.ISO","CameraControls.Iris","CameraControls.Shutter"})
+            if (PlayerPrefs.HasKey(key)) values.Add(new GameSaveValue { key=key, kind=1, number=PlayerPrefs.GetFloat(key) });
         if (PlayerPrefs.HasKey("Level2CameraPurchased")) values.Add(new GameSaveValue { key = "Level2CameraPurchased", kind = 0, integer = PlayerPrefs.GetInt("Level2CameraPurchased") });
         if (PlayerPrefs.HasKey("Level3LightPurchaseLessonCompleted")) values.Add(new GameSaveValue { key = "Level3LightPurchaseLessonCompleted", kind = 0, integer = PlayerPrefs.GetInt("Level3LightPurchaseLessonCompleted") });
         if (PlayerPrefs.HasKey("Level3LightPurchased")) values.Add(new GameSaveValue { key = "Level3LightPurchased", kind = 0, integer = PlayerPrefs.GetInt("Level3LightPurchased") });
@@ -133,3 +136,4 @@ public static class LegacyGameSave
         return values;
     }
 }
+
