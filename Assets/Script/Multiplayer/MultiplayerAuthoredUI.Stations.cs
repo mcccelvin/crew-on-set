@@ -60,6 +60,7 @@ public sealed partial class MultiplayerAuthoredUI
                 RefreshShop();
             });
         }
+        ShopTerminal.CompactShopCards(root.GetComponent<Canvas>());
         if (root != panels["shop"]?.transform)
             foreach (var button in root.GetComponentsInChildren<Button>(true)) button.interactable = false;
     }
@@ -120,7 +121,7 @@ public sealed partial class MultiplayerAuthoredUI
                 if (container.GetComponent<LayoutGroup>() == null) ((RectTransform)card.transform).anchoredPosition = new Vector2((index - 1) * 105, 0);
             }
         }
-        Bind(root, "WallButton", () => refs.Get<GameObject>("DirectorTerminal.interiorPicker")?.SetActive(true), "CHOOSE SET");
+        Bind(root, "WallButton", () => UITransition.Show(refs.Get<GameObject>("DirectorTerminal.interiorPicker")), "CHOOSE SET");
         Bind(root, "Clear Stage", () => Crew.Send(new CrewCommand { action = "clearStage" }));
         Bind(root, "Pose Actor Button", () => { Message = "Equip the megaphone to cue your actor."; Close(); }, "USE MEGAPHONE");
         var picker = refs.Get<GameObject>("DirectorTerminal.interiorPicker");

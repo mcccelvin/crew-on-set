@@ -13,6 +13,24 @@ MonoBehaviour:
   m_Name: ExportUIArt
   m_EditorClassIdentifier: 
   entries:
+  - key: contractArtisanOpen
+    texture: {fileID: 2800000, guid: 45b7fd5e775ec9e419707ee695ff4ff0, type: 3}
+  - key: contractGokeOpen
+    texture: {fileID: 2800000, guid: 33a48908d8f6604448cf92e6691d3b34, type: 3}
+  - key: contractKapeOpen
+    texture: {fileID: 2800000, guid: 2dcb88db7e4e3dd4e8fbf3926f57f0f9, type: 3}
+  - key: contractTerrariOpen
+    texture: {fileID: 2800000, guid: af885cf2222ce9a479d68ef39b7bd863, type: 3}
+  - key: contractArtisan
+    texture: {fileID: 2800000, guid: a906fc05ae0a4034581abe849fe449ca, type: 3}
+  - key: contractGoke
+    texture: {fileID: 2800000, guid: 2367ebce25ecb6047b1e120263225773, type: 3}
+  - key: contractTerrari
+    texture: {fileID: 2800000, guid: e70700778f85c954ca93f911239c3a2e, type: 3}
+  - key: contractKape
+    texture: {fileID: 2800000, guid: db94b6f68fcef444ea6221475bf2630d, type: 3}
+  - key: contractHaraya
+    texture: {fileID: 2800000, guid: 73ccbce7c82b5f344bc89b8b5577186d, type: 3}
   - key: equipment_low_cam
     texture: {fileID: 2800000, guid: 5266b98bd29ec554bae865059bda1712, type: 3}
   - key: equipment_mid_cam
@@ -123,3 +141,15 @@ MonoBehaviour:
     texture: {fileID: 2800000, guid: 83b829d265214da7aa757e8afeb40ce7, type: 3}
   - key: almanacHud
     texture: {fileID: 2800000, guid: 5c81f996f8b64852b68414ac57497e59, type: 3}
+  - key: profileIcon
+    texture: {fileID: 2800000, guid: bec7a409765148b4aa88ea5002a17bb6, type: 3}
+  - key: profileAccount
+    texture: {fileID: 2800000, guid: 3b06573b2774c3e469dcc0211dc2d820, type: 3}
+  - key: profileBackground
+    texture: {fileID: 2800000, guid: a65bedcfb2a6f084183893006a510adc, type: 3}
+  - key: profileLabel
+    texture: {fileID: 2800000, guid: c7fee1636e85b4245a761cef68b55adc, type: 3}
+  - key: profileBack
+    texture: {fileID: 2800000, guid: 7c625806d664273498216dc4c0f0fa66, type: 3}
+  - key: profileExit
+    texture: {fileID: 2800000, guid: a4a1a688cc58c9b418ca93009b36de9a, type: 3}

@@ -12,6 +12,22 @@ public class ColorGradingManager : MonoBehaviour
     [Header("Video Output")]
     public RawImage computerScreen;
     private Material gradingMat;
+    public DraggableClip SelectedClip { get; private set; }
+    public void SelectClip(DraggableClip clip)
+    {
+        SelectedClip = clip;
+        if (clip == null) return;
+        brightnessSlider.SetValueWithoutNotify(clip.gradeBrightness);
+        contrastSlider.SetValueWithoutNotify(clip.gradeContrast);
+        saturationSlider.SetValueWithoutNotify(clip.gradeSaturation);
+        appliedB = appliedC = appliedS = float.NaN;
+        var player = FindObjectOfType<CommercialCompiler>()?.editorPlayer;
+        if (player != null)
+            player.PlaySequence(new System.Collections.Generic.List<ClipSegment> {
+                new ClipSegment { path = clip.clipFilePath, startFrame = clip.startFrame, endFrame = clip.endFrame,
+                    uiStartX = GokeSequence.Left(clip), uiWidth = clip.GetComponent<RectTransform>().rect.width }
+            }, false, true);
+    }
 
     [Header("Sliders")]
     public Slider brightnessSlider;
@@ -72,6 +88,16 @@ public class ColorGradingManager : MonoBehaviour
     void Update()
     {
         if (brightnessSlider == null || contrastSlider == null || saturationSlider == null) return;
+        if (CampaignProgression.GetCurrentLevel() == 4)
+        {
+            bool selected = SelectedClip != null && SelectedClip.isOnTimeline;
+            brightnessSlider.interactable = contrastSlider.interactable = saturationSlider.interactable = selected;
+            if (!selected)
+            {
+                if (qualityText != null) qualityText.text = "SELECT A TIMELINE CLIP TO COLOR GRADE";
+                return;
+            }
+        }
 
         SyncNumericFields();
         ProcessTutorialTarget();
@@ -84,6 +110,12 @@ public class ColorGradingManager : MonoBehaviour
             appliedB = brightnessSlider.value;
             appliedC = contrastSlider.value;
             appliedS = saturationSlider.value;
+            if (CampaignProgression.GetCurrentLevel() == 4 && SelectedClip != null && SelectedClip.isOnTimeline)
+            {
+                SelectedClip.gradeBrightness = appliedB;
+                SelectedClip.gradeContrast = appliedC;
+                SelectedClip.gradeSaturation = appliedS;
+            }
 
             if (gradingMat != null)
             {
@@ -128,12 +160,12 @@ public class ColorGradingManager : MonoBehaviour
         }
         else if (currentLevel == 4)
         {
-            targetBrightness = 1.02f;
-            targetContrast = 1.16f;
-            targetSaturation = 1.12f;
-            brightnessTolerance = 0.07f;
-            contrastTolerance = 0.08f;
-            saturationTolerance = 0.08f;
+            targetBrightness = (BeginnerBrightnessMin + BeginnerBrightnessMax) * .5f;
+            targetContrast = (BeginnerContrastMin + BeginnerContrastMax) * .5f;
+            targetSaturation = (BeginnerSaturationMin + BeginnerSaturationMax) * .5f;
+            brightnessTolerance = (BeginnerBrightnessMax - BeginnerBrightnessMin) * .5f;
+            contrastTolerance = (BeginnerContrastMax - BeginnerContrastMin) * .5f;
+            saturationTolerance = (BeginnerSaturationMax - BeginnerSaturationMin) * .5f;
         }
         else if (currentLevel >= 5)
         {
@@ -190,7 +222,8 @@ public class ColorGradingManager : MonoBehaviour
 
         var existingMarker = slider.transform.Find("Recommended Grade Marker");
         GameObject markerObject = existingMarker != null ? existingMarker.gameObject : new GameObject("Recommended Grade Marker", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        markerObject.SetActive(true);
+        // Keep compatibility with scene/editor setup, but never display target ticks.
+        markerObject.SetActive(false);
         markerObject.layer = slider.gameObject.layer;
         markerObject.transform.SetParent(slider.transform, false);
 
@@ -207,6 +240,41 @@ public class ColorGradingManager : MonoBehaviour
     }
 
     [SerializeField] private Button compareButton, resetAllButton;
+    private Coroutine comparisonScroll;
+    public void RevealComparisonForTutorial()
+    {
+        if (compareButton == null || !isActiveAndEnabled) return;
+        var scroll = compareButton.GetComponentInParent<ScrollRect>();
+        if (scroll == null || !scroll.gameObject.activeInHierarchy) return;
+        if (comparisonScroll != null) StopCoroutine(comparisonScroll);
+        comparisonScroll = StartCoroutine(ScrollToComparison(scroll));
+    }
+
+    private System.Collections.IEnumerator ScrollToComparison(ScrollRect scroll)
+    {
+        yield return null; // Let the dialogue and panel layout settle first.
+        Canvas.ForceUpdateCanvases();
+        scroll.StopMovement();
+        float start = scroll.verticalNormalizedPosition;
+        float elapsed = 0f;
+        const float duration = .65f;
+        while (elapsed < duration && scroll != null && scroll.gameObject.activeInHierarchy)
+        {
+            if (!PauseManager.isPaused)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(elapsed / duration));
+                scroll.verticalNormalizedPosition = Mathf.Lerp(start, 0f, t);
+                scroll.StopMovement();
+            }
+            yield return null;
+        }
+        comparisonScroll = null;
+    }
+    public bool IsComparisonControl(Transform target)
+    {
+        return compareButton != null && (target == compareButton.transform || target.IsChildOf(compareButton.transform));
+    }
     [SerializeField] private Button[] resetRowButtons = new Button[3];
     private bool gradeControlsBound;
     private void BindGradeControls()
@@ -251,7 +319,7 @@ public class ColorGradingManager : MonoBehaviour
 #endif
     private void CreateQualityPanel()
     {
-        if(compareButton!=null) { BindGradeControls(); return; }
+        if(compareButton!=null) { BindGradeControls(); EnsureGradeScroll(); return; }
         Transform root=EditorManager.Instance!=null && EditorManager.Instance.colorGradingBin!=null ? EditorManager.Instance.colorGradingBin.transform : null;
         if(root==null) return;
         foreach(Transform child in root) child.gameObject.SetActive(false);
@@ -264,6 +332,90 @@ public class ColorGradingManager : MonoBehaviour
         qualityText=EditorWorkspaceUI.Label(root,"Grade status","",.03f,.01f,.97f,.10f);
         qualityText.gameObject.SetActive(false);
         BindGradeControls();
+        EnsureGradeScroll();
+    }
+
+    private void EnsureGradeScroll()
+    {
+        if (compareButton == null) return;
+        var root = compareButton.transform.parent as RectTransform;
+        if (root == null) return;
+        if (root.name == "Grade Scroll Content") { EnsureScrollingLabels(root); return; }
+        var children = new System.Collections.Generic.List<Transform>();
+        foreach (Transform child in root) children.Add(child);
+        var viewportObject = new GameObject("Grade Scroll View", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
+        var viewport = viewportObject.GetComponent<RectTransform>();
+        viewport.SetParent(root, false);
+        viewport.anchorMin = new Vector2(0f, .08f);
+        viewport.anchorMax = new Vector2(1f, .82f);
+        viewport.offsetMin = new Vector2(12f, 8f); viewport.offsetMax = new Vector2(-12f, -8f);
+        viewportObject.GetComponent<Image>().color = new Color32(29, 29, 29, 255);
+        var content = new GameObject("Grade Scroll Content", typeof(RectTransform)).GetComponent<RectTransform>();
+        content.SetParent(viewport, false);
+        content.anchorMin = new Vector2(0f, 1f); content.anchorMax = Vector2.one;
+        content.pivot = new Vector2(.5f, 1f);
+        content.sizeDelta = new Vector2(0f, 540f);
+        content.anchoredPosition = Vector2.zero;
+        foreach (var child in children)
+        {
+            // Leave the authored panel heading fixed outside the scroll viewport.
+            var heading = child.GetComponent<TMP_Text>();
+            if (heading != null && heading.text.Replace(" ", "").Trim().ToUpperInvariant() == "COLOR") continue;
+            child.SetParent(content, false);
+        }
+        var scroll = viewportObject.GetComponent<ScrollRect>();
+        scroll.viewport = viewport; scroll.content = content;
+        scroll.horizontal = false; scroll.vertical = true;
+        scroll.movementType = ScrollRect.MovementType.Clamped;
+        scroll.scrollSensitivity = 32f;
+        scroll.verticalNormalizedPosition = 1f;
+        var sliders = new[] { brightnessSlider, contrastSlider, saturationSlider };
+        for (int i = 0; i < sliders.Length; i++)
+        {
+            var slider = sliders[i];
+            if (slider == null) continue;
+            float top = -20f - i * 150f;
+            PlaceGradeControl((RectTransform)slider.transform, .04f, .74f, top - 64f, 30f);
+            if (valueInputs[i] != null) PlaceGradeControl((RectTransform)valueInputs[i].transform, .65f, .96f, top, 34f);
+            if (resetRowButtons[i] != null) PlaceGradeControl((RectTransform)resetRowButtons[i].transform, .78f, .96f, top - 64f, 30f);
+            foreach (var label in slider.GetComponentsInChildren<TMP_Text>(true))
+            {
+                string name = label.text.Trim().ToUpperInvariant();
+                if (name != "BRIGHTNESS" && name != "CONTRAST" && name != "SATURATION") continue;
+                label.transform.SetParent(content, false);
+                PlaceGradeControl(label.rectTransform, .04f, .62f, top, 34f);
+                label.raycastTarget = false;
+            }
+        }
+        PlaceGradeControl((RectTransform)compareButton.transform, .04f, .48f, -478f, 40f);
+        PlaceGradeControl((RectTransform)resetAllButton.transform, .52f, .96f, -478f, 40f);
+        EnsureScrollingLabels(content);
+    }
+    private void EnsureScrollingLabels(RectTransform content)
+    {
+        var backdrop = content.parent.GetComponent<Image>();
+        if (backdrop != null) backdrop.color = new Color32(29, 29, 29, 255);
+        string[] names = { "BRIGHTNESS", "CONTRAST", "SATURATION" };
+        for (int i = 0; i < names.Length; i++)
+        {
+            string objectName = names[i] + " Scroll Label";
+            if (content.Find(objectName) != null) continue;
+            // Replace any old text labels; artwork labels behind the viewport are covered.
+            foreach (var old in content.GetComponentsInChildren<TMP_Text>(true))
+                if (old.text.Trim().ToUpperInvariant() == names[i]) old.gameObject.SetActive(false);
+            var label = EditorWorkspaceUI.Label(content, objectName, names[i], 0, 0, 1, 1);
+            label.font = TMP_Settings.defaultFontAsset;
+            label.fontSize = 22f; label.fontStyle = FontStyles.Bold;
+            label.color = Color.white; label.raycastTarget = false;
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            PlaceGradeControl(label.rectTransform, .04f, .62f, -20f - i * 150f, 34f);
+        }
+    }
+    private static void PlaceGradeControl(RectTransform rect, float left, float right, float top, float height)
+    {
+        rect.anchorMin = new Vector2(left, 1f); rect.anchorMax = new Vector2(right, 1f);
+        rect.pivot = new Vector2(.5f, 1f); rect.localScale = Vector3.one;
+        rect.offsetMin = new Vector2(0f, top - height); rect.offsetMax = new Vector2(0f, top);
     }
     private void BuildGradeRow(Transform root,Slider slider,string label,int index,float bottom)
     {

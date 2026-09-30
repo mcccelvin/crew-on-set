@@ -9,6 +9,8 @@ public class Level3Manager : MonoBehaviour
 {
     public static Level3Manager Instance;
     private bool rimLessonStarted;
+    private bool cameraPracticeActive;
+    public bool RecordingBlockedByPractice => cameraPracticeActive || lightingPracticeRoot != null;
     public bool RimEquipmentAvailable { get; private set; }
     private float rimSetupReadySince = -1f;
 
@@ -55,6 +57,7 @@ public class Level3Manager : MonoBehaviour
 
     private void BeginCameraMovementLesson(bool afterLightPlacement = false)
     {
+        cameraPracticeActive = true;
         rimLessonStarted=true;
         var inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
         Vector3 previousPosition = Vector3.zero;
@@ -65,7 +68,11 @@ public class Level3Manager : MonoBehaviour
             new GuidedPracticeLesson.Step("Your Soft Light is placed at 3200K for a warm look. Now pick up your camera with <color=yellow>[E]</color> and select its hotbar slot. If it is already in your inventory, just equip it. We'll practice smooth movement before recording.","Pick up and equip your camera",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem),
             new GuidedPracticeLesson.Step("Next, pick up a blank SD card with <color=yellow>[E]</color>. It stores one recording. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect a blank SD card",()=>inventory != null && inventory.HasBlankSDCard()),
             new GuidedPracticeLesson.Step("Select your camera and click <color=yellow>Left Mouse Button</color> to open the viewfinder. Look through it to frame the lit subject before practicing movement.","Equip camera and click LMB to open the viewfinder",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive()),
-            new GuidedPracticeLesson.Step("White balance is now unlocked. Press F2, select White balance with Up/Down, then adjust with Left/Right. This changes the camera image: lower Kelvin cools it, higher warms it. Compare it with your warm light.","Adjust camera white balance in F2 settings",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem wbCamera && wbCamera.WhiteBalancePracticed),
+            new GuidedPracticeLesson.Step("White balance changes how the camera renders color; it does not change the lamps. Let's compare two settings on this practice subject. Press F2 to open camera settings.", "[F2] Open camera settings", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.SettingsOpen),
+            new GuidedPracticeLesson.Step("Select WHITE BALANCE with Up/Down. Use Left/Right to set 3200K. Look at the subject and remember its color at this setting.", "Set WHITE BALANCE to 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
+            new GuidedPracticeLesson.Step("Now raise white balance to 6500K with Right Arrow. Watch the image become warmer even though the lamps have not changed.", "Raise WHITE BALANCE to 6500K and compare", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 6500f) < 50f),
+            new GuidedPracticeLesson.Step("Return to 3200K with Left Arrow. Notice the cooler result compared with 6500K. Judge the subject's colors, not just the number: white balance is a camera adjustment, not lamp brightness.", "Return WHITE BALANCE to 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
+            new GuidedPracticeLesson.Step("Press F2 to close settings. Keep the viewfinder open so we can practice steady movement next.", "[F2] Close camera settings", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && !camera.SettingsOpen),
             new GuidedPracticeLesson.Step("Keep the viewfinder open. Hold <color=yellow>Ctrl</color> while moving with WASD, and turn gently with the mouse. Ctrl slows walking and looking for a steady shot. Practice for five seconds while keeping the lit subject framed; then I'll come back. We are rehearsing, so do not record yet.","Keep viewfinder open; practice Ctrl + WASD for 5 seconds",()=>
             {
                 var keys = UnityEngine.InputSystem.Keyboard.current;
@@ -84,10 +91,11 @@ public class Level3Manager : MonoBehaviour
                 trackingMovement = true;
                 return practiceSeconds >= 5f;
             }),
-            new GuidedPracticeLesson.Step("Use three SD cards for three different views: back, side and overall. Record about 7 seconds for each view. For a moving take, hold Ctrl before pressing WASD, keep the car framed, release WASD first, let the camera settle, then stop recording. The editor provides a 2-second Terrari intro and 2-second outro, making a 25-second commercial.","Continue to finish the camera-movement lesson",()=>true)
+            new GuidedPracticeLesson.Step("Good practice! You've compared white balance and tried steady movement. When filming, start gently, keep your subject framed, and let the camera settle before stopping. We'll discuss the next job after you accept its contract.","Finish the camera practice",()=>true)
         },()=>
         {
             practiceLesson=null;
+            cameraPracticeActive = false;
             PlayerPrefs.SetInt("Level3CameraMovementLessonComplete",1);
             PlayerPrefs.Save();
             if (afterLightPlacement) ShowLightingPracticeComplete();
@@ -126,6 +134,18 @@ public class Level3Manager : MonoBehaviour
     private ContractUIManager contractUIManager;
     private int level3LightItemIndex = -1;
     private FilmLightItem practiceLight;
+    private int threePointRole;
+    private FilmLightItem collectedBackLight;
+    private Vector3 practiceFront;
+    private Vector3 practiceRight;
+    private float practiceFrontDistance;
+    private float practiceSideDistance;
+    private FilmLightItem purchasedPracticeLight;
+    private readonly List<FilmLightItem> threePointPracticeLights = new List<FilmLightItem>();
+    private readonly List<GameObject> loanLights = new List<GameObject>();
+    private string PracticeRole => threePointRole == 0 ? "Soft Key" : threePointRole == 1 ? "Soft Fill" : "Soft Back";
+    private float PracticeIntensity => threePointRole == 0 ? 75f : threePointRole == 1 ? 40f : 60f;
+    private float PracticeDiffusion => threePointRole == 0 ? 75f : threePointRole == 1 ? 100f : 25f;
     private GuidedPracticeLesson practiceLesson;
     private GameObject lightingPracticeRoot;
     private GameObject lightingPracticeWall;
@@ -146,6 +166,7 @@ public class Level3Manager : MonoBehaviour
 
     private void OnDestroy()
     {
+        foreach (var loan in loanLights) if (loan != null) Destroy(loan);
         practiceLesson?.Release();
         CleanUpLightingPractice();
         if (Instance == this) Instance = null;
@@ -335,6 +356,16 @@ public class Level3Manager : MonoBehaviour
 
     public bool CanBuyItem(int itemIndex)
     {
+        if (threePointRole == 0 && itemIndex == level3LightItemIndex &&
+            (currentStep == Level3Step.BuyLight || currentStep == Level3Step.LightCheckout))
+        {
+            var shop = FindObjectOfType<ShopTerminal>();
+            if (shop != null && shop.CartItemCount(itemIndex) >= 1)
+            {
+                tutorialManager?.ShowWarning("Only ONE Better Light for now. Confirm this purchase and set up your Key light first.");
+                return false;
+            }
+        }
         if (currentStep == Level3Step.BuyLight)
         {
             if (itemIndex != level3LightItemIndex)
@@ -343,28 +374,44 @@ public class Level3Manager : MonoBehaviour
                 return false;
             }
 
-            currentStep = Level3Step.LightCheckout;
-
-            if (TutorialUIManager.Instance != null)
-            {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Confirm the Better Lights purchase" });
-            }
-
             return true;
         }
 
         if (currentStep == Level3Step.LightCheckout)
         {
-            if (tutorialManager != null) tutorialManager.ShowWarning("You've got the Soft Light in your cart. Click CONFIRM to order it.");
-            return false;
+            return itemIndex == level3LightItemIndex;
         }
 
         return true;
     }
 
+    public void OnBetterLightCartChanged(ShopTerminal shop)
+    {
+        if (shop == null || (currentStep != Level3Step.BuyLight && currentStep != Level3Step.LightCheckout)) return;
+        int required = threePointRole == 1 ? 2 : 1;
+        int count = shop.CartItemCount(level3LightItemIndex);
+        bool ready = count >= required;
+        currentStep = ready ? Level3Step.LightCheckout : Level3Step.BuyLight;
+        TutorialUIManager.Instance?.SetupTasks(new[] { ready
+            ? "- Confirm the Better Lights purchase"
+            : "- Add " + (required - count) + " more Better Light to your cart (" + count + "/" + required + ")" });
+    }
+
     public bool CanConfirmPurchase()
     {
-        if (currentStep == Level3Step.LightCheckout) return true;
+        if (currentStep == Level3Step.LightCheckout)
+        {
+            var shop = FindObjectOfType<ShopTerminal>();
+            int required = threePointRole == 1 ? 2 : 1;
+            if (threePointRole == 0 && shop != null && shop.CartItemCount(level3LightItemIndex) > 1)
+            {
+                tutorialManager?.ShowWarning("Buy only ONE Better Light for the first lesson. Remove the extra lights before confirming.");
+                return false;
+            }
+            if (shop != null && shop.CartItemCount(level3LightItemIndex) >= required) return true;
+            tutorialManager?.ShowWarning("Add " + required + " Better Lights to the cart, then confirm.");
+            return false;
+        }
 
         if (currentStep == Level3Step.BuyLight)
         {
@@ -389,7 +436,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open LIGHTS", "- Add the Better Lights to your cart" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { threePointRole == 1 ? "- Open LIGHTS and add TWO Better Lights to your cart" : "- Open LIGHTS and add a Better Light to your cart" });
         }
     }
 
@@ -418,6 +465,11 @@ public class Level3Manager : MonoBehaviour
     public void OnLightPickedUp(FilmLightItem light)
     {
         if (currentStep != Level3Step.PickUpLight || light == null) return;
+        if (threePointPracticeLights.Contains(light))
+        {
+            tutorialManager?.ShowWarning("Pick up another Better Light from delivery. Leave the placed lights on the stage.");
+            return;
+        }
 
         if (light.EquipmentName != "Level 3 Soft Light")
         {
@@ -425,13 +477,21 @@ public class Level3Manager : MonoBehaviour
             return;
         }
 
+        if (threePointRole == 1 && collectedBackLight == null)
+        {
+            collectedBackLight = light;
+            TutorialUIManager.Instance?.SetupTasks(new[] { "- Pick up the SECOND Better Light from delivery (1/2 collected)" });
+            return;
+        }
+        if (threePointRole == 1 && light == collectedBackLight) return;
         practiceLight = light;
+        if (threePointRole == 0) purchasedPracticeLight = light;
         ShowLightingPracticeIntroduction();
     }
 
     public bool CanPickUpLight(FilmLightItem light)
     {
-        if (currentStep != Level3Step.ObserveSoftLight || light == null || light != practiceLight) return true;
+        if (light == null || !threePointPracticeLights.Contains(light)) return true;
 
         if (tutorialManager != null) tutorialManager.ShowWarning("Leave the light there for a moment. Take a look at what it does to the surface.");
         return false;
@@ -459,7 +519,8 @@ public class Level3Manager : MonoBehaviour
 
     public void OnLightDropped(FilmLightItem light)
     {
-        if (currentStep != Level3Step.PlaceSoftLight || light == null || light != practiceLight || softLightPlacementMarker == null) return;
+        if (currentStep != Level3Step.PlaceSoftLight || !IsAvailablePracticeLight(light) || softLightPlacementMarker == null) return;
+        practiceLight = light;
 
         if (practiceLesson != null && (!practiceLesson.ReadyToPlace || !GuidedPracticeLesson.AtMarker(softLightPlacementMarker)))
         {
@@ -469,10 +530,10 @@ public class Level3Manager : MonoBehaviour
 
         // Use the same player-position check as entry into the guided lesson.
         bool isNearMarker = GuidedPracticeLesson.AtMarker(softLightPlacementMarker);
-        bool hasCorrectIntensity = Mathf.Abs(light.intensityPercent - 75f) <= 2.5f;
+        bool hasCorrectIntensity = Mathf.Abs(light.intensityPercent - PracticeIntensity) <= 2.5f;
         bool hasCorrectTilt = Mathf.Abs(light.GetCurrentTilt() + 10f) <= 2.5f;
         bool hasCorrectTemperature = Mathf.Abs(light.GetColorTemperature() - 3200f) <= 250f;
-        bool hasCorrectDiffusion = Mathf.Abs(light.GetDiffusionPercent() - 75f) <= 2.5f;
+        bool hasCorrectDiffusion = Mathf.Abs(light.GetDiffusionPercent() - PracticeDiffusion) <= 2.5f;
 
         if (!light.IsPoweredOn() || !hasCorrectIntensity || !hasCorrectTilt || !hasCorrectTemperature || !hasCorrectDiffusion || !isNearMarker)
         {
@@ -481,14 +542,14 @@ public class Level3Manager : MonoBehaviour
                 string correction = !light.IsPoweredOn()
                     ? "Turn the Soft Light ON with Left Mouse Button."
                     : !hasCorrectIntensity
-                        ? "Set the Soft Light to 75% with the mouse wheel."
+                        ? "Set the " + PracticeRole + " to " + PracticeIntensity + "% with the mouse wheel."
                         : !hasCorrectTilt
                             ? "Set the tilt to -10 degrees with the arrow keys."
                             : !hasCorrectTemperature
                                 ? "Set color temperature to 3200K with Z and X."
                                 : !hasCorrectDiffusion
-                                    ? "Set diffusion to 75% with V and B."
-                                    : "Stand on the SOFT KEY marker before pressing G.";
+                                    ? "Set diffusion to " + PracticeDiffusion + "% with V and B."
+                                    : "Stand on the " + PracticeRole.ToUpperInvariant() + " marker before pressing G.";
                 tutorialManager.ShowWarning("Let's adjust that a little. Pick the light up again. " + correction);
             }
             return;
@@ -496,8 +557,7 @@ public class Level3Manager : MonoBehaviour
 
         practiceLesson?.Release();
         practiceLesson = null;
-        light.PlaceOnSurface(softLightPlacementMarker.position);
-        ConfigurePracticeLight(light);
+        // Keep the beam width, shadows and output the player saw while aiming.
 
         Rigidbody[] lightBodies = light.GetComponentsInChildren<Rigidbody>(true);
         foreach (Rigidbody lightBody in lightBodies)
@@ -510,9 +570,11 @@ public class Level3Manager : MonoBehaviour
         }
 
         softLightPlacementMarker.gameObject.SetActive(false);
+        threePointPracticeLights.Add(light);
+        if (threePointRole < 2 && TryPrepareNextPracticeLight()) return;
         currentStep = Level3Step.ObserveSoftLight;
         isBriefingOpen = false;
-        BeginCameraMovementLesson(true);
+        StartCoroutine(CompareThreePointLights());
     }
 
     public void OnContractQualificationsOpened()
@@ -598,7 +660,7 @@ public class Level3Manager : MonoBehaviour
         GameObject lightPrefab = usePlaceholder ? shopTerminal.availableItems[1].prefabToSpawn : shopTerminal.level3LightPrefab;
         if (lightPrefab == null) return;
 
-        if (!requiresLightPurchase && PlayerPrefs.GetInt("Level3LightPurchased", 0) == 1)
+        if (threePointRole == 0 && !requiresLightPurchase && PlayerPrefs.GetInt("Level3LightPurchased", 0) == 1)
         {
             shopTerminal.RestoreLevel3Light(lightPrefab, usePlaceholder);
             level3LightItemIndex = shopTerminal.availableItems.FindIndex(item => item.itemName == "LEVEL 3 SOFT LIGHT");
@@ -653,7 +715,7 @@ public class Level3Manager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop", "- Buy the Better Lights" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { threePointRole == 1 ? "- Buy TWO more Better Lights from the Equipment Shop" : "- Buy a Better Light from the Equipment Shop" });
             TutorialUIManager.Instance.SetDynamicGlow("shop", true);
         }
 
@@ -676,13 +738,19 @@ public class Level3Manager : MonoBehaviour
 
     private void StartLightPickup()
     {
+        if (threePointRole == 2 && collectedBackLight != null)
+        {
+            practiceLight = collectedBackLight;
+            ShowLightingPracticeIntroduction();
+            return;
+        }
         currentStep = Level3Step.PickUpLight;
         isBriefingOpen = false;
 
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Pick up the Better Lights from the delivery table" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { threePointRole == 1 ? "- Pick up BOTH Better Lights from delivery (0/2 collected)" : "- Pick up the Better Light from the delivery table" });
         }
 
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
@@ -696,7 +764,12 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Let's try the Soft Light on our practice set. I'll walk you through each control, one at a time.", TutorialUIManager.Instance.posePointUp, true, false);
+            string purpose = threePointRole == 0
+                ? "KEY is the main light. Place it in front and to one side to create a bright side and a shadow side."
+                : threePointRole == 1
+                    ? "FILL sits on the opposite front side. Keep it weaker than the Key to soften shadows without flattening the subject."
+                    : "BACK sits behind the subject. Its job is a bright edge that separates the subject from the background.";
+            TutorialUIManager.Instance.ShowBossDialogue(purpose + " Follow the green circle; we'll adjust one control at a time.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -707,8 +780,160 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
         practiceLesson = GuidedPracticeLesson.Light(tutorialManager, softLightPlacementMarker,
-            () => practiceLight != null && practiceLight.gameObject.activeInHierarchy && practiceLight.GetComponentInParent<Player.PlayerController.PlayerController>() != null ? practiceLight : null,
-            "Soft Key", 75f, true);
+            GetHeldPracticeLight,
+            PracticeRole, PracticeIntensity, true, lightingPracticeTarget);
+    }
+
+    private bool IsAvailablePracticeLight(FilmLightItem light)
+    {
+        return light != null && light.HasAdvancedFeatures() && !threePointPracticeLights.Contains(light);
+    }
+
+    private FilmLightItem GetHeldPracticeLight()
+    {
+        var inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
+        var light = inventory != null ? inventory.GetHeldItem() as FilmLightItem : null;
+        if (!IsAvailablePracticeLight(light)) return null;
+
+        // Follow the equipped light, not the order in which deliveries were picked up.
+        // Keep the other collected light available for the Back role.
+        if (threePointRole == 1 && light == collectedBackLight && practiceLight != light &&
+            IsAvailablePracticeLight(practiceLight))
+            collectedBackLight = practiceLight;
+        practiceLight = light;
+        return light;
+    }
+
+    private bool TryPrepareNextPracticeLight()
+    {
+        var shop = FindObjectOfType<ShopTerminal>();
+        if (shop == null || level3LightItemIndex < 0 || level3LightItemIndex >= shop.availableItems.Count ||
+            shop.availableItems[level3LightItemIndex].prefabToSpawn == null) return false;
+        threePointRole++;
+        Vector3 position = lightingPracticeTarget.position + (threePointRole == 1
+            ? practiceFront * practiceFrontDistance + practiceRight * practiceSideDistance
+            : -practiceFront * Mathf.Min(practiceFrontDistance, 2.2f) + practiceRight * practiceSideDistance);
+        var stage = FindStageRenderer();
+        if (stage != null) position = ClampPracticePointToStage(position, stage.bounds);
+        softLightPlacementMarker = CreatePlacementMarker(position);
+        foreach (var label in softLightPlacementMarker.GetComponentsInChildren<TextMeshPro>())
+            label.text = PracticeRole.ToUpperInvariant() + "\n" + PracticeIntensity + "%";
+        practiceLight = null;
+        requiresLightPurchase = threePointRole == 1;
+        currentStep = threePointRole == 1 ? Level3Step.IntroduceLight : Level3Step.IntroducePickup;
+        isBriefingOpen = true;
+        var ui = TutorialUIManager.Instance;
+        if (ui != null) ui.ShowBossDialogue(threePointRole == 1
+            ? "Your Key light gives the subject shape. Buy TWO more Better Lights from the shop: one for Fill and one for Back. These are yours to keep. Leave the Key on."
+            : "Equip the remaining Better Light from your hotbar. Place it behind the subject as the Back light to reveal its outline. Leave the Key and Fill in place.", ui.posePointUp, true, false);
+        return true;
+    }
+
+    private IEnumerator CompareThreePointLights()
+    {
+        var savedLights = new Dictionary<Light, bool>();
+        var savedRenderers = new Dictionary<Renderer, bool>();
+        var player = FindObjectOfType<Player.PlayerController.PlayerController>();
+        var view = player != null ? player.GameplayCamera : null;
+        Vector3 savedPosition = view != null ? view.transform.position : Vector3.zero;
+        Quaternion savedRotation = view != null ? view.transform.rotation : Quaternion.identity;
+        float savedFov = view != null ? view.fieldOfView : 60f;
+        bool couldMove = player != null && player.canMove;
+        bool couldLook = player != null && player.canLook;
+        float orbitAngle = 0f;
+        string[] prompts = {
+            "KEY ONLY: FIND THE BRIGHT SIDE AND SHADOW SIDE.",
+            "ADD FILL: WATCH THE SHADOW SIDE BECOME SOFTER.",
+            "ADD BACK: LOOK FOR THE BRIGHT EDGE AROUND THE SUBJECT." };
+        try
+        {
+            foreach (var lamp in FindObjectsOfType<Light>())
+            {
+                savedLights[lamp] = lamp.enabled;
+                lamp.enabled = false;
+            }
+            if (player != null)
+            {
+                player.canMove = player.canLook = false;
+                foreach (var renderer in player.GetComponentsInChildren<Renderer>(true))
+                {
+                    savedRenderers[renderer] = renderer.forceRenderingOff;
+                    renderer.forceRenderingOff = true;
+                }
+            }
+            // Compare from the intended front of the subject, not the Back-light marker.
+            if (view != null && lightingPracticeTarget != null)
+            {
+                Vector3 center = lightingPracticeTarget.position + Vector3.up * .7f;
+                Vector3 destination = center + practiceFront * 4.5f + Vector3.up * .4f;
+                Quaternion rotation = Quaternion.LookRotation(center - destination);
+                for (float elapsed = 0; elapsed < 1f;)
+                {
+                    if (!PauseManager.isPaused && Application.isFocused) elapsed += Time.unscaledDeltaTime;
+                    float blend = Mathf.SmoothStep(0f, 1f, elapsed);
+                    view.transform.SetPositionAndRotation(Vector3.Lerp(savedPosition, destination, blend), Quaternion.Slerp(savedRotation, rotation, blend));
+                    view.fieldOfView = Mathf.Lerp(savedFov, 55f, blend);
+                    yield return null;
+                }
+            }
+            for (int role = 0; role < threePointPracticeLights.Count; role++)
+            {
+                bool compared = false;
+                TutorialUIManager.Instance?.SetupTasks(new[] { prompts[role] + "\nHOLD [B] TO SEE WITHOUT THIS LIGHT." });
+                yield return null;
+                while (UnityEngine.InputSystem.Keyboard.current != null && UnityEngine.InputSystem.Keyboard.current.enterKey.isPressed) yield return null;
+                while (true)
+                {
+                    var keys = UnityEngine.InputSystem.Keyboard.current;
+                    if (!PauseManager.isPaused && Application.isFocused && keys != null)
+                    {
+                        if (view != null && lightingPracticeTarget != null && !keys.bKey.isPressed)
+                        {
+                            orbitAngle = (orbitAngle + 10f * Time.unscaledDeltaTime) % 360f;
+                            Vector3 center = lightingPracticeTarget.position + Vector3.up * .7f;
+                            Vector3 offset = Quaternion.AngleAxis(orbitAngle, Vector3.up) * practiceFront * 4.5f + Vector3.up * .4f;
+                            // Keep the camera on the subject side of walls and scenery.
+                            float distance = offset.magnitude;
+                            foreach (var hit in Physics.RaycastAll(center, offset.normalized, distance, ~0, QueryTriggerInteraction.Ignore))
+                            {
+                                if (hit.collider.transform.IsChildOf(lightingPracticeTarget) ||
+                                    (player != null && hit.collider.transform.IsChildOf(player.transform)) ||
+                                    hit.collider.GetComponentInParent<FilmLightItem>() != null) continue;
+                                distance = Mathf.Min(distance, Mathf.Max(.5f, hit.distance - .25f));
+                            }
+                            view.transform.SetPositionAndRotation(center + offset.normalized * distance, Quaternion.LookRotation(-offset));
+                        }
+                        if (compared && !keys.bKey.isPressed && keys.enterKey.wasPressedThisFrame) break;
+                        if (keys.bKey.isPressed && !compared)
+                        {
+                            compared = true;
+                            TutorialUIManager.Instance?.SetupTasks(new[] { prompts[role] + "\nRELEASE [B] TO RESTORE. [ENTER] NEXT." });
+                        }
+                        for (int i = 0; i < threePointPracticeLights.Count; i++)
+                            if (threePointPracticeLights[i] != null && threePointPracticeLights[i].spotlight != null)
+                                threePointPracticeLights[i].spotlight.enabled = i <= role && !(i == role && keys.bKey.isPressed);
+                    }
+                    yield return null;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var entry in savedLights)
+                if (entry.Key != null) entry.Key.enabled = entry.Value;
+            foreach (var entry in savedRenderers)
+                if (entry.Key != null) entry.Key.forceRenderingOff = entry.Value;
+            if (view != null)
+            {
+                view.transform.SetPositionAndRotation(savedPosition, savedRotation);
+                view.fieldOfView = savedFov;
+            }
+            if (player != null) { player.canMove = couldMove; player.canLook = couldLook; }
+            foreach (var light in threePointPracticeLights)
+                if (light != null && light.spotlight != null) light.spotlight.enabled = light.IsPoweredOn();
+        }
+        TutorialUIManager.Instance?.HideTasks();
+        BeginCameraMovementLesson(true);
     }
 
     private IEnumerator ObserveLightingSetup()
@@ -742,13 +967,21 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("See how the reflection spreads across the surface? The softer edge reveals the shape without losing all the shadow. I'll send the light back to delivery now.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("See how the softer reflection reveals the shape without losing all the shadow? Keep your three Better Lights and use them for your commercial.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
     private void FinishLightingPractice()
     {
-        ReturnPracticeLightToDeliveryZone();
+        for (int i = 0; i < threePointPracticeLights.Count; i++)
+        {
+            practiceLight = threePointPracticeLights[i];
+            ReturnPracticeLightToDeliveryZone(i);
+        }
+        practiceLight = null;
+        foreach (var loan in loanLights) if (loan != null) Destroy(loan);
+        loanLights.Clear();
+        threePointPracticeLights.Clear();
         CleanUpLightingPractice();
         ShowAlmanacIntroduction();
     }
@@ -857,10 +1090,10 @@ public class Level3Manager : MonoBehaviour
         if (practiceLesson != null || TutorialUIManager.Instance == null || practiceLight == null) return;
 
         string powerTask = practiceLight.IsPoweredOn() ? "<color=#55FF88>ON</color>" : "OFF";
-        string intensityTask = Mathf.RoundToInt(practiceLight.intensityPercent) + "% / 75%";
+        string intensityTask = Mathf.RoundToInt(practiceLight.intensityPercent) + "% / " + PracticeIntensity + "%";
         string tiltTask = Mathf.RoundToInt(practiceLight.GetCurrentTilt()) + " degrees / -10 degrees";
         string temperatureTask = Mathf.RoundToInt(practiceLight.GetColorTemperature()) + "K / 3200K";
-        string diffusionTask = Mathf.RoundToInt(practiceLight.GetDiffusionPercent()) + "% / 75%";
+        string diffusionTask = Mathf.RoundToInt(practiceLight.GetDiffusionPercent()) + "% / " + PracticeDiffusion + "%";
 
         TutorialUIManager.Instance.SetupTasks(new string[]
         {
@@ -886,10 +1119,10 @@ public class Level3Manager : MonoBehaviour
         practiceSpotlight.shadowNormalBias = 0.25f;
         practiceSpotlight.shadowNearPlane = 0.2f;
         light.RefreshAdvancedFeatures();
-        light.AimAt(lightingPracticeTarget.position + Vector3.up * 0.8f);
+        // Dropping must retain the player's previewed head position and aim.
     }
 
-    private void ReturnPracticeLightToDeliveryZone()
+    private void ReturnPracticeLightToDeliveryZone(int slot = 0)
     {
         if (practiceLight == null) return;
 
@@ -900,21 +1133,9 @@ public class Level3Manager : MonoBehaviour
             return;
         }
 
-        if (practiceLight.IsPoweredOn()) practiceLight.OnUse(Camera.main);
-
         Transform deliveryZone = shopTerminal.deliveryZone;
-        practiceLight.transform.position = deliveryZone.position + deliveryZone.right * 0.35f + Vector3.up * 0.65f;
-        practiceLight.transform.rotation = deliveryZone.rotation;
-
-        Rigidbody[] lightBodies = practiceLight.GetComponentsInChildren<Rigidbody>(true);
-        foreach (Rigidbody lightBody in lightBodies)
-        {
-            if (lightBody == null) continue;
-            lightBody.velocity = Vector3.zero;
-            lightBody.angularVelocity = Vector3.zero;
-            lightBody.isKinematic = false;
-            lightBody.useGravity = true;
-        }
+        practiceLight.ReturnToDelivery(deliveryZone.position + deliveryZone.right * ((slot - 1) * .85f)
+            + Vector3.up * .65f, deliveryZone.rotation);
 
         practiceLight = null;
     }
@@ -949,8 +1170,14 @@ public class Level3Manager : MonoBehaviour
         float stageFrontExtent = Mathf.Abs(stageFront.x) * stageBounds.extents.x + Mathf.Abs(stageFront.z) * stageBounds.extents.z;
         float stageSideExtent = Mathf.Abs(stageRight.x) * stageBounds.extents.x + Mathf.Abs(stageRight.z) * stageBounds.extents.z;
 
-        Vector3 targetPosition = stageCenter - stageFront * Mathf.Min(0.8f, stageFrontExtent * 0.12f);
-        Vector3 lightPosition = targetPosition + stageFront * Mathf.Min(4.2f, stageFrontExtent * 0.68f) - stageRight * Mathf.Min(3.2f, stageSideExtent * 0.42f);
+        // Move the whole rig forward and keep the rear marker away from the curved backdrop.
+        Vector3 targetPosition = stageCenter + stageFront * Mathf.Min(1f, stageFrontExtent * .18f);
+        practiceFront = stageFront;
+        practiceRight = stageRight;
+        // Widen the triangle without pushing the rear light into the backdrop.
+        practiceFrontDistance = Mathf.Min(3.2f, stageFrontExtent * .48f);
+        practiceSideDistance = Mathf.Min(3.8f, stageSideExtent * .60f);
+        Vector3 lightPosition = targetPosition + stageFront * practiceFrontDistance - stageRight * practiceSideDistance;
 
         targetPosition = ClampPracticePointToStage(targetPosition, stageBounds);
         lightPosition = ClampPracticePointToStage(lightPosition, stageBounds);
@@ -1025,7 +1252,7 @@ public class Level3Manager : MonoBehaviour
         GameObject markerDisc = GuidedPracticeLesson.CreateGreenMarker(markerRoot.transform);
         markerDisc.name = "Placement Point";
         markerDisc.transform.SetParent(markerRoot.transform);
-        markerDisc.transform.localPosition = Vector3.zero;
+        markerDisc.transform.localPosition = Vector3.up * .12f;
         // Marker size and floor clearance match the first tutorial.
 
         Collider markerCollider = markerDisc.GetComponent<Collider>();
@@ -1061,6 +1288,8 @@ public class Level3Manager : MonoBehaviour
 
     private void CleanUpLightingPractice()
     {
+        foreach (var loan in loanLights) if (loan != null) Destroy(loan);
+        loanLights.Clear();
         if (lightingPracticeRoot != null) Destroy(lightingPracticeRoot);
         if (lightingPracticeDirector != null && lightingPracticeWall != null) lightingPracticeDirector.RemovePracticeWall(lightingPracticeWall);
 
@@ -1258,12 +1487,22 @@ internal sealed class GuidedPracticeLesson
         TutorialManager tutorial = Object.FindObjectOfType<TutorialManager>(true);
         GameObject source = tutorial != null ? tutorial.stageWalkTriggerCircle : null;
         GameObject visual;
-        if (source != null)
+        var sourceMesh = source != null ? source.GetComponentInChildren<MeshFilter>(true) : null;
+        if (sourceMesh != null && sourceMesh.sharedMesh != null)
         {
-            visual = Object.Instantiate(source, parent);
-            visual.transform.rotation = source.transform.rotation;
-            visual.transform.localScale = source.transform.lossyScale;
-            visual.SetActive(true);
+            // Duplicate the original A/B/C circle's visual, without copying hidden
+            // renderer flags, tutorial scripts, or its old label.
+            visual = new GameObject("Practice Circle", typeof(MeshFilter), typeof(MeshRenderer));
+            visual.transform.SetParent(parent, false);
+            visual.GetComponent<MeshFilter>().sharedMesh = sourceMesh.sharedMesh;
+            var sourceRenderer = sourceMesh.GetComponent<MeshRenderer>();
+            if (sourceRenderer != null)
+                visual.GetComponent<MeshRenderer>().sharedMaterials = sourceRenderer.sharedMaterials;
+            visual.transform.rotation = sourceMesh.transform.rotation;
+            Vector3 size = sourceMesh.transform.lossyScale;
+            Vector3 parentSize = parent.lossyScale;
+            visual.transform.localScale = new Vector3(size.x / Mathf.Max(.001f, Mathf.Abs(parentSize.x)),
+                size.y / Mathf.Max(.001f, Mathf.Abs(parentSize.y)), size.z / Mathf.Max(.001f, Mathf.Abs(parentSize.z)));
         }
         else
         {
@@ -1276,6 +1515,8 @@ internal sealed class GuidedPracticeLesson
         Renderer renderer = visual.GetComponentInChildren<Renderer>();
         if (renderer != null)
         {
+            renderer.enabled = true;
+            renderer.forceRenderingOff = false;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;
         }
@@ -1284,7 +1525,7 @@ internal sealed class GuidedPracticeLesson
 
 
     public static GuidedPracticeLesson Light(TutorialManager tutorial, Transform marker,
-        System.Func<FilmLightItem> heldLight, string role, float intensity, bool advanced)
+        System.Func<FilmLightItem> heldLight, string role, float intensity, bool advanced, Transform subject = null)
     {
         var steps = new List<Step>
         {
@@ -1303,7 +1544,7 @@ internal sealed class GuidedPracticeLesson
         };
         float practiceHeight = role.IndexOf("Back", System.StringComparison.OrdinalIgnoreCase) >= 0 ? .8f :
             role.IndexOf("Fill", System.StringComparison.OrdinalIgnoreCase) >= 0 ? .25f : .5f;
-        if (advanced) practiceHeight = .75f;
+        if (advanced && role.IndexOf("Key", System.StringComparison.OrdinalIgnoreCase) >= 0) practiceHeight = .75f;
         float? startingHeight = null;
         bool adjustedHeight = false;
         steps.Add(new Step("Lights start at +0.50 m extension. The HEIGHT indicator shows the current extension above the original stand. Hold <color=red>[Q]</color> to raise it or <color=red>[E]</color> to lower it, down to +0.00 m. For this " + role + " demonstration set the extension to +" + practiceHeight.ToString("F2") + " m. " + (advanced ? "Try the height controls yourself; if it already matches, move it away and back. " : "If it already matches, keep it there. ") + "The head and beam move together. A high Key shapes the subject, a lower Fill opens shadows, and a raised Back light outlines the edge.",
@@ -1322,16 +1563,30 @@ internal sealed class GuidedPracticeLesson
                 () => heldLight() != null && Mathf.Abs(heldLight().GetCurrentTilt() + 10f) <= 2.5f));
         if (advanced)
         {
+            float diffusion = role.IndexOf("Fill", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 100f :
+                role.IndexOf("Back", System.StringComparison.OrdinalIgnoreCase) >= 0 ? 25f : 75f;
             steps.Add(new Step("Negative tilt points down; positive tilt points up. Press Down Arrow to tilt down to -10 degrees with <color=red>[Up/Down]</color>. Aim the light onto the subject.",
                 "[Up/Down] Set tilt to -10 degrees",
                 () => heldLight() != null && Mathf.Abs(heldLight().GetCurrentTilt() + 10f) <= 2.5f));
-            steps.Add(new Step("Hold <color=red>[Z]</color> to lower Kelvin or <color=red>[X]</color> to raise it. Set 3200K for a warm automotive look. Lower numbers look warmer; higher numbers look cooler.",
+            steps.Add(new Step("Use <color=red>[Z/X]</color> to set 3200K. We match all three lights for this warm practice look, not because three-point lighting requires 3200K. Your camera's white balance also affects the result.",
                 "[Z/X] Set temperature to 3200K",
                 () => heldLight() != null && Mathf.Abs(heldLight().GetColorTemperature() - 3200f) <= 250f));
-            steps.Add(new Step("Use <color=red>[V/B]</color> to set diffusion to 75%. Diffusion softens shadow edges and spreads the reflection.",
-                "[V/B] Set diffusion to 75%",
-                () => heldLight() != null && Mathf.Abs(heldLight().GetDiffusionPercent() - 75f) <= 2.5f));
+            string diffusionReason = diffusion == 100f ? "A softer Fill gently opens the shadows." :
+                diffusion == 25f ? "Less diffusion gives our Back light a more defined edge." : "A soft Key gives a broad reflection while keeping shape.";
+            steps.Add(new Step("Use <color=red>[V/B]</color> to set diffusion to " + diffusion + "%. " + diffusionReason + " These are game practice settings, not universal lighting rules.",
+                "[V/B] Set diffusion to " + diffusion + "%",
+                () => heldLight() != null && Mathf.Abs(heldLight().GetDiffusionPercent() - diffusion) <= 2.5f));
         }
+        if (advanced && subject != null)
+            steps.Add(new Step("Turn toward the practice subject. Watch the beam land on it. A light only helps when it reaches the subject; the stand position alone is not enough.",
+                "Aim the light at the practice subject",
+                () =>
+                {
+                    var light = heldLight();
+                    if (light == null || light.spotlight == null || subject == null) return false;
+                    Vector3 direction = subject.position + Vector3.up * .7f - light.spotlight.transform.position;
+                    return direction.magnitude <= light.spotlight.range && Vector3.Angle(light.spotlight.transform.forward, direction) <= light.spotlight.spotAngle * .3f;
+                }));
         steps.Add(new Step("Everything is set. Stand on the " + role + " circle and press <color=red>[G]</color> to place the light.",
             "Stand on the " + role + " circle, then [G] place the light", null));
         return new GuidedPracticeLesson(tutorial, steps, null, marker);
@@ -1435,5 +1690,3 @@ internal static class CampaignGuidance
         highlighted = target;
     }
 }
-
-

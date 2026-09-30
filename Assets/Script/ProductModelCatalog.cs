@@ -64,6 +64,36 @@ public sealed class ProductModelCatalog : ScriptableObject
     }
 
     public GameObject flowerTable;
+    public AnimationClip coffeeMixAnimation;
+    public AnimationClip coffeePressAnimation;
+    public GameObject gokeBox;
+    public Material gokeBoxMaterial;
+
+    public static GameObject CreateGokeBox()
+    {
+        var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
+        if (catalog == null || catalog.gokeBox == null) return null;
+        var root = new GameObject("Goke Box");
+        var visual = Instantiate(catalog.gokeBox, root.transform);
+        visual.SetActive(true);
+        var renderers = visual.GetComponentsInChildren<Renderer>(true);
+        if (renderers.Length == 0) { Destroy(root); return null; }
+        foreach (var r in renderers)
+        {
+            var materials = r.sharedMaterials;
+            for (int i=0;i<materials.Length;i++)
+                if (catalog.gokeBoxMaterial != null && (materials[i] == null || materials[i].name.IndexOf("outline", StringComparison.OrdinalIgnoreCase) < 0))
+                    materials[i] = catalog.gokeBoxMaterial;
+            r.sharedMaterials = materials;
+        }
+        var bounds = GetBounds(renderers);
+        visual.transform.localScale *= 1f / Mathf.Max(.001f, Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z));
+        bounds = GetBounds(renderers);
+        visual.transform.position -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        bounds = GetBounds(renderers);
+        var collider = root.AddComponent<BoxCollider>(); collider.center = bounds.center; collider.size = bounds.size;
+        return root;
+    }
     [HideInInspector] public GameObject coffeeInterior;
     [Tooltip("Per-axis local scale before automatic fitting. Axes follow the model rotation. The final interior is constrained to the stage and height limit. Reapply the set to see changes.")]
     [HideInInspector] public Vector3 coffeeInteriorScale = Vector3.one;
@@ -121,6 +151,18 @@ public sealed class ProductModelCatalog : ScriptableObject
         visual.transform.localScale *= scale;
         bounds = GetBounds(renderers);
         visual.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        if (table)
+        {
+            // A primitive tabletop remains raycastable in builds without runtime mesh cooking.
+            // Recalculate after grounding so flowers land on the visible top, not the floor.
+            bounds = GetBounds(renderers);
+            float thickness = Mathf.Min(.05f, bounds.size.y);
+            var tabletop = root.AddComponent<BoxCollider>();
+            tabletop.center = root.transform.InverseTransformPoint(new Vector3(
+                bounds.center.x, bounds.max.y - thickness * .5f, bounds.center.z));
+            tabletop.size = new Vector3(bounds.size.x, thickness, bounds.size.z);
+            return root;
+        }
         // Preserve the authored mesh: walls share geometry with counters and shelf trim.
         // Individual mesh colliders leave the room and the spaces between furniture accessible.
         foreach (var filter in visual.GetComponentsInChildren<MeshFilter>())

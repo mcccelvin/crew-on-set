@@ -17,7 +17,8 @@ public class TutorialManager : MonoBehaviour
 {
     public static TutorialManager Instance;
 
-    public const float TutorialBlueTarget = 150f;
+    public const float TutorialBlueTarget = 175f;
+    public const float TutorialGreenTarget = 140f;
     private const float TutorialBlueSnapTolerance = 10f;
 
     [Header("Spawning Setup")]
@@ -150,7 +151,53 @@ public class TutorialManager : MonoBehaviour
         }
     }
 
-    private void Start()
+    private IEnumerator Start()
+    {
+        BuildRuntimePracticeMarkers();
+        while (StudioArrivalTour.IsPendingOrPlaying) yield return null;
+        StartAfterStudioTour();
+    }
+
+    private void BuildRuntimePracticeMarkers()
+    {
+        Transform stage = null;
+        foreach (var candidate in FindObjectsOfType<Transform>(true))
+            if (candidate.name == "stage" && candidate.gameObject.scene == gameObject.scene) { stage = candidate; break; }
+        if (stage == null) stage = stageSpawnPoint;
+        stageWalkTriggerCircle = ReplacePracticeMarker(stageWalkTriggerCircle, stage, new Vector3(-.0554f, -.1377f, .00444f), "LIGHT POSITION");
+        cubePlacementTarget = ReplacePracticeMarker(cubePlacementTarget, stage, new Vector3(0, -.2476f, .0047f), "PRODUCT POSITION");
+        cameraWalkTriggerCircle = ReplacePracticeMarker(cameraWalkTriggerCircle, stage, new Vector3(0, -.1854f, .00464f), "CAMERA POSITION");
+    }
+
+    private GameObject ReplacePracticeMarker(GameObject previous, Transform stage, Vector3 localPoint, string label)
+    {
+        if (previous == null && stage == null) return null;
+        Vector3 position = previous != null ? previous.transform.position : stage.TransformPoint(localPoint);
+        if (previous != null) previous.SetActive(false);
+        var root = new GameObject(label);
+        root.transform.SetParent(transform, false);
+        root.transform.position = position;
+        var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+        disc.transform.SetParent(root.transform, false);
+        disc.transform.localPosition = Vector3.up * .12f;
+        disc.transform.localScale = new Vector3(1.4f, .02f, 1.4f);
+        Destroy(disc.GetComponent<Collider>());
+        var renderer = disc.GetComponent<Renderer>();
+        renderer.material.color = Color.green;
+        renderer.material.EnableKeyword("_EMISSION");
+        renderer.material.SetColor("_EmissionColor", Color.green * .65f);
+        renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        var text = new GameObject("Label").AddComponent<TextMeshPro>();
+        text.transform.SetParent(root.transform, false);
+        text.transform.localPosition = Vector3.up * .55f;
+        text.text = label; text.fontSize = 3; text.color = Color.green;
+        text.alignment = TextAlignmentOptions.Center;
+        root.SetActive(false);
+        return root;
+    }
+
+    private void StartAfterStudioTour()
     {
         Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
         LockPlayer();
@@ -313,13 +360,15 @@ public class TutorialManager : MonoBehaviour
 
         if (spacePromptText != null)
         {
+            spacePromptText.text = "[SPACE / LMB] CONTINUE";
             bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.unscaledTime >= spacebarCooldown) && bossDialogueReady && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
             spacePromptText.gameObject.SetActive(canShowPrompt);
         }
 
         bool isJumpCurrentlyHeld = (pInput != null && pInput.Jump) || spaceHeld;
 
-        bool jumpJustPressed = (pInput != null && pInput.Continue) || (isJumpCurrentlyHeld && !wasJumpHeld);
+        bool jumpJustPressed = (pInput != null && pInput.Continue) || (isJumpCurrentlyHeld && !wasJumpHeld) ||
+                              (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen() && TutorialUIManager.BossContinuePressed);
         wasJumpHeld = isJumpCurrentlyHeld;
 
         if (jumpJustPressed && !isTransitioning)
@@ -749,6 +798,9 @@ public class TutorialManager : MonoBehaviour
     private void PointLineAtIdentifier(string targetIdentifier)
     {
         if (objectiveLine == null) return;
+        string key = (targetIdentifier ?? "").ToLowerInvariant();
+        GameObject marker = key == "pointa" ? stageWalkTriggerCircle : key == "pointb" ? cubePlacementTarget : key == "pointc" ? cameraWalkTriggerCircle : null;
+        if (marker != null) { PointLineAtTransform(marker.transform); return; }
 
         if (string.IsNullOrEmpty(targetIdentifier))
         {
@@ -846,12 +898,39 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator UnlockPlayerAfterFrame()
     {
-        yield return new WaitUntil(() => Keyboard.current == null || !Keyboard.current.spaceKey.isPressed);
+        var step = currentStep;
+        yield return new WaitUntil(() => (Keyboard.current == null || !Keyboard.current.spaceKey.isPressed) &&
+            (Mouse.current == null || !Mouse.current.leftButton.isPressed));
         yield return null;
+        if (currentStep != step || !isTaskPhaseActive) yield break;
 
         Player.PlayerController.PlayerController p = FindObjectOfType<Player.PlayerController.PlayerController>();
         if (p != null)
         {
+            Transform target = GetTaskLookTarget();
+            var view = p.GameplayCamera;
+            if (target != null && view != null)
+            {
+                p.canMove = p.canLook = false;
+                Quaternion from = view.transform.rotation;
+                Vector3 aim = GuidedPracticeLesson.GuideEndpoint(target, false);
+                Vector3 direction = aim - view.transform.position;
+                if (direction.sqrMagnitude > .01f)
+                {
+                    Quaternion to = Quaternion.LookRotation(direction);
+                    for (float elapsed = 0; elapsed < .85f;)
+                    {
+                        if (currentStep != step || !isTaskPhaseActive) yield break;
+                        if (!PauseManager.isPaused)
+                        {
+                            elapsed += Time.unscaledDeltaTime;
+                            view.transform.rotation = Quaternion.Slerp(from, to, Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / .85f)));
+                        }
+                        yield return null;
+                    }
+                }
+                p.SyncLookToCamera();
+            }
             p.canLook = true;
 
             if (currentStep == TutorialStep.TurnOnLight ||
@@ -908,6 +987,9 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator StartTutorialWithDelay()
     {
+        if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
+        StudioArrivalTour.BeginWelcomeTour();
+        while (StudioArrivalTour.IsPendingOrPlaying) yield return null;
         yield return new WaitForSecondsRealtime(1f);
         currentStep = TutorialStep.Intro;
         FinishTutorialInitialization();
@@ -1059,10 +1141,12 @@ public class TutorialManager : MonoBehaviour
 
             if (CareerManager.Instance != null && budgetToAdd > 0)
             {
-                CareerManager.Instance.AddMoney(budgetToAdd);
+                CareerManager.Instance.AddMoney(budgetToAdd, "Training allowance");
             }
             else if (budgetToAdd > 0)
             {
+                PlayerAnalytics.Begin(1);
+                PlayerAnalytics.TransactionMade(budgetToAdd, "Training allowance", "Training allowance");
                 int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
                 PlayerPrefs.SetInt("PlayerMoney", savedMoney + budgetToAdd);
             }
@@ -1120,6 +1204,38 @@ public class TutorialManager : MonoBehaviour
         if (CampaignLevelManager.Instance != null) return CampaignLevelManager.Instance.IsBriefingActive();
         if (Level3Manager.Instance != null) return Level3Manager.Instance.IsBriefingActive();
         return GokeLevelManager.Instance == null || GokeLevelManager.Instance.IsBriefingActive();
+    }
+
+    private Transform GetTaskLookTarget()
+    {
+        string keyword;
+        switch (currentStep)
+        {
+            case TutorialStep.BuyLight_WalkToShop:
+            case TutorialStep.BuyCamera_WalkToShop:
+                var shop = FindObjectOfType<ShopTerminal>();
+                if (shop != null) return shop.transform;
+                keyword = "shop"; break;
+            case TutorialStep.BuildStageWall: keyword = "director"; break;
+            case TutorialStep.WalkToStageWithLight: return stageWalkTriggerCircle != null ? stageWalkTriggerCircle.transform : stageSpawnPoint;
+            case TutorialStep.WalkToStageWithCamera: return cameraWalkTriggerCircle != null ? cameraWalkTriggerCircle.transform : stageSpawnPoint;
+            case TutorialStep.PickUpLight: keyword = "light"; break;
+            case TutorialStep.PickUpCamera: keyword = "camera"; break;
+            case TutorialStep.PickUpSDCard: keyword = "sd"; break;
+            case TutorialStep.PickUpUsedSDCard: FindTutorialUsedSDCard(); return tutorialUsedSDCard;
+            case TutorialStep.InsertToComputer:
+            case TutorialStep.OpenComputer:
+                var computer = FindObjectOfType<ComputerStation>();
+                return computer != null ? computer.transform : null;
+            default: return null;
+        }
+        if (availableTargets != null)
+            foreach (var target in availableTargets)
+                if (string.Equals(target.targetName, keyword, System.StringComparison.OrdinalIgnoreCase) && target.targetTransform != null)
+                    return target.targetTransform;
+        foreach (var glow in FindObjectsOfType<TutorialGlowTarget>())
+            if (glow.name.IndexOf(keyword, System.StringComparison.OrdinalIgnoreCase) >= 0) return glow.transform;
+        return keyword == "director" && directorTerminal != null ? directorTerminal.transform : deliveryZone;
     }
 
     private void StartTaskPhase()
@@ -1183,7 +1299,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.Tablet_PaintWall:
                 TutorialUIManager.Instance.SetDynamicGlow("director", true);
                 TutorialUIManager.Instance.SetDynamicGlow("stage", false);
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 0", "Set <color=blue>Blue</color> to 150" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 140", "Set <color=blue>Blue</color> to 175" });
                 wallColorChanged = false;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(redColorSliderRect);
                 break;
@@ -1205,7 +1321,7 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.Tablet_PaintCube:
                 TutorialUIManager.Instance.SetDynamicGlow("pointB", false);
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 0", "Set <color=blue>Blue</color> to 150" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Set <color=red>Red</color> to ~255", "Set <color=green>Green</color> to 140", "Set <color=blue>Blue</color> to 175" });
                 cubePainted = false;
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(redColorSliderRect);
                 break;
@@ -1268,8 +1384,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.PracticeLight_Intensity:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Practice adjusting Intensity <color=red>[Scroll Wheel]</color> (5s)" });
-                StartCoroutine(PracticeTimer(5f, TutorialStep.AdjustLight_Intensity));
+                TutorialUIManager.Instance.SetupTasks(new string[] { "[SCROLL] CHANGE THE LIGHT INTENSITY" });
                 break;
 
             case TutorialStep.AdjustLight_Intensity:
@@ -1277,8 +1392,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.PracticeLight_Tilt:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Practice adjusting Tilt <color=red>[Up/Down Arrows]</color> (5s)" });
-                StartCoroutine(PracticeTimer(5f, TutorialStep.AdjustLight_Tilt));
+                TutorialUIManager.Instance.SetupTasks(new string[] { "[UP / DOWN] CHANGE THE LIGHT TILT" });
                 break;
 
             case TutorialStep.AdjustLight_Tilt:
@@ -1332,7 +1446,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.WalkToStageWithCamera:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Walk over to the Target Circle on the Stage (Point C)" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Walk onto the green CAMERA circle on the stage" });
                 TutorialUIManager.Instance.SetDynamicGlow("camera", false);
                 if (cameraWalkTriggerCircle != null) cameraWalkTriggerCircle.SetActive(true);
                 TutorialUIManager.Instance.SetDynamicGlow("pointc", true);
@@ -1522,9 +1636,11 @@ public class TutorialManager : MonoBehaviour
         TutorialStep paintStep = isWall ? TutorialStep.Tablet_PaintWall : TutorialStep.Tablet_PaintCube;
         if (currentStep != paintStep) return color;
 
-        // Help the player land on 150 without changing unrelated colors or
+        // Help the player land on the requested RGB values without changing unrelated colors or
         // completing the lesson until the Director Terminal sees mouse release.
         float blueValue = color.b * 255f;
+        if (Mathf.Abs(color.g * 255f - TutorialGreenTarget) <= TutorialBlueSnapTolerance + 0.001f)
+            color.g = TutorialGreenTarget / 255f;
         if (Mathf.Abs(blueValue - TutorialBlueTarget) <= TutorialBlueSnapTolerance + 0.001f)
             color.b = TutorialBlueTarget / 255f;
 
@@ -1535,7 +1651,7 @@ public class TutorialManager : MonoBehaviour
     {
         if (currentStep == TutorialStep.Tablet_PaintWall && isTaskPhaseActive && !wallColorChanged)
         {
-            if (rValue >= 245f && rValue <= 255f && gValue <= 10f && Mathf.Approximately(bValue, TutorialBlueTarget))
+            if (rValue >= 245f && rValue <= 255f && Mathf.Approximately(gValue, TutorialGreenTarget) && Mathf.Approximately(bValue, TutorialBlueTarget))
             {
                 wallColorChanged = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1555,7 +1671,7 @@ public class TutorialManager : MonoBehaviour
     {
         if (currentStep == TutorialStep.Tablet_PaintCube && isTaskPhaseActive && !cubePainted)
         {
-            if (rValue >= 245f && rValue <= 255f && gValue <= 10f && Mathf.Approximately(bValue, TutorialBlueTarget))
+            if (rValue >= 245f && rValue <= 255f && Mathf.Approximately(gValue, TutorialGreenTarget) && Mathf.Approximately(bValue, TutorialBlueTarget))
             {
                 cubePainted = true;
                 TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -1748,6 +1864,11 @@ public class TutorialManager : MonoBehaviour
 
     public void OnLightIntensityChanged(float intensity, Player.Equipment.FilmLightItem light = null)
     {
+        if (currentStep == TutorialStep.PracticeLight_Intensity && isTaskPhaseActive)
+        {
+            StartCoroutine(TransitionToNextStep(TutorialStep.AdjustLight_Intensity, true));
+            return;
+        }
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.IsEquipmentIntroductionActive())
         {
             GokeLevelManager.Instance.OnLightIntensityChanged(light, intensity);
@@ -1772,6 +1893,11 @@ public class TutorialManager : MonoBehaviour
 
     public void OnLightTilted(float tilt)
     {
+        if (currentStep == TutorialStep.PracticeLight_Tilt && isTaskPhaseActive)
+        {
+            StartCoroutine(TransitionToNextStep(TutorialStep.AdjustLight_Tilt, true));
+            return;
+        }
         if (Level3Manager.Instance != null && Level3Manager.Instance.IsEquipmentIntroductionActive())
         {
             Level3Manager.Instance.OnLightTilted(tilt);
@@ -2016,7 +2142,7 @@ public class TutorialManager : MonoBehaviour
 
             case TutorialStep.Tablet_SelectWall: ui.ShowBossDialogue("Click the wall to select it. That tells the color sliders which object we're painting.", ui.posePoint, true, false); break;
 
-            case TutorialStep.Tablet_PaintWall: ui.ShowBossDialogue("Let's give the backdrop that pink the client asked for. Set Red to 255, Green to 0, and Blue to 150.", ui.posePointUp, true, false); break;
+            case TutorialStep.Tablet_PaintWall: ui.ShowBossDialogue("Let's give the backdrop that pink the client asked for. Set Red to 255, Green to 140, and Blue to 175.", ui.posePointUp, true, false); break;
 
             case TutorialStep.Tablet_SpawnCube: ui.ShowBossDialogue("The vase needs a little height. Click the <color=red>Table</color> card to pick up a display stand with your cursor.", ui.poseOpenHand, true, false); break;
             case TutorialStep.Tablet_MoveCube: ui.ShowBossDialogue("Bring the table over to the stage marker, then <color=red>[Left Click]</color> to set it down.", ui.posePoint, true, false); break;
@@ -2064,7 +2190,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.PickUpCamera: ui.ShowBossDialogue("Let's grab the camera first. Look at it on the delivery table and press <color=red>[E]</color>.", ui.posePoint, true, false); break;
             case TutorialStep.PickUpSDCard: ui.ShowBossDialogue("Grab the SD Card with <color=red>[E]</color> too. It'll fit in another hotbar slot.", ui.poseOpenHand, true, false); break;
             case TutorialStep.InsertSDCard: ui.ShowBossDialogue("Select the camera in your hotbar, then press <color=red>[C]</color> to pop the SD Card in.", ui.poseBoss, true, false); break;
-            case TutorialStep.WalkToStageWithCamera: ui.ShowBossDialogue("Head over to Point C, the Director's mark. Let's see how our set looks through the camera.", ui.posePointUp, true, false); break;
+            case TutorialStep.WalkToStageWithCamera: ui.ShowBossDialogue("Head over to the green CAMERA circle. Let's see how our set looks through the camera.", ui.posePointUp, true, false); break;
 
             case TutorialStep.EquipCameraView: ui.ShowBossDialogue("With the camera selected, click <color=red>[Left Click]</color> to look through the viewfinder. This is what your audience will see.", ui.poseHappy, true, false); break;
 
@@ -2447,4 +2573,3 @@ public class TutorialManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 }
-

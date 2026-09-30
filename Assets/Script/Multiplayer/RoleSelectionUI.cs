@@ -125,7 +125,7 @@ public sealed partial class RoleSelectionUI : MonoBehaviour
         }
         var spawner = FindObjectOfType<PUNSpawner>();
         if (spawner != null && !string.IsNullOrEmpty(spawner.Status)) GUILayout.Label(spawner.Status);
-        if (GUILayout.Button(PhotonNetwork.InRoom ? "LEAVE ROOM" : "RETURN TO MAIN MENU", GUILayout.Height(32))) { if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom(); else UnityEngine.SceneManagement.SceneManager.LoadScene("Main Menu"); }
+        if (GUILayout.Button(PhotonNetwork.InRoom ? "LEAVE ROOM" : "RETURN TO MAIN MENU", GUILayout.Height(32))) { if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom(); else LoadingScreenController.LoadScene("Main Menu"); }
         GUILayout.EndScrollView(); GUILayout.EndArea();
         GUI.skin.label.wordWrap = oldWrap;
     }

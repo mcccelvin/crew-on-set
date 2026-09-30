@@ -15,7 +15,7 @@ namespace Player.Equipment
         private Vector3 previewPosition;
         private bool previewValid;
         public bool IsRepositioning { get; private set; }
-        private const string Controls = "[LMB] Select Actor / Aim at chair, machine or product | [O] Stop / Return product\n[Z] Cycle Neutral / Wave / Action (drink held coffee) | [ARROWS] Move | [R] Turn | [B/N] Marks | [K] Walk [J] Reset [H] Clear | [G] Drop";
+        private const string Controls = "[LMB] Select Actor or Interact | [O] Stop / Return product\n[Z] Cycle animations | [ARROWS] Move | [R] Turn | [B/N] Marks | [K] Walk [J] Reset [H] Clear | [G] Drop";
 
         public bool HasSelectedActor => selectedActor != null;
         public int CommandCount => commandCount;
@@ -34,16 +34,56 @@ namespace Player.Equipment
 
             if (item.GetComponent<Rigidbody>() == null) item.AddComponent<Rigidbody>();
             var body = item.GetComponent<Rigidbody>();
-            body.isKinematic = false;
-            body.useGravity = true;
-            if (item.GetComponentInChildren<Collider>() == null)
+            if (!body.isKinematic)
             {
-                var box = item.AddComponent<BoxCollider>();
-                box.center = new Vector3(0f, .15f, 0f);
-                box.size = new Vector3(1.1f, .8f, 1.6f);
+                body.velocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
             }
-            foreach (var mesh in item.GetComponentsInChildren<MeshCollider>(true)) mesh.convex = true;
+            body.isKinematic = true;
+            body.useGravity = false;
+            body.detectCollisions = true;
+            // Imported pivots are offset. Fit a build-safe primitive to the visible model.
+            var box = item.GetComponent<BoxCollider>();
+            if (box == null) box = item.AddComponent<BoxCollider>();
+            foreach (var collider in item.GetComponentsInChildren<Collider>(true))
+                collider.enabled = collider == box;
+            box.isTrigger = false;
+            bool hasBounds = false;
+            Bounds localBounds = default;
+            foreach (var renderer in item.GetComponentsInChildren<Renderer>(true))
+            {
+                var bounds = renderer.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    var point = item.transform.InverseTransformPoint(bounds.center + Vector3.Scale(bounds.extents,
+                        new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1)));
+                    if (!hasBounds) { localBounds = new Bounds(point, Vector3.zero); hasBounds = true; }
+                    else localBounds.Encapsulate(point);
+                }
+            }
+            if (hasBounds) { box.center = localBounds.center; box.size = localBounds.size; }
             return megaphone;
+        }
+
+        public void PrepareShopDelivery(Vector3 position)
+        {
+            float surfaceY = position.y - .5f;
+            float closest = float.PositiveInfinity;
+            foreach (var hit in Physics.RaycastAll(position + Vector3.up, Vector3.down, 3f,
+                ~0, QueryTriggerInteraction.Ignore))
+            {
+                if (hit.normal.y < .5f || hit.collider.GetComponentInParent<Equipment>() != null ||
+                    hit.distance >= closest) continue;
+                closest = hit.distance;
+                surfaceY = hit.point.y;
+            }
+            var visuals = GetComponentsInChildren<Renderer>(true);
+            if (visuals.Length == 0) { transform.position = position; return; }
+            Bounds bounds = visuals[0].bounds;
+            foreach (var visual in visuals) bounds.Encapsulate(visual.bounds);
+            transform.position += new Vector3(position.x - bounds.center.x,
+                surfaceY + .015f - bounds.min.y, position.z - bounds.center.z);
+            // Keep the delivery stationary until collected, even if the table has no build collider.
         }
 
         protected override void Awake()
@@ -106,6 +146,8 @@ namespace Player.Equipment
 
         public override void OnUse(Camera camera)
         {
+            var tablet = FindObjectOfType<DirectorTerminal>();
+            if (tablet != null && tablet.IsOpen) return;
             if (IsRepositioning)
             {
                 var lesson = CampaignLevelManager.Instance;
@@ -120,7 +162,7 @@ namespace Player.Equipment
                     GameFeedback.Show("ACTOR REPOSITIONED");
                     return;
                 }
-                GameFeedback.Show("Aim at a clear floor spot near the actor's current floor height.");
+                if (selectedActor != null) selectedActor.WarnInvalidActorPosition();
                 return;
             }
             var practice = CampaignLevelManager.Instance;
@@ -158,7 +200,7 @@ namespace Player.Equipment
                 !practice.CanUseContract4PracticeAction("megaphone.select")) return;
 
             selectedActor = target;
-            GameFeedback.Show("ACTOR SELECTED\nAim at a chair, machine or product and click. [Z] Cycle animationss | [O] Stop / Return product.");
+            GameFeedback.Show("ACTOR SELECTED\nAim at a chair, machine or product and click. [Z] Cycle animations | [O] Stop / Return product.");
         }
 
         public string GetAimPrompt(Camera camera)
@@ -177,6 +219,8 @@ namespace Player.Equipment
 
         public override void OnHeldUpdate(InputManager input)
         {
+            var tablet = FindObjectOfType<DirectorTerminal>();
+            if (tablet != null && tablet.IsOpen) return;
             if (selectedActor == null) { CancelReposition(); return; }
             if (Keyboard.current == null) return;
             var practice = CampaignLevelManager.Instance;
@@ -237,7 +281,8 @@ namespace Player.Equipment
                     if (hit.collider.transform.IsChildOf(transform.root) || hit.collider.GetComponentInParent<ActorBot>() != null) continue;
                     if (hit.normal.y < .7f || Mathf.Abs(hit.point.y - selectedActor.transform.position.y) > .5f) break;
                     previewPosition = new Vector3(hit.point.x, selectedActor.transform.position.y, hit.point.z);
-                    previewValid = true;
+                    previewValid = selectedActor.CanStandAt(previewPosition);
+                    if (!previewValid) break;
                     previewActor = selectedActor;
                     previewActor.ShowPlacementPreview(previewPosition);
                     break;
@@ -258,6 +303,10 @@ namespace Player.Equipment
         {
             CancelReposition();
             base.OnDropped(camera);
+            itemRigidbody.isKinematic = false;
+            itemRigidbody.useGravity = true;
+            itemRigidbody.detectCollisions = true;
+            itemRigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         }
 
         private void OnDisable() { CancelReposition(); }

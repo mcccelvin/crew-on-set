@@ -9,8 +9,9 @@ public sealed class LamborminiEditLesson : MonoBehaviour
     private IEnumerator Start()
     {
         yield return null;
-        if(CampaignProgression.GetCurrentLevel()!=3 || DevTutorialBypass.Disabled || TutorialUIManager.Instance==null){Destroy(this);yield break;}
-        ready=true; Show();
+        // Retain the component for existing scene references, but do not run a Terrari editor lesson.
+        Destroy(this);
+        yield break;
     }
     private void Show()
     {
@@ -25,7 +26,7 @@ public sealed class LamborminiEditLesson : MonoBehaviour
         if(!ready)return;
         if(DevTutorialBypass.Disabled){Cleanup();return;}
         var ui=TutorialUIManager.Instance;
-        if(ui==null || PauseManager.isPaused || Keyboard.current==null || !Keyboard.current.spaceKey.wasPressedThisFrame || !ui.CanAdvanceBossDialogue())return;
+        if(ui==null || PauseManager.isPaused || !TutorialUIManager.BossContinuePressed || !ui.CanAdvanceBossDialogue())return;
         if(step++==0)Show();else Cleanup();
     }
     private void Cleanup(){ready=false;if(TutorialUIManager.Instance!=null){TutorialUIManager.Instance.HideBossDialogue();TutorialUIManager.Instance.HideTasks();}Destroy(this);}

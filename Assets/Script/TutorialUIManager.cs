@@ -20,6 +20,10 @@ public class TutorialUIManager : MonoBehaviour
 {
     public static TutorialUIManager Instance;
 
+    [Header("Editable Boss Dialogue - Studio and Editor")]
+    [Tooltip("Edit wording only; task progression and poses remain unchanged. Blank text uses the original line.")]
+    [SerializeField] private BossDialogueText[] bossDialogue = BossDialogueText.Defaults();
+
     [Header("UI: Boss Dialogue")]
     public GameObject bossHUDCanvas;
     public TextMeshProUGUI bossText;
@@ -79,6 +83,18 @@ public class TutorialUIManager : MonoBehaviour
     private Coroutine notificationCoroutine;
     private Coroutine taskRevealCoroutine;
     private Coroutine bossRevealCoroutine;
+    private int bossInputConsumedFrame = -1;
+
+    public static bool BossContinuePressed => Application.isFocused && !PauseManager.isPaused &&
+        ((Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame) ||
+         (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame));
+
+    private void ProcessBossRevealInput()
+    {
+        if (!IsBossDialogueOpen() || bossInputConsumedFrame == Time.frameCount) return;
+        if (BossContinuePressed || (Application.isFocused && !PauseManager.isPaused && inputManager != null && inputManager.Continue))
+            TryAdvanceBossDialoguePage();
+    }
     private Player.Manager.InputManager inputManager;
     private bool[] completedTaskRows;
     private CanvasGroup bossCanvasGroup;
@@ -122,13 +138,7 @@ public class TutorialUIManager : MonoBehaviour
 
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
         Keyboard keyboard = Keyboard.current;
-        bool continuePressed = (keyboard != null && keyboard.spaceKey.wasPressedThisFrame) ||
-                               (inputManager != null && inputManager.Continue);
-        if (continuePressed && HasPendingBossDialoguePage() && CanAdvanceCurrentBossDialoguePage())
-        {
-            AdvanceBossDialoguePage();
-            return;
-        }
+        ProcessBossRevealInput();
 
         if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) return;
 
@@ -145,12 +155,13 @@ public class TutorialUIManager : MonoBehaviour
             if (isTaskUIExpanded && newTaskNotification != null) newTaskNotification.SetActive(false);
 
             GameObject revealedView = isTaskUIExpanded ? taskOpenView : taskClosedView;
-            if (revealedView != null) StartCoroutine(AnimateQuickReveal(revealedView));
+            if (revealedView != null && EditorManager.Instance == null) StartCoroutine(AnimateQuickReveal(revealedView));
         }
     }
 
     public void ShowBossDialogue(string message, Sprite pose, bool showOk, bool showSkip)
     {
+        message = BossDialogueText.Resolve(bossDialogue, message);
         if (DevTutorialBypass.Disabled) { HideBossDialogue(); return; }
         RecoverTaskPanel();
 
@@ -167,9 +178,21 @@ public class TutorialUIManager : MonoBehaviour
         ShowBossDialoguePage(bossDialoguePages[0]);
     }
 
-    /// <summary>Returns true when Space should be consumed by the current dialogue before its owner advances.</summary>
+    /// <summary>Consumes reveal/page input before the dialogue owner advances.</summary>
     public bool TryAdvanceBossDialoguePage()
     {
+        if (PauseManager.isPaused || !Application.isFocused || bossInputConsumedFrame == Time.frameCount) return true;
+        if (!IsBossDialogueOpen()) return false;
+        if (bossRevealCoroutine != null || Time.unscaledTime < bossDialogueReadyAt)
+        {
+            if (bossRevealCoroutine != null) StopCoroutine(bossRevealCoroutine);
+            bossRevealCoroutine = null;
+            ResetBossAnimationState();
+            GameplayAudioManager.StopVoice();
+            bossDialogueReadyAt = 0f;
+            bossInputConsumedFrame = Time.frameCount;
+            return true;
+        }
         if (!HasPendingBossDialoguePage()) return false;
         if (!CanAdvanceCurrentBossDialoguePage()) return true;
         AdvanceBossDialoguePage();
@@ -178,6 +201,7 @@ public class TutorialUIManager : MonoBehaviour
 
     private void ShowBossDialoguePage(string message)
     {
+        bossInputConsumedFrame = Time.frameCount;
         GameplayAudioManager.Speak();
         if (bossRevealCoroutine != null)
         {
@@ -262,9 +286,10 @@ public class TutorialUIManager : MonoBehaviour
 
     public bool CanAdvanceBossDialogue()
     {
-        // Owners must wait while this shared UI still has another page to show.
-        // TutorialUIManager.Update consumes Space and advances that page first.
-        return !HasPendingBossDialoguePage() && CanAdvanceCurrentBossDialoguePage();
+        ProcessBossRevealInput();
+        // Process input here too so owner Update order cannot skip a revealed page.
+        return !PauseManager.isPaused && Application.isFocused && bossInputConsumedFrame != Time.frameCount &&
+               !HasPendingBossDialoguePage() && CanAdvanceCurrentBossDialoguePage();
     }
 
     public float GetBossDialogueReadyDelay()
@@ -306,7 +331,7 @@ public class TutorialUIManager : MonoBehaviour
 
         if (newTaskNotification != null) newTaskNotification.SetActive(false);
 
-        if (newTaskNotification != null) notificationCoroutine = StartCoroutine(ShowNewTaskNotification());
+        if (newTaskNotification != null && EditorManager.Instance == null) notificationCoroutine = StartCoroutine(ShowNewTaskNotification());
     }
 
     private IEnumerator RevealTasksSequentially(string[] tasks)
@@ -323,16 +348,30 @@ public class TutorialUIManager : MonoBehaviour
                 if (taskRows[i].taskText != null)
                 {
                     taskRows[i].taskText.text = cleanText;
-                    taskRows[i].taskText.enableWordWrapping = false;
-                    taskRows[i].taskText.overflowMode = TextOverflowModes.Ellipsis;
-                    taskRows[i].taskText.enableAutoSizing = true;
+                    taskRows[i].taskText.enableWordWrapping = true;
+                    taskRows[i].taskText.overflowMode = TextOverflowModes.Overflow;
+                    taskRows[i].taskText.enableAutoSizing = false;
+                    taskRows[i].taskText.fontSize = 20f;
                     taskRows[i].taskText.fontSizeMin = 14f;
+                    if (EditorManager.Instance != null)
+                    {
+                        taskRows[i].taskText.fontSizeMax = 22f;
+                        taskRows[i].taskText.raycastTarget = false;
+                    }
                 }
                 ApplyTaskState(i);
 
                 taskRows[i].rowContainer.SetActive(true);
-                yield return AnimateTaskRowIn(taskRows[i]);
-                yield return new WaitForSecondsRealtime(0.08f);
+                if (EditorManager.Instance == null)
+                {
+                    yield return AnimateTaskRowIn(taskRows[i]);
+                    yield return new WaitForSecondsRealtime(0.08f);
+                }
+                else
+                {
+                    var group = taskRows[i].rowContainer.GetComponent<CanvasGroup>();
+                    if (group != null) { group.alpha = 1f; group.blocksRaycasts = false; }
+                }
             }
         }
 
@@ -383,6 +422,184 @@ public class TutorialUIManager : MonoBehaviour
         {
             if (row != null && row.rowContainer != null) row.rowContainer.SetActive(false);
         }
+    }
+
+    private readonly Vector3[] editorTimelineCorners = new Vector3[4];
+    private TMP_FontAsset editorChecklistFont;
+    private readonly Dictionary<RectTransform, Vector2> originalTaskPositions = new Dictionary<RectTransform, Vector2>();
+    private readonly Dictionary<RectTransform, float> originalTaskHeights = new Dictionary<RectTransform, float>();
+
+    private void FitStudioTaskRows()
+    {
+        if (EditorManager.Instance != null || taskRows == null) return;
+        float extraHeight = 0f;
+        foreach (var row in taskRows)
+        {
+            if (row == null || row.rowContainer == null || row.taskText == null) continue;
+            var rect = row.rowContainer.transform as RectTransform;
+            if (rect == null) continue;
+            if (!originalTaskPositions.ContainsKey(rect))
+            {
+                originalTaskPositions.Add(rect, rect.anchoredPosition);
+                originalTaskHeights.Add(rect, rect.rect.height);
+            }
+            var label = row.taskText;
+            label.enableWordWrapping = true;
+            label.overflowMode = TextOverflowModes.Overflow;
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.offsetMin = new Vector2(4f, 6f);
+            label.rectTransform.offsetMax = new Vector2(-4f, -6f);
+            float height = Mathf.Max(originalTaskHeights[rect], label.GetPreferredValues(label.text, Mathf.Max(1f, rect.rect.width - 8f), Mathf.Infinity).y + 12f);
+            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            rect.anchoredPosition = originalTaskPositions[rect] + Vector2.down * (extraHeight + (height - originalTaskHeights[rect]) * (1f - rect.pivot.y));
+            if (row.rowContainer.activeSelf) extraHeight += height - originalTaskHeights[rect];
+        }
+    }
+    private readonly Dictionary<Canvas, (bool sorting, int order)> almanacTaskSorting =
+        new Dictionary<Canvas, (bool sorting, int order)>();
+
+    private bool taskViewfinderOpen;
+    public void SetTaskViewfinderVisible(bool open)
+    {
+        taskViewfinderOpen = open;
+        UpdateAlmanacTaskSorting();
+    }
+
+    private void UpdateAlmanacTaskSorting()
+    {
+        bool bookOpen = AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen();
+        if (!bookOpen && !taskViewfinderOpen)
+        {
+            foreach (var entry in almanacTaskSorting)
+                if (entry.Key != null)
+                {
+                    entry.Key.overrideSorting = entry.Value.sorting;
+                    entry.Key.sortingOrder = entry.Value.order;
+                }
+            almanacTaskSorting.Clear();
+            return;
+        }
+        if (taskRows == null) return;
+        foreach (var row in taskRows)
+        {
+            if (row == null || row.rowContainer == null) continue;
+            var canvas = row.rowContainer.GetComponent<Canvas>();
+            if (canvas == null) canvas = row.rowContainer.AddComponent<Canvas>();
+            if (!almanacTaskSorting.ContainsKey(canvas))
+                almanacTaskSorting.Add(canvas, (canvas.overrideSorting, canvas.sortingOrder));
+            // Viewfinder is order 150; boss dialogue remains above tasks at 160.
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = taskViewfinderOpen ? 155 : 65;
+        }
+    }
+
+    private void LateUpdate()
+    {
+        UpdateAlmanacTaskSorting();
+        if (editorChecklistFont == null)
+            editorChecklistFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (taskRows != null)
+            foreach (var row in taskRows)
+            {
+                if (row == null || row.taskText == null) continue;
+                if (editorChecklistFont != null) row.taskText.font = editorChecklistFont;
+                row.taskText.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+                row.taskText.characterSpacing = 0;
+                row.taskText.enableAutoSizing = false;
+                row.taskText.fontSize = 20f;
+            }
+        FitStudioTaskRows();
+        var lesson = EditorTutorialManager.Instance;
+        if (EditorManager.Instance == null || lesson == null || lesson.timelineScrollRect == null || taskRows == null) return;
+        var viewport = lesson.timelineScrollRect.viewport;
+        if (viewport == null || !viewport.gameObject.activeInHierarchy) return;
+        if (editorChecklistFont == null)
+            editorChecklistFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        viewport.GetWorldCorners(editorTimelineCorners);
+        var sourceCanvas = viewport.GetComponentInParent<Canvas>();
+        var sourceCamera = sourceCanvas != null && sourceCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? sourceCanvas.worldCamera : null;
+        Vector2 screen = RectTransformUtility.WorldToScreenPoint(sourceCamera, editorTimelineCorners[1]);
+        float totalHeight = 0f;
+        foreach (var row in taskRows)
+            if (row != null && row.rowContainer != null && row.rowContainer.activeInHierarchy)
+            {
+                if (row.taskText != null)
+                {
+                    if (editorChecklistFont != null) row.taskText.font = editorChecklistFont;
+                    row.taskText.enableAutoSizing = false;
+                    row.taskText.fontSize = 20f;
+                    row.taskText.enableWordWrapping = true;
+                    row.taskText.overflowMode = TextOverflowModes.Overflow;
+                }
+                totalHeight += EditorTaskHeight(row) + 4f;
+            }
+        float rowOffset = 0f;
+        foreach (var row in taskRows)
+        {
+            if (row == null || row.rowContainer == null || !row.rowContainer.activeInHierarchy) continue;
+            var rect = row.rowContainer.transform as RectTransform;
+            var parent = rect != null ? rect.parent as RectTransform : null;
+            if (parent == null) continue;
+            var canvas = parent.GetComponentInParent<Canvas>();
+            var camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            // Keep the checklist at the screen's left edge; use the timeline only for its lower height.
+            Vector2 sideScreen = screen;
+            if (canvas != null)
+            {
+                ((RectTransform)canvas.rootCanvas.transform).GetWorldCorners(editorTimelineCorners);
+                sideScreen.x = RectTransformUtility.WorldToScreenPoint(camera, editorTimelineCorners[0]).x;
+            }
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, sideScreen, camera, out var corner);
+            rect.pivot = new Vector2(0f, 1f);
+            rect.localScale = Vector3.one;
+            float rowHeight = EditorTaskHeight(row);
+            rect.sizeDelta = new Vector2(430f, rowHeight);
+            // Stack above the ruler, leaving the timeline tracks clear.
+            rect.position = parent.TransformPoint(corner + new Vector2(0f, 48f + totalHeight - rowOffset));
+            if (lesson.currentStep == EditorTutorialManager.EditorStep.ClickExport && canvas != null)
+            {
+                // Use the empty area beneath the COLOR heading, above all comparison controls.
+                var rootRect = (RectTransform)canvas.rootCanvas.transform;
+                Vector3 safePosition = rootRect.TransformPoint(new Vector3(
+                    rootRect.rect.xMin + rootRect.rect.width * .02f,
+                    rootRect.rect.yMin + rootRect.rect.height * .87f, 0f));
+                Vector2 safeScreen = RectTransformUtility.WorldToScreenPoint(camera, safePosition);
+                RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, safeScreen, camera, out var safeLocal);
+                rect.position = parent.TransformPoint(safeLocal + Vector2.down * rowOffset);
+            }
+            rowOffset += rowHeight + 4f;
+            var background = row.rowContainer.GetComponent<Image>();
+            if (background != null) background.color = new Color(.10f, .42f, .23f, .31f);
+            foreach (var graphic in row.rowContainer.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
+            if (row.taskText != null)
+            {
+                var textRect = row.taskText.rectTransform;
+                textRect.localScale = Vector3.one;
+                textRect.localRotation = Quaternion.identity;
+                textRect.anchorMin = Vector2.zero; textRect.anchorMax = Vector2.one;
+                textRect.offsetMin = new Vector2(4f, 3f); textRect.offsetMax = new Vector2(-4f, -3f);
+                if (editorChecklistFont != null && row.taskText.font != editorChecklistFont)
+                {
+                    row.taskText.font = editorChecklistFont;
+                    row.taskText.fontSharedMaterial = editorChecklistFont.material;
+                }
+                row.taskText.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+                row.taskText.characterSpacing = 0f;
+                row.taskText.wordSpacing = 0f;
+                row.taskText.enableAutoSizing = false;
+                row.taskText.fontSizeMin = 16f;
+                row.taskText.fontSizeMax = 20f;
+                row.taskText.alignment = TextAlignmentOptions.MidlineLeft;
+                row.taskText.color = Color.white;
+            }
+        }
+    }
+
+    private static float EditorTaskHeight(TaskUIRow row)
+    {
+        return row.taskText == null ? 36f : Mathf.Max(36f, row.taskText.GetPreferredValues(row.taskText.text, 422f, Mathf.Infinity).y + 12f);
     }
 
     private void RecoverTaskPanel()

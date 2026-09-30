@@ -101,21 +101,26 @@ public class TutorialHighlighter : MonoBehaviour
     }
 #endif
 
-    private void Update()
+    private void LateUpdate()
     {
+        if (IsChoosingContract()) { HideHighlight(); return; }
         if (highlightFrame != null && highlightFrame.gameObject.activeSelf && targetElement != null)
         {
             // 1. Pulse the yellow frame
             float alpha = (Mathf.Sin(Time.unscaledTime * pulseSpeed) + 1f) / 2f;
-            if (frameCanvasGroup != null) frameCanvasGroup.alpha = Mathf.Lerp(0.4f, 1f, alpha);
+            if (frameCanvasGroup != null) frameCanvasGroup.alpha = EditorManager.Instance != null ? 1f : Mathf.Lerp(0.4f, 1f, alpha);
 
             // 2. Smoothly fade in the dark background
             if (dimmerGroup != null)
             {
                 currentDimmerAlpha = Mathf.MoveTowards(currentDimmerAlpha, 1f, Time.unscaledDeltaTime * 5f);
-                var editor=EditorManager.Instance;
-                bool grading=editor!=null&&editor.colorGradingBin!=null&&editor.colorGradingBin.activeInHierarchy;
-                dimmerGroup.alpha = grading ? 0f : currentDimmerAlpha;
+                dimmerGroup.alpha = currentDimmerAlpha;
+                var lesson = EditorTutorialManager.Instance;
+                if (lesson != null && (lesson.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness ||
+                    lesson.currentStep == EditorTutorialManager.EditorStep.AdjustContrast ||
+                    lesson.currentStep == EditorTutorialManager.EditorStep.AdjustSaturation ||
+                    lesson.currentStep == EditorTutorialManager.EditorStep.ClickExport))
+                    dimmerGroup.alpha = 0f;
             }
 
             TrackTarget();
@@ -124,6 +129,7 @@ public class TutorialHighlighter : MonoBehaviour
 
     public void HighlightElement(RectTransform uiElementToHighlight)
     {
+        if (IsChoosingContract()) { HideHighlight(); return; }
         if (targetElement == uiElementToHighlight && targetElement != null && highlightFrame != null && highlightFrame.gameObject.activeSelf) return;
         HideHighlight();
 
@@ -139,10 +145,55 @@ public class TutorialHighlighter : MonoBehaviour
         }
 
         targetElement = uiElementToHighlight;
+        if (EditorManager.Instance != null) EnsureEditorFrame();
         highlightFrame.gameObject.SetActive(true);
         if (dimmerGroup != null) dimmerGroup.gameObject.SetActive(true);
 
         TrackTarget();
+    }
+
+    private static bool IsChoosingContract()
+    {
+        var contracts = ContractUIManager.Instance;
+        return contracts != null && contracts.offerPanel != null && contracts.offerPanel.activeInHierarchy;
+    }
+
+    private void EnsureEditorFrame()
+    {
+        // Render above the workspace, independently of masks on the authored frame.
+        var root = myCanvas != null ? myCanvas.rootCanvas : null;
+        if (root == null) return;
+        highlightFrame.SetParent(root.transform, false);
+        highlightFrame.anchorMin = highlightFrame.anchorMax = new Vector2(.5f, .5f);
+        highlightFrame.pivot = new Vector2(.5f, .5f);
+        highlightFrame.localScale = Vector3.one;
+        var canvas = highlightFrame.GetComponent<Canvas>();
+        if (canvas == null) canvas = highlightFrame.gameObject.AddComponent<Canvas>();
+        canvas.overrideSorting = true; canvas.sortingOrder = 25000;
+        var oldImage = highlightFrame.GetComponent<Image>();
+        if (oldImage != null) oldImage.enabled = false;
+        // Use the same clear rectangular opening and dark surround as the shop.
+        // Disable edges from older runtime instances rather than drawing a gold border.
+        for (int i = 0; i < 4; i++)
+        {
+            var edge = highlightFrame.Find("Guide Edge " + i);
+            if (edge != null) edge.gameObject.SetActive(false);
+        }
+        CreateDimmerPanels();
+        if (dimmerGroup != null)
+        {
+            var rect = (RectTransform)dimmerGroup.transform;
+            rect.SetParent(root.transform, false);
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            rect.localScale = Vector3.one;
+            var maskCanvas = dimmerGroup.GetComponent<Canvas>();
+            if (maskCanvas == null) maskCanvas = dimmerGroup.gameObject.AddComponent<Canvas>();
+            maskCanvas.overrideSorting = true;
+            maskCanvas.sortingOrder = 24999;
+            dimmerGroup.blocksRaycasts = false;
+        }
     }
 
     public void HighlightWorldBounds(Bounds bounds, Camera camera)
@@ -212,6 +263,23 @@ public class TutorialHighlighter : MonoBehaviour
         Vector2 screenBottomLeft = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[0]);
         Vector2 screenTopRight = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[2]);
 
+        // Contract selection needs the artwork and its action visible together.
+        // Expand the same dimmer opening rather than leaving the folder under the mask.
+        if (targetElement.name == "Select contract" && targetElement.parent != null)
+        {
+            var folder = targetElement.parent.Find("Contract folder 1") as RectTransform;
+            if (folder != null && folder.gameObject.activeInHierarchy)
+            {
+                folder.GetWorldCorners(targetCorners);
+                for (int i = 0; i < targetCorners.Length; i++)
+                {
+                    Vector2 point = RectTransformUtility.WorldToScreenPoint(cam, targetCorners[i]);
+                    screenBottomLeft = Vector2.Min(screenBottomLeft, point);
+                    screenTopRight = Vector2.Max(screenTopRight, point);
+                }
+            }
+        }
+
         RectTransform parentRect = highlightFrame.parent as RectTransform;
         if (parentRect == null)
         {
@@ -227,7 +295,7 @@ public class TutorialHighlighter : MonoBehaviour
         Vector2 localSize = new Vector2(Mathf.Abs(localTopRight.x - localBottomLeft.x), Mathf.Abs(localTopRight.y - localBottomLeft.y));
 
         highlightFrame.position = parentRect.TransformPoint(localCenter);
-        highlightFrame.sizeDelta = localSize + Vector2.one * padding;
+        highlightFrame.sizeDelta = localSize + Vector2.one * (EditorManager.Instance != null ? 8f : padding);
         highlightFrame.localRotation = Quaternion.identity;
 
         // --- NEW: UPDATE THE DARKNESS MASK TO FRAME THE HOLE ---
@@ -257,6 +325,13 @@ public class TutorialHighlighter : MonoBehaviour
         float parentRight = parentLeft + parentW;
         float parentBottom = -parentRect.pivot.y * parentH;
         float parentTop = parentBottom + parentH;
+
+        holeLeft = Mathf.Clamp(holeLeft, parentLeft, parentRight);
+        holeRight = Mathf.Clamp(holeRight, parentLeft, parentRight);
+        holeBottom = Mathf.Clamp(holeBottom, parentBottom, parentTop);
+        holeTop = Mathf.Clamp(holeTop, parentBottom, parentTop);
+        holeH = holeTop - holeBottom;
+        holeY = (holeTop + holeBottom) * .5f;
 
         // 1. Top Panel
         dimmerPanels[0].sizeDelta = new Vector2(parentW, parentTop - holeTop);

@@ -82,20 +82,17 @@ public sealed class ActorBot : MonoBehaviour
                 {
                     if (originals[i] == null) continue;
                     var material = new Material(originals[i]);
-                    if (material.HasProperty("_BaseColor")) { var color = material.GetColor("_BaseColor"); color.a = .3f; material.SetColor("_BaseColor", color); }
-                    if (material.HasProperty("_Color")) { var color = material.GetColor("_Color"); color.a = .3f; material.SetColor("_Color", color); }
-                    if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 1f);
-                    if (material.HasProperty("_Mode")) material.SetFloat("_Mode", 2f);
-                    if (material.HasProperty("_Blend")) material.SetFloat("_Blend", 0f);
-                    material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-                    material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-                    material.SetInt("_ZWrite", 0);
-                    material.DisableKeyword("_ALPHATEST_ON");
-                    material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-                    material.EnableKeyword("_ALPHABLEND_ON");
-                    material.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                    material.SetOverrideTag("RenderType", "Transparent");
-                    material.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+                    // Preserve clothing occlusion and authored hair cutouts. Making
+                    // every layer transparent exposed the body beneath the outfit.
+                    // A subtle cyan tint distinguishes the placement preview instead.
+                    foreach (string property in new[] { "_BaseColor", "_Color" })
+                    {
+                        if (!material.HasProperty(property)) continue;
+                        Color original = material.GetColor(property);
+                        Color preview = Color.Lerp(original, new Color(.55f, .9f, 1f), .25f);
+                        preview.a = original.a;
+                        material.SetColor(property, preview);
+                    }
                     transparent[i] = material;
                     previewMaterials.Add(material);
                 }
@@ -161,6 +158,45 @@ public sealed class ActorBot : MonoBehaviour
     private Rigidbody heldBody;
     private bool heldWasKinematic;
     public bool IsHoldingProduct => heldProduct != null;
+    public bool CanMixCoffee => heldProduct != null && heldProduct.IsCoffeeCup;
+    private AnimationMixerPlayable coffeeActionMixer;
+    private AnimationClipPlayable coffeeActionPlayable;
+    private AnimationClip activeCoffeeClip;
+
+    private bool EvaluateCoffeeAnimation()
+    {
+        var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
+        AnimationClip clip = catalog == null ? null :
+            furnitureActive && furniture != null && furniture.action == Contract4Interactable.Action.Machine ? catalog.coffeePressAnimation :
+            !furnitureActive && performance == 3 && CanMixCoffee && !walking ? catalog.coffeeMixAnimation : null;
+        if (clip == null || !clip.isHumanMotion || !graph.IsValid())
+        {
+            if (coffeeActionMixer.IsValid()) { coffeeActionMixer.SetInputWeight(0,1); coffeeActionMixer.SetInputWeight(1,0); }
+            return false;
+        }
+        if (!coffeeActionMixer.IsValid())
+        {
+            var output = graph.GetOutput(0);
+            var original = output.GetSourcePlayable();
+            coffeeActionMixer = AnimationMixerPlayable.Create(graph,2);
+            graph.Connect(original,0,coffeeActionMixer,0);
+            output.SetSourcePlayable(coffeeActionMixer);
+        }
+        if (activeCoffeeClip != clip)
+        {
+            if (coffeeActionPlayable.IsValid()) { graph.Disconnect(coffeeActionMixer,1); graph.DestroyPlayable(coffeeActionPlayable); }
+            coffeeActionPlayable = AnimationClipPlayable.Create(graph,clip);
+            graph.Connect(coffeeActionPlayable,0,coffeeActionMixer,1);
+            activeCoffeeClip = clip;
+        }
+        coffeeActionMixer.SetInputWeight(0,0); coffeeActionMixer.SetInputWeight(1,1);
+        coffeeActionPlayable.SetTime(Mathf.Repeat(elapsed,Mathf.Max(.001f,clip.length)));
+        graph.Evaluate(0);
+        poseHandler.GetHumanPose(ref pose);
+        pose.bodyPosition = restingPose.bodyPosition; pose.bodyRotation = restingPose.bodyRotation;
+        poseHandler.SetHumanPose(ref pose);
+        return true;
+    }
     private readonly CoffeeCharacterMotion coffeeMotion = new CoffeeCharacterMotion();
     public bool DrinkCoffee()
     {
@@ -307,9 +343,43 @@ public sealed class ActorBot : MonoBehaviour
     public bool HasStartMark => hasStart;
     public bool WalkCompleted { get; private set; }
     public bool ReturnedAfterWalk { get; private set; }
+    public static bool IsInsideStage(Vector3 position)
+    {
+        var stage = StageInterior.FindStagePlatform();
+        if (stage == null) return false;
+        var bounds = stage.bounds;
+        const float margin = .25f;
+        return position.x >= bounds.min.x + margin && position.x <= bounds.max.x - margin &&
+            position.z >= bounds.min.z + margin && position.z <= bounds.max.z - margin;
+    }
+
+    public bool CanStandAt(Vector3 position)
+    {
+        if (!IsInsideStage(position)) return false;
+        foreach (var obstacle in Physics.OverlapCapsule(position + Vector3.up * .4f,
+            position + Vector3.up * 1.5f, .22f, ~0, QueryTriggerInteraction.Ignore))
+            if (!obstacle.transform.IsChildOf(transform)) return false;
+        return true;
+    }
+
+    private bool WalkRouteClear()
+    {
+        int samples = Mathf.Max(1, Mathf.CeilToInt(Vector3.Distance(startMark, endMark) / .15f));
+        for (int i = 0; i <= samples; i++)
+            if (!CanStandAt(Vector3.Lerp(startMark, endMark, (float)i / samples))) return false;
+        return true;
+    }
+
+    public void WarnInvalidActorPosition()
+    {
+        const string message = "Reposition the actor and END mark inside the stage. Leave a clear walking route away from tables, lights and other obstacles.";
+        if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning(message);
+        GameFeedback.Show(message);
+    }
     public void SetStartMark()
     {
         StopFurnitureAction();
+        if (!CanStandAt(transform.position)) { WarnInvalidActorPosition(); return; }
         walking = false;
         startMark = transform.position;
         startFacing = transform.rotation;
@@ -325,6 +395,12 @@ public sealed class ActorBot : MonoBehaviour
         WalkCompleted = ReturnedAfterWalk = false;
         endMark.y = startMark.y;
         hasEnd = hasStart && Vector3.Distance(startMark, endMark) > .2f;
+        if (hasEnd && !WalkRouteClear())
+        {
+            hasEnd = false;
+            WarnInvalidActorPosition();
+            return;
+        }
         GameFeedback.Show(hasEnd ? "END saved. K: rehearse. J: return to start. Recording repeats this walk. H: clear walk."
             : "Set START with B first, then move the actor at least 0.2 metres before pressing N.");
     }
@@ -332,7 +408,9 @@ public sealed class ActorBot : MonoBehaviour
     {
         StopFurnitureAction();
         walking = false;
-        transform.position += new Vector3(offset.x, 0f, offset.z);
+        Vector3 destination = transform.position + new Vector3(offset.x, 0f, offset.z);
+        if (offset != Vector3.zero && !CanStandAt(destination)) { WarnInvalidActorPosition(); return; }
+        transform.position = destination;
     }
     public void ReturnToStartMark()
     {
@@ -345,6 +423,7 @@ public sealed class ActorBot : MonoBehaviour
     public void RehearseWalk()
     {
         if (!HasWalk) { GameFeedback.Show("Place the actor at START and press B, then move to END and press N."); return; }
+        if (!WalkRouteClear()) { hasEnd = false; WarnInvalidActorPosition(); return; }
         ReturnToStartMark();
         WalkCompleted = ReturnedAfterWalk = false;
         walking = true;
@@ -650,7 +729,7 @@ public sealed class ActorBot : MonoBehaviour
     {
         coffeeMotion.Reset();
         StopFurnitureAction();
-        performance = Mathf.Clamp(action, 0, 2);
+        performance = Mathf.Clamp(action, 0, CanMixCoffee ? 3 : 2);
         RestartTake();
         if (performance == 2) DrinkCoffee();
     }
@@ -687,6 +766,7 @@ public sealed class ActorBot : MonoBehaviour
     {
         if (poseHandler == null) return;
         if (furnitureActive) animator.transform.localPosition = furnitureVisualPosition;
+        if (EvaluateCoffeeAnimation()) return;
         if (graph.IsValid())
         {
             float length = idle.GetAnimationClip().length;

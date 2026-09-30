@@ -16,10 +16,9 @@ public class CutsceneController : MonoBehaviour
 
     private float playTimer = 0f;
     private bool canSkip = false;
+    private bool ending;
 
-    // Blink trackers
-    private float blinkTimer = 0f;
-    private bool isTextWhite = true;
+    private float cursorIdleTimer;
 
     private void Start()
     {
@@ -27,8 +26,20 @@ public class CutsceneController : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Make sure the skip text is hidden when the video starts!
-        if (skipPromptText != null) skipPromptText.gameObject.SetActive(false);
+        if (skipPromptText != null)
+        {
+            var rect = skipPromptText.rectTransform;
+            rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
+            rect.pivot = new Vector2(1f, 0f);
+            rect.anchoredPosition = new Vector2(-32f, 24f);
+            rect.sizeDelta = new Vector2(460f, 48f);
+            skipPromptText.enableAutoSizing = false;
+            skipPromptText.fontSize = 22f;
+            skipPromptText.alignment = TextAlignmentOptions.MidlineRight;
+            skipPromptText.raycastTarget = false;
+            skipPromptText.alpha = 0f;
+            skipPromptText.gameObject.SetActive(true);
+        }
 
         if (videoPlayer != null)
         {
@@ -39,29 +50,22 @@ public class CutsceneController : MonoBehaviour
     private void Update()
     {
         // Count up the master timer while the cutscene plays
-        playTimer += Time.deltaTime;
+        playTimer += Time.unscaledDeltaTime;
+        // Delta still detects physical mouse movement while the cursor is locked.
+        bool cursorMoved = Mouse.current != null && Mouse.current.delta.ReadValue().sqrMagnitude > .01f;
+        cursorIdleTimer = cursorMoved ? 0f : cursorIdleTimer + Time.unscaledDeltaTime;
 
         // Unlock the ability to skip after 3 seconds
         if (playTimer >= 3f && !canSkip)
         {
             canSkip = true;
-            // Show the text!
-            if (skipPromptText != null) skipPromptText.gameObject.SetActive(true);
         }
 
-        // --- NEW: The Blinking Logic ---
-        // Only blink if we are allowed to skip and the text exists
-        if (canSkip && skipPromptText != null)
+        // A quiet reminder after five idle seconds, without distracting blinking.
+        if (skipPromptText != null)
         {
-            blinkTimer += Time.deltaTime;
-            if (blinkTimer >= blinkSpeed)
-            {
-                blinkTimer = 0f; // Reset the blink timer
-                isTextWhite = !isTextWhite; // Flip the color state
-
-                // Apply the color to the text!
-                skipPromptText.color = isTextWhite ? Color.white : Color.black;
-            }
+            float targetAlpha = canSkip && cursorIdleTimer >= 5f ? 1f : 0f;
+            skipPromptText.alpha = cursorMoved ? 0f : Mathf.MoveTowards(skipPromptText.alpha, targetAlpha, Time.unscaledDeltaTime * 3f);
         }
 
         // If allowed to skip AND the player presses Spacebar, skip the scene!
@@ -83,8 +87,10 @@ public class CutsceneController : MonoBehaviour
 
     private void EndCutscene(VideoPlayer vp)
     {
-
-        SceneManager.LoadScene(5);
+        if (ending) return;
+        ending = true;
+        StudioArrivalTour.Queue();
+        LoadingScreenController.LoadScene(5);
     }
 
     private void OnDestroy()

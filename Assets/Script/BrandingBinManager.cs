@@ -83,12 +83,13 @@ public class BrandingBinManager : MonoBehaviour
         // 2. Check Progress
         int currentLevel = CampaignProgression.GetCurrentLevel();
         List<BrandingData> activeList = currentLevel == 1 ? tutorialLogos : level1Logos;
+        if (currentLevel == 4) activeList = new List<BrandingData>();
         if(currentLevel==3)
         {
             activeList=new List<BrandingData>
             {
                 new BrandingData { logoName="TERRARI",logoSprite=ExportUIArt.GetWhite("terrariWordmark") },
-                new BrandingData { logoName="TERRARI EMBLEM",logoSprite=ExportUIArt.GetWhite("terrariMark") }
+                new BrandingData { logoName="TERRARI TEXT 2",logoSprite=ExportUIArt.GetWhite("terrariWordmark") }
             };
         }
 
@@ -109,6 +110,12 @@ public class BrandingBinManager : MonoBehaviour
             if (logoImage != null)
             {
                 logoImage.sprite = GetDisplaySprite(data);
+                if (currentLevel == 2)
+                {
+                    // Preserve the artwork's alpha and crop in previews and export clones.
+                    logoImage.sprite = ExportUIArt.GetWhite(logoImage.sprite);
+                    logoImage.color = Color.white;
+                }
                 logoImage.preserveAspect = true;
             }
             newLogo.transform.localScale = Vector3.one;

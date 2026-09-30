@@ -13,7 +13,10 @@ public class UIDragProp : MonoBehaviour, IPointerClickHandler
         terminal = term;
 
         TextMeshProUGUI label = GetComponentInChildren<TextMeshProUGUI>();
-        if (label != null) label.text = (prefab.name.ToLowerInvariant().Contains("cube") && CampaignProgression.GetCurrentLevel() == 1 ? "Table" : prefab.name.Replace("Prefab", "")) + "\n" + ProductionEconomy.Prop + " B";
+        string displayName = prefab.name.ToLowerInvariant().Contains("cube")
+            ? (CampaignProgression.GetCurrentLevel() == 1 ? "Table" : "Box")
+            : prefab.name.Replace("Prefab", "");
+        if (label != null) label.text = displayName + "\n" + ProductionEconomy.Prop + " B";
     }
 
     public void OnPointerClick(PointerEventData eventData)

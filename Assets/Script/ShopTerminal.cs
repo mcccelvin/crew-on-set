@@ -135,7 +135,200 @@ public class ShopTerminal : MonoBehaviour
                 }
                 label.text = DisplayEquipmentName(label.text);
             }
+            CompactShopCards(canvas);
+            RefreshShopAvailability(canvas);
         }
+    }
+
+    private bool IsShopItemOwned(string itemName)
+    {
+        // Recording media is consumable and must remain purchasable.
+        if (itemName == "SD CARD") return false;
+        // Level 2's existing lesson requires three panel lights in total.
+        if (itemName != "NONY FX" && itemName != "LEVEL 2 CAMERA" && itemName != "DIRECTOR MEGAPHONE") return false;
+        if (itemName == "DIRECTOR MEGAPHONE" && RequiresPracticeMegaphonePurchase && !MegaphonePurchasedThisSession) return false;
+        if (PlayerPrefs.GetInt("OwnedEquipment." + itemName, 0) > 0) return true;
+        if (itemName == "NONY FX") return cameraSoldOut;
+        if (itemName == "LEVEL 3 SOFT LIGHT") return level3LightSoldOut || PlayerPrefs.GetInt("Level3LightPurchased", 0) == 1;
+        if (itemName == "DIRECTOR MEGAPHONE") return megaphoneSoldOut || HasPurchasedMegaphone;
+        return false;
+    }
+
+    private bool IsShopItemAvailable(string itemName)
+    {
+        int level = CampaignProgression.GetCurrentLevel();
+        if (itemName == "LEVEL 2 CAMERA" || itemName == "LIGHT STRIP") return false;
+        if (itemName == "LEVEL 3 SOFT LIGHT" && level < 3) return false;
+        if (itemName == "DIRECTOR MEGAPHONE" && level < 4) return false;
+        var item = availableItems.Find(candidate => candidate != null && candidate.itemName == itemName);
+        return item != null && item.prefabToSpawn != null;
+    }
+
+    private void RefreshShopAvailability(Canvas canvas)
+    {
+        if (canvas == null) return;
+        foreach (string name in new[] { "NONY FX", "160 LED PANEL", "SD CARD", "LEVEL 3 SOFT LIGHT", "DIRECTOR MEGAPHONE" })
+        {
+            bool owned = IsShopItemOwned(name);
+            bool available = IsShopItemAvailable(name);
+            string caption = owned ? "OUT OF STOCK" : available ? "+ ADD TO CART" : "NOT AVAILABLE";
+            int index = availableItems.FindIndex(item => item != null && item.itemName == name);
+            foreach (var card in FindLayoutCards(canvas, name))
+            {
+                foreach (var button in card.GetComponentsInChildren<Button>(true))
+                {
+                    if (!IsCartButton(button)) continue;
+                    button.gameObject.name = "Shop cart button";
+                    button.onClick = new Button.ButtonClickedEvent();
+                    if (index >= 0) button.onClick.AddListener(() => AddItemToCartByIndex(index));
+                    button.enabled = true;
+                    button.interactable = !owned && available;
+                    var liveLabel = SetVisibleStockCaption(button, caption);
+                    foreach (var label in button.GetComponentsInChildren<TextMeshProUGUI>(true))
+                        if (label != liveLabel) label.enabled = false;
+                }
+            }
+        }
+    }
+
+    private static TextMeshProUGUI SetVisibleStockCaption(Button button, string caption)
+    {
+        // The card texture has baked lettering. Cover the button's actual text area
+        // so world and screen canvas scaling cannot shift the replacement caption.
+        var oldCardOverlay = button.transform.parent != null
+            ? button.transform.parent.Find("Shop stock caption") as RectTransform
+            : null;
+        if (oldCardOverlay != null && oldCardOverlay.parent != button.transform)
+            Destroy(oldCardOverlay.gameObject);
+        var cover = button.transform.Find("Shop stock caption") as RectTransform;
+        if (cover == null)
+        {
+            var panel = new GameObject("Shop stock caption", typeof(RectTransform), typeof(Image));
+            cover = panel.GetComponent<RectTransform>();
+            cover.SetParent(button.transform, false);
+            cover.anchorMin = new Vector2(.06f, .12f);
+            cover.anchorMax = new Vector2(.94f, .88f);
+            cover.offsetMin = cover.offsetMax = Vector2.zero;
+            var background = panel.GetComponent<Image>();
+            background.color = Color.white;
+            background.raycastTarget = false;
+            var textObject = new GameObject("Status", typeof(RectTransform), typeof(TextMeshProUGUI));
+            textObject.transform.SetParent(cover, false);
+            var label = textObject.GetComponent<TextMeshProUGUI>();
+            label.rectTransform.anchorMin = Vector2.zero;
+            label.rectTransform.anchorMax = Vector2.one;
+            label.rectTransform.offsetMin = label.rectTransform.offsetMax = Vector2.zero;
+            label.font = TMP_Settings.defaultFontAsset;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 1f;
+            label.fontSizeMax = 32f;
+            label.enableWordWrapping = false;
+            label.color = Color.black;
+            label.raycastTarget = false;
+        }
+        cover.SetAsLastSibling();
+        var status = cover.GetComponentInChildren<TextMeshProUGUI>(true);
+        status.text = caption;
+        return status;
+    }
+
+    public static void CompactShopCards(Canvas canvas)
+    {
+        if (canvas == null) return;
+        var camera = FindLayoutCard(canvas, "NONY FX");
+        if (camera != null)
+        {
+            var parent = camera.parent;
+            if (parent == null) return;
+            var light = FindLayoutCard(canvas, "160 LED PANEL");
+            var card = FindLayoutCard(canvas, "SD CARD");
+            if (light == null || card == null) return;
+            float[] columns = { camera.localPosition.x, light.localPosition.x, card.localPosition.x };
+            float rowHeight = camera.rect.height + 15f;
+            var betterLights = KeepSingleBetterLightsCard(canvas) as RectTransform ?? FindLayoutCard(canvas, "LEVEL 3 SOFT LIGHT");
+            var megaphone = KeepSingleShopCard(canvas, "Director Megaphone") as RectTransform ?? FindLayoutCard(canvas, "DIRECTOR MEGAPHONE");
+            var cards = new[] { camera, light, card, betterLights, megaphone };
+            var parentLayout = parent.GetComponent<LayoutGroup>();
+            foreach (var layoutCard in cards)
+            {
+                if (layoutCard == null) continue;
+                if (layoutCard.parent != parent) layoutCard.SetParent(parent, false);
+                layoutCard.anchorMin = camera.anchorMin;
+                layoutCard.anchorMax = camera.anchorMax;
+                layoutCard.pivot = camera.pivot;
+                layoutCard.sizeDelta = camera.sizeDelta;
+                layoutCard.localScale = camera.localScale;
+                layoutCard.localRotation = camera.localRotation;
+                if (parentLayout != null)
+                {
+                    var ignore = layoutCard.GetComponent<LayoutElement>() ?? layoutCard.gameObject.AddComponent<LayoutElement>();
+                    ignore.ignoreLayout = true;
+                }
+                int item = System.Array.IndexOf(cards, layoutCard);
+                layoutCard.localPosition = new Vector3(columns[item % 3], camera.localPosition.y - (item / 3) * rowHeight, camera.localPosition.z);
+                layoutCard.gameObject.SetActive(true);
+                layoutCard.SetAsLastSibling();
+            }
+        }
+    }
+
+    private static List<RectTransform> FindLayoutCards(Canvas canvas, string title)
+    {
+        var matches = new List<RectTransform>();
+        var unique = new HashSet<RectTransform>();
+        if (canvas == null) return matches;
+        foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
+        {
+            if (!DisplayEquipmentName(label.text.Trim()).Equals(DisplayEquipmentName(title), System.StringComparison.OrdinalIgnoreCase)) continue;
+            for (var node = label.transform.parent; node != null && node != canvas.transform; node = node.parent)
+            {
+                bool hasCart = false;
+                foreach (var button in node.GetComponentsInChildren<Button>(true))
+                    if (IsCartButton(button)) { hasCart = true; break; }
+                if (hasCart)
+                {
+                    if (node is RectTransform rect && unique.Add(rect)) matches.Add(rect);
+                    break;
+                }
+            }
+        }
+        return matches;
+    }
+
+    private static RectTransform FindLayoutCard(Canvas canvas, string title)
+    {
+        var cards = FindLayoutCards(canvas, title);
+        if (cards.Count == 0) return null;
+        foreach (var card in cards) if (card.gameObject.activeInHierarchy) return card;
+        return cards[0];
+    }
+
+    private static Transform KeepSingleBetterLightsCard(Canvas canvas)
+    {
+        return KeepSingleShopCard(canvas, "Level 3 Soft Light", "Better Lights");
+    }
+
+    private static Transform KeepSingleShopCard(Canvas canvas, string cardName, string alias = null)
+    {
+        if (canvas == null) return null;
+        Transform first = null;
+        foreach (var rect in canvas.GetComponentsInChildren<RectTransform>(true))
+        {
+            if (rect.parent == null ||
+                (!rect.name.Equals(cardName, System.StringComparison.OrdinalIgnoreCase) &&
+                 (alias == null || !rect.name.Equals(alias, System.StringComparison.OrdinalIgnoreCase))) ||
+                rect.GetComponentInChildren<Button>(true) == null) continue;
+            if (first != null)
+            {
+                rect.gameObject.SetActive(false);
+                continue;
+            }
+            first = rect;
+        }
+        if (first != null) first.gameObject.SetActive(true);
+        return first;
     }
 
     private void RefreshEquipmentIcons()
@@ -215,12 +408,15 @@ public class ShopTerminal : MonoBehaviour
                     candidate.GetComponent<Player.Equipment.ActorMegaphoneItem>() != null) continue;
                 candidate.SetParent(null, true);
                 candidate.position = position;
-                Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(candidate.gameObject);
                 candidate.gameObject.SetActive(true);
+                Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(candidate.gameObject).PrepareShopDelivery(position);
                 return candidate.gameObject;
             }
         }
-        return Instantiate(item.prefabToSpawn, position, deliveryZone.rotation);
+        var delivered = Instantiate(item.prefabToSpawn, position, deliveryZone.rotation);
+        if (item.itemName == "DIRECTOR MEGAPHONE")
+            Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(delivered).PrepareShopDelivery(position);
+        return delivered;
     }
 
     private void SetupMegaphone()
@@ -243,7 +439,9 @@ public class ShopTerminal : MonoBehaviour
             if (btn != null) btn.interactable = false;
 
         foreach (var txt in cameraCartTexts)
-            if (txt != null) txt.text = "SOLD OUT";
+            if (txt != null) txt.text = "OUT OF STOCK";
+        RefreshShopAvailability(worldSpaceCanvas);
+        RefreshShopAvailability(screenSpaceCanvas);
     }
 
     // Compatibility entry points retained for existing scene/event references.
@@ -340,7 +538,9 @@ public class ShopTerminal : MonoBehaviour
         try
         {
         if (shopCanvas == null) return;
-        var existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 3 SOFT LIGHT"),shopCanvas);
+        var existingCard=KeepSingleBetterLightsCard(shopCanvas);
+        if (existingCard == null)
+            existingCard=FindShopItemCard(FindShopText(shopCanvas,"LEVEL 3 SOFT LIGHT"),shopCanvas);
         if(existingCard!=null)
         {
             foreach(var button in existingCard.GetComponentsInChildren<Button>(true))
@@ -348,7 +548,7 @@ public class ShopTerminal : MonoBehaviour
                 if(!IsCartButton(button))continue;
                 button.onClick=new Button.ButtonClickedEvent();
                 button.onClick.AddListener(()=>AddItemToCartByIndex(level3LightItemIndex));
-                button.enabled=true;button.interactable=true;
+                button.enabled=true;button.interactable=!level3LightSoldOut;
             }
             if(!level3LightCards.Contains(existingCard.gameObject))level3LightCards.Add(existingCard.gameObject);
             existingCard.gameObject.SetActive(true);return;
@@ -383,7 +583,13 @@ public class ShopTerminal : MonoBehaviour
 
         level3LightCards.Add(level3LightCard);
         }
-        finally { RefreshEquipmentIcons(); }
+        finally
+        {
+            RefreshEquipmentIcons();
+            CompactShopCards(shopCanvas);
+            RefreshShopAvailability(shopCanvas);
+            level3LightCards.RemoveAll(card => card == null || !card.activeSelf);
+        }
     }
 
     private void PositionLevel3LightCard(RectTransform level3LightCard, RectTransform originalLightCard)
@@ -405,7 +611,9 @@ public class ShopTerminal : MonoBehaviour
         try
         {
         if (canvas == null) return;
-        var existingCard=FindShopItemCard(FindShopText(canvas,"DIRECTOR MEGAPHONE"),canvas);
+        var existingCard=KeepSingleShopCard(canvas, "Director Megaphone");
+        if (existingCard == null)
+            existingCard=FindShopItemCard(FindShopText(canvas,"DIRECTOR MEGAPHONE"),canvas);
         if(existingCard!=null)
         {
             foreach(var button in existingCard.GetComponentsInChildren<Button>(true))
@@ -413,7 +621,7 @@ public class ShopTerminal : MonoBehaviour
                 if(!IsCartButton(button))continue;
                 button.onClick=new Button.ButtonClickedEvent();
                 button.onClick.AddListener(()=>AddItemToCartByIndex(index));
-                button.enabled=true;button.interactable=true;
+                button.enabled=true;button.interactable=!megaphoneSoldOut;
             }
             if(!megaphoneCards.Contains(existingCard.gameObject))megaphoneCards.Add(existingCard.gameObject);
             existingCard.gameObject.SetActive(true);return;
@@ -441,7 +649,13 @@ public class ShopTerminal : MonoBehaviour
         megaphoneCards.Add(card);
         card.SetActive(true);
         }
-        finally { RefreshEquipmentIcons(); }
+        finally
+        {
+            RefreshEquipmentIcons();
+            CompactShopCards(canvas);
+            RefreshShopAvailability(canvas);
+            megaphoneCards.RemoveAll(card => card == null || !card.activeSelf);
+        }
     }
 
     private void MarkMegaphoneSoldOut()
@@ -451,8 +665,10 @@ public class ShopTerminal : MonoBehaviour
         {
             if (card == null) continue;
             foreach (var button in card.GetComponentsInChildren<Button>(true)) if (IsCartButton(button)) button.interactable = false;
-            foreach (var text in card.GetComponentsInChildren<TextMeshProUGUI>(true)) if (text.text.Contains("ADD TO CART")) text.text = "SOLD OUT";
+            foreach (var text in card.GetComponentsInChildren<TextMeshProUGUI>(true)) if (text.text.Contains("ADD TO CART")) text.text = "OUT OF STOCK";
         }
+        RefreshShopAvailability(worldSpaceCanvas);
+        RefreshShopAvailability(screenSpaceCanvas);
     }
 
     private void CreateLevel2CameraShopCard(Canvas shopCanvas)
@@ -483,7 +699,7 @@ public class ShopTerminal : MonoBehaviour
         TextMeshProUGUI[] cardTexts = originalCameraCard.GetComponentsInChildren<TextMeshProUGUI>(true);
         foreach (TextMeshProUGUI cardText in cardTexts)
         {
-            if (cardText.text.Contains("ADD TO CART")) cardText.text = "SOLD OUT";
+            if (cardText.text.Contains("ADD TO CART")) cardText.text = "OUT OF STOCK";
         }
     }
 
@@ -504,14 +720,14 @@ public class ShopTerminal : MonoBehaviour
             TextMeshProUGUI[] cardTexts = level2CameraCard.GetComponentsInChildren<TextMeshProUGUI>(true);
             foreach (TextMeshProUGUI cardText in cardTexts)
             {
-                if (cardText.text.Contains("ADD TO CART")) cardText.text = "SOLD OUT";
+                if (cardText.text.Contains("ADD TO CART")) cardText.text = "OUT OF STOCK";
             }
         }
     }
 
     private void MarkLevel3LightSoldOut()
     {
-        level3LightSoldOut = true;
+        level3LightSoldOut = false;
 
         foreach (GameObject level3LightCard in level3LightCards)
         {
@@ -520,15 +736,17 @@ public class ShopTerminal : MonoBehaviour
             Button[] cardButtons = level3LightCard.GetComponentsInChildren<Button>(true);
             foreach (Button cardButton in cardButtons)
             {
-                cardButton.interactable = false;
+                cardButton.interactable = true;
             }
 
             TextMeshProUGUI[] cardTexts = level3LightCard.GetComponentsInChildren<TextMeshProUGUI>(true);
             foreach (TextMeshProUGUI cardText in cardTexts)
             {
-                if (cardText.text.Contains("ADD TO CART")) cardText.text = "SOLD OUT";
+                if (cardText.text.Contains("OUT OF STOCK")) cardText.text = "ADD TO CART";
             }
         }
+        RefreshShopAvailability(worldSpaceCanvas);
+        RefreshShopAvailability(screenSpaceCanvas);
     }
 
     private TextMeshProUGUI FindShopText(Canvas shopCanvas, string textToFind)
@@ -586,21 +804,35 @@ public class ShopTerminal : MonoBehaviour
         return null;
     }
 
-    private bool IsCartButton(Button button)
+    private static bool IsCartButton(Button button)
     {
         if (button == null) return false;
+        if (button.name == "Shop cart button") return true;
+        // Authored cards use image-only AddToCard buttons with empty saved events.
+        // They must be recognized before runtime listeners and captions are added.
+        string authoredName = button.name.Replace(" ", "").Replace("_", "").Replace("(Clone)", "");
+        if (authoredName.Equals("AddToCard", System.StringComparison.OrdinalIgnoreCase) ||
+            authoredName.Equals("AddToCart", System.StringComparison.OrdinalIgnoreCase)) return true;
 
         for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
         {
             if (button.onClick.GetPersistentMethodName(i) == "AddItemToCartByIndex") return true;
         }
 
+        // Runtime listeners are absent from Unity's persistent-event list.
+        foreach (var label in button.GetComponentsInChildren<TextMeshProUGUI>(true))
+            if (label.text.Trim().Equals("Buy", System.StringComparison.OrdinalIgnoreCase) ||
+                label.text.IndexOf("ADD TO CART", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                label.text.IndexOf("SOLD OUT", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                label.text.IndexOf("OUT OF STOCK", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                label.text.IndexOf("NOT AVAILABLE", System.StringComparison.OrdinalIgnoreCase) >= 0) return true;
         return false;
     }
 
     public void AddItemToCartByIndex(int itemIndex)
     {
         if (itemIndex < 0 || itemIndex >= availableItems.Count || availableItems[itemIndex] == null) return;
+        if (IsShopItemOwned(availableItems[itemIndex].itemName) || !IsShopItemAvailable(availableItems[itemIndex].itemName)) return;
         var practice = CampaignLevelManager.Instance;
         if (practice != null && practice.IsContract4PracticeActive &&
             (!practice.CanUseContract4PracticeAction("shop.purchase") || itemIndex != megaphoneItemIndex)) return;
@@ -615,7 +847,7 @@ public class ShopTerminal : MonoBehaviour
             ShopItem itemToAdd = availableItems[itemIndex];
 
             if (itemToAdd == null) return;
-            if ((itemIndex == 0 || itemIndex == level2CameraItemIndex || itemIndex == megaphoneItemIndex || itemToAdd.itemName.Contains("CAMERA")) && shoppingCart.Contains(itemToAdd))
+            if ((itemToAdd.itemName == "NONY FX" || itemToAdd.itemName == "LEVEL 2 CAMERA" || itemToAdd.itemName == "DIRECTOR MEGAPHONE") && shoppingCart.Contains(itemToAdd))
             {
                 GameFeedback.Show("Already in your cart: " + itemToAdd.itemName);
                 return;
@@ -626,6 +858,7 @@ public class ShopTerminal : MonoBehaviour
 
             shoppingCart.Add(itemToAdd);
             currentTotalCost += itemToAdd.price;
+            Level3Manager.Instance?.OnBetterLightCartChanged(this);
 
             UpdateTotalUI();
             // Advance only after the requested item really entered the cart.
@@ -636,6 +869,12 @@ public class ShopTerminal : MonoBehaviour
                 else if (itemIndex == 2) TutorialManager.Instance.OnSDCardAddedToCart();
             }
         }
+    }
+
+    public int CartItemCount(int index)
+    {
+        return index >= 0 && index < availableItems.Count
+            ? shoppingCart.FindAll(item => item == availableItems[index]).Count : 0;
     }
 
     private bool CartContainsItem(int index)
@@ -675,8 +914,10 @@ public class ShopTerminal : MonoBehaviour
             Level3Manager.Instance.IsEquipmentIntroductionActive() &&
             !Level3Manager.Instance.CanConfirmPurchase()) return;
 
-        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(currentTotalCost))
+        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(currentTotalCost, "Cart", "Equipment cart"))
         {
+            foreach (ShopItem item in shoppingCart)
+                PlayerAnalytics.TransactionMade(-item.price, PlayerAnalytics.EquipmentCategory(item.itemName), item.itemName);
             SpawnItemsAndFinish();
         }
         // TrySpendMoney displays a notification even when tutorials are disabled.
@@ -767,6 +1008,7 @@ public class ShopTerminal : MonoBehaviour
         }
 
         // Tell the Tutorial Manager that we successfully checked out!
+        RefreshShopPresentation();
         if (shoppingCart.Count > 0 && TutorialManager.Instance != null)
         {
             TutorialManager.Instance.OnEquipmentBought(shoppingCart.Count);
@@ -879,7 +1121,7 @@ public class ShopTerminal : MonoBehaviour
 
         if (crosshairClicker != null) crosshairClicker.enabled = false;
 
-        if (screenSpaceCanvas != null) screenSpaceCanvas.gameObject.SetActive(true);
+        if (screenSpaceCanvas != null) UITransition.Show(screenSpaceCanvas.gameObject);
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -929,4 +1171,3 @@ public class ShopTerminal : MonoBehaviour
         return isTerminalActive;
     }
 }
-

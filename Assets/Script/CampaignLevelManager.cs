@@ -116,9 +116,9 @@ public class CampaignLevelManager : MonoBehaviour
         if (activeLevel != 4 || card == null || card.campaignLevel != 4 || DevTutorialBypass.Disabled) return;
         string size = card.shotType == 1 ? "WIDE" : card.shotType == 2 ? "MEDIUM" : "CLOSE-UP";
         string hint = card.videoDuration < 5f ? "Record at least 5 seconds for the edit." :
-            !card.requiredSubjectsVisible ? "Retake: keep both subjects fully visible throughout." :
-            CoffeeStoryRules.Beat(card.actorPose) == 0 ? "Retake: hold Wave, Action (or Using Machine), or Sitting for the whole take." :
-            "Collect this card. Next, record a different story beat.";
+            !card.requiredSubjectsVisible ? "Retake: show coffee and packaging, or actor coffee use in the cafe." :
+            card.actorPose != "Product Overview" && card.actorPose != "Coffee Use" ? "Retake: keep one required action or overview throughout the take." :
+            "Collect this card: " + card.actorPose + ". Record enough footage for 30–45 seconds.";
         GameFeedback.Show(size + " TAKE SAVED\n" + hint);
     }
 
@@ -207,6 +207,12 @@ public class CampaignLevelManager : MonoBehaviour
     public bool CanUseContract4PracticeAction(string action)
     {
         if (!IsContract4PracticeActive) return true;
+        // Saving/rehearsing END must allow fixing the route without restarting the lesson.
+        string permission = practiceLesson.CurrentPermission;
+        if (!practiceLesson.IsExplaining &&
+            (permission == "megaphone.mark.end" || permission == "megaphone.walk.rehearse") &&
+            (action == "megaphone.reposition" || action == "megaphone.place" || action == "megaphone.mark.end"))
+            return true;
         return !practiceLesson.IsExplaining && practiceLesson.CurrentPermission == action;
     }
 
@@ -423,12 +429,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[]
-            {
-                "- Review greeting, coffee moment and seated break",
-                "- Review the 15-second story edit",
-                "- Press <color=red>[TAB]</color> when finished"
-            });
+            TutorialUIManager.Instance.HideTasks();
         }
         else
         {
@@ -599,7 +600,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Kape Kultura wants a little story: greeting, coffee moment, seated break. Direct three different performances, then cut away the waiting. Your camera now unlocks exposure: F2, select ISO, Aperture or Shutter with Up/Down, then adjust with Left/Right. Watch the image brightness.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("A new coffee client is ready. Review and accept the contract first; then we'll discuss the production requirements.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
         else
         {
@@ -730,8 +731,8 @@ public class CampaignLevelManager : MonoBehaviour
             return new string[]
             {
                 "- Review Hiring, Blocking & Posing Actors",
-                "- Review the Three-Beat Coffee Story",
-                "- Review the Closing Brand Graphic",
+                "- Review the Coffee Product Commercial",
+                "- Review Clip Selection and Color Grading",
                 "- Review Elliptical Editing",
                 "- Press <color=red>[P]</color> or CLOSE when finished"
             };
@@ -755,7 +756,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (activeLevel == 4)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Tell three moments: Wave hello, Action with coffee, then Sitting for a break. Film each separately with actor and coffee visible. Press <color=red>[SPACE]</color> when you're ready.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Show the coffee cup with its packaging first. Then film an actor using coffee in the coffee-shop set. Record enough footage for a 30–45-second commercial, with no overlays. You'll learn to split and grade individual clips in the editor.", TutorialUIManager.Instance.poseBoss, true, false);
         }
         else
         {
@@ -998,13 +999,13 @@ public class CampaignLevelManager : MonoBehaviour
     }
 
     // Match the grader's evidence; accept any complete matching trio, not just the first takes.
-    internal static bool HasCoffeeCoverage(System.Collections.Generic.IEnumerable<FootageData> clips, int requiredCoverage = 14)
+    internal static bool HasCoffeeCoverage(System.Collections.Generic.IEnumerable<FootageData> clips, int requiredCoverage = 6)
     {
         int coverage = 0;
         foreach (var clip in clips)
             if (clip != null && clip.campaignLevel == 4 && !string.IsNullOrEmpty(clip.fileName) && clip.requiredSubjectsVisible)
             {
-                int beat = CoffeeStoryRules.Beat(clip.actorPose);
+                int beat = clip.actorPose == "Product Overview" ? 1 : clip.actorPose == "Coffee Use" ? 2 : 0;
                 if (beat > 0) coverage |= 1 << beat;
             }
         return (coverage & requiredCoverage) == requiredCoverage;
@@ -1097,5 +1098,3 @@ public class CampaignLevelManager : MonoBehaviour
         if (tutorialManager != null) tutorialManager.UnfreezePlayerMovement();
     }
 }
-
-

@@ -50,7 +50,8 @@ public class MultiplayerPauseManager : MonoBehaviour
 
     private void Pause()
     {
-        pauseMenuCanvas.SetActive(true);
+        PauseManager.PutOverlayOnTop(pauseMenuCanvas, 30000);
+        UITransition.Show(pauseMenuCanvas);
         isPaused = true;
 
         // Free the mouse so you can click the UI buttons
@@ -71,7 +72,7 @@ public class MultiplayerPauseManager : MonoBehaviour
         }
 
         isPaused = false;
-        SceneManager.LoadScene(0);
+        LoadingScreenController.LoadScene(0);
     }
 
     public void OpenOptions()

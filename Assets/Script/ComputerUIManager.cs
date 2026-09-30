@@ -35,7 +35,7 @@ public class ComputerUIManager : MonoBehaviour
     public void OpenGridView()
     {
         videoPlayerPanel.SetActive(false);
-        recordingsGridPanel.SetActive(true);
+        UITransition.Show(recordingsGridPanel);
         if (pixelPlayer != null) pixelPlayer.StopTape();
         RefreshGrid();
     }
@@ -43,7 +43,7 @@ public class ComputerUIManager : MonoBehaviour
     public void OpenPlayerView(string filePath)
     {
         recordingsGridPanel.SetActive(false);
-        videoPlayerPanel.SetActive(true);
+        UITransition.Show(videoPlayerPanel);
         replayStartedByPlayer = false;
         currentlyPlayingFile = Path.GetFileName(filePath);
         if (playerTitleText != null) playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
@@ -227,7 +227,7 @@ public class ComputerUIManager : MonoBehaviour
         EvaluateStagePreProduction();
 
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnEditorConfirmed();
-        UnityEngine.SceneManagement.SceneManager.LoadScene("Editor");
+        LoadingScreenController.LoadScene("Editor");
     }
 
     private List<FootageData> GetUsableTapeFiles(List<FootageData> files)
@@ -339,7 +339,10 @@ public class ComputerUIManager : MonoBehaviour
             feedback += "<color=red>- The flower vase is missing from the set.</color>\n";
         }
 
-        if (stage != null && stage.HasWall() && stage.currentWallColor.r > 0.5f && stage.currentWallColor.g < 0.7f && stage.currentWallColor.b > 0.5f)
+        if (stage != null && stage.HasWall() &&
+            Mathf.Abs(stage.currentWallColor.r * 255f - 255f) <= 10f &&
+            Mathf.Abs(stage.currentWallColor.g * 255f - TutorialManager.TutorialGreenTarget) <= 10f &&
+            Mathf.Abs(stage.currentWallColor.b * 255f - TutorialManager.TutorialBlueTarget) <= 10f)
         {
             score += 50f;
             feedback += "<color=green>+ Good Pink Stage Design.</color>\n";
@@ -347,7 +350,7 @@ public class ComputerUIManager : MonoBehaviour
         else
         {
             MarkRequiredSetupMissing();
-            feedback += "<color=yellow>- Backdrop needs to be Pink.</color>\n";
+            feedback += "<color=yellow>- Set the pink backdrop to RGB 255, 140, 175.</color>\n";
         }
 
         FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
@@ -407,10 +410,15 @@ public class ComputerUIManager : MonoBehaviour
         }
 
         FilmLightItem[] lights = FindObjectsOfType<FilmLightItem>();
-        if (GetPoweredLightCount(lights) < 3)
+        // Goke teaches composition with one light; three-point lighting starts in Level 3.
+        if (!HasPoweredLight(lights))
         {
             MarkRequiredSetupMissing();
-            feedback += "<color=red>- Power the Key, Fill, and Back lights before recording.</color>\n";
+            feedback += "<color=red>- Power at least one production light for the Goke subject.</color>\n";
+        }
+        else
+        {
+            feedback += "<color=green>+ Production light powered. One light is enough for Goke.</color>\n";
         }
     }
 
@@ -480,17 +488,20 @@ public class ComputerUIManager : MonoBehaviour
     private void GradeLevel4Stage(DirectorTerminal stage, ref float score, ref string feedback)
     {
         GetCampaignProduct(4, out int productCount);
-        bool setReady = stage != null && stage.HasWall();
-        bool actorReady = FindObjectsOfType<CubeActor>().Length == 1;
-        bool productReady = productCount >= 1;
+        bool setReady = stage != null && stage.HasWall() && GameSavePrefs.GetInt("Studio.SelectedInterior", 0) > 0;
+        bool actorReady = FindObjectsOfType<CubeActor>().Length >= 1;
+        bool cup = false, packaging = false;
+        foreach (var product in FindObjectsOfType<CampaignProduct>())
+            if (product.campaignLevel == 4) { if (product.IsCoffeeCup) cup = true; else packaging = true; }
+        bool productReady = cup && packaging;
         // Performance is judged from footage, not the actor's pose at ingestion time.
         if (setReady) score += 30f;
         if (actorReady) score += 35f;
         if (productReady) score += 35f;
         if (!setReady || !actorReady || !productReady) MarkRequiredSetupMissing();
-        feedback += setReady ? "+ Story set prepared; color is your choice.\n" : "- Choose the Plain Backdrop or Coffee Interior.\n";
-        feedback += actorReady ? "+ One lead actor ready.\n" : "- Hire exactly one lead actor.\n";
-        feedback += productReady ? "+ Coffee product ready.\n" : "- Add a Kape product or cup of coffee.\n";
+        feedback += setReady ? "+ Coffee-shop set ready.\n" : "- Place a coffee-shop interior.\n";
+        feedback += actorReady ? "+ Actor ready.\n" : "- Hire an actor.\n";
+        feedback += productReady ? "+ Coffee and packaging ready.\n" : "- Place both Kape packaging and a cup of coffee.\n";
     }
 
     private void GradeLevel5Stage(DirectorTerminal stage, ref float score, ref string feedback)
@@ -669,4 +680,3 @@ public class ComputerUIManager : MonoBehaviour
         return true;
     }
 }
-

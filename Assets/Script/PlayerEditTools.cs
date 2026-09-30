@@ -45,6 +45,7 @@ public class PlayerEditTools : MonoBehaviour
             BindTool(graphicAnimationButtonRect, CycleGraphicAnimation);
             BindTool(transitionButtonRect, CycleTransition);
             BindTool(musicButtonRect, CycleMusic);
+            PolishToolsLayout(brandingPanel.transform);
             RefreshLabels();
             return;
         }
@@ -79,7 +80,36 @@ public class PlayerEditTools : MonoBehaviour
         musicText = CreateToolButton("Music", toolsPanel.transform, new Vector2(0.51f, 0.04f), new Vector2(0.98f, 0.37f), CycleMusic, out musicButtonRect);
 
 
+        PolishToolsLayout(brandingPanel.transform);
         RefreshLabels();
+    }
+
+    private void PolishToolsLayout(Transform brandingPanel)
+    {
+        // Blend the controls into the authored panel without an extra enclosing box.
+        var background = toolsPanel.GetComponent<Image>();
+        if (background != null) { background.enabled = false; background.raycastTarget = false; }
+        var border = toolsPanel.GetComponent<Outline>();
+        if (border != null) border.enabled = false;
+        // Reserve a footer for tutorial guidance above the separate transport bar.
+        MakeRoomForTools(brandingPanel);
+        var panel = (RectTransform)toolsPanel.transform;
+        panel.anchorMin = Vector2.zero; panel.anchorMax = new Vector2(1f, 0f);
+        panel.pivot = new Vector2(.5f, 0f);
+        panel.anchoredPosition = new Vector2(0f, 100f);
+        panel.sizeDelta = new Vector2(-32f, 210f);
+        RectTransform[] buttons = { cameraMotionButtonRect, graphicAnimationButtonRect, transitionButtonRect, musicButtonRect };
+        for (int i = 0; i < buttons.Length; i++)
+        {
+            var rect = buttons[i];
+            if (rect == null) continue;
+            float x = i % 2 == 0 ? 0f : .5f;
+            float y = i < 2 ? .37f : 0f;
+            SetRect(rect, new Vector2(x, y), new Vector2(x + .5f, y + .35f), new Vector2(8f, 6f), new Vector2(-8f, -6f));
+            var motion = rect.GetComponent<UIButtonFeedback>();
+            if (motion != null) motion.enabled = false;
+            rect.localScale = Vector3.one;
+        }
     }
 
     private void BindTool(RectTransform rect, UnityEngine.Events.UnityAction action)
@@ -95,7 +125,7 @@ public class PlayerEditTools : MonoBehaviour
         int level = CampaignProgression.GetCurrentLevel();
         if (level == 2) return "GOKE: INTRO 2s / FOOTAGE 6s / OUTRO 2s";
         if (level == 3) return "TERRARI: INTRO 2s • BACK 7s • SIDE 7s • OVERALL 7s • OUTRO 2s = 25s";
-        if (level == 4) return "KAPE STORY: WAVE > ACTION > SITTING | 15s | CLOSING BRAND | STYLE OPTIONAL";
+        if (level == 4) return "KAPE: PRODUCT + PACKAGING > ACTOR USING COFFEE | 30–45s | NO OVERLAYS | B: SPLIT SELECTED CLIP";
         return "PRODUCT TARGET: PUSH IN • FADE/POP • FADE • CLEAN";
     }
 
@@ -134,6 +164,8 @@ public class PlayerEditTools : MonoBehaviour
         selectedMusic = (MusicMode)(((int)selectedMusic + 1) % 4);
         RefreshLabels();
         NotifyEditChanged();
+        var player = FindObjectOfType<TruePixelPlayer>();
+        if (player != null) player.AuditionSelectedMusic();
     }
 
     private void NotifyEditChanged()
@@ -188,7 +220,7 @@ public class PlayerEditTools : MonoBehaviour
             if (child == null || child.transform == brandingPanel || child.name != "Assets") continue;
 
             Vector2 offsetMin = child.offsetMin;
-            offsetMin.y = Mathf.Max(offsetMin.y, 254f);
+            offsetMin.y = Mathf.Max(offsetMin.y, 324f);
             child.offsetMin = offsetMin;
             break;
         }
@@ -303,4 +335,3 @@ internal static class EditorWorkspaceUI
         return button;
     }
 }
-

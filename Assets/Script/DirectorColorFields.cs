@@ -25,6 +25,7 @@ public sealed class DirectorColorFields : MonoBehaviour
                 hex.onEndEdit.AddListener(CommitHex);
             }
             Refresh(owner.CanUseColorSliders());
+            ConfigureControlsGuide();
             return;
         }
         listenersBound = true;
@@ -55,6 +56,41 @@ public sealed class DirectorColorFields : MonoBehaviour
             label.fontSize = 26; label.enableAutoSizing = false; label.alignment = TextAlignmentOptions.Center;
         }
         Refresh(owner.CanUseColorSliders());
+        ConfigureControlsGuide();
+    }
+
+    private void ConfigureControlsGuide()
+    {
+        if (hex == null) return;
+        var field = (RectTransform)hex.transform;
+        var parent = field.parent;
+        var existing = parent.Find("Tablet Controls Guide");
+        var guide = existing != null ? existing.GetComponent<TextMeshProUGUI>() :
+            new GameObject("Tablet Controls Guide", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        guide.transform.SetParent(parent, false);
+        guide.font = TMP_Settings.defaultFontAsset;
+        guide.text = "<b>CONTROLS</b>\nLMB  Select / place\nRMB  Remove element\nT  Reposition selected\nENTER  Apply typed color";
+        guide.color = new Color(.12f,.18f,.26f);
+        guide.fontSize = 22; guide.enableAutoSizing = true; guide.fontSizeMin = 17; guide.fontSizeMax = 22;
+        guide.alignment = TextAlignmentOptions.TopLeft; guide.raycastTarget = false;
+        var rect = guide.rectTransform;
+        rect.anchorMin = field.anchorMin; rect.anchorMax = field.anchorMax;
+        rect.pivot = new Vector2(.5f,1);
+        rect.anchoredPosition = new Vector2(0,field.anchoredPosition.y-90);
+        rect.sizeDelta = new Vector2(350,170);
+        if (terminal.selectionIndicatorText != null)
+        {
+            var status = terminal.selectionIndicatorText;
+            status.transform.SetParent(parent,false);
+            status.rectTransform.anchorMin = field.anchorMin; status.rectTransform.anchorMax = field.anchorMax;
+            status.rectTransform.pivot = new Vector2(.5f,1);
+            status.rectTransform.anchoredPosition = new Vector2(0,field.anchoredPosition.y-38);
+            status.rectTransform.sizeDelta = new Vector2(350,44);
+            status.font = TMP_Settings.defaultFontAsset;
+            status.fontSize = 20; status.enableAutoSizing = true; status.fontSizeMin = 14; status.fontSizeMax = 20;
+            status.color = guide.color; status.alignment = TextAlignmentOptions.Center;
+            status.raycastTarget = false;
+        }
     }
 
     private TMP_InputField CreateField(string name, TMP_Text style, Transform parent, Vector2 position, Vector2 size)

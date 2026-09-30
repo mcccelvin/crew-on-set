@@ -74,13 +74,14 @@ namespace Player.Equipment
         private Vector3 stableLensPosition;
         private Vector3 lensPositionVelocity;
         private bool viewfinderPoseInitialized;
+        private float breathingTime;
         private Coroutine viewTransition;
         private Transform animationParent;
         private Vector3 restingPosition;
         private Quaternion restingRotation;
         private bool hasAnimationPose;
         private Renderer[] hiddenCameraRenderers;
-        private bool[] previousForceRenderingOff;
+        private UnityEngine.Rendering.ShadowCastingMode[] previousShadowModes;
         private int heldUpdateFrame = -1;
         private bool lensControlsInitialized;
         private float targetFOV;
@@ -392,6 +393,7 @@ namespace Player.Equipment
 
             if (!isCameraActive && !isSDCardInserted)
             {
+                GameFeedback.Show("NO SD CARD\nInsert an SD card [C] before opening the viewfinder.", true);
                 HotbarUIManager hotbar = FindObjectOfType<HotbarUIManager>();
                 if (hotbar != null)
                 {
@@ -409,8 +411,10 @@ namespace Player.Equipment
             isCameraActive = true;
             viewfinderAimCamera = playerCamera;
             viewfinderPoseInitialized = false;
+            breathingTime = 0f;
             MatchPlayerCameraLook(playerCamera);
             HideCameraBody();
+            HidePlayerBody(playerCamera);
 
             RefreshGridVisibility();
 
@@ -429,6 +433,7 @@ namespace Player.Equipment
             OpenDynamicHUD();
 
             TogglePlayerUI(!isCameraActive);
+            TutorialUIManager.Instance?.SetTaskViewfinderVisible(true);
         }
 
         private void CloseViewfinder()
@@ -437,6 +442,7 @@ namespace Player.Equipment
             if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 0;
             CancelViewTransition();
             RestoreCameraBody();
+            RestorePlayerBody();
             viewfinderPoseInitialized = false;
             viewfinderAimCamera = null;
             if (filmCamera != null)
@@ -453,6 +459,7 @@ namespace Player.Equipment
 
             // Unequipping an idle camera must not hide another camera's shared HUD.
             if (!ownedCameraView) return;
+            TutorialUIManager.Instance?.SetTaskViewfinderVisible(false);
             if (filmUICanvas != null) filmUICanvas.SetActive(false);
             if (trackingSquare != null) trackingSquare.gameObject.SetActive(false);
             if (TutorialManager.Instance != null) TutorialManager.Instance.OnCameraViewExited(EquipmentName);
@@ -490,7 +497,7 @@ namespace Player.Equipment
 
             if (input.Record)
             {
-                if (!isRecording && !isSDCardInserted) { Debug.LogWarning("Insert SD Card first!"); return; }
+                if (!isRecording && !isSDCardInserted) { GameFeedback.Show("NO SD CARD\nInsert an SD card [C] before recording.", true); return; }
                 ToggleRecording();
             }
 
@@ -570,12 +577,22 @@ namespace Player.Equipment
         private void UpdateRuleOfThirdsPractice()
         {
             if (!CameraFeatureUnlocks.ManualFocus || filmCamera == null || GokeLevelManager.Instance == null) return;
-            if (!GridEnabled) { GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false); return; }
+            bool independent = GokeLevelManager.Instance.ThirdsIndependentPractice;
+            if (settingsOpen) { GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false); return; }
+            if (GridEnabled == independent)
+            {
+                GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false);
+                if (ruleOfThirdsInstructionText != null)
+                    ruleOfThirdsInstructionText.text = independent ? "PRESS F2 — TURN GRID OFF, THEN CLOSE SETTINGS" : "PRESS F2 — TURN GRID ON, THEN CLOSE SETTINGS";
+                LayoutThirdsLessonPanel();
+                return;
+            }
 
             if (targetSubject == null) CacheTargetSubject();
             if (targetSubject == null)
             {
                 GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false);
+                if (ruleOfThirdsInstructionText != null) ruleOfThirdsInstructionText.text = "FIND THE PRACTICE PRODUCT IN THE VIEWFINDER";
                 return;
             }
 
@@ -583,8 +600,9 @@ namespace Player.Equipment
             Vector3 viewPosition = filmCamera.WorldToViewportPoint(targetCenter);
             bool hasViewportBounds = TryGetViewportBounds(targetRenderers, out Vector4 viewportBounds);
 
-            float horizontalDistance = Mathf.Min(Mathf.Abs(viewPosition.x - 0.333f), Mathf.Abs(viewPosition.x - 0.666f));
-            float verticalDistance = Mathf.Min(Mathf.Abs(viewPosition.y - 0.333f), Mathf.Abs(viewPosition.y - 0.666f));
+            float targetX = GokeLevelManager.Instance.ThirdsPracticeIntersection == 0 ? .333f : .666f;
+            float horizontalDistance = Mathf.Abs(viewPosition.x - targetX);
+            float verticalDistance = Mathf.Abs(viewPosition.y - .333f);
             float subjectCoverage = hasViewportBounds ? Mathf.Max(viewportBounds.z - viewportBounds.x, viewportBounds.w - viewportBounds.y) : 0f;
 
             bool isOnIntersection = horizontalDistance <= 0.065f && verticalDistance <= 0.085f;
@@ -595,15 +613,25 @@ namespace Player.Equipment
             UpdateRuleOfThirdsLessonOverlay(viewPosition, subjectCoverage, hasViewportBounds, isFullyVisible, hasCorrectComposition);
 
             GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(hasCorrectComposition);
+            if (hasCorrectComposition && ruleOfThirdsInstructionText != null)
+            {
+                int progress = Mathf.RoundToInt(GokeLevelManager.Instance.ThirdsFramingProgress * 100f);
+                ruleOfThirdsInstructionText.text = "<color=#55FF88>GOOD FRAMING!</color>\nKEEP THIS POSITION — " + progress + "%";
+            }
         }
 
         private void UpdateRuleOfThirdsLessonOverlay(Vector3 viewPosition, float subjectCoverage, bool hasViewportBounds, bool isFullyVisible, bool hasCorrectComposition)
         {
+            LayoutThirdsLessonPanel();
             float leftDistance = Mathf.Abs(viewPosition.x - 0.333f);
             float rightDistance = Mathf.Abs(viewPosition.x - 0.666f);
             float bottomDistance = Mathf.Abs(viewPosition.y - 0.333f);
             float topDistance = Mathf.Abs(viewPosition.y - 0.666f);
             int closestIntersection = (leftDistance <= rightDistance ? 0 : 2) + (bottomDistance <= topDistance ? 0 : 1);
+            if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.ThirdsPracticeActive)
+                closestIntersection = GokeLevelManager.Instance.ThirdsPracticeIntersection;
+            float targetX = closestIntersection < 2 ? .333f : .666f;
+            float targetY = closestIntersection % 2 == 0 ? .333f : .666f;
 
             for (int i = 0; i < ruleOfThirdsIntersections.Length; i++)
             {
@@ -626,15 +654,29 @@ namespace Player.Equipment
                 return;
             }
 
-            if (Mathf.Min(leftDistance, rightDistance) > 0.065f)
+            if (!isFullyVisible || subjectCoverage > .58f)
             {
-                ruleOfThirdsInstructionText.text = "<color=#FFD84A>MOVE LEFT OR RIGHT</color>  •  ALIGN THE PRODUCT WITH A VERTICAL THIRD";
+                ruleOfThirdsInstructionText.text = "SCROLL DOWN TO ZOOM OUT — KEEP THE WHOLE CAN INSIDE THE FRAME";
+                return;
+            }
+            if (subjectCoverage < .2f)
+            {
+                ruleOfThirdsInstructionText.text = "SCROLL UP TO ZOOM IN — MAKE THE SUBJECT EASIER TO SEE";
+                return;
+            }
+            if (Mathf.Abs(viewPosition.x - targetX) > 0.065f)
+            {
+                ruleOfThirdsInstructionText.text = viewPosition.x > targetX
+                    ? "MOVE MOUSE RIGHT\nUNTIL THE SUBJECT'S CENTRE REACHES THE GOLD DOT"
+                    : "MOVE MOUSE LEFT\nUNTIL THE SUBJECT'S CENTRE REACHES THE GOLD DOT";
                 return;
             }
 
-            if (Mathf.Min(bottomDistance, topDistance) > 0.085f)
+            if (Mathf.Abs(viewPosition.y - targetY) > 0.085f)
             {
-                ruleOfThirdsInstructionText.text = "<color=#FFD84A>USE Q / E</color>  •  ALIGN THE PRODUCT WITH A HORIZONTAL THIRD";
+                ruleOfThirdsInstructionText.text = viewPosition.y > targetY
+                    ? "MOVE MOUSE UP\nUNTIL THE SUBJECT'S CENTRE REACHES THE GOLD DOT"
+                    : "MOVE MOUSE DOWN\nUNTIL THE SUBJECT'S CENTRE REACHES THE GOLD DOT";
                 return;
             }
 
@@ -656,7 +698,29 @@ namespace Player.Equipment
                 return;
             }
 
-            ruleOfThirdsInstructionText.text = "<color=#55FF88>GOOD VISUAL HIERARCHY</color>  •  HOLD THE RULE OF THIRDS FRAME STEADY";
+            ruleOfThirdsInstructionText.text = closestIntersection < 2
+                ? "<color=#55FF88>HOLD STEADY</color>\nCAN ON LEFT • MESSAGE SPACE ON RIGHT"
+                : "<color=#55FF88>HOLD STEADY</color>\nCAN ON RIGHT • MESSAGE SPACE ON LEFT";
+        }
+
+        private void LayoutThirdsLessonPanel()
+        {
+            if (ruleOfThirdsInstructionText == null) return;
+            var panel = ruleOfThirdsInstructionText.transform.parent as RectTransform;
+            if (panel == null) return;
+            // Apply to saved prefab UI as well as dynamically created viewfinders.
+            panel.anchorMin = panel.anchorMax = new Vector2(1f, 0f);
+            panel.pivot = new Vector2(1f, 0f);
+            panel.anchoredPosition = new Vector2(-24f, 100f);
+            var parent = panel.parent as RectTransform;
+            float width = parent != null ? Mathf.Min(460f, parent.rect.width * .38f) : 460f;
+            ruleOfThirdsInstructionText.fontSize = 20f;
+            ruleOfThirdsInstructionText.enableAutoSizing = false;
+            ruleOfThirdsInstructionText.enableWordWrapping = true;
+            ruleOfThirdsInstructionText.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+            ruleOfThirdsInstructionText.alignment = TextAlignmentOptions.MidlineLeft;
+            panel.sizeDelta = new Vector2(width, Mathf.Max(72f,
+                ruleOfThirdsInstructionText.GetPreferredValues(ruleOfThirdsInstructionText.text, Mathf.Max(1f, width - 40f), Mathf.Infinity).y + 16f));
         }
 
         public bool IsCameraViewActive()
@@ -736,15 +800,41 @@ namespace Player.Equipment
             RestoreHeldPose();
         }
 
+        private readonly System.Collections.Generic.Dictionary<Renderer, UnityEngine.Rendering.ShadowCastingMode> hiddenPlayerBody =
+            new System.Collections.Generic.Dictionary<Renderer, UnityEngine.Rendering.ShadowCastingMode>();
+
+        private void HidePlayerBody(Camera playerCamera)
+        {
+            if (hiddenPlayerBody.Count != 0) return;
+            var owner = playerCamera != null ? playerCamera.GetComponentInParent<global::Player.PlayerController.PlayerController>() : null;
+            if (owner == null) owner = GetComponentInParent<global::Player.PlayerController.PlayerController>();
+            if (owner == null) owner = FindObjectOfType<global::Player.PlayerController.PlayerController>();
+            if (owner == null) return;
+            foreach (var part in owner.GetComponentsInChildren<Renderer>(true))
+            {
+                // Camera housing is already managed separately by HideCameraBody.
+                if (part.transform.IsChildOf(transform)) continue;
+                hiddenPlayerBody.Add(part, part.shadowCastingMode);
+                part.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
+            }
+        }
+
+        private void RestorePlayerBody()
+        {
+            foreach (var entry in hiddenPlayerBody)
+                if (entry.Key != null) entry.Key.shadowCastingMode = entry.Value;
+            hiddenPlayerBody.Clear();
+        }
+
         private void HideCameraBody()
         {
             if (hiddenCameraRenderers != null) return;
             hiddenCameraRenderers = GetComponentsInChildren<Renderer>(true);
-            previousForceRenderingOff = new bool[hiddenCameraRenderers.Length];
+            previousShadowModes = new UnityEngine.Rendering.ShadowCastingMode[hiddenCameraRenderers.Length];
             for (int i = 0; i < hiddenCameraRenderers.Length; i++)
             {
-                previousForceRenderingOff[i] = hiddenCameraRenderers[i].forceRenderingOff;
-                hiddenCameraRenderers[i].forceRenderingOff = true;
+                previousShadowModes[i] = hiddenCameraRenderers[i].shadowCastingMode;
+                hiddenCameraRenderers[i].shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly;
             }
         }
 
@@ -753,9 +843,9 @@ namespace Player.Equipment
             if (hiddenCameraRenderers == null) return;
             for (int i = 0; i < hiddenCameraRenderers.Length; i++)
                 if (hiddenCameraRenderers[i] != null)
-                    hiddenCameraRenderers[i].forceRenderingOff = previousForceRenderingOff[i];
+                    hiddenCameraRenderers[i].shadowCastingMode = previousShadowModes[i];
             hiddenCameraRenderers = null;
-            previousForceRenderingOff = null;
+            previousShadowModes = null;
         }
 
         private void UpdateStableViewfinderPose()
@@ -772,8 +862,17 @@ namespace Player.Equipment
             Quaternion desiredRotation = viewfinderAimCamera != null
                 ? viewfinderAimCamera.transform.rotation
                 : (lensParent != null ? lensParent.rotation : Quaternion.identity) * Quaternion.Euler(originalLensRotation);
-            // Both preview and recorder use this same final pose, without artificial random sway.
-            filmCamera.transform.SetPositionAndRotation(stableLensPosition, desiredRotation);
+            // Gentle four-second breathing cycle, shared by the viewfinder and recording.
+            // Apply to the stable pose, never accumulate offsets or alter the player's aim.
+            breathingTime += Time.deltaTime;
+            float phase = breathingTime * (Mathf.PI * 2f / 4f);
+            float blend = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(breathingTime));
+            float zoomScale = Mathf.Clamp(filmCamera.fieldOfView / 60f, .15f, 1f);
+            Vector3 breathOffset = desiredRotation * Vector3.up * (Mathf.Sin(phase) * .0015f * blend * zoomScale);
+            Quaternion breathRotation = Quaternion.Euler(
+                Mathf.Sin(phase) * .055f * blend * zoomScale,
+                Mathf.Sin(phase * .5f) * .025f * blend * zoomScale, 0f);
+            filmCamera.transform.SetPositionAndRotation(stableLensPosition + breathOffset, desiredRotation * breathRotation);
         }
 
         private Vector3 GetSubjectCenter(RecordableSubject sub)
@@ -945,7 +1044,7 @@ namespace Player.Equipment
 
             if (currentLevel == 4)
             {
-                SampleLevel4Frame();
+                SampleCoffeeCommercialFrame();
                 return;
             }
 
@@ -990,7 +1089,7 @@ namespace Player.Equipment
 
             float framingScore = isLevel1 ? GradeCenterFraming(viewPos) : GradeRuleOfThirds(viewPos);
             float shotSizeScore = GradeSubjectSize(targetRenderers, 0.22f, 0.65f);
-            float lightingScore = isLevel1 ? GradeBasicLighting(targetCenter) : Grade3PointLighting(targetCenter, currentLevel == 2);
+            float lightingScore = currentLevel <= 2 ? GradeBasicLighting(targetCenter) : Grade3PointLighting(targetCenter);
 
             totalCameraScoreAccumulated += (framingScore + shotSizeScore);
             totalLightingScoreAccumulated += lightingScore;
@@ -1056,8 +1155,10 @@ namespace Player.Equipment
                 Vector3 cameraArrow = (filmCamera.transform.position - targetCenter).normalized;
                 Vector3 lightArrow = (lightPosition - targetCenter).normalized;
 
-                float intensityScore = 10f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 45f) / 55f);
-                float tiltScore = 5f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 5f) / 15f);
+                bool compositionLesson = CampaignProgression.GetCurrentLevel() == 2;
+                float intensityScore = compositionLesson ? 10f * Mathf.InverseLerp(0f, 30f, light.intensityPercent) : 10f * Mathf.Clamp01(1f - Mathf.Abs(light.intensityPercent - 45f) / 55f);
+                // Goke rewards illuminating the subject, not copying a tutorial tilt.
+                float tiltScore = compositionLesson ? 5f * Mathf.InverseLerp(.5f, .95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget)) : 5f * Mathf.Clamp01(1f - Mathf.Abs(light.GetCurrentTilt() + 5f) / 15f);
                 float aimScore = 8f * Mathf.InverseLerp(0.5f, 0.95f, Vector3.Dot(light.spotlight.transform.forward, directionToTarget));
                 float placementScore = 4f * Mathf.InverseLerp(-0.1f, 0.8f, Vector3.Dot(cameraArrow, lightArrow));
                 float distanceScore = 3f * GradeRange(Vector3.Distance(lightPosition, targetCenter), 1.5f, 6f);
@@ -1247,7 +1348,40 @@ namespace Player.Equipment
                 bestScore = Mathf.Max(bestScore, score);
             }
 
-            return Mathf.Clamp(bestScore, 0f, 30f);
+            // Better-Light control is the foundation; distinct roles improve the result.
+            // Do not invalidate a readable take merely because it uses fewer lights.
+            float roles = Grade3PointLighting(targetCenter, true);
+            return Mathf.Clamp(bestScore * .8f + roles * .2f, 0f, 30f);
+        }
+
+        private void SampleCoffeeCommercialFrame()
+        {
+            CampaignProduct cup = null, packaging = null;
+            foreach (var product in FindObjectsOfType<CampaignProduct>())
+            {
+                if (product.campaignLevel != 4) continue;
+                if (product.IsCoffeeCup) cup = product; else packaging = product;
+            }
+            bool cupVisible = false, packageVisible = false, actorVisible = false;
+            Vector4 cupView = Vector4.zero, packageView = Vector4.zero, actorView = Vector4.zero;
+            if (cup != null) cupVisible = TryGetViewportBounds(cup.GetComponentsInChildren<Renderer>(), out cupView) && GradeViewportVisibility(cupView, .03f) >= .99f && !IsCampaignTargetBlocked(cup.transform.position + Vector3.up * .1f, cup.transform);
+            if (packaging != null) packageVisible = TryGetViewportBounds(packaging.GetComponentsInChildren<Renderer>(), out packageView) && GradeViewportVisibility(packageView, .03f) >= .99f && !IsCampaignTargetBlocked(packaging.transform.position + Vector3.up * .1f, packaging.transform);
+            var actor = FindObjectOfType<CubeActor>();
+            if (actor != null) actorVisible = TryGetViewportBounds(actor.GetComponentsInChildren<Renderer>(), out actorView) && GradeViewportVisibility(actorView, .03f) >= .99f;
+            var bot = actor != null ? actor.GetComponent<ActorBot>() : null;
+            var stage = FindObjectOfType<DirectorTerminal>();
+            bool coffeeSet = stage != null && stage.HasWall() && GameSavePrefs.GetInt("Studio.SelectedInterior", 0) > 0;
+            bool usingCoffee = cupVisible && actorVisible && coffeeSet && bot != null &&
+                ((bot.CanMixCoffee && actor.GetPoseName() == "Action") || actor.GetPoseName() == "Using Machine");
+            string evidence = usingCoffee ? "Coffee Use" : cupVisible && packageVisible ? "Product Overview" : "Incomplete";
+            Vector4 viewport = usingCoffee ? CombineViewportBounds(cupView, actorView) : CombineViewportBounds(cupView, packageView);
+            bool valid = evidence != "Incomplete";
+            RecordProductionEvidence(viewport, valid, null, cup != null ? cup.transform.position : transform.position);
+            if (string.IsNullOrEmpty(recordedActorPose)) recordedActorPose = evidence;
+            else if (recordedActorPose != evidence) recordedActorPose = "Mixed";
+            totalCameraScoreAccumulated += valid ? 70f * GradeRange(GetViewportCoverage(viewport), .25f, .85f) : 20f;
+            totalLightingScoreAccumulated += 30f;
+            framesSampled++;
         }
 
         private void SampleLevel4Frame()
@@ -1701,6 +1835,7 @@ namespace Player.Equipment
                 if (pixelRecorder == null) ResolvePixelRecorder();
                 if (pixelRecorder != null) pixelRecorder.CancelRecording();
                 isRecording = false;
+                GameplayAudioManager.SetRecording(this, false);
 
                 if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
 
@@ -1710,6 +1845,11 @@ namespace Player.Equipment
 
             if (!isRecording)
             {
+                if (Level3Manager.Instance != null && Level3Manager.Instance.RecordingBlockedByPractice)
+                {
+                    GameFeedback.Show("RECORDING LOCKED: Finish the practice lesson first. Use the viewfinder to rehearse without recording.");
+                    return;
+                }
                 if (TutorialManager.Instance != null && !TutorialManager.Instance.CanRecord()) return;
 
                 bool requiresCenterFraming = CampaignProgression.GetCurrentLevel() == 1;
@@ -1773,7 +1913,8 @@ namespace Player.Equipment
                 }
 
                 recordingStartTime = Time.time;
-                GameplayAudioManager.Play("Start Recording");
+                GameplayAudioManager.SetRecording(this, true);
+                GameplayAudioManager.PlayRecordingCue("Start Recording");
                 recordingCampaignLevel = CampaignProgression.GetCurrentLevel();
                 totalCameraScoreAccumulated = 0f;
                 totalLightingScoreAccumulated = 0f;
@@ -1792,7 +1933,8 @@ namespace Player.Equipment
                 if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
 
                 generatedFileName = pixelRecorder.StopRecording();
-                GameplayAudioManager.Play("Stop Recording");
+                GameplayAudioManager.SetRecording(this, false);
+                GameplayAudioManager.PlayRecordingCue("Stop Recording");
                 finalDuration = Time.time - recordingStartTime;
 
                 if (framesSampled > 0)
@@ -1825,6 +1967,8 @@ namespace Player.Equipment
 
         private void OnDestroy()
         {
+            RestorePlayerBody();
+            GameplayAudioManager.SetRecording(this, false);
             if (dynamicHUD != null) Destroy(dynamicHUD.gameObject);
             ReleaseCameraSettings();
             // The grid is parented to the shared HUD, not this equipment object.
@@ -1833,6 +1977,7 @@ namespace Player.Equipment
 
         private GameObject EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
         {
+            PlayerAnalytics.TakeRecorded(recordingCampaignLevel);
             isSDCardInserted = false;
             if (sdCardPrefab != null)
             {
@@ -1932,7 +2077,3 @@ namespace Player.Equipment
     }
 
 }
-
-
-
-

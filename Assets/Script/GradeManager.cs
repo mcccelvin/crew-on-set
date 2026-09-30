@@ -67,10 +67,11 @@ public class GradeManager : MonoBehaviour
                 {
                     if (CareerManager.Instance != null)
                     {
-                        CareerManager.Instance.AddMoney(grades.earnedBCoins);
+                        CareerManager.Instance.AddMoney(grades.earnedBCoins, "Completion reward");
                     }
                     else if (grades.earnedBCoins > 0)
                     {
+                        PlayerAnalytics.TransactionMade(grades.earnedBCoins, "Completion reward", "Completion reward");
                         int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
                         PlayerPrefs.SetInt("PlayerMoney", (int)System.Math.Min(int.MaxValue, (long)Mathf.Max(0, savedMoney) + grades.earnedBCoins));
                     }
@@ -83,6 +84,7 @@ public class GradeManager : MonoBehaviour
                 CampaignProgression.CompleteLevel(submittedLevel);
             }
 
+            grades.feedback = PlayerAnalytics.Complete(submittedLevel, grades) + "\n\n" + grades.feedback;
             CrossSceneData.resultApplied = true;
             CrossSceneData.finalGrades = grades;
             PlayerPrefs.Save();
@@ -252,6 +254,7 @@ public class GradeManager : MonoBehaviour
 
         int submittedLevel = Mathf.Clamp(CrossSceneData.submittedLevel, CampaignProgression.MinimumLevel, CampaignProgression.MaximumLevel);
         CampaignProgression.SetRetryLevel(submittedLevel);
+        PlayerAnalytics.Begin(submittedLevel, true);
 
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
 
@@ -261,7 +264,7 @@ public class GradeManager : MonoBehaviour
 
         isLoadingScene = true;
         PrepareForStudioLoad();
-        SceneManager.LoadScene("SingleStudio");
+        LoadingScreenController.LoadScene("SingleStudio");
     }
 
 
@@ -294,7 +297,7 @@ public class GradeManager : MonoBehaviour
 
         isLoadingScene = true;
         PrepareForStudioLoad();
-        SceneManager.LoadScene("SingleStudio");
+        LoadingScreenController.LoadScene("SingleStudio");
     }
 
     private void StopSuccessfulContinuation()

@@ -24,9 +24,18 @@ public sealed class ExportUIArt : ScriptableObject
     // Make a white version of the original artwork without changing imported assets.
     public static Sprite GetWhite(string key)
     {
-        string cacheKey = key + "/white";
+        return CreateWhiteSprite(Get(key), key + "/white");
+    }
+
+    public static Sprite GetWhite(Sprite original)
+    {
+        if (original == null) return null;
+        return CreateWhiteSprite(original, "sprite/" + original.GetInstanceID() + "/white");
+    }
+
+    private static Sprite CreateWhiteSprite(Sprite original, string cacheKey)
+    {
         if (sprites.TryGetValue(cacheKey, out var cached) && cached != null) return cached;
-        Sprite original = Get(key);
         if (original == null) return null;
         Texture2D source = original.texture;
         RenderTexture previous = RenderTexture.active;

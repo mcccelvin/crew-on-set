@@ -61,6 +61,12 @@ public class EditorManager : MonoBehaviour
     private void Start()
     {
         PauseManager.isPaused = false;
+        DraggableClip.ResetSplitHistory();
+        PauseManager.EnsureEditorPause();
+        var contractReference = ContractUIManager.Instance;
+        if (contractReference == null)
+            contractReference = new GameObject("Editor contract reference").AddComponent<ContractUIManager>();
+        contractReference.ConfigureEditorReference();
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -86,13 +92,14 @@ public class EditorManager : MonoBehaviour
         {
             AddGeneratedTerrariClip("TerrariIntro", "TERRARI INTRO", ProvidedClipRole.TerrariIntro);
             AddGeneratedTerrariClip("TerrariOutro", "TERRARI OUTRO", ProvidedClipRole.TerrariOutro);
-            gameObject.AddComponent<LamborminiEditLesson>();
+            // Terrari editing is independent; supplied clips remain available without a lesson.
         }
         else if (EditingLevel == 4) gameObject.AddComponent<CoffeeStoryEditLesson>();
     }
 
     private void Update()
     {
+        if (PauseManager.isPaused) return;
         if (emptyPreviewMessage != null && gradingManager != null && gradingManager.computerScreen != null)
         {
             Texture texture = gradingManager.computerScreen.texture;
@@ -416,9 +423,9 @@ public class EditorManager : MonoBehaviour
 
     private void UpdatePhaseUI()
     {
-        if (clipBankContainer != null) clipBankContainer.gameObject.SetActive(currentPhase == 0);
-        if (brandingBinPanel != null) brandingBinPanel.SetActive(currentPhase == 1);
-        if (colorGradingBin != null) colorGradingBin.SetActive(currentPhase == 2);
+        if (clipBankContainer != null) SetPhaseVisible(clipBankContainer.gameObject, currentPhase == 0);
+        SetPhaseVisible(brandingBinPanel, currentPhase == 1);
+        SetPhaseVisible(colorGradingBin, currentPhase == 2);
         if (exportButton != null) exportButton.SetActive(currentPhase == 2 || CampaignProgression.GetCurrentLevel() == 2 || EditingLevel == 4);
         if (titleSafeGuide != null) titleSafeGuide.SetActive(currentPhase == 1 || currentPhase == 2);
         if (playerEditTools != null) playerEditTools.SetVisible(currentPhase == 1);
@@ -429,7 +436,9 @@ public class EditorManager : MonoBehaviour
         if (activePanel != null)
         {
             if (phaseRevealCoroutine != null) StopCoroutine(phaseRevealCoroutine);
-            phaseRevealCoroutine = StartCoroutine(AnimatePhasePanelIn(activePanel));
+            phaseRevealCoroutine = null;
+            var group = activePanel.GetComponent<CanvasGroup>();
+            if (group != null) group.alpha = 1f;
         }
 
         if (tabButtonImages != null && tabButtonImages.Length > 0)
@@ -438,33 +447,22 @@ public class EditorManager : MonoBehaviour
             {
                 if (tabButtonImages[i] != null)
                 {
+                    var motion = tabButtonImages[i].GetComponent<UIButtonFeedback>();
+                    if (motion != null) motion.enabled = false;
                     tabButtonImages[i].color = (i == currentPhase) ? EditorWorkspaceUI.Accent : EditorWorkspaceUI.Control;
                 }
             }
         }
     }
 
-    private IEnumerator AnimatePhasePanelIn(GameObject panel)
+    private static void SetPhaseVisible(GameObject panel, bool visible)
     {
-        if (panel == null) yield break;
-
-        CanvasGroup group = panel.GetComponent<CanvasGroup>();
-        if (group == null) group = panel.AddComponent<CanvasGroup>();
-        group.alpha = 0f;
-
-        float elapsed = 0f;
-        const float duration = 0.2f;
-        while (elapsed < duration && panel != null && panel.activeInHierarchy)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float inverse = 1f - t;
-            group.alpha = 1f - inverse * inverse * inverse;
-            yield return null;
-        }
-
+        if (panel == null) return;
+        var motion = panel.GetComponent<UITransition>();
+        if (motion != null) motion.enabled = false;
+        panel.SetActive(visible);
+        var group = panel.GetComponent<CanvasGroup>();
         if (group != null) group.alpha = 1f;
-        phaseRevealCoroutine = null;
     }
 
     private void BuildProfessionalPreview()
@@ -614,6 +612,8 @@ public class EditorManager : MonoBehaviour
                 path = clip.clipFilePath,
                 startFrame = clip.startFrame,
                 endFrame = clip.endFrame,
+                useClipGrade = EditingLevel == 4,
+                brightness = clip.gradeBrightness, contrast = clip.gradeContrast, saturation = clip.gradeSaturation,
                 uiStartX = trueStartX,
                 uiWidth = rt.rect.width
             });
@@ -652,7 +652,7 @@ public class EditorManager : MonoBehaviour
             return false;
         }
 
-        if (reviewVideoPanel != null) reviewVideoPanel.SetActive(true);
+        UITransition.Show(reviewVideoPanel);
 
         CommercialCompiler compiler = FindObjectOfType<CommercialCompiler>();
         if (compiler != null && compiler.editorPlayer != null) compiler.editorPlayer.StopTape();
@@ -729,7 +729,7 @@ public class EditorManager : MonoBehaviour
         if (reviewVideoPanel != null) reviewVideoPanel.SetActive(false);
         if (exportPlayer != null) exportPlayer.StopTape();
 
-        SceneManager.LoadScene("ReviewScene");
+        LoadingScreenController.LoadScene("ReviewScene");
     }
 
     private void ShowEditorWarning(string message)
@@ -755,5 +755,3 @@ public class EditorManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 }
-
-

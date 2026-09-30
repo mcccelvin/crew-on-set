@@ -85,8 +85,48 @@ namespace Player.Equipment
         private Vector3 originalHeadPosition;
         private Transform originalStand;
         private Vector3 standScale, standPosition;
-        private float standHeight, standBottom;
+        private float standHeight;
         public float HeightExtension => heightExtension;
+
+        public void ResetAfterPractice()
+        {
+            isLightOn = false;
+            intensityPercent = 0f;
+            currentTilt = 0f;
+            diffusionPercent = 0f;
+            colorTemperature = 4300f; // Valid neutral default; 0 Kelvin is not a light setting.
+            AdjustStandHeight(-heightExtension);
+            if (headPivot != null)
+                headPivot.rotation = transform.rotation * Quaternion.Inverse(neutralBeamRotation);
+            if (spotlight != null) spotlight.enabled = false;
+            UpdateLightOutput();
+            UpdateLightUI();
+            RefreshPlacementControls();
+        }
+
+        public void ReturnToDelivery(Vector3 position, Quaternion rotation)
+        {
+            // Restore collider/pickup state before moving a previously held stand.
+            base.OnDropped(null);
+            isHeld = false;
+            heldBeamReference = null;
+            gameObject.SetActive(true);
+            transform.SetPositionAndRotation(position, rotation);
+            ResetAfterPractice();
+            SettleOnSurface(null);
+            foreach (var body in GetComponentsInChildren<Rigidbody>(true))
+            {
+                if (!body.isKinematic)
+                {
+                    body.velocity = Vector3.zero;
+                    body.angularVelocity = Vector3.zero;
+                }
+                body.useGravity = false;
+                body.isKinematic = true;
+                body.detectCollisions = true;
+            }
+            if (lightUICanvas != null) lightUICanvas.SetActive(false);
+        }
 
         public void AdjustStandHeight(float metres)
         {
@@ -94,17 +134,22 @@ namespace Player.Equipment
             heightExtension = Mathf.Clamp(heightExtension + metres, 0f, 1.5f);
             float rootScale = Mathf.Max(.001f, Mathf.Abs(transform.lossyScale.y));
             // Stored metres describe the deployed stand, not its miniature held model.
-            float deployedScale = isHeld ? rootScale / heldPresentationScale : rootScale;
+            float deployedScale = rootScale;
             headPivot.localPosition = originalHeadPosition + Vector3.up * (heightExtension / deployedScale);
             if (originalStand != null && standHeight > .001f)
             {
                 float extension = heightExtension / deployedScale;
                 float factor = 1f + extension / standHeight;
+                // Measure the current model at its baseline scale. The replacement
+                // Better Light mesh can have different bounds from the original panel.
+                originalStand.localScale = standScale;
+                originalStand.localPosition = standPosition;
+                float baselineBottom = GetStandBounds().min.y;
                 originalStand.localScale = new Vector3(standScale.x, standScale.y * factor, standScale.z);
                 // Preserve the authored stand's bottom, not its mesh pivot.
                 originalStand.localPosition = standPosition;
                 float newBottom = GetStandBounds().min.y;
-                originalStand.position += transform.up * ((standBottom - newBottom) * rootScale);
+                originalStand.position += transform.TransformVector(Vector3.up * (baselineBottom - newBottom));
             }
             RefreshPlacementControls();
         }
@@ -156,7 +201,7 @@ namespace Player.Equipment
             base.OnPickedUp(holdPoint);
             isHeld = true;
             heldBeamReference = FindHeldBeamReference(holdPoint);
-            transform.localScale *= heldPresentationScale;
+            // Use the deployed size while aiming too: no size/beam-origin pop on G.
             UpdateHeldBeamTransform();
             RefreshPlacementControls();
             if (lightUICanvas != null) lightUICanvas.SetActive(false);
@@ -166,7 +211,9 @@ namespace Player.Equipment
         // Triggered when you press G to drop it
         public override void OnDropped(Camera playerCamera)
         {
-            // Keep the same heading and head tilt. Only lower the stand onto its surface.
+            // Finish this frame's aiming before capturing the placement pose.
+            UpdateHeldBeamTransform();
+            Vector3 headPosition = headPivot != null ? headPivot.position : transform.position;
             Quaternion headRotation = headPivot != null ? headPivot.rotation : Quaternion.identity;
             Vector3 dropPosition = transform.position;
             isHeld = false;
@@ -174,7 +221,24 @@ namespace Player.Equipment
             base.OnDropped(playerCamera);
             transform.position = dropPosition;
             if (headPivot != null) headPivot.rotation = headRotation;
+            if (headPivot != null) transform.position += headPosition - headPivot.position;
             SettleOnSurface(playerCamera);
+
+            if (headPivot != null)
+            {
+                // Keep the feet on the surface and telescope the stand to the previewed head.
+                float heightCorrection = headPosition.y - headPivot.position.y;
+                if (originalStand != null && standHeight > .001f)
+                {
+                    float rootScale = Mathf.Max(.001f, Mathf.Abs(transform.lossyScale.y));
+                    float bottomBefore = GetStandBounds().min.y;
+                    Vector3 scale = originalStand.localScale;
+                    scale.y = Mathf.Max(.01f, scale.y + standScale.y * heightCorrection / (rootScale * standHeight));
+                    originalStand.localScale = scale;
+                    originalStand.position += transform.up * ((bottomBefore - GetStandBounds().min.y) * rootScale);
+                }
+                headPivot.SetPositionAndRotation(headPosition, headRotation);
+            }
 
             if (allRigidbodies != null)
             {
@@ -187,6 +251,9 @@ namespace Player.Equipment
                         lightRigidbody.velocity = Vector3.zero;
                         lightRigidbody.angularVelocity = Vector3.zero;
                     }
+                    // A placed studio stand should not jump from contact resolution.
+                    lightRigidbody.useGravity = false;
+                    lightRigidbody.isKinematic = true;
                 }
             }
 
@@ -225,6 +292,9 @@ namespace Player.Equipment
         public override void OnUse(Camera playerCamera)
         {
             isLightOn = !isLightOn;
+            // The tutorial returns lights at zero output. Power-on must give visible light.
+            if (isLightOn && intensityPercent <= 0f) intensityPercent = 100f;
+            UpdateLightOutput();
             if (spotlight != null) spotlight.enabled = isLightOn;
 
             if (isLightOn && TutorialManager.Instance != null)
@@ -296,7 +366,15 @@ namespace Player.Equipment
         public void RefreshAdvancedFeatures()
         {
             if (!hasSoftLightModel && EquipmentName == "Level 3 Soft Light")
+            {
                 hasSoftLightModel = EquipmentModelVisuals.SoftLight(transform, headPivot, originalStand, spotlight);
+                if (hasSoftLightModel)
+                {
+                    float scale = Mathf.Max(.001f, Mathf.Abs(transform.lossyScale.y));
+                    if (isHeld) scale /= heldPresentationScale;
+                    originalHeadPosition = headPivot.localPosition - Vector3.up * (heightExtension / scale);
+                }
+            }
             UpdateLightOutput();
             RefreshPlacementControls();
             UpdateLightUI();
@@ -341,7 +419,7 @@ namespace Player.Equipment
             // Preserve the held stand base as the telescopic head rises. Without this
             // offset the hand-follow code cancels every height adjustment.
             Vector3 panelPosition = heldBeamReference.position + heldBeamReference.rotation * heldPanelPosition
-                + Vector3.up * (heightExtension * heldPresentationScale);
+                + Vector3.up * heightExtension;
             transform.position += panelPosition - headPivot.position;
         }
 
@@ -419,6 +497,7 @@ namespace Player.Equipment
             spotlight.transform.localScale = Vector3.one;
             spotlight.transform.position = centre + beamForward * (front + 0.06f);
             spotlight.type = LightType.Spot;
+            spotlight.cookie = PanelLightAppearance.SquareCookie;
             spotlight.shadowNearPlane = 0.05f;
             spotlight.shadowNormalBias = 0.1f;
             originalHeadPosition = headPivot.localPosition;
@@ -429,7 +508,6 @@ namespace Player.Equipment
                 standPosition = originalStand.localPosition;
                 Bounds bounds = GetStandBounds();
                 standHeight = bounds.size.y;
-                standBottom = bounds.min.y;
             }
             var hazeObject = new GameObject("Studio Haze Beam");
             hazeObject.layer = spotlight.gameObject.layer;
@@ -642,7 +720,9 @@ namespace Player.Equipment
             {
                 diffuserRenderer.GetPropertyBlock(diffuserProperties);
                 Color lampColor = Mathf.CorrelatedColorTemperatureToRGB(GetColorTemperature());
-                diffuserProperties.SetColor("_EmissionColor", isLightOn ? lampColor * (0.25f + intensityPercent / 100f) : Color.black);
+                bool emitting = isLightOn && intensityPercent > 0f;
+                diffuserProperties.SetColor("_Color", emitting ? Color.white : new Color(0.65f, 0.65f, 0.62f));
+                diffuserProperties.SetColor("_EmissionColor", emitting ? lampColor * (1.5f + 3f * intensityPercent / 100f) : Color.black);
                 diffuserRenderer.SetPropertyBlock(diffuserProperties);
             }
 

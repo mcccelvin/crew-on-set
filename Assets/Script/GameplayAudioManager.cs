@@ -8,7 +8,8 @@ public sealed class GameplayAudioManager : MonoBehaviour
 {
     private static GameplayAudioManager instance;
     private GameplaySoundLibrary library;
-    private AudioSource effects, voice, music;
+    private AudioSource effects, voice, music, recordingCue;
+    private readonly HashSet<Object> recordingCameras = new HashSet<Object>();
     private readonly HashSet<Button> buttons = new HashSet<Button>();
     private float scanAt, voiceUntil, feedbackAt;
     private int level = -1;
@@ -30,6 +31,8 @@ public sealed class GameplayAudioManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         library = Resources.Load<GameplaySoundLibrary>("GameplaySounds");
         effects = Source(.45f * GameOptions.SfxVolume);
+        effects.ignoreListenerPause = true;
+        recordingCue = Source(GameOptions.SfxVolume);
         voice = Source(.25f * GameOptions.SfxVolume);
         music = Source(.12f * GameOptions.MusicVolume);
         music.loop = true;
@@ -49,6 +52,7 @@ public sealed class GameplayAudioManager : MonoBehaviour
     private void SceneLoaded(Scene scene, LoadSceneMode mode)
     {
         level = -1; scanAt = 0;
+        recordingCameras.Clear();
         StopVoice();
         Play("ClapperBoard Transition");
     }
@@ -59,6 +63,22 @@ public sealed class GameplayAudioManager : MonoBehaviour
     {
         var clip = Clip(prefix);
         if (clip != null) instance.effects.PlayOneShot(clip);
+    }
+
+    public static void SetRecording(Object camera, bool recording)
+    {
+        if (instance == null) return;
+        if (recording) instance.recordingCameras.Add(camera);
+        else instance.recordingCameras.Remove(camera);
+        instance.music.mute = instance.recordingCameras.Count > 0;
+    }
+
+    public static void PlayRecordingCue(string prefix)
+    {
+        var clip = Clip(prefix);
+        if (clip == null) return;
+        instance.recordingCue.volume = GameOptions.SfxVolume;
+        instance.recordingCue.PlayOneShot(clip);
     }
 
     public static void Feedback(string text, bool error)
@@ -81,6 +101,8 @@ public sealed class GameplayAudioManager : MonoBehaviour
 
     private void Update()
     {
+        recordingCameras.RemoveWhere(camera => camera == null);
+        music.mute = recordingCameras.Count > 0;
         if (Time.unscaledTime >= voiceUntil) voice.Stop();
         effects.volume = .45f * GameOptions.SfxVolume;
         voice.volume = .25f * GameOptions.SfxVolume;
@@ -101,8 +123,7 @@ public sealed class GameplayAudioManager : MonoBehaviour
         string scene = SceneManager.GetActiveScene().name;
         music.Stop();
         if (scene != "SingleStudio" && scene != "MultiStudio") return;
-        string[] tracks = { "BG Music by Andrii", "BG Music by FASSounds", "BG Music by Dmitriy", "BG Music by Nesterouk", "bg music kinda lofi" };
-        music.clip = Clip(tracks[Mathf.Clamp(level - 1, 0, tracks.Length - 1)]);
+        music.clip = Clip("BG Music by Andrii");
         if (music.clip != null) music.Play();
     }
 

@@ -12,6 +12,7 @@ public class ContractGrader : MonoBehaviour
             ? EditorManager.Instance.EditingLevel : CampaignProgression.GetCurrentLevel();
         CrossSceneData.submittedLevel = currentLevel;
         CrossSceneData.resultApplied = false;
+        PlayerAnalytics.CaptureScores(currentLevel, avgCam, avgLight);
 
         if (currentLevel == 1) return GradeLevel1(avgCam, avgLight, totalSeconds);
         if (currentLevel == 2) return GradeLevel2(avgCam, avgLight, totalSeconds);
@@ -194,11 +195,11 @@ public class ContractGrader : MonoBehaviour
             editor != null ? editor.pixelsPerSecond : 40f);
         float post = 100f;
         feedback += "<color=white><b>--- COFFEE STORY EDIT ---</b></color>\n";
-        if (!story.beats) { post -= 40f; feedback += "- Use three distinct recordings in order: Wave greeting, Action (or Using Machine), then Sitting. Keep actor and coffee visible.\n"; }
-        else feedback += "+ Your performance has a beginning, middle and ending.\n";
-        if (!story.continuous) { post -= 20f; feedback += "- Join the three clips from 0s with no gaps or overlaps; keep each beat at least 2 seconds.\n"; }
-        if (!story.duration) { post -= 20f; feedback += "- Trim the story to 15 seconds (within 0.5s).\n"; }
-        if (!story.brand) { post -= 20f; feedback += "- Place a brand graphic over the final 2 seconds. Static graphics are welcome.\n"; }
+        if (!story.beats) { post -= 40f; feedback += "- Include a product-and-packaging overview and a coffee-shop shot of an actor using the coffee. Keep each required shot at least 2 seconds.\n"; }
+        else feedback += "+ Product overview and actor coffee use are shown.\n";
+        if (!story.continuous) { post -= 20f; feedback += "- Join clips from 0s without gaps or overlaps; keep each segment at least 2 seconds.\n"; }
+        if (!story.duration) { post -= 20f; feedback += "- Deliver a 30–45-second commercial.\n"; }
+        if (!story.brand) { post -= 20f; feedback += "- Remove overlays for this contract.\n"; }
         feedback += "Shot sizes, set color, light model, music, transitions and color grade are creative choices, not repeated checklist requirements.\n";
         bool complete = IsRequiredSetupComplete() && story.beats && story.continuous && story.duration && story.brand;
         return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(4), complete);
@@ -336,11 +337,11 @@ public class ContractGrader : MonoBehaviour
         }
         else if (level == GameLevel.Level2)
         {
-            feedback += "<color=white>Tip: Use any thirds intersection. Aim Key, opposite softer Fill, and Back at Goke. Choose intensities to suit your look; 75/40/60 is only an example.</color>\n\n";
+            feedback += "<color=white>Tip: Keep the whole subject near a thirds intersection and leave space for branding. One powered, aimed light is enough for Goke; three-point lighting is a Level 3 lesson.</color>\n\n";
         }
         else if (level == GameLevel.Level3)
         {
-            feedback += "<color=white>Tip: Show the back, side and overall view of the orange car. These angles are equally valid; keep the car visible and well lit. Centered and thirds framing both work. Start the Soft Light near 75%; refine aim and diffusion for clear highlights.</color>\n\n";
+            feedback += "<color=white>Tip: Show the back, side and overall view of the car. Lighting rewards Better-Light aim, output, temperature and diffusion (80%), plus distinct Key, Fill and Back roles (20%). Practice percentages are examples, not mandatory settings.</color>\n\n";
         }
         else if (level == GameLevel.Level4)
         {
@@ -648,4 +649,3 @@ public class ContractGrader : MonoBehaviour
         };
     }
 }
-

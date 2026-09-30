@@ -111,24 +111,27 @@ public partial class AlmanacManager : MonoBehaviour
         EnsureEquipmentAndTechniqueEntries();
         RemoveLegacyKnowledgeEntries();
         BuildAlmanacUI();
+        BuildProfileUI();
         BindBookButtons();
         BuildKnowledgeFilters();
         LoadAlmanacData();
         RestoreKnowledgeProgress();
 
         if (almanacCanvas != null) almanacCanvas.SetActive(false);
+        if (profileCanvas != null) profileCanvas.SetActive(false);
 
-        if (playerInfoTabBtn) playerInfoTabBtn.onClick.AddListener(OpenPlayerInfoTab);
+        if (playerInfoTabBtn && playerInfoTabBtn.onClick.GetPersistentEventCount() == 0) playerInfoTabBtn.onClick.AddListener(OpenPlayerInfoTab);
         if (knowledgeTabBtn) knowledgeTabBtn.onClick.AddListener(OpenKnowledgeTab);
-        if (achievementsTabBtn) achievementsTabBtn.onClick.AddListener(OpenAchievementsTab);
+        if (achievementsTabBtn && achievementsTabBtn.onClick.GetPersistentEventCount() == 0) achievementsTabBtn.onClick.AddListener(OpenAchievementsTab);
         if (closeButton) closeButton.onClick.AddListener(ToggleAlmanac);
         if (allKnowledgeButton) allKnowledgeButton.onClick.AddListener(ShowAllKnowledge);
-        if (equipmentKnowledgeButton) equipmentKnowledgeButton.onClick.AddListener(ShowEquipmentKnowledge);
-        if (techniquesKnowledgeButton) techniquesKnowledgeButton.onClick.AddListener(ShowTechniqueKnowledge);
+        if (bookEntryTitle == null && equipmentKnowledgeButton) equipmentKnowledgeButton.onClick.AddListener(ShowEquipmentKnowledge);
+        if (bookEntryTitle == null && techniquesKnowledgeButton) techniquesKnowledgeButton.onClick.AddListener(ShowTechniqueKnowledge);
     }
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
+        ClosePlayerProfile();
         RebindSceneCanvas(scene);
     }
 
@@ -161,13 +164,14 @@ public partial class AlmanacManager : MonoBehaviour
 
         if (sceneAlmanacCanvas == almanacCanvas) return;
 
-        if (isAlmanacOpen) RestoreInputState();
+        if (isAlmanacOpen || isProfileOpen) RestoreInputState();
         RemoveUIListeners();
 
+        profileCanvas = null;
         almanacCanvas = sceneAlmanacCanvas;
         bookEntryTitle=null;
         bookPage=0;
-        bookCategory=0;
+        bookCategory=-1;
         playerInfoTabBtn = null;
         knowledgeTabBtn = null;
         achievementsTabBtn = null;
@@ -210,9 +214,15 @@ public partial class AlmanacManager : MonoBehaviour
     private void Update()
     {
         UpdateNavigationLesson();
+        UpdateTechniqueReviewHighlight();
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
 
         Keyboard keyboard = Keyboard.current;
+        if (Application.isFocused && keyboard != null && keyboard.iKey.wasPressedThisFrame)
+        {
+            OpenPlayerProfile();
+            return;
+        }
         bool actionPressed = inputManager != null && inputManager.ConsumeAlmanac();
         bool keyPressed = keyboard != null && keyboard.pKey.wasPressedThisFrame;
         // Keep the global book shortcut available after menu/input-map transitions.
@@ -227,7 +237,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (!isAlmanacOpen) return;
+        if (!isAlmanacOpen && !isProfileOpen) return;
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -241,6 +251,14 @@ public partial class AlmanacManager : MonoBehaviour
 
     public void ToggleAlmanac()
     {
+        if (isProfileOpen) { ClosePlayerProfile(); return; }
+        if (bookSelectionAnimating) return;
+        if (isAlmanacOpen && !finishingBookClose && equipmentKnowledgeButton != null && closeButton != null)
+        {
+            CancelPageTurn();
+            StartCoroutine(AnimateBookClose());
+            return;
+        }
         if (almanacCanvas == null) RebindSceneCanvas(SceneManager.GetActiveScene());
         if (!DevTutorialBypass.Disabled && !isAlmanacOpen && PlayerPrefs.GetInt("AlmanacUnlocked", 0) == 0) return;
         if (!isAlmanacOpen && PauseManager.isPaused) return;
@@ -266,7 +284,7 @@ public partial class AlmanacManager : MonoBehaviour
 
         if (isAlmanacOpen) EndNavigationLesson();
         isAlmanacOpen = !isAlmanacOpen;
-        almanacCanvas.SetActive(isAlmanacOpen);
+        UITransition.SetVisible(almanacCanvas, isAlmanacOpen);
 
         if (isAlmanacOpen)
         {
@@ -298,7 +316,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     public bool IsOpen()
     {
-        return isAlmanacOpen;
+        return isAlmanacOpen || isProfileOpen;
     }
 
     public void UnlockTutorialEquipment()
@@ -330,6 +348,7 @@ public partial class AlmanacManager : MonoBehaviour
         UnlockKnowledge("led_panel");
         UnlockKnowledge("nony_fx_camera");
         UnlockKnowledge("sd_card");
+        UnlockKnowledge("editing_computer");
         UnlockKnowledge("set_building_technique");
         UnlockKnowledge("center_framing");
         UnlockKnowledge("basic_product_lighting");
@@ -340,10 +359,10 @@ public partial class AlmanacManager : MonoBehaviour
 
     public void UnlockProductionTechniques()
     {
+        RequestTechniqueReviewHighlight();
         EnsureEquipmentAndTechniqueEntries();
         RemoveLegacyKnowledgeEntries();
         UnlockKnowledge("rule_of_thirds");
-        UnlockKnowledge("three_point_lighting");
         UnlockKnowledge("product_separation");
         UnlockKnowledge("commercial_color_grading");
         UnlockKnowledge("advertising_post_production");
@@ -352,9 +371,11 @@ public partial class AlmanacManager : MonoBehaviour
 
     public void UnlockLevel3Equipment()
     {
+        RequestTechniqueReviewHighlight();
         PlayerPrefs.SetInt("AlmanacUnlocked", 1);
         EnsureEquipmentAndTechniqueEntries();
         RemoveLegacyKnowledgeEntries();
+        UnlockKnowledge("three_point_lighting");
         UnlockKnowledge("level_3_soft_light");
         UnlockKnowledge("automotive_staging");
         UnlockKnowledge("soft_light_technique");
@@ -365,6 +386,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     public void UnlockLevel4Knowledge()
     {
+        RequestTechniqueReviewHighlight();
         PlayerPrefs.SetInt("AlmanacUnlocked", 1);
         EnsureEquipmentAndTechniqueEntries();
         RemoveLegacyKnowledgeEntries();
@@ -484,6 +506,11 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void OpenTab(int tabIndex)
     {
+        if (profileCardImage != null)
+        {
+            profileCardImage.sprite = tabIndex == 0 ? ExportUIArt.Get("profileAccount") : null;
+            profileCardImage.color = tabIndex == 0 ? Color.white : new Color32(252, 245, 220, 255);
+        }
         if (tabIndex != 1) CloseTechniqueGuide();
         if (playerInfoPanel != null) playerInfoPanel.SetActive(tabIndex == 0);
         if (knowledgePanel != null) knowledgePanel.SetActive(tabIndex == 1);
@@ -493,9 +520,9 @@ public partial class AlmanacManager : MonoBehaviour
         if (achievementsTabBtn != null) achievementsTabBtn.interactable = tabIndex != 2;
     }
 
-    private void OpenPlayerInfoTab() { OpenTab(0); }
+    public void OpenPlayerInfoTab() { OpenTab(0); }
     private void OpenKnowledgeTab() { OpenTab(1); RefreshKnowledgeUI(); }
-    private void OpenAchievementsTab() { OpenTab(2); }
+    public void OpenAchievementsTab() { OpenTab(2); }
 
     private void ShowAllKnowledge() { SetKnowledgeCategoryFilter(0); }
     private void ShowEquipmentKnowledge() { SetKnowledgeCategoryFilter(1); }
@@ -533,9 +560,9 @@ public partial class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("three_point_lighting", "LIGHTING: 3-POINT LIGHTING", "A professional setup using three lights with different jobs.\n\n• Key Light: the strongest light, placed about 45° from the subject.\n• Fill Light: a softer light on the opposite side that controls shadow depth.\n• Back Light: placed behind the subject to separate it from the background.\n• Balance intensity and tilt so every light supports the key instead of flattening the image.");
         AddKnowledgeEntry("director_tablet", "DIRECTOR TABLET", "Stage-building control center.\n\n• Add and paint backdrop walls with the RGB controls.\n• Spawn approved props, select them, and press [T] to reposition them.\n• Use Clear Stage when you need to rebuild the set.");
         AddKnowledgeEntry("led_panel", "160 LED PANEL", "Portable light used as a key, fill, or back light.\n\n• [LMB] toggles power.\n• [Scroll] changes intensity from 0–100%.\n• [Up/Down Arrows] adjust tilt in 5-degree steps.\n• [G] drops the light in position.");
-        AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid and manual focus. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. [ and ] pull manual focus. AF-C remains available. Advanced settings are hidden until their level.", "Equipment", 1, 20);
+        AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. The camera uses continuous autofocus (AF-C). Advanced settings are hidden until their level.", "Equipment", 1, 20);
         AddKnowledgeEntry("sd_card", "SD CARD", "Removable storage used by every production camera.\n\n• Carry a blank card and press [C] while holding the camera to load it.\n• Completing a recording ejects a used card containing the footage and grading data.\n• Carry the used card to the computer tower and press [F] to ingest it.");
-        AddKnowledgeEntry("level_2_camera", "CAMERA UNLOCK - MANUAL FOCUS", "Level 2 unlocks settings on your existing camera, at no extra camera cost. Use the thirds grid to compose. F2 opens settings: select Focus mode with Up/Down, then Left/Right toggles AF-C/Manual. Hold [ / ] to focus nearer/farther. Watch the product sharpness. You can pull focus while recording; zoom and height remain locked during a take.", "Equipment", 2, 0);
+        database.RemoveAll(entry => entry.id == "level_2_camera"); // Retired manual-focus page, including serialized copies.
         AddKnowledgeEntry("level_3_soft_light", "LEVEL 3 SOFT LIGHT", "Higher-output light designed for cleaner subject lighting.\n\n• Produces up to 40 lux, twice the output of the 160 LED Panel.\n• Soft shadows create smoother transitions across the subject.\n• Use it as a strong Key Light or move it farther away for wider coverage.\n• Controls: [LMB] Power, [Scroll] Intensity, [Up/Down Arrows] Tilt, [G] Drop.");
     }
 
@@ -581,7 +608,7 @@ public partial class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("director_tablet", "LEVEL 1 - DIRECTOR TABLET CONTROLS", "The Director Tablet is the stage-building control center.\n\n- Press [E] at the terminal to open or close it.\n- ADD WALL creates the stage backdrop. Select the wall before using the RGB controls.\n- Click an approved prop card to attach it to the cursor, then click the stage to place it.\n- Select a placed prop and press [T] to reposition it.\n- Props and walls cost B-Coins, so avoid unnecessary duplicates.\n- CLEAR STAGE removes the current setup when you need to rebuild.", 1, 20);
         AddKnowledgeEntry("set_building", "LEVEL 1 - SET BUILDING & PRODUCT STAGING", "Build for the camera, not only for the Scene view.\n\n- Match the backdrop color requested by the client.\n- Pull the product away from the wall to create separation and reduce flat shadows.\n- Use cubes or approved props as supports when the product needs height.\n- Keep the main product visible and avoid placing graphics, actors, or props directly in front of it.\n- Open the camera viewfinder before recording and correct any overlap or empty framing.", 1, 30);
         AddKnowledgeEntry("led_panel", "LEVEL 1 - 160 LED PANEL", "Portable light used as a key, fill, or back light.\n\n- [LMB] toggles power while the light is held.\n- [Scroll] changes intensity in 5% steps from 0-100%.\n- [Up/Down Arrows] adjust tilt in 5-degree steps.\n- [G] drops the light in its current position.\n- Aim the light at the subject before dropping it. One light can illuminate a basic shot; multiple lights create depth and separation.", 1, 40);
-        AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid and manual focus. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. [ and ] pull manual focus. AF-C remains available. Advanced settings are hidden until their level.", "Equipment", 1, 20);
+        AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. The camera uses continuous autofocus (AF-C). Advanced settings are hidden until their level.", "Equipment", 1, 20);
         AddKnowledgeEntry("sd_card", "LEVEL 1 - SD CARD & FOOTAGE INGEST", "Every recording requires a blank SD Card.\n\n- Pick up a blank card before preparing the camera.\n- Hold the camera and press [C] to consume and insert the blank card.\n- Stopping a valid recording ejects a used card containing the footage and production scores.\n- Press [E] to pick up the used card.\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E], then review the clip in RECORDINGS before entering the Editor.", 1, 60);
         AddKnowledgeEntry("recording_workflow", "LEVEL 1 - RECORDING CHECKLIST", "Check these items before pressing [R].\n\n- The correct product and backdrop are visible.\n- Every required light is powered, aimed, and set to the intended intensity.\n- A blank SD Card is inserted.\n- The subject is detected and framed for the requested composition.\n- Zoom and camera height are final because adjustments lock during recording.\n- Record at least the required duration, then stop with [R] and collect the ejected card.", 1, 70);
         AddKnowledgeEntry("post_production_workflow", "LEVEL 1 - POST-PRODUCTION CHECKLIST", "Turn the recorded take into the final commercial.\n\n- Drag the recorded clip from the media bin to the Video Track.\n- Preview it, double-click it, and trim the handles to the required duration.\n- Move the clip to 0.0 seconds so the sequence has no empty opening.\n- Add the required branding graphics without blocking the product.\n- Time each branding clip on its timeline track.\n- Adjust brightness, contrast, and saturation to match the client brief.\n- Export, watch the final render, then submit it for grading.", 1, 80);
@@ -589,10 +616,10 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void EnsureLevel2KnowledgeEntries()
     {
-        AddKnowledgeEntry("level_2_camera", "CAMERA UNLOCK - MANUAL FOCUS", "Level 2 unlocks settings on your existing camera, at no extra camera cost. Use the thirds grid to compose. F2 opens settings: select Focus mode with Up/Down, then Left/Right toggles AF-C/Manual. Hold [ / ] to focus nearer/farther. Watch the product sharpness. You can pull focus while recording; zoom and height remain locked during a take.", "Equipment", 2, 0);
+        database.RemoveAll(entry => entry.id == "level_2_camera"); // Retired manual-focus page, including serialized copies.
         AddKnowledgeEntry("rule_of_thirds", "LEVEL 2 - RULE OF THIRDS", "Use the camera's 3 x 3 grid to create deliberate off-center composition.\n\n- Place the product near the left or right vertical grid line.\n- Put the most important detail close to a grid intersection.\n- Leave open space in the direction a subject faces or a vehicle points.\n- Do not center the product when the client specifically requests Rule of Thirds.\n- Check the tracking frame and product visibility before recording.", 2, 10);
-        AddKnowledgeEntry("three_point_lighting", "LEVEL 2 - 3-POINT LIGHTING", "Three lights create shape and separation by performing different jobs.\n\n- KEY: strongest light, placed about 45 degrees to one side. Start near 75% intensity.\n- FILL: softer light on the opposite side. Start near 40% intensity.\n- BACK: behind the subject for separation. Start near 60% intensity; these percentages are examples, not Goke grading targets.\n- Aim every beam at the product and adjust tilt until it reaches the subject.\n- Inspect the camera view for depth, readable highlights, and controlled shadows.", 2, 20);
-        AddKnowledgeEntry("level_2_workflow", "LEVEL 2 - PRODUCT COMMERCIAL WORKFLOW", "Use this plan for contracts such as Goke Cola.\n\n1. Build and color the requested backdrop.\n2. Place the approved product away from the wall.\n3. Build a Key, Fill, and Back Light arrangement.\n4. Use the NONY FX Camera grid to place the product on the requested third.\n5. Record a clean take and ingest its SD Card.\n6. In CLIPS, find the supplied GOKE INTRO and GOKE OUTRO. Build INTRO 2s > your footage 6s > OUTRO 2s with no gaps. Add the logo and tagline overlays at any times, together or separately.\n7. Press [TAB] whenever you need the active contract's exact qualifications.", 2, 30);
+        AddKnowledgeEntry("three_point_lighting", "LEVEL 3 - 3-POINT LIGHTING", "Three lights create shape and separation by performing different jobs.\n\n- KEY: strongest light, placed about 45 degrees to one side. Start near 75% intensity.\n- FILL: softer light on the opposite side. Start near 40% intensity.\n- BACK: behind the subject for separation. Start near 60% intensity; these percentages are practice examples, not universal targets.\n- Aim every beam at the product and adjust tilt until it reaches the subject.\n- Inspect the camera view for depth, readable highlights, and controlled shadows.", 3, 20);
+        AddKnowledgeEntry("level_2_workflow", "LEVEL 2 - PRODUCT COMMERCIAL WORKFLOW", "Use this plan for contracts such as Goke Cola.\n\n1. Build and color the requested backdrop.\n2. Place the approved product away from the wall.\n3. Use your existing light to keep the product readable.\n4. Use the NONY FX Camera grid to place the product on the requested third.\n5. Record a clean take and ingest its SD Card.\n6. In CLIPS, find the supplied GOKE INTRO and GOKE OUTRO. Build INTRO 2s > your footage 6s > OUTRO 2s with no gaps. Add the logo and tagline overlays at any times, together or separately.\n7. Press [TAB] whenever you need the active contract's exact qualifications.", 2, 30);
         AddKnowledgeEntry("grading_and_feedback", "LEVEL 2 - GRADING & CLIENT FEEDBACK", "Your final grade combines three production areas.\n\n- PRE-PRODUCTION checks the stage, backdrop, approved props, and placement.\n- PRODUCTION checks composition and equipment settings throughout the recorded take.\n- POST-PRODUCTION checks duration, branding count, and color grade.\n- S requires 90+ overall, Camera 60/70, and Lighting 25/30.\n- A requires 80+ overall, Camera 50/70, and Lighting 20/30. B and C also require both departments to pass.\n- Required lighting roles and equipment must be present; editing cannot replace missing production work.", 2, 40);
     }
 
@@ -613,9 +640,9 @@ public partial class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 1,200 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Hold [PgUp/PgDn] while carrying it to raise/lower the existing stand.\n- The always-on guide shows visible-beam haze; setup view only, never in the recording.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
         AddKnowledgeEntry("camera_white_balance", "CAMERA UNLOCK - WHITE BALANCE", "Level 3: F2, select White balance with Up/Down, then Left/Right changes Kelvin. Lower camera Kelvin makes the image cooler; higher makes it warmer. Tint adjusts green/magenta. Camera white balance changes the recorded image; light Kelvin changes the light itself. Try matching a 3200K source, then choose a deliberate warm look.", "Technique", 3, 25);
         AddKnowledgeEntry("camera_exposure", "CAMERA UNLOCK - EXPOSURE", "Level 4: F2 reveals ISO, Aperture and Shutter angle. Up/Down selects; Left/Right adjusts. Higher ISO brightens the image. A lower F-number brightens it and reduces depth of field. A wider shutter angle increases exposure and the simulated motion blur. Starting point: ISO 800, F4, 180 degrees at 24fps (about 1/48 second). These controls are a teaching simulation, not Sony sensor emulation. Settings affect the viewfinder and recorded footage.", "Technique", 4, 5);
-        AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid and manual focus. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. [ and ] pull manual focus. AF-C remains available. Advanced settings are hidden until their level.", "Equipment", 1, 20);
+        AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. The camera uses continuous autofocus (AF-C). Advanced settings are hidden until their level.", "Equipment", 1, 20);
         AddKnowledgeEntry("sd_card", "EQUIPMENT - SD CARD", "LEVEL 1 EQUIPMENT - 150 B-COINS\n\nFEATURES\n- Blank cards provide recording storage for every camera.\n- Used cards store the footage filename, duration, camera score, lighting score, and total score.\n\nHOW TO USE\n- Keep a blank card in the hotbar and press [C] while holding a camera.\n- Stop the recording to eject the used card.\n- Pick it up with [E].\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E] to review the recording.", "Equipment", 1, 30);
-        AddKnowledgeEntry("level_2_camera", "CAMERA UNLOCK - MANUAL FOCUS", "Level 2 unlocks settings on your existing camera, at no extra camera cost. Use the thirds grid to compose. F2 opens settings: select Focus mode with Up/Down, then Left/Right toggles AF-C/Manual. Hold [ / ] to focus nearer/farther. Watch the product sharpness. You can pull focus while recording; zoom and height remain locked during a take.", "Equipment", 2, 0);
+        database.RemoveAll(entry => entry.id == "level_2_camera"); // Retired manual-focus page, including serialized copies.
         AddKnowledgeEntry("level_3_soft_light", "EQUIPMENT - BETTER LIGHTS", "LEVEL 3 EQUIPMENT - 4,500 B-COINS\n\nFEATURES\n- Produces up to 40 lux, twice the output of the 160 LED Panel.\n- Creates softer shadow transitions on faces and reflective surfaces.\n- Strong enough for a powerful Key Light or wider coverage from farther away.\n\nHOW TO USE\n- Press [LMB] to toggle power.\n- Use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to adjust tilt.\n- Hold [PgUp/PgDn] to raise/lower the head (up to +1.5m); [G] places the stand.\n- The always-on guide shows a setup-only beam guide; it is hidden in the viewfinder and recordings.\n- Aim it across the subject or vehicle, then press [G] to drop it.", "Equipment", 3, 0);
 
         AddKnowledgeEntry("set_building_technique", "TECHNIQUE - SET BUILDING & PRODUCT STAGING", "LEVEL 1 TECHNIQUE\n\n- Match the backdrop color and approved props to the contract brief.\n- Use a support cube when the product needs height.\n- Keep the product visible and remove anything blocking its silhouette.\n- In the Flower Vase contract, use a pink backdrop, place the cube near center, then place the flower on top.\n- Confirm the final placement through the camera viewfinder, not only from the player view.", "Technique", 1, 0);
@@ -624,22 +651,93 @@ public partial class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("recording_technique", "TECHNIQUE - STABLE 10-SECOND RECORDING", "LEVEL 1 TECHNIQUE\n\n- Insert a blank SD Card and finish the composition before pressing [R].\n- Keep the camera stable and the subject correctly framed throughout the take.\n- Record for the duration requested by the contract; the training and Goke contracts use 10 seconds.\n- Press [R] again to stop and generate the used SD Card.\n- Review the ingested clip before opening the Editor.", "Technique", 1, 30);
         AddKnowledgeEntry("post_production_technique", "TECHNIQUE - TRIMMING, BRANDING & COLOR", "LEVEL 1 TECHNIQUE\n\n- Drag the clip to the Video Track, trim it to 10.0 seconds, and move it to 0.0 seconds.\n- Keep Logo 1 on screen from 0-5 seconds and Logo 2 from 5-10 seconds without blocking the product.\n- Use brightness for exposure, contrast for separation, and saturation for color strength.\n- Choose your own Flower Vase look. All available values earn full color credit: Brightness 0.75-1.25, Contrast 0.75-1.50, Saturation 0.65-1.40. Compare Before / After and keep product detail readable.\n- Export, review the final render, then submit it.", "Technique", 1, 40);
         AddKnowledgeEntry("rule_of_thirds", "TECHNIQUE - RULE OF THIRDS", "LEVEL 2 TECHNIQUE\n\n- Divide the frame with the NONY FX Camera's 3 x 3 grid.\n- Place the product near the left or right vertical line instead of the center.\n- Put the most important detail close to a grid intersection.\n- Leave visual space in front of the direction a person faces or a vehicle points.\n- For Goke Cola, the product must sit clearly on the left or right third.", "Technique", 2, 0);
-        AddKnowledgeEntry("three_point_lighting", "TECHNIQUE - 3-POINT LIGHTING", "LEVEL 2 TECHNIQUE\n\n- KEY LIGHT: strongest, about 45 degrees to one side. Start near 75% intensity.\n- FILL LIGHT: opposite side controlling shadow depth. Start near 40%.\n- BACK LIGHT: behind the product for separation. Start near 60%; these percentages are examples, not Goke grading targets.\n- Aim every beam at the product and adjust tilt until the light reaches it.\n- Check the camera image for depth, readable highlights, and controlled shadows.", "Technique", 2, 10);
+        AddKnowledgeEntry("three_point_lighting", "TECHNIQUE - 3-POINT LIGHTING", "LEVEL 3 TECHNIQUE\n\n- KEY LIGHT: strongest, about 45 degrees to one side. Start near 75% intensity.\n- FILL LIGHT: opposite side controlling shadow depth. Start near 40%.\n- BACK LIGHT: behind the product for separation. Start near 60%; these percentages are practice examples, not universal targets.\n- Aim every beam at the product and adjust tilt until the light reaches it.\n- Check the camera image for depth, readable highlights, and controlled shadows.", "Technique", 3, 10);
         AddKnowledgeEntry("product_separation", "TECHNIQUE - PRODUCT & BACKDROP SEPARATION", "LEVEL 2 TECHNIQUE\n\n- Pull the product forward instead of leaving it against the backdrop.\n- Physical distance creates depth and gives the Back Light room to work.\n- Keep the product silhouette clear from props with similar colors.\n- For Goke Cola, use a red backdrop and place the can wherever you choose; no minimum wall distance is required.\n- Use lighting and color contrast to guide attention toward the product.", "Technique", 2, 20);
         AddKnowledgeEntry("commercial_color_grading", "TECHNIQUE - COMMERCIAL COLOR GRADING", "OPTIONAL GOKE FINISH\n\nBrightness controls exposure, contrast separates light and dark areas, and saturation controls color strength. Preserve highlight and shadow detail. For this contract these controls are optional; the lesson focuses on intro/outro placement. The contract also requires two overlays, with timing and duration chosen by you.", "Technique", 2, 30);
         AddKnowledgeEntry("advertising_post_production", "TECHNIQUE - INTRO & OUTRO", "GOKE POST-PRODUCTION\n\nINTRO: Introduces the brand and sets the tone, helping viewers understand whose commercial they are watching.\n\nOUTRO: Reinforces the brand and leaves a memorable closing message. 'Make it a Goke' invites the viewer to choose the product.\n\nBoth clips are supplied in CLIPS. Drag the full 2-second intro to 0s, place 8 seconds of your recorded product footage after it, and finish with the full 2-second outro at 10s. Join all clips without gaps or overlaps. Double-click footage to trim; right-click a clip to return it to the bank. Use both the Goke logo and tagline overlays. Choose when and how long they appear; no fixed order or minimum hold is required. Preview the complete 12-second commercial before export.", "Technique", 2, 40);
         AddKnowledgeEntry("hiring_and_posing_actors", "TECHNIQUE - HIRING, BLOCKING & POSING ACTORS", "LEVEL 4 TECHNIQUE\n\n- Click an Actor card, move the actor over the stage, then click again to place them. Hire prices reflect acting polish: Rookie 750, Trained 2,250, Expert 4,500 B-Coins (default rates).\n- Place and reposition with the tablet. Equip the megaphone and click the actor to select them.\n- Press [Z] to cycle Neutral, Wave, Action, then Neutral. Aim at a stool or machine and click to cue Sitting or Using Machine; [O] stops it. Bots perform automatically on their mark; they restart the action for every take. Rookie gestures are smaller with slower cues; Trained and Expert actors deliver progressively smoother, more expressive gestures. All tiers can meet the contract.\n- Select the actor and press [T] to reposition them; [R] turns the bot in 15-degree steps.\n- Block the actor beside the product without hiding its important shape.\n- Preserve the same pose and screen side across matching shots.", "Technique", 4, 0);
         AddKnowledgeEntry("automotive_staging", "TECHNIQUE - AUTOMOTIVE STAGING & COMPOSITION", "LEVEL 3 TECHNIQUE\n\n- Show a readable front or side silhouette of the vehicle.\n- Leave open space around the body instead of crowding it with props.\n- Use the Rule of Thirds grid to balance the vehicle with intentional negative space.\n- Aim the Soft Light across the body to reveal form without clipping reflections.\n- Check that the vehicle direction and empty space guide the viewer through the frame.", "Technique", 3, 10);
         AddKnowledgeEntry("soft_light_technique", "TECHNIQUE - SOFT LIGHTING FOR REFLECTIVE SURFACES", "LEVEL 3 TECHNIQUE\n\n- Move the Better Lights across the front or side of the vehicle to reveal body shape.\n- Start near 75% intensity and -10 degrees tilt, then aim the beam across the car.\n- Change distance and intensity together: farther placement widens coverage but reduces brightness.\n- Keep enough shadow to preserve depth instead of lighting every surface equally.\n- In post use Contrast 1.15-1.45, Saturation 0.95-1.20, and Brightness 0.90-1.10.", "Technique", 3, 20);
-        AddKnowledgeEntry("coffee_story_workflow", "LEVEL 4 - THREE-BEAT COFFEE STORY", "Choose Plain Backdrop or Coffee Interior. Add one actor, a coffee product and a usable chair. Set color and lighting are creative choices. Record three separate takes of at least 5 seconds: Wave greeting, Action beside coffee (or Using Machine), then Sitting. Keep one performance throughout each take. In editing, join the three different takes in that order from 0s. Each beat must last at least 2s; trim the whole story to 15s (within 0.5s). Add a brand graphic over the final 2s.", "Technique", 4, 10);
-        AddKnowledgeEntry("shot_coverage", "TECHNIQUE - PERFORMANCE BEATS", "A beat is a meaningful change in the story. Greeting introduces the character; the coffee moment presents the product; the seated break resolves the moment. Use different actions, not three sizes of the same pose. Choose framing that keeps actor and coffee readable.", "Technique", 4, 20);
-        AddKnowledgeEntry("screen_continuity", "TECHNIQUE - ELLIPTICAL EDITING", "Elliptical editing omits uneventful time. Cut directly from greeting to coffee moment to seated break. Three separate recordings must play in that order, joined without gaps or overlaps. Do not duplicate a single take. The character may change position and pose between these moments.", "Technique", 4, 30);
+        AddKnowledgeEntry("coffee_story_workflow", "LEVEL 4 - COFFEE PRODUCT COMMERCIAL", "Film the cup of coffee and Kape packaging together for a product overview. Then record an actor using coffee in a coffee-shop interior. Give the actor a cup and cue Action, or use the coffee machine with coffee in frame. Build a continuous 30–45-second edit, beginning with the overview. Keep at least 2 seconds of each required shot. No overlays. Additional shots, lighting and color choices are yours.", "Technique", 4, 10);
+        AddKnowledgeEntry("shot_coverage", "TECHNIQUE - PRODUCT AND PERFORMANCE", "Introduce the coffee with its packaging, then show its use in the cafe. Keep both cup and packaging visible in the overview. In the performance shot, keep actor and coffee readable. Record enough material to choose the strongest 30–45 seconds.", "Technique", 4, 20);
+        AddKnowledgeEntry("screen_continuity", "TECHNIQUE - SPLITTING AND TRIMMING", "Click a timeline clip, then press B to split it at the red playhead. The two halves retain their footage and color settings and can be edited separately. Double-click to trim. Remove unwanted waiting and join clips without gaps or overlaps.", "Technique", 4, 30);
         AddKnowledgeEntry("motivated_lighting", "TECHNIQUE - STORY MOOD", "Choose lighting and set color to support your character's coffee break. There is no required light model, Kelvin value, or brown paint in this contract. Check subject readability in your preview.", "Technique", 4, 40);
         AddKnowledgeEntry("lifestyle_staging", "TECHNIQUE - PERFORMANCE SPACE", "Give one lead actor a readable space beside the coffee product and chair. Keep furniture clear of the performance. Use the megaphone to cue each moment. Existing coffee-machine interactions are optional discovery, not a new tutorial requirement.", "Technique", 4, 50);
-        AddKnowledgeEntry("warm_commercial_grade", "TECHNIQUE - CLOSING BRAND & RHYTHM", "Let viewers read each story beat for at least 2 seconds. Finish the 15-second edit with a brand graphic over its final 2 seconds; a static graphic counts. No supplied intro/outro, animated-graphic quota or fixed color-grade ranges. Music, transitions and grading are optional creative choices.", "Technique", 4, 60);
+        AddKnowledgeEntry("warm_commercial_grade", "TECHNIQUE - CLIP COLOR GRADING", "Click a timeline clip and open COLOR GRADE. Brightness, contrast and saturation affect only that clip in Level 4. Select another clip to edit its own settings. Preview the entire 30–45-second commercial for consistency. Do not add overlays for this contract.", "Technique", 4, 60);
         AddKnowledgeEntry("creative_brief", "TECHNIQUE - INTERPRETING A CREATIVE BRIEF", "LEVEL 5 TECHNIQUE\n\n- Identify the audience, communication goal, required subjects, mood, and deliverables before building the set.\n- Translate each written requirement into a visible production decision.\n- For Haraya, the teal campaign world, actor, product, and vehicle must feel like one intentional brand story.\n- A creative choice can break a composition convention only when it still serves the brief and remains readable.", "Technique", 5, 0);
         AddKnowledgeEntry("visual_hierarchy", "TECHNIQUE - INTEGRATED CAMPAIGN & VISUAL HIERARCHY", "LEVEL 5 TECHNIQUE\n\n- Visual hierarchy controls what the viewer notices first, second, and third.\n- Use scale, contrast, placement, light, and negative space to make the product dominant while the actor and vehicle provide context.\n- Carry one brand idea through production design, performance, composition, lighting, graphics, and color.\n- Prevent tangencies, overlaps, and background clutter from weakening silhouettes.\n- Record at least four purposeful shots using three shot sizes so the final edit has progression and variety.", "Technique", 5, 10);
         AddKnowledgeEntry("quality_control", "TECHNIQUE - COMMERCIAL QUALITY CONTROL", "LEVEL 5 TECHNIQUE\n\n- Review the brief before recording, before export, and before submission.\n- Confirm required subjects, shot variety, lighting roles, duration, graphic count, and color ranges.\n- Watch the finished sequence for empty frames, accidental reversals, obstructed products, mismatched shots, or unreadable graphics.\n- Haraya requires a 20-second edit, three graphics, three-point lighting, and a polished grade within the contract qualifications.", "Technique", 5, 20);
+        ExpandReferenceBook();
+    }
+
+    private void ExpandReferenceBook()
+    {
+        AddKnowledgeEntry("editing_computer", "EQUIPMENT - EDITING COMPUTER",
+            "PURPOSE\nTurn recorded takes into a finished commercial. The tower ingests footage; the monitor lets you review, edit and submit it.\n\nHOW TO USE\n1. Collect the used SD Card after recording. Hold it at the tower and press [F] to ingest.\n2. Press [E] at the monitor. Review RECORDINGS, then enter the Editor.\n3. Drag footage from the bin to the Video Track. Arrange clips from 0 seconds. Double-click to trim unwanted footage.\n4. Preview the sequence, export, watch the result, then submit.\n\nTOOLS\nEDITOR arranges and trims shots. BRANDING adds and times graphics when the brief asks for them. COLOR GRADE adjusts brightness, contrast and saturation. EXPORT produces the finished sequence.\n\nFrom Level 4, select a timeline clip to grade only that clip; [B] splits the selected clip at the red playhead. Follow the active brief for duration and overlays.", "Equipment", 1, 40);
+
+        foreach (KnowledgeEntry entry in database)
+        {
+            switch (entry.id)
+            {
+                case "led_panel":
+                    entry.description = "PURPOSE\nThe 160 LED Panel is your basic portable light. Use it to make a subject readable and reveal its shape. Position and aim matter as much as intensity.\n\nHOW TO USE\nEquip the light. [LMB] switches power; [Scroll] changes intensity; [Up/Down] changes tilt. Hold [Q] to raise or [E] to lower the stand. [G] places it.\n\nCHECK THE RESULT\nAim at the subject, not only the wall. Move to one side to reveal a bright side and a shadow side. Increase output if detail is too dark; reduce it if detail disappears in bright areas. Check through the camera before recording.\n\nThe setup beam is an aiming aid, not part of the recorded image. This light is simpler and lower-output than Better Lights.";
+                    break;
+                case "level_3_soft_light":
+                    entry.description = "PURPOSE\nBetter Lights provide higher output plus temperature and diffusion controls. Use them to shape reflective products and build key, fill and back lighting.\n\nHOW TO USE\n[LMB] power; [Scroll] intensity; [Up/Down] tilt; hold [Q/E] to raise/lower; [G] place. [Z/X] adjusts Kelvin. [V/B] adjusts diffusion.\n\nUNDERSTAND THE CONTROLS\nLower Kelvin makes the source warmer; higher Kelvin makes it cooler. Diffusion softens the light's shadow transition. It is not a brightness control.\n\nCHECK THE RESULT\nUse a stronger key to create shape, a gentler fill to reveal shadow detail, and a rear light to define the edge. Match source temperatures for a consistent starting point. Change diffusion for each light's job; 3200K and 75% are not universal requirements. Compare in the camera and preserve visible detail.";
+                    break;
+                case "nony_fx_camera":
+                    entry.description = "PURPOSE\nThe NONY FX Camera chooses what the audience sees and records it. Composition, movement and exposure affect how clearly the subject reads.\n\nHOW TO USE\nCarry a blank SD Card and press [C] to insert it. [LMB] opens/exits the viewfinder. [Scroll] zooms; [Q/E] adjusts height. Hold [Ctrl] for controlled movement. [R] starts/stops recording; collect the ejected card afterward.\n\nSETTINGS\nFrom Level 2, [F2] opens/closes settings. Up/Down selects a row; Left/Right changes it. Close settings before composing. Focus stays automatic. The thirds grid supports composition; Level 3 adds white balance; Level 4 adds exposure controls.\n\nCHECK THE RESULT\nKeep the subject visible, leave intentional space, and avoid accidental camera movement. Finish zoom and height adjustments before the take. Review recorded footage at the computer.";
+                    break;
+                case "sd_card":
+                    entry.description = "PURPOSE\nAn SD Card carries a recorded take from the camera to the computer. A blank card is recording storage; a used card contains footage and its production results.\n\nHOW TO USE\n1. Keep a blank card in the hotbar. Hold the camera and press [C] to insert it.\n2. Record with [R], then stop. Collect the used card with [E].\n3. Hold that card at the computer tower and press [F] to ingest. Open the monitor with [E] to review the take.\n\nGOOD HABIT\nPrepare enough blank cards for separate takes. Review framing and subject visibility before editing: color grading cannot restore a subject that was outside the frame.";
+                    break;
+                case "director_tablet":
+                    entry.description = "PURPOSE\nThe Director Tablet builds the physical set: backdrop, props and actors. It controls placement; the megaphone controls actor performance.\n\nHOW TO USE\nPress [E] at the terminal. Early levels use ADD WALL; from Level 4, CHOOSE SET offers interiors. Select the wall to change its color with RGB sliders, number fields or HEX.\nClick an approved item card, move the preview, then click to place. Select an object and press [T] to reposition it. CLEAR STAGE removes the current setup.\n\nPLAN BEFORE BUYING\nCheck the contract first. Props and sets cost money. Leave space for the camera and lights, keep important products unobstructed, and check the set through the viewfinder. Close the tablet before using handheld equipment.";
+                    break;
+                case "actor_megaphone":
+                    entry.description = "PURPOSE\nThe Director Megaphone cues hired actors. It does not control cameras, lights or editing. Hire and place actors with the tablet first.\n\nHOW TO USE\nEquip the megaphone and click an actor to select them. [Z] cycles Neutral, Wave and Action. Action uses coffee when the actor holds a cup. Aim at a stool or coffee machine and click to cue its interaction. [O] stops the action.\n[T] repositions; [R] turns the actor in steps; arrow keys nudge placement. [B/N] stores walk marks, [K] rehearses, [J] returns to START, and [H] clears the route.\n\nCHECK THE PERFORMANCE\nRehearse before recording. Keep the actor and relevant product visible without blocking each other. Check the pose and screen direction between matching shots. More expensive actors change performance polish, not the basic contract requirements.";
+                    break;
+            }
+
+            if (entry.category != "Technique") continue;
+            string lesson = null;
+            switch (entry.id)
+            {
+                case "center_framing": lesson = "Centering gives a subject direct emphasis. Compare both sides of the frame: distracting empty space or a cropped edge can weaken the shot. Check the entire take, not just its first frame."; break;
+                case "rule_of_thirds": lesson = "The grid helps organize attention and open space; it is not a rule that every image must obey. Try centering, then move the subject toward an intersection. Notice how the empty space changes the balance. Keep the whole subject readable."; break;
+                case "three_point_lighting": lesson = "Judge each light by its job. Compare key alone, key plus fill, then all three. The key establishes shape; fill reveals shadows without erasing them; back light defines an edge. If adding fill makes the image flat, reduce it. Percentages depend on distance and aim."; break;
+                case "soft_light_technique": lesson = "Watch the transition from bright to dark on the subject. Change diffusion and compare the transition, then adjust intensity separately. On reflective surfaces, move the light until the highlight describes the shape instead of hiding it."; break;
+                case "basic_product_lighting": lesson = "A well-lit image still needs shadows to show form. Compare front lighting with lighting from one side. Check detail in both the brightest and darkest areas before recording."; break;
+                case "camera_white_balance": lesson = "White balance compensates for the light's color; it does not reposition or brighten the light. Look at a neutral surface while changing the setting. Compare the warm and cool casts, then choose a neutral starting point or an intentional mood."; break;
+                case "camera_exposure": lesson = "Exposure controls how light or dark the recorded image is. Change one setting at a time and watch detail in highlights and shadows. A bright image is not automatically a better image: keep the product's texture and shape readable."; break;
+                case "recording_technique": lesson = "Begin only after framing and lighting are ready. Avoid an accidental wobble at the start or finish. Review the take before editing; an unusable recording is better replaced than hidden with effects."; break;
+                case "vehicle_rim_lighting": lesson = "Camera movement should reveal something about the subject. Start slowly, keep a stable distance, and settle before stopping. Compare a stationary shot with a controlled moving shot; avoid movement that crops the subject."; break;
+                case "shot_coverage": lesson = "An overview answers WHAT the product is; a use shot answers HOW it belongs in the scene. Record both clearly so the audience understands the connection. Keep product and actor visible when the action matters."; break;
+                case "screen_continuity": lesson = "Splitting creates two editable pieces; trimming removes unwanted time. Neither creates new footage. Watch across each join for a readable action and check for gaps or overlaps. Preserve enough time for the viewer to understand each shot."; break;
+                case "commercial_color_grading":
+                case "warm_commercial_grade": lesson = "Brightness changes overall lightness, contrast changes separation between dark and light, and saturation changes color strength. Change one at a time and compare before/after. Preserve detail and match neighboring shots instead of maximizing every slider."; break;
+                case "advertising_post_production": lesson = "The intro establishes brand identity; the outro leaves a final message. Give the product footage enough time between them. Preview all three parts together: a readable beginning, middle and ending matters more than adding effects."; break;
+                case "post_production_technique": lesson = "Editing controls order and timing. Trim dead time, keep a continuous sequence, and let graphics support rather than cover the product. Preview from the beginning before export to catch gaps and mistimed branding."; break;
+                case "hiring_and_posing_actors":
+                case "lifestyle_staging": lesson = "Blocking means placing the actor and planning movement so the action reads on camera. Rehearse first. Check that furniture, props and the actor's body do not hide the product at the important moment."; break;
+                case "set_building_technique":
+                case "product_separation":
+                case "automotive_staging": lesson = "Build for the camera's view. Compare silhouettes and overlaps, leave useful negative space, and remove clutter. Moving the subject away from the backdrop gives you more control over its shadow and separation."; break;
+                case "quiet_movement": lesson = "Quiet walking reduces unwanted footstep noise, but is not silent jumping. Move deliberately during a take and avoid unnecessary movement near the recorded action."; break;
+                case "motivated_lighting": lesson = "Choose a mood, then check that it still serves readability. Warm or cool color alone does not tell the story: direction, shadow depth and clear performance also matter."; break;
+                case "coffee_story_workflow": lesson = "Plan the overview and use shot before recording. Review the required subjects in each take, then assemble the edit. Extra shots should clarify the product story, not replace the required evidence."; break;
+                case "creative_brief": lesson = "Separate required deliverables from creative choices. Make a short checklist of subjects, duration and finish, then decide how to communicate the idea. Review the checklist before spending and before submitting."; break;
+                case "visual_hierarchy": lesson = "Ask where your eye goes first. If a background prop is more noticeable than the product, simplify the frame or change placement and contrast. Each shot should have an intentional main point of interest."; break;
+                case "quality_control": lesson = "Watch once for story, once for image problems, and once against the brief. Check transitions, readable branding and final duration. Fix errors before export and review the exported result too."; break;
+            }
+            if (lesson != null)
+            {
+                const string section = "\n\nWHY IT MATTERS / PRACTICE\n";
+                int previousSection = entry.description.IndexOf(section, System.StringComparison.Ordinal);
+                if (previousSection >= 0) entry.description = entry.description.Substring(0, previousSection);
+                entry.description += section + lesson;
+            }
+        }
     }
 
     private void RemoveLegacyKnowledgeEntries()
@@ -740,11 +838,14 @@ public partial class AlmanacManager : MonoBehaviour
         if (playerNameText == null) return;
         string playerName = PlayerPrefs.GetString("PlayerName", "").Trim();
         playerNameText.richText = false;
-        playerNameText.text = "Director: " + (string.IsNullOrEmpty(playerName) ? "Guest" : playerName);
+        playerNameText.text = string.IsNullOrEmpty(playerName) ? "Guest" : playerName;
     }
 
     private void RefreshAllUI()
     {
+        AddKnowledgeEntry("career_analytics", "YOUR CAREER ANALYTICS", PlayerAnalytics.Summary(), "Technique", 1, -1);
+        foreach (var entry in database)
+            if (entry.id == "career_analytics") entry.isUnlocked = true;
         RefreshDirectorName();
 
         if (CareerManager.Instance != null && playerMoneyText != null)
@@ -1161,7 +1262,7 @@ public partial class AlmanacManager : MonoBehaviour
     {
         if (techniqueGuidePanel == null || ruleOfThirdsGuidePlayer == null) return;
 
-        techniqueGuidePanel.SetActive(true);
+        UITransition.Show(techniqueGuidePanel);
         techniqueGuidePanel.transform.SetAsLastSibling();
         ruleOfThirdsGuidePlayer.OpenGuide(FindRuleOfThirdsSubjectPrefab());
     }
@@ -1316,8 +1417,9 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        ReleaseProfilePreview();
         EndNavigationLesson();
-        if (isAlmanacOpen) RestoreInputState();
+        if (isAlmanacOpen || isProfileOpen) RestoreInputState();
         RemoveUIListeners();
         if (Instance == this)
         {
@@ -1326,6 +1428,7 @@ public partial class AlmanacManager : MonoBehaviour
         }
     }
 }
+
 
 
 

@@ -8,6 +8,18 @@ public static class LegacyGameSave
     public static List<GameSaveValue> Read(bool prepareCheckpoint = true)
     {
         var values = new List<GameSaveValue>();
+        if (PlayerPrefs.HasKey("Analytics.Career.v1"))
+            values.Add(new GameSaveValue { key = "Analytics.Career.v1", kind = 2, text = PlayerPrefs.GetString("Analytics.Career.v1") });
+        int analyticsChunks = PlayerPrefs.GetInt("Analytics.Career.v1.Count", 0);
+        if (analyticsChunks > 0)
+        {
+            values.Add(new GameSaveValue { key = "Analytics.Career.v1.Count", kind = 0, integer = analyticsChunks });
+            for (int i = 0; i < analyticsChunks; i++)
+            {
+                string key = "Analytics.Career.v1." + i;
+                values.Add(new GameSaveValue { key = key, kind = 2, text = PlayerPrefs.GetString(key, "") });
+            }
+        }
         foreach (string key in new[] { "OwnedInterior.0", "OwnedInterior.1", "OwnedInterior.2", "GokeEquipmentAdvancePaid", "GokeEquipmentLoanIssued", "OwnedEquipment.NON Y FX", "OwnedEquipment.NONY FX", "OwnedEquipment.160 LED PANEL", "OwnedEquipment.LEVEL 2 CAMERA", "OwnedEquipment.LEVEL 3 SOFT LIGHT" })
             if (PlayerPrefs.HasKey(key)) values.Add(new GameSaveValue { key = key, kind = 0, integer = PlayerPrefs.GetInt(key) });
         if (PlayerPrefs.HasKey("AchivDone_advertising_post_production")) values.Add(new GameSaveValue { key = "AchivDone_advertising_post_production", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_advertising_post_production") });
@@ -136,4 +148,3 @@ public static class LegacyGameSave
         return values;
     }
 }
-

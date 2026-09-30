@@ -81,7 +81,7 @@ public class FinalGradePanelUI : MonoBehaviour
             feedbackDetailedText.text = $"<b>PRE-PRODUCTION: {grades.preProductionScore:F1}/100\nPRODUCTION: {grades.productionScore:F1}/100\nPOST-PRODUCTION: {grades.postProductionScore:F1}/100</b>\n\n" + feedbackDetailedText.text;
         }
 
-        if (feedbackButtonText != null) feedbackButtonText.text = "REVIEW FEEDBACK";
+        if (feedbackButtonText != null) feedbackButtonText.text = "FEEDBACK & BUDGET";
         if (returnButtonText != null) returnButtonText.text = grades.letterGrade == "F" ? "REPLAY CONTRACT" : "RETURN TO STUDIO";
         if (feedbackPanel != null) feedbackPanel.SetActive(false);
     }

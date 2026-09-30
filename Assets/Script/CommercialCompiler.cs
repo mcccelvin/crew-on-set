@@ -45,6 +45,8 @@ public class CommercialCompiler : MonoBehaviour
                 path = clip.clipFilePath,
                 startFrame = clip.startFrame,
                 endFrame = clip.endFrame,
+                useClipGrade = CampaignProgression.GetCurrentLevel() == 4,
+                brightness = clip.gradeBrightness, contrast = clip.gradeContrast, saturation = clip.gradeSaturation,
 
                 // --- THE FIX: Send the UI dimensions to the player ---
                 uiStartX = trueStartX,
@@ -80,7 +82,7 @@ public class CommercialCompiler : MonoBehaviour
 
         if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
         {
-            EditorTutorialManager.Instance.OnTimelinePlayed();
+            EditorTutorialManager.Instance.OnTimelinePlayed(editorPlayer);
         }
     }
 

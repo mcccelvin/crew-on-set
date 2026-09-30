@@ -21,6 +21,77 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     public bool requiredSubjectsVisible;
     public bool usedSoftLight;
     public bool hasThreePointRoles;
+    public float gradeBrightness = 1f, gradeContrast = 1f, gradeSaturation = 1f;
+    public static DraggableClip Selected { get; private set; }
+    public static int SplitCount { get; private set; }
+    public static int SplitUndoCount { get; private set; }
+    private static readonly System.Collections.Generic.Stack<System.Action> splitUndo = new System.Collections.Generic.Stack<System.Action>();
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    public static void ResetSplitHistory() { splitUndo.Clear(); Selected = null; SplitCount = SplitUndoCount = 0; }
+
+    private void Update()
+    {
+        if (Selected != this || !isOnTimeline || CampaignProgression.GetCurrentLevel() != 4 || PauseManager.isPaused) return;
+        if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return;
+        var focused = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+        if (focused != null && (focused.GetComponent<TMPro.TMP_InputField>() != null || focused.GetComponent<InputField>() != null)) return;
+        var keyboard = UnityEngine.InputSystem.Keyboard.current;
+        if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsQualificationsOpen()) return;
+        if (keyboard != null && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed) && keyboard.zKey.wasPressedThisFrame)
+        {
+            if (splitUndo.Count > 0) { splitUndo.Pop().Invoke(); SplitUndoCount++; }
+            return;
+        }
+        if (keyboard == null || !keyboard.bKey.wasPressedThisFrame || endFrame - startFrame < 2) return;
+        var player = FindObjectOfType<CommercialCompiler>()?.editorPlayer;
+        if (player == null || player.playheadLine == null) return;
+        float left = GokeSequence.Left(this);
+        float width = rectTransform.rect.width;
+        float localX = rectTransform.InverseTransformPoint(player.playheadLine.position).x;
+        float fraction = (localX - rectTransform.rect.xMin) / Mathf.Max(.001f, width);
+        int cut = startFrame + Mathf.RoundToInt((endFrame - startFrame) * fraction);
+        if (fraction <= 0 || fraction >= 1 || cut <= startFrame || cut >= endFrame)
+        {
+            GameFeedback.Show("MOVE THE RED PLAYHEAD INSIDE THE SELECTED CLIP");
+            return;
+        }
+        player.StopTape();
+        int oldEnd = endFrame;
+        Vector2 oldPosition = rectTransform.anchoredPosition;
+        float oldRightTrim = rightTrimPixels;
+        var copy = Instantiate(gameObject, transform.parent).GetComponent<DraggableClip>();
+        copy.startFrame = cut;
+        copy.endFrame = endFrame;
+        endFrame = cut;
+        float ratio = (float)(endFrame - startFrame) / (copy.endFrame - startFrame);
+        rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width * ratio);
+        rectTransform.anchoredPosition = new Vector2(left + width * ratio * rectTransform.pivot.x, rectTransform.anchoredPosition.y);
+        var otherRect = copy.GetComponent<RectTransform>();
+        otherRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width * (1f - ratio));
+        otherRect.anchoredPosition = new Vector2(left + width * ratio + otherRect.rect.width * otherRect.pivot.x, rectTransform.anchoredPosition.y);
+        copy.trueBankParent = trueBankParent;
+        copy.trueBankSiblingIndex = trueBankSiblingIndex;
+        copy.originalParent = originalParent;
+        copy.binWidth = binWidth;
+        copy.originalWidth = originalWidth;
+        float pixelsPerFrame = originalWidth / Mathf.Max(1, totalFrames);
+        leftTrimPixels = startFrame * pixelsPerFrame;
+        rightTrimPixels = (totalFrames - endFrame) * pixelsPerFrame;
+        copy.leftTrimPixels = copy.startFrame * pixelsPerFrame;
+        copy.rightTrimPixels = (copy.totalFrames - copy.endFrame) * pixelsPerFrame;
+        splitUndo.Push(() => {
+            if (this == null || copy == null) return;
+            player?.StopTape();
+            copy.gameObject.SetActive(false); Destroy(copy.gameObject);
+            endFrame = oldEnd; rightTrimPixels = oldRightTrim;
+            rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+            rectTransform.anchoredPosition = oldPosition;
+            Selected = this;
+            GameFeedback.Show("SPLIT UNDONE");
+        });
+        SplitCount++;
+        GameFeedback.Show("SPLIT AT PLAYHEAD\nCTRL + Z: UNDO SPLIT");
+    }
 
     [HideInInspector] public Transform originalParent;
     private Transform trueBankParent;
@@ -44,6 +115,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     private float dragMaxX;
     private float lastLeftClickTime = 0f;
     private const float doubleClickThreshold = 0.3f;
+    private bool tutorialRejectedDrag;
 
     private void Awake()
     {
@@ -51,26 +123,39 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
         parentCanvas = GetComponentInParent<Canvas>();
+        if (GetComponent<TimelineClipAppearance>() == null) gameObject.AddComponent<TimelineClipAppearance>();
     }
 
     private void Start()
     {
-        trueBankParent = transform.parent;
-        trueBankSiblingIndex = transform.GetSiblingIndex();
-        binWidth = rectTransform.rect.width;
-        originalWidth = binWidth;
+        if (trueBankParent == null)
+        {
+            trueBankParent = transform.parent;
+            trueBankSiblingIndex = transform.GetSiblingIndex();
+            binWidth = rectTransform.rect.width;
+            originalWidth = binWidth;
+        }
     }
 
     public void OnPointerDown(PointerEventData eventData)
     {
+        var lesson = EditorTutorialManager.Instance;
+        if (lesson != null && lesson.RestrictsEditor &&
+            eventData.button != PointerEventData.InputButton.Right && !lesson.AcceptsTaskInput) return;
         if (eventData.button == PointerEventData.InputButton.Right)
         {
             if (isOnTimeline) ReturnToBin();
         }
         else if (eventData.button == PointerEventData.InputButton.Left)
         {
+            if (isOnTimeline && CampaignProgression.GetCurrentLevel() == 4)
+            {
+                Selected = this;
+                FindObjectOfType<ColorGradingManager>()?.SelectClip(this);
+            }
             if (Time.time - lastLeftClickTime < doubleClickThreshold)
             {
+                if (lesson != null && lesson.RestrictsEditor && lesson.currentStep != EditorTutorialManager.EditorStep.DoubleClickToTrim) return;
                 ClipInspector inspector = ClipInspector.Instance;
                 if (inspector == null) inspector = FindObjectOfType<ClipInspector>(true);
 
@@ -135,16 +220,19 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     {
         if (totalFrames <= 0 || originalWidth <= 0) return;
 
-        float pixelsPerFrame = originalWidth / totalFrames;
+        float pixelsPerFrame = TimelineManager.Instance != null && TimelineManager.Instance.pixelsPerSecond > 0f
+            ? TimelineManager.Instance.pixelsPerSecond / TapeSettings.framesPerSecond
+            : originalWidth / totalFrames;
 
         float currentLeftEdge = rectTransform.anchoredPosition.x - (rectTransform.rect.width * rectTransform.pivot.x);
         float trueZeroX = currentLeftEdge - leftTrimPixels;
 
+        originalWidth = totalFrames * pixelsPerFrame;
         leftTrimPixels = startFrame * pixelsPerFrame;
         rightTrimPixels = (totalFrames - endFrame) * pixelsPerFrame;
 
         float newWidth = originalWidth - leftTrimPixels - rightTrimPixels;
-        if (newWidth < 20f) newWidth = 20f;
+        newWidth = Mathf.Max(pixelsPerFrame, newWidth);
         float newLeftEdge = trueZeroX + leftTrimPixels;
 
         rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, newWidth);
@@ -154,6 +242,11 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
     public void OnBeginDrag(PointerEventData eventData)
     {
+        var lesson = EditorTutorialManager.Instance;
+        tutorialRejectedDrag = lesson != null && lesson.RestrictsEditor &&
+            (!lesson.AcceptsTaskInput || (lesson.currentStep != EditorTutorialManager.EditorStep.DragVideoToTimeline &&
+             lesson.currentStep != EditorTutorialManager.EditorStep.PositionVideoAtStart));
+        if (tutorialRejectedDrag) return;
         if (eventData.button == PointerEventData.InputButton.Right) return;
         if (originalWidth <= 0) originalWidth = rectTransform.rect.width;
 
@@ -228,6 +321,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
     public void OnDrag(PointerEventData eventData)
     {
+        if (tutorialRejectedDrag) return;
         if (eventData.button == PointerEventData.InputButton.Right) return;
         float deltaX = eventData.delta.x / parentCanvas.scaleFactor;
 
@@ -298,6 +392,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        if (tutorialRejectedDrag) { tutorialRejectedDrag = false; return; }
         if (eventData.button == PointerEventData.InputButton.Right) return;
         canvasGroup.blocksRaycasts = true;
         canvasGroup.alpha = 1f;

@@ -27,6 +27,7 @@ namespace Player.PlayerController
             heldViewCamera = null;
         }
         private bool appearanceInitialized;
+        public Transform ProfileVisual => transform.Find("Player Character Visual");
         [SerializeField] private float UpperLimit = -40f;
         [SerializeField] private float LowerLimit = 70f;
         [SerializeField] private float MouseSensitivity = 21.9f;
@@ -38,6 +39,7 @@ namespace Player.PlayerController
 
         // --- NEW SWITCH: Stops the camera from spinning! ---
         public bool canLook = true;
+        public UnityEngine.Camera GameplayCamera => Camera != null ? Camera.GetComponent<UnityEngine.Camera>() : null;
 
         // --- THE FIX: NEW SWITCH: Stops the player from walking! ---
         public bool canMove = true;
@@ -194,6 +196,7 @@ namespace Player.PlayerController
                 nextFootstep = Time.time + Mathf.Clamp(.9f / groundSpeed, .25f, .55f);
             }
             HandleJump();
+            UpdateMovementAnimation();
             Move();
         }
 
@@ -260,13 +263,27 @@ namespace Player.PlayerController
                 : Vector3.zero;
             precisionWasActive = allowed && easing;
             playerRigidbody.velocity = horizontalVelocity + Vector3.up * playerRigidbody.velocity.y;
+        }
+
+        private void UpdateMovementAnimation()
+        {
+            if (!hasAnimator) return;
+            // Sample the last physics result, not the requested velocity (walls can block it).
+            Vector3 horizontalVelocity = Vector3.ProjectOnPlane(playerRigidbody.velocity, Vector3.up);
             Vector3 localVelocity = Quaternion.Inverse(playerRigidbody.rotation) * horizontalVelocity;
             currentVelocity = new Vector2(localVelocity.x, localVelocity.z);
-            if (hasAnimator)
-            {
-                animator.SetFloat(xVelHash, currentVelocity.x);
-                animator.SetFloat(yVelHash, currentVelocity.y);
-            }
+            float speed = currentVelocity.magnitude;
+            // The existing directional blend tree places walk clips at 2 and run at 6.
+            float blend = speed <= walkSpeed ? speed / walkSpeed * 2f
+                : Mathf.Lerp(2f, 6f, Mathf.InverseLerp(walkSpeed, runSpeed, speed));
+            // Keep a relaxed idle pose airborne instead of running in the air.
+            Vector2 motion = grounded && MovementAllowed && speed > .05f ? currentVelocity.normalized * blend : Vector2.zero;
+            float damping = 1f / Mathf.Max(1f, AnimBlendSpeed);
+            animator.SetFloat(xVelHash, motion.x, damping, Time.fixedDeltaTime);
+            animator.SetFloat(yVelHash, motion.y, damping, Time.fixedDeltaTime);
+            animator.SetFloat(zVelHash, playerRigidbody.velocity.y);
+            animator.SetBool(fallingHash, !grounded && playerRigidbody.velocity.y <= 0f);
+            animator.SetBool(groundHash, grounded);
         }
 
         private void CamMovement()
@@ -325,7 +342,13 @@ namespace Player.PlayerController
             Vector3 velocity = playerRigidbody.velocity;
             velocity.y = jumpSpeed;
             playerRigidbody.velocity = velocity;
-            if (hasAnimator) animator.SetTrigger(jumpHash);
+            if (hasAnimator)
+            {
+                animator.ResetTrigger(jumpHash);
+                // Jump physics remain active; the stylized jump animation is retired.
+                animator.SetBool(groundHash, false);
+                animator.SetBool(fallingHash, false);
+            }
 
             grounded = false;
             jumpBufferCounter = 0f;
@@ -353,12 +376,6 @@ namespace Player.PlayerController
                 if (Vector3.Dot(groundHits[i].normal, Vector3.up) < 0.65f) continue;
                 grounded = true;
                 break;
-            }
-            if (hasAnimator)
-            {
-                animator.SetFloat(zVelHash, playerRigidbody.velocity.y);
-                animator.SetBool(fallingHash, !grounded && playerRigidbody.velocity.y < -0.1f);
-                animator.SetBool(groundHash, grounded);
             }
         }
 

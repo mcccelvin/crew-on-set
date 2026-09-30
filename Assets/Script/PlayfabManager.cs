@@ -38,6 +38,8 @@ public class PlayfabManager : MonoBehaviour
 
     void OnRegisterSuccess(RegisterPlayFabUserResult result)
     {
+        PlayerPrefs.SetString("PlayerName", "Player");
+        GameSaveManager.Ensure().SetAccount(result.PlayFabId);
         if (messageText != null) messageText.text = "Registered and Login";
         Debug.Log("Register  successful!");
     }
@@ -55,6 +57,8 @@ public class PlayfabManager : MonoBehaviour
 
     void OnLoginSuccess(LoginResult result)
     {
+        PlayerPrefs.SetString("PlayerName", result.InfoResultPayload?.PlayerProfile?.DisplayName ?? "Player");
+        GameSaveManager.Ensure().SetAccount(result.PlayFabId);
         if (messageText != null) messageText.text = "Logged In!";
         Debug.Log("Login successful!");
     }

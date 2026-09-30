@@ -13,6 +13,8 @@ public class ClipSegment
     public int endFrame;
     public float uiStartX;
     public float uiWidth;
+    public bool useClipGrade;
+    public float brightness = 1f, contrast = 1f, saturation = 1f;
     [HideInInspector] public int globalStartFrame;
     [HideInInspector] public int globalEndFrame;
 }
@@ -42,6 +44,7 @@ public class TruePixelPlayer : MonoBehaviour
     private DraggableOverlay[] timelineOverlays;
     private bool isPaused = true;
     private bool isLoading;
+    private bool configuringScrubBar;
     public bool CanStartPlayback => !isLoading && preloadedFrames.Count > 0;
     public bool isFinished = false;
     public bool HasPlaybackReachedEnd { get; private set; }
@@ -65,7 +68,7 @@ public class TruePixelPlayer : MonoBehaviour
     private void Update()
     {
         if (editorialAudioSource != null) editorialAudioSource.volume = .5f * GameOptions.MusicVolume;
-        if (preloadedFrames.Count == 0) return;
+        if (isLoading || isPaused || isFinished || PauseManager.isPaused || preloadedFrames.Count == 0) return;
 
         float frameInterval = 1f / Mathf.Max(1f, framesPerSecond);
 
@@ -98,6 +101,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void FinishPlayback()
     {
+        if (isLoading || isPaused || isFinished || preloadedFrames.Count == 0) return;
         HasPlaybackReachedEnd = true;
         isFinished = true;
         isPaused = true;
@@ -109,7 +113,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
         {
-            EditorTutorialManager.Instance.OnPlaybackFinished();
+            EditorTutorialManager.Instance.OnPlaybackFinished(this);
         }
     }
 
@@ -117,7 +121,17 @@ public class TruePixelPlayer : MonoBehaviour
     {
         isLoading = true;
         if (loadingPanel != null) loadingPanel.SetActive(true);
-        if (loadingText != null) loadingText.text = message;
+        if (loadingText != null)
+        {
+            var font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            if (font != null) loadingText.font = font;
+            loadingText.fontStyle = FontStyles.Bold;
+            loadingText.fontSize = 24f;
+            loadingText.enableAutoSizing = false;
+            loadingText.alignment = TextAlignmentOptions.Center;
+            loadingText.color = Color.white;
+            loadingText.text = message.ToUpperInvariant();
+        }
     }
 
     private void HideLoading()
@@ -182,15 +196,15 @@ public class TruePixelPlayer : MonoBehaviour
         }
     }
 
-    public void PlaySequence(List<ClipSegment> sequence, bool useFadeIn)
+    public void PlaySequence(List<ClipSegment> sequence, bool useFadeIn, bool startPaused = false)
     {
         StopTape();
         currentSequence = sequence;
         isFadingIn = useFadeIn;
-        StartCoroutine(LoadSequenceCoroutine());
+        StartCoroutine(LoadSequenceCoroutine(startPaused));
     }
 
-    private IEnumerator LoadSequenceCoroutine()
+    private IEnumerator LoadSequenceCoroutine(bool startPaused)
     {
         ShowLoading("Compiling Timeline...");
         yield return null;
@@ -222,7 +236,7 @@ public class TruePixelPlayer : MonoBehaviour
 
                             if (preloadedFrames.Count % 10 == 0)
                             {
-                                if (loadingText != null) loadingText.text = $"Compiling Frame {preloadedFrames.Count}...";
+                                if (loadingText != null) loadingText.text = $"COMPILING TIMELINE...\n<color=#B9C3CC><size=75%>{preloadedFrames.Count} FRAMES READY</size></color>";
                                 yield return null;
                             }
                         }
@@ -234,12 +248,12 @@ public class TruePixelPlayer : MonoBehaviour
         finally
         {
             HideLoading();
-            isPaused = preloadedFrames.Count == 0;
+            isPaused = startPaused || preloadedFrames.Count == 0;
             isFinished = preloadedFrames.Count == 0;
             currentFrameIndex = 0;
             playbackTimer = 0f;
 
-            if (TimelinePlayhead.Instance != null && preloadedFrames.Count > 0) TimelinePlayhead.Instance.StartPlayback();
+            if (TimelinePlayhead.Instance != null && !isPaused) TimelinePlayhead.Instance.StartPlayback();
 
             PreparePlayerCreatedEffects();
 
@@ -324,6 +338,12 @@ public class TruePixelPlayer : MonoBehaviour
 
             if (activeClip != null)
             {
+                if (activeClip.useClipGrade && computerScreen.material != null)
+                {
+                    computerScreen.material.SetFloat("_Brightness", activeClip.brightness);
+                    computerScreen.material.SetFloat("_Contrast", activeClip.contrast);
+                    computerScreen.material.SetFloat("_Saturation", activeClip.saturation);
+                }
                 int framesInClip = activeClip.globalEndFrame - activeClip.globalStartFrame;
 
                 if (framesInClip > 1)
@@ -362,17 +382,24 @@ public class TruePixelPlayer : MonoBehaviour
     {
         if (exportProgressBar != null && preloadedFrames.Count > 0)
         {
-            exportProgressBar.minValue = 0;
-            exportProgressBar.maxValue = preloadedFrames.Count - 1;
-            exportProgressBar.value = 0;
-            exportProgressBar.onValueChanged.RemoveListener(OnScrub);
-            exportProgressBar.onValueChanged.AddListener(OnScrub);
+            // Range changes can also invoke onValueChanged, including scene-bound
+            // listeners. Initializing the slider must never pause requested playback.
+            configuringScrubBar = true;
+            try
+            {
+                exportProgressBar.minValue = 0;
+                exportProgressBar.maxValue = preloadedFrames.Count - 1;
+                exportProgressBar.SetValueWithoutNotify(0);
+                exportProgressBar.onValueChanged.RemoveListener(OnScrub);
+                exportProgressBar.onValueChanged.AddListener(OnScrub);
+            }
+            finally { configuringScrubBar = false; }
         }
     }
 
     public void OnScrub(float value)
     {
-        if (preloadedFrames.Count == 0) return;
+        if (configuringScrubBar || isLoading || preloadedFrames.Count == 0) return;
 
         isPaused = true;
         if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.PausePlayback();
@@ -556,9 +583,21 @@ public class TruePixelPlayer : MonoBehaviour
         editorialCanvasGroup.alpha = Mathf.SmoothStep(0f, 1f, transitionAlpha);
     }
 
+    private float musicAuditionUntil;
+
+    public void AuditionSelectedMusic()
+    {
+        if (!isActiveAndEnabled || isLoading || (!isPaused && !isFinished)) return;
+        BuildPlayerSelectedMusic(PlayerEditTools.Instance != null
+            ? PlayerEditTools.Instance.selectedMusic : PlayerEditTools.MusicMode.None);
+        musicAuditionUntil = Time.unscaledTime + 3f;
+        if (editorialAudioSource.clip != null) editorialAudioSource.Play();
+    }
+
     private void SyncPlayerCreatedAudio()
     {
         if (editorialAudioSource == null || editorialAudioSource.clip == null) return;
+        if (Time.unscaledTime < musicAuditionUntil && (isPaused || isFinished)) return;
 
         if (currentSequence == null || currentSequence.Count == 0)
         {

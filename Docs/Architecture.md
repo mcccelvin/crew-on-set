@@ -24,13 +24,15 @@ Read the row relevant to the task, then search its entry points. Paths below are
 | Camera / SD / recordings | `FilmCameraItem.cs`, `FilmCameraItem.Settings.cs`, `CameraFeatureUnlocks.cs`, `ComputerStation.cs`, `ComputerUIManager.cs` | One career camera: L1 autofocus, L2 manual focus/thirds, L3 white balance, L4 exposure. F2 settings, arrows adjust, brackets pull focus. Settings use GameSavePrefs; camera-only URP overrides also affect recorded footage. Legacy camera IDs remain compatible; shop restores the base camera instead of selling upgrades. Follow recording and inventory callers before changing media transfer |
 | Editing / playback | `EditorManager.cs`, `TruePixelPlayer.cs`, `CommercialCompiler.cs` | `EditorTutorialManager.cs`, `DraggableClip.cs`, `ClipInspector.cs`, `ProjectDataManager.cs` |
 | Branding / color | `BrandingBinManager.cs`, `DraggableOverlay.cs`, `BrandingClip.cs` | `ColorGradingManager.cs`, `ContractGrader.cs`; timing must agree with playback and grading |
-| Gameplay HUD | `CareerManager.ConfigureGameplayHUD`, `HotbarUIManager` | Almanac PSD book icon above balance; P shortcut; dark slots with selected outline. Artwork key: `almanacHud`. |
-| Contract / Almanac UI | `ContractUIManager.cs`, `AlmanacManager.cs`, `AlmanacBook.cs` | `ExportUIArt.cs`, `Assets/Resources/ExportUIArt.asset`; `Docs/UIExportIntegration.md` |
+| Gameplay HUD | `CareerManager.ConfigureGameplayHUD`, `HotbarUIManager` | Almanac icon at top left (P); profile icon above coins at top right (I). Dark slots with selected outline. Artwork keys: `almanacHud`, `profileIcon`. |
+| Contract / Almanac UI | `ContractUIManager.cs`, `AlmanacManager.cs`, `AlmanacBook.cs`, `AlmanacProfile.cs` | `ExportUIArt.cs`, `Assets/Resources/ExportUIArt.asset`; `Docs/UIExportIntegration.md` |
 | Player controls / testing cheats | `InputManager.cs`, `DevTutorialBypass.cs` | Also inspect `Assets/Player`; tutorials own movement restrictions |
 
 Unless a full path is given, filenames above are under `Assets/Script`.
 
 ## Runtime boundaries
+
+- `PlayerAnalytics` stores categorized transactions and up to 50 contract attempts through career-scoped `GameSavePrefs`. Career/shop/tablet events record spending; camera ejection counts takes; `ContractGrader` captures camera/light scores and `GradeManager` finalizes results once. Results show budget coaching without changing technical grades. Almanac Techniques includes YOUR CAREER ANALYTICS (10 latest attempts). Existing mid-contract saves are marked partially tracked; legacy import/reset includes the analytics key. Shared multiplayer room budgets are outside this single-player career report.
 
 - `GameSaveManager` persists across scenes, selects the active career and coordinates local/cloud saves. `GameSaveRepository` handles stored records; `GameSavePrefs` routes career preferences. UI consumes these services.
 - `GameSaveMenu` draws the PSD-based save grid and dialogs. `SaveLoadPanelHost` connects the authored LOAD tab and existing account button. `GameSetupMenu` handles Single/Multi creation.
@@ -49,6 +51,8 @@ Static UI is saved in the scenes and equipment prefab rather than rebuilt on Pla
 Clip cards, timeline ticks, save cards, achievements, and prop-bank entries are data-driven and still populate dynamically. Do not globally disable Instantiate or remove UI controllers. Existing builders remain as compatibility fallbacks for unmigrated scenes. Keep the scene/prefab references when editing layouts; repeat migration only when deliberately adding missing layouts.
 
 ## Scene flow and serialization
+
+`LoadingScreenController` owns the persistent loading overlay and local asynchronous scene transitions. Scene entry points call its `LoadScene` overloads; multiplayer hosts use `LoadNetworkScene`, which retains Photon scene synchronization, while joining clients call `ShowNetworkLoading`. The supplied ten-second Crew-On-Set animation is stored as 120 frames in `Resources/Loading/LoadingFrames.png` (10 columns, 12 rows, 12 fps). `Tools/ExportLoadingFrames.ps1` reproduces the atlas from the source MP4 using Windows PowerShell -STA. Loading ends when the destination scene is ready; it does not wait for the full animation loop.
 
 The main scenes live in `Assets/Scenes`: `Main Menu`, `Account`, `Login`, `CutScene`, `SingleStudio`, `MultiStudio`, `Editor`, and `ReviewScene`. Confirm enabled build order in `ProjectSettings/EditorBuildSettings.asset` before editing integer scene routes.
 

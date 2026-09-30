@@ -377,7 +377,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); Publish(); } }
     public override void OnPlayerLeftRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "Crew member left. Reassign their roles from the crew menu."; Publish(); } }
     public override void OnMasterClientSwitched(Photon.Realtime.Player player) { ReadSnapshot(); if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "New host selected. Crew session continues."; Publish(); } }
-    public override void OnLeftRoom() { SceneManager.LoadScene("Main Menu"); }
-    public override void OnDisconnected(DisconnectCause cause) { SceneManager.LoadScene("Main Menu"); }
+    public override void OnLeftRoom() { LoadingScreenController.LoadScene("Main Menu"); }
+    public override void OnDisconnected(DisconnectCause cause) { LoadingScreenController.LoadScene("Main Menu"); }
     private void OnDestroy() { if (Instance == this) Instance = null; }
 }

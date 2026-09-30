@@ -70,7 +70,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         statusText.text = "Room Joined! Loading Sandbox...";
-        if (PhotonNetwork.IsMasterClient) PhotonNetwork.LoadLevel("MultiStudio");
+        LoadingScreenController.ShowNetworkLoading();
+        if (PhotonNetwork.IsMasterClient) LoadingScreenController.LoadNetworkScene("MultiStudio");
     }
 
     // If the player types a wrong code, turn the buttons back on!

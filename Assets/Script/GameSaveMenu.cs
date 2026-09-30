@@ -19,9 +19,14 @@ public sealed class GameSaveMenu : MonoBehaviour
 
     [SerializeField] private GameObject createDialogLayout, deleteDialogLayout;
     [SerializeField] private TMP_Text deleteName;
+    private TMP_Text deleteDetails, deleteError;
+    private Button deleteConfirm;
     [SerializeField] private GameSetupMenu createSetup;
     private void BindMainButtons()
     {
+        // Hide the obsolete control in any previously baked menu hierarchy.
+        var sync = paper.Find("Retry cloud sync");
+        if (sync != null) sync.gameObject.SetActive(false);
         Bind(paper.Find("Close"),CloseMenu);
         Bind(paper.Find("JOIN"),()=>{
             if(sourceHost==null)return;
@@ -31,6 +36,7 @@ public sealed class GameSaveMenu : MonoBehaviour
         });
         Bind(paper.Find("Start selected save"),()=>{if(selected!=null&&!saves.Syncing)saves.StartGame(selected,false);});
         Bind(paper.Find("Delete selected save"),ShowDeleteDialog);
+        StyleDeleteButton(paper.Find("Delete selected save").GetComponent<Button>(), "DELETE SAVE", true);
     }
     private static void Bind(Transform target,UnityEngine.Events.UnityAction action)
     {
@@ -47,19 +53,109 @@ public sealed class GameSaveMenu : MonoBehaviour
     private void ShowDeleteDialog()
     {
         if(selected==null||saves.Syncing||newGameDialog!=null)return;
-        if(deleteDialogLayout==null) BuildDeleteDialog();
-        var chosen=selected;newGameDialog=deleteDialogLayout;newGameDialog.SetActive(true);deleteName.text=chosen.name;
+        if(deleteDialogLayout==null || deleteDialogLayout.transform.Find("Creation style dialog/Blank delete panel interior")==null)
+        {
+            if(deleteDialogLayout!=null) deleteDialogLayout.SetActive(false);
+            BuildDeleteDialog();
+        }
+        var chosen=selected;newGameDialog=deleteDialogLayout;
+        newGameDialog.transform.SetAsLastSibling();
+        UITransition.Show(newGameDialog);deleteName.text=chosen.name;
         var box=deleteDialogLayout.transform.Find("Creation style dialog");
+        if(deleteDetails==null) deleteDetails=box.Find("Save details").GetComponent<TMP_Text>();
+        if(deleteError==null) deleteError=box.Find("Delete error").GetComponent<TMP_Text>();
+        deleteConfirm=box.Find("DELETE").GetComponent<Button>();
+        deleteDetails.text="LEVEL "+chosen.Level+"   |   "+chosen.Money.ToString("N0")+" B-COINS";
+        deleteError.text="";
+        deleteConfirm.interactable=true;
         Bind(box.Find("CANCEL"),CloseDialog);
-        Bind(box.Find("DELETE"),()=>{chosen.values.RemoveAll(v=>v.key=="SaveDeleted");chosen.values.Add(new GameSaveValue{key="SaveDeleted",integer=1});saves.Repository.Commit(chosen);selected=null;CloseDialog();Refresh();saves.SyncCloud();});
+        Bind(box.Find("DELETE"),()=>ConfirmDelete(chosen));
+        box.Find("CANCEL").GetComponent<Button>().Select();
+    }
+
+    private void ConfirmDelete(GameSaveSlot chosen)
+    {
+        if(saves.Syncing || chosen==null || chosen.Int("SaveDeleted",0)!=0) return;
+        deleteConfirm.interactable=false;
+        var previous=chosen.values.Where(v=>v.key=="SaveDeleted").ToList();
+        try
+        {
+            chosen.values.RemoveAll(v=>v.key=="SaveDeleted");
+            chosen.values.Add(new GameSaveValue{key="SaveDeleted",integer=1});
+            saves.Repository.Commit(chosen);
+        }
+        catch(Exception)
+        {
+            chosen.values.RemoveAll(v=>v.key=="SaveDeleted");chosen.values.AddRange(previous);
+            deleteError.text="COULD NOT DELETE. PLEASE TRY AGAIN.";
+            deleteConfirm.interactable=true;
+            return;
+        }
+        selected=null;CloseDialog();Refresh();saves.SyncCloud();
+    }
+
+    private static void StyleDeleteButton(Button button, string label, bool destructive)
+    {
+        var image=button.GetComponent<Image>();
+        ExportUIArt.Apply(image,destructive?"redButton":"greenButton");
+        image.color=Color.white;
+        var text=button.GetComponentInChildren<TMP_Text>(true);
+        if(text==null) text=Text(button.transform,label,new Vector2(.06f,.08f),new Vector2(.94f,.92f),26);
+        text.text=label;text.font=TMP_Settings.defaultFontAsset;text.fontStyle=FontStyles.Bold;
+        text.color=Color.white;
+        if(text is TextMeshProUGUI outlinedText) ExportUIArt.OutlineText(outlinedText);
+        text.alignment=TextAlignmentOptions.Center;text.raycastTarget=false;
+        text.enableAutoSizing=true;text.fontSizeMin=20;text.fontSizeMax=28;
+        var colors=button.colors;colors.normalColor=Color.white;colors.highlightedColor=new Color(1,.9f,.78f);
+        colors.pressedColor=new Color(.75f,.7f,.65f);colors.disabledColor=new Color(.55f,.55f,.55f,.6f);button.colors=colors;
+        var oldOutline=button.GetComponent<Outline>();
+        if(oldOutline!=null) oldOutline.enabled=false;
     }
     private void BuildDeleteDialog()
     {
-        var box=CreateFolderDialog("Delete this saved game?");
-        deleteDialogLayout=newGameDialog;deleteDialogLayout.name="Delete Save Dialog";
-        deleteName=Text(box,"Selected save",new Vector2(.18f,.42f),new Vector2(.8f,.64f),30);deleteName.richText=false;
-        Button(box,"CANCEL",new Vector2(.2f,.17f),new Vector2(.45f,.3f),CloseDialog);
-        Button(box,"DELETE",new Vector2(.53f,.17f),new Vector2(.78f,.3f),()=>{});
+        var shade=Rect("Delete Save Dialog",transform,Vector2.zero,Vector2.one);
+        deleteDialogLayout=shade.gameObject;
+        shade.gameObject.AddComponent<Image>().color=new Color(0,0,0,.6f);
+        var box=Rect("Creation style dialog",shade,new Vector2(.315f,.29f),new Vector2(.685f,.71f));
+        var background=box.gameObject.AddComponent<Image>();
+        var original=sourceHost!=null?sourceHost.transform.Find("createpanel"):null;
+        var artwork=original!=null?original.GetComponent<Image>():null;
+        if(artwork!=null && artwork.sprite!=null)
+        {
+            background.sprite=artwork.sprite;background.type=artwork.type;background.color=artwork.color;
+        }
+        else
+        {
+            background.color=new Color32(255,244,210,255);
+            var border=box.gameObject.AddComponent<Outline>();border.effectColor=new Color32(167,134,76,255);border.effectDistance=new Vector2(6,-6);
+        }
+        // The creation-panel sprite includes its title. Keep its frame, but cover
+        // the printed interior before adding the delete dialog's own content.
+        var interior=Rect("Blank delete panel interior",box,new Vector2(.025f,.035f),new Vector2(.975f,.965f));
+        var interiorImage=interior.gameObject.AddComponent<Image>();
+        interiorImage.color=new Color32(255,244,210,255);
+        interiorImage.raycastTarget=false;
+        var title=Text(box,"DELETE SAVE?",new Vector2(.07f,.81f),new Vector2(.93f,.94f),36);
+        title.name="Styled delete heading";
+        title.fontStyle=FontStyles.Bold;title.color=new Color32(75,43,19,255);title.alignment=TextAlignmentOptions.Center;
+        deleteName=Text(box,"Selected save",new Vector2(.07f,.60f),new Vector2(.93f,.78f),32);
+        deleteName.name="Selected save";
+        deleteName.richText=false;deleteName.fontStyle=FontStyles.Bold;
+        deleteName.alignment=TextAlignmentOptions.Center;
+        deleteName.enableAutoSizing=true;deleteName.fontSizeMin=22;deleteName.fontSizeMax=32;
+        deleteDetails=Text(box,"Save details",new Vector2(.07f,.50f),new Vector2(.93f,.60f),22);
+        deleteDetails.name="Save details";
+        deleteDetails.alignment=TextAlignmentOptions.Center;
+        var warning=Text(box,"Remove this save and its career progress?\nYour account and other saves are kept.\nThis cannot be undone in the game.",new Vector2(.08f,.28f),new Vector2(.92f,.48f),22);
+        warning.alignment=TextAlignmentOptions.Center;
+        deleteError=Text(box,"Delete error",new Vector2(.07f,.21f),new Vector2(.93f,.28f),20);deleteError.text="";
+        deleteError.name="Delete error";
+        deleteError.color=new Color32(150,42,38,255);
+        var cancel=Button(box,"CANCEL",new Vector2(.13f,.09f),new Vector2(.42f,.22f),CloseDialog);
+        deleteConfirm=Button(box,"DELETE",new Vector2(.58f,.09f),new Vector2(.87f,.22f),()=>{});
+        StyleDeleteButton(cancel,"KEEP SAVE",false);StyleDeleteButton(deleteConfirm,"DELETE SAVE",true);
+        cancel.navigation=new Navigation{mode=Navigation.Mode.Explicit,selectOnRight=deleteConfirm};
+        deleteConfirm.navigation=new Navigation{mode=Navigation.Mode.Explicit,selectOnLeft=cancel};
         deleteDialogLayout.SetActive(false);newGameDialog=null;
     }
 #if UNITY_EDITOR
@@ -86,7 +182,8 @@ public sealed class GameSaveMenu : MonoBehaviour
             existing.saves=manager;existing.joining=false;
             existing.sourceHost=FindObjectOfType<SaveLoadPanelHost>(true);
             if(existing.sourceHost!=null&&existing.sourceHost.transform.parent!=null)existing.sourceHost.transform.parent.gameObject.SetActive(false);
-            existing.BindMainButtons();existing.gameObject.SetActive(true);
+            existing.BindMainButtons();UITransition.Show(existing.gameObject);
+            if (existing.paper != null) UITransition.ConfigurePanel(existing.paper.gameObject);
             manager.Changed-=existing.Refresh;manager.Changed+=existing.Refresh;existing.Refresh();return;
         }
         var go = new GameObject("Saved Games", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -103,6 +200,8 @@ public sealed class GameSaveMenu : MonoBehaviour
         menu.BindMainButtons();
         manager.Changed += menu.Refresh;
         menu.Refresh();
+        UITransition.Show(go);
+        if (menu.paper != null) UITransition.ConfigurePanel(menu.paper.gameObject);
     }
     private void OnDestroy()
     {
@@ -148,6 +247,9 @@ public sealed class GameSaveMenu : MonoBehaviour
         rows.sizeDelta=new Vector2(0,height);
         status.text=saves.Status;
         if(selected==null||!slots.Contains(selected))selected=slots.FirstOrDefault();
+        var deleteButton=paper.Find("Delete selected save").GetComponent<Button>();
+        deleteButton.interactable=selected!=null&&!saves.Syncing;
+        if(deleteConfirm!=null && newGameDialog==deleteDialogLayout) deleteConfirm.interactable=!saves.Syncing;
         for(int i=0;i<slots.Count;i++)
         {
             var slot=slots[i];float left=(i%3)*.35f;float top=1-(i/3)*295f/height;
@@ -188,12 +290,12 @@ public sealed class GameSaveMenu : MonoBehaviour
         if(newGameDialog!=null)return;
         if(createDialogLayout!=null)
         {
-            newGameDialog=createDialogLayout;newGameDialog.SetActive(true);
+            newGameDialog=createDialogLayout;UITransition.Show(newGameDialog);
             if(createSetup!=null)
             {
                 foreach(var button in createSetup.GetComponentsInChildren<UnityEngine.UI.Button>(true))
                     Bind(button.transform,button.name=="Button"?(UnityEngine.Events.UnityAction)createSetup.OnCreateButtonPressed:CloseDialog);
-                createSetup.singlePlayerToggle.isOn=true;
+                createSetup.ResetGameMode();
                 createSetup.gameNameInput.text="Game "+(saves.Repository.Slots.Count(s=>s.Int("SaveDeleted",0)==0)+1);
             }
             else
@@ -224,7 +326,7 @@ public sealed class GameSaveMenu : MonoBehaviour
                 if(button.name=="Button")button.onClick.AddListener(setup.OnCreateButtonPressed);
                 else button.onClick.AddListener(CloseDialog);
             }
-            setup.singlePlayerToggle.isOn=true;
+            setup.ResetGameMode();
             setup.gameNameInput.text="Game "+(saves!=null?saves.Repository.Slots.Count(s=>s.Int("SaveDeleted",0)==0)+1:1);
             return;
         }

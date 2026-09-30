@@ -81,7 +81,20 @@ public static class EquipmentModelVisuals
         // The imported head and stand were fitted independently; reconnect the mounting joint.
         var standBounds = BoundsOf(Meshes(newStand));
         var headBounds = BoundsOf(Meshes(newHead));
+        Vector3 beamAxis = emitter.transform.forward.normalized;
+        float headDepth = Vector3.Dot(new Vector3(Mathf.Abs(beamAxis.x), Mathf.Abs(beamAxis.y), Mathf.Abs(beamAxis.z)), headBounds.extents);
+        // The stand belongs under the rear lamp body, not the centre of the softbox mouth.
+        Vector3 rearMount = headBounds.center - beamAxis * (headDepth * 0.78f);
+        Vector3 standShift = rearMount - standBounds.center;
+        standShift.y = 0;
+        newStand.position += standShift;
         newHead.position += Vector3.up * (standBounds.max.y - headBounds.min.y + .005f);
+        // Tilt around the connected mounting joint without shifting the visible meshes.
+        Vector3 joint = new Vector3(rearMount.x, standBounds.max.y, rearMount.z);
+        var children = head.Cast<Transform>().ToArray();
+        var positions = children.Select(t => t.position).ToArray();
+        head.position = joint;
+        for (int i = 0; i < children.Length; i++) children[i].position = positions[i];
         foreach (var renderer in oldHead) renderer.enabled = false;
         foreach (var renderer in oldStand) renderer.enabled = false;
         // Move the beam beyond the new softbox housing so it cannot shadow its own light.
@@ -89,6 +102,7 @@ public static class EquipmentModelVisuals
         Vector3 forward = emitter.transform.forward;
         float radius = Vector3.Dot(new Vector3(Mathf.Abs(forward.x), Mathf.Abs(forward.y), Mathf.Abs(forward.z)), bounds.extents);
         emitter.transform.position = bounds.center + forward * (radius + .06f);
+        emitter.cookie = null; // Rounded softbox: retain the soft radial falloff, never a square panel cookie.
         Object.Destroy(imported.gameObject);
         return true;
     }

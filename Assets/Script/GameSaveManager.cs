@@ -64,6 +64,17 @@ public sealed class GameSaveManager : MonoBehaviour
         Repository = null;
         Syncing = false;
         OpenRepository();
+        try
+        {
+            var guest = new GameSaveRepository(Path.Combine(Application.persistentDataPath, "CareerSaves"), "guest");
+            Repository.ImportUnclaimedGuestSaves(guest);
+        }
+        catch (Exception)
+        {
+            Status = "Some local saves could not be linked. Originals are kept; log in again to retry.";
+            Changed?.Invoke();
+            return;
+        }
         SyncCloud();
     }
     public void OpenRepository()
@@ -99,7 +110,7 @@ public sealed class GameSaveManager : MonoBehaviour
         DevTutorialBypass.ResetForNewGame();
         PauseManager.isPaused = false;
         Time.timeScale = 1f;
-        SceneManager.LoadScene(isNew ? "CutScene" : "SingleStudio");
+        LoadingScreenController.LoadScene(isNew ? "CutScene" : "SingleStudio");
     }
     public GameSaveSlot CreateGame(string name)
     {
@@ -117,7 +128,7 @@ public sealed class GameSaveManager : MonoBehaviour
         Active=null;GameSavePrefs.Activate(null);Repository=null;
         PlayerPrefs.DeleteKey("PlayFabId");PlayerPrefs.DeleteKey("PlayerName");PlayerPrefs.Save();
         OpenRepository();Changed?.Invoke();
-        SceneManager.LoadScene("Main Menu");
+        LoadingScreenController.LoadScene("Main Menu");
     }
     public void SaveCheckpoint()
     {
@@ -170,9 +181,9 @@ public sealed class GameSaveManager : MonoBehaviour
                     UploadNext(repo, requestSession);
                 }
                 catch (Exception) { SyncFailed("Some cloud saves could not be read. Local saves are still available."); }
-            }, error => { if (session == requestSession) SyncFailed("Cloud sync unavailable. Local saves are ready; use RETRY SYNC later."); });
+            }, error => { if (session == requestSession) SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); });
         }
-        catch (Exception) { SyncFailed("Cloud sync unavailable. Local saves are ready; use RETRY SYNC later."); }
+        catch (Exception) { SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); }
     }
     private void UploadNext(GameSaveRepository repo, int requestSession)
     {
@@ -196,7 +207,12 @@ public sealed class GameSaveManager : MonoBehaviour
             if (session != requestSession || Repository != repo) return;
             try { slot.cloudRevision = revision; repo.Write(slot); UploadNext(repo, requestSession); }
             catch (Exception) { SyncFailed("Cloud sync paused. Your local checkpoint is still available."); }
-        }, error => { if (session == requestSession) SyncFailed("Cloud upload failed. Checkpoint saved locally; use RETRY SYNC later."); });
+        }, error => { if (session == requestSession) SyncFailed("Cloud upload failed. Checkpoint saved locally; retrying automatically."); });
     }
-    private void SyncFailed(string message) { Syncing = false; Status = message; Changed?.Invoke(); }
+    private void SyncFailed(string message)
+    {
+        Syncing = false; Status = message;
+        nextSync = Time.unscaledTime + 60f;
+        Changed?.Invoke();
+    }
 }

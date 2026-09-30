@@ -48,7 +48,6 @@ public class CareerManager : MonoBehaviour
         if (Instance == this) UpdateMoneyUI();
     }
 
-    private TextMeshProUGUI dayTextHUD;
     private Image almanacHudImage;
     private Material lockedAlmanacMaterial;
 
@@ -71,7 +70,6 @@ public class CareerManager : MonoBehaviour
     {
         if (Instance != this) return;
         RefreshAlmanacAppearance();
-        if (dayTextHUD != null) dayTextHUD.text = "DAY " + CampaignProgression.GetCurrentLevel();
         if (playerMoney != Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0))) UpdateMoneyUI();
     }
 
@@ -89,25 +87,16 @@ public class CareerManager : MonoBehaviour
         if (moneyTextHUD == null) return;
         var coins = moneyTextHUD.transform.parent as RectTransform;
         if (coins == null || coins.parent == null) return;
+        if (profileHudButton == null && coins.parent.Find("Profile HUD") == null)
+        {
         coins.anchorMin = coins.anchorMax = Vector2.one;
         coins.pivot = new Vector2(1,1);
-        coins.anchoredPosition = new Vector2(-28,-40);
-        if (coins.parent.Find("Day HUD") == null)
-        {
-            dayTextHUD = Instantiate(moneyTextHUD, coins.parent);
-            dayTextHUD.name = "Day HUD";
-            dayTextHUD.text = "DAY " + CampaignProgression.GetCurrentLevel();
-            dayTextHUD.fontSize = 36;
-            dayTextHUD.fontStyle = FontStyles.Bold;
-            dayTextHUD.alignment = TextAlignmentOptions.Center;
-            dayTextHUD.raycastTarget = false;
-            var dayRect = dayTextHUD.rectTransform;
-            dayRect.anchorMin = dayRect.anchorMax = new Vector2(.5f,1);
-            dayRect.pivot = new Vector2(.5f,1);
-            dayRect.anchoredPosition = new Vector2(0,-32);
-            dayRect.sizeDelta = new Vector2(260,60);
+        coins.anchoredPosition = new Vector2(-28,-144);
         }
-        else dayTextHUD = coins.parent.Find("Day HUD").GetComponent<TextMeshProUGUI>();
+        ConfigureProfileShortcut(coins.parent);
+        // Retire any existing counter without changing campaign/day progression.
+        var oldDayHud = coins.parent.Find("Day HUD");
+        if (oldDayHud != null) oldDayHud.gameObject.SetActive(false);
         var existingBook = coins.parent.Find("Almanac HUD");
         if (existingBook != null)
         {
@@ -142,6 +131,57 @@ public class CareerManager : MonoBehaviour
         caption.rectTransform.sizeDelta = new Vector2(60,44);
     }
 
+    [SerializeField] private Button profileHudButton;
+
+    private void ConfigureProfileShortcut(Transform parent)
+    {
+        var existing = profileHudButton != null ? profileHudButton.transform : parent.Find("Profile HUD");
+        if (existing != null)
+        {
+            profileHudButton = existing.GetComponent<Button>();
+            BindProfileShortcut();
+            return;
+        }
+        var root = existing != null ? existing.gameObject : new GameObject("Profile HUD", typeof(RectTransform), typeof(Image), typeof(Button));
+        var rect = root.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = rect.anchorMax = Vector2.one;
+        rect.pivot = Vector2.one;
+        rect.anchoredPosition = new Vector2(-28, -24);
+        rect.sizeDelta = new Vector2(94, 94);
+        ExportUIArt.Apply(root.GetComponent<Image>(), "profileIcon");
+        root.GetComponent<Image>().preserveAspect = true;
+        var button = root.GetComponent<Button>();
+        profileHudButton = button;
+        BindProfileShortcut();
+        if (rect.Find("Profile shortcut") == null)
+        {
+            var caption = Instantiate(moneyTextHUD, rect);
+            caption.name = "Profile shortcut";
+            caption.text = "PROFILE [I]";
+            caption.fontSize = 18;
+            caption.enableAutoSizing = false;
+            caption.alignment = TextAlignmentOptions.Center;
+            caption.raycastTarget = false;
+            ExportUIArt.OutlineText(caption);
+            caption.rectTransform.anchorMin = caption.rectTransform.anchorMax = new Vector2(.5f, 0);
+            caption.rectTransform.pivot = new Vector2(.5f, 1);
+            caption.rectTransform.anchoredPosition = new Vector2(-8, -2);
+            caption.rectTransform.sizeDelta = new Vector2(124, 22);
+        }
+    }
+
+    private void BindProfileShortcut()
+    {
+        if (profileHudButton == null || profileHudButton.onClick.GetPersistentEventCount() > 0) return;
+        profileHudButton.onClick.RemoveListener(OpenProfile);
+        profileHudButton.onClick.AddListener(OpenProfile);
+    }
+
+    public void OpenProfile()
+    {
+        if (AlmanacManager.Instance != null) AlmanacManager.Instance.OpenPlayerProfile();
+    }
     private void BindAlmanacShortcut(Button button)
     {
         if (button == null) return;
@@ -162,6 +202,8 @@ public class CareerManager : MonoBehaviour
         currentActiveJob = jobName;
         string acceptedKey = CampaignProgression.GetAcceptedKey(CampaignProgression.GetCurrentLevel());
         if (PlayerPrefs.GetInt(acceptedKey, 0) == 1) return;
+        PlayerAnalytics.Begin(CampaignProgression.GetCurrentLevel());
+        PlayerAnalytics.TransactionMade(Mathf.Max(0, upfrontPayment), "Contract advance", jobName);
         PlayerPrefs.SetInt(acceptedKey, 1);
 
         // Save upfront payment to hard drive!
@@ -171,6 +213,7 @@ public class CareerManager : MonoBehaviour
 
         UpdateMoneyUI();
         Debug.Log($"Accepted {jobName}. Received {upfrontPayment} B coins upfront!");
+        GameSaveManager.Instance?.SaveCheckpoint();
     }
 
     public void CompleteActiveJob(int finalPayment)
@@ -184,33 +227,51 @@ public class CareerManager : MonoBehaviour
 
     public bool TrySpendMoney(int amount)
     {
+        return TrySpendMoney(amount, "Other purchases", "Purchase");
+    }
+
+    public bool TrySpendMoney(int amount, string category, string item)
+    {
         playerMoney = Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0));
         if (amount < 0) return false;
         if (playerMoney < amount)
         {
+            PlayerAnalytics.PurchaseRejected();
             GameFeedback.Show($"INSUFFICIENT BALANCE\nNeed {amount:N0} B-Coins | Balance {playerMoney:N0} | Short {amount - playerMoney:N0}", true);
             UpdateMoneyUI();
             return false;
         }
 
+        // A cart records its lines separately after the whole purchase is approved.
+        if (category != "Cart") PlayerAnalytics.TransactionMade(-amount, category, item);
+        else PlayerAnalytics.EnsureTracking();
         playerMoney -= amount;
         PlayerPrefs.SetInt("PlayerMoney", playerMoney);
         PlayerPrefs.Save();
 
         UpdateMoneyUI();
         GameFeedback.Show($"PURCHASE CONFIRMED  -{amount:N0} B-Coins\nBalance: {playerMoney:N0} B-Coins");
+        GameSaveManager.Instance?.SaveCheckpoint();
         return true;
     }
 
     public void AddMoney(int amount)
     {
+        AddMoney(amount, "Other income");
+    }
+
+    public void AddMoney(int amount, string source)
+    {
         if (amount <= 0) return;
+        if (source == "Training allowance") PlayerAnalytics.Begin(1);
+        PlayerAnalytics.TransactionMade(amount, source, source);
 
         playerMoney = (int)System.Math.Min(int.MaxValue, (long)Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0)) + amount);
         PlayerPrefs.SetInt("PlayerMoney", playerMoney);
         PlayerPrefs.Save();
 
         UpdateMoneyUI();
+        GameSaveManager.Instance?.SaveCheckpoint();
     }
 
     public void UpdateMoneyUI()
@@ -245,7 +306,7 @@ public class CareerManager : MonoBehaviour
         if (keyboard.f10Key.wasPressedThisFrame)
         {
             if (Instance == null) Instance = FindObjectOfType<CareerManager>(true);
-            if (Instance != null) Instance.AddMoney(1000);
+            if (Instance != null) Instance.AddMoney(1000, "Developer funds");
             else
             {
                 int balance = (int)System.Math.Min(int.MaxValue, (long)Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0)) + 1000);
@@ -272,7 +333,7 @@ public class CareerManager : MonoBehaviour
             }
             Cursor.lockState = scene == "SingleStudio" ? CursorLockMode.Locked : CursorLockMode.None;
             Cursor.visible = scene != "SingleStudio";
-            UnityEngine.SceneManagement.SceneManager.LoadScene(scene);
+            LoadingScreenController.LoadScene(scene);
         }
     }
 
@@ -303,6 +364,20 @@ public class CareerManager : MonoBehaviour
     private static void SwitchLevelCheat(int targetLevel)
     {
         CampaignProgression.SetCheatLevel(targetLevel);
+        // Restart the flower setup only for an explicit level-one cheat.
+        if (targetLevel == 1)
+        {
+            PlayerPrefs.SetInt("Studio.StageCleared", 1);
+            PlayerPrefs.SetInt("Studio.SelectedInterior", 0);
+            PlayerPrefs.DeleteKey("Studio.WallColor");
+        }
+        else if (targetLevel <= 3)
+        {
+            // Coffee interiors are unavailable in levels 1-3; retain ownership for later.
+            PlayerPrefs.SetInt("Studio.SelectedInterior", 0);
+            PlayerPrefs.SetInt("OwnedInterior.0", 1);
+            PlayerPrefs.SetInt("Studio.StageCleared", 0);
+        }
 
         int minimumMoney = targetLevel == 1 ? 10000 : 20000;
         int savedMoney = PlayerPrefs.GetInt("PlayerMoney", 0);
@@ -329,7 +404,8 @@ public class CareerManager : MonoBehaviour
         PlayerPrefs.Save();
         Debug.Log("<color=yellow>DEV LEVEL CHEAT: Loading Level " + targetLevel + "</color>");
         GameFeedback.Show("CHEAT ACTIVATED\nLoading Level " + targetLevel);
-        UnityEngine.SceneManagement.SceneManager.LoadScene("SingleStudio");
+        if (targetLevel == 1) StudioArrivalTour.Queue();
+        LoadingScreenController.LoadScene("SingleStudio");
     }
 
     private void OnDestroy()
@@ -338,3 +414,5 @@ public class CareerManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 }
+
+

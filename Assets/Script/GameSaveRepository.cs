@@ -25,6 +25,7 @@ public sealed class GameSaveSlot
     public string name;
     public string revision;
     public string cloudRevision;
+    public string linkedAccount;
     public string updatedUtc;
     public List<GameSaveValue> values = new List<GameSaveValue>();
     public int Level => Mathf.Clamp(Int("CurrentLevel", 1), 1, 5);
@@ -71,6 +72,28 @@ public sealed class GameSaveRepository
         slot.revision = Guid.NewGuid().ToString("N");
         slot.updatedUtc = DateTime.UtcNow.ToString("o");
         Write(slot);
+    }
+
+    // Copy once, keeping the guest file intact. Stable IDs make interrupted imports retry-safe.
+    public int ImportUnclaimedGuestSaves(GameSaveRepository guest)
+    {
+        if (Owner == "guest" || guest.Owner != "guest") return 0;
+        int imported = 0;
+        foreach (var source in guest.Slots)
+        {
+            if (source.Int("SaveDeleted", 0) != 0 || !string.IsNullOrEmpty(source.linkedAccount)) continue;
+            if (!Slots.Exists(s => s.id == source.id))
+            {
+                var copy = new GameSaveSlot { id = source.id, owner = Owner, name = source.name,
+                    values = Clone(source.values) };
+                Commit(copy);
+                Slots.Add(copy);
+                imported++;
+            }
+            source.linkedAccount = Owner;
+            guest.Write(source);
+        }
+        return imported;
     }
 
     public void Write(GameSaveSlot slot)

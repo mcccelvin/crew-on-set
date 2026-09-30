@@ -105,7 +105,7 @@ public class AccountManager : MonoBehaviour
             string displayName = SaveLoginProfile(successfulResult, email);
             GameSaveManager.Ensure().SetAccount(successfulResult.PlayFabId);
             if (messageText != null) messageText.text = "Login successful! Welcome " + displayName;
-            SceneManager.LoadScene("Account");
+            LoadingScreenController.LoadScene("Account");
         },
         PlayfabFailure);
     }

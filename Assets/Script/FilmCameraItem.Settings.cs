@@ -10,19 +10,24 @@ namespace Player.Equipment
     {
         private bool settingsLoaded, settingsOpen, manualFocus;
         public bool GridEnabled { get; private set; }
+        public bool SettingsOpen => settingsOpen;
 
         private void RefreshGridVisibility()
         {
             if (ruleOfThirdsGrid == null) return;
-            ruleOfThirdsGrid.SetActive(isCameraActive && CameraFeatureUnlocks.Level >= 2 && GridEnabled);
+            bool practice = GokeLevelManager.Instance != null && GokeLevelManager.Instance.ThirdsPracticeActive;
+            ruleOfThirdsGrid.SetActive(isCameraActive && CameraFeatureUnlocks.Level >= 2 && (GridEnabled || practice));
             bool lesson = GokeLevelManager.Instance != null && GokeLevelManager.Instance.ShowThirdsLessonGuide;
             foreach (Transform child in ruleOfThirdsGrid.transform)
-                if (child.name.Contains("Power Point") || child.name.Contains("Label") || child.name.Contains("Lesson Panel"))
-                    child.gameObject.SetActive(lesson);
+                if (child.name.Contains("Lesson Panel")) child.gameObject.SetActive(practice && !settingsOpen);
+                else if (child.name.Contains("Power Point") || child.name.Contains("Label"))
+                    child.gameObject.SetActive(lesson && GridEnabled);
+                else child.gameObject.SetActive(GridEnabled);
         }
         private int settingRow, featureLevel;
         private float manualDistance = 5f, whiteBalance = 5600f, tint, iso = 800f, iris = 4f, shutterAngle = 180f;
         private float nextSettingRepeat;
+        private bool recordingLookActive;
         private Volume cameraSettingsVolume;
         private VolumeProfile cameraSettingsProfile;
         private ColorAdjustments cameraExposure;
@@ -50,18 +55,23 @@ namespace Player.Equipment
         // Explicitly prepare manual capture too: render requests can bypass normal camera callbacks.
         public void PrepareRecordingLook()
         {
+            recordingLookActive = true;
             ApplyCameraLook();
             HideCameraBody();
             if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 1f;
+            UpdateSettingsVolumeStack();
         }
 
         public void FinishRecordingLook()
         {
+            recordingLookActive = false;
             if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 0f;
             if (!isCameraActive) RestoreCameraBody();
         }
         public bool ManualFocusPracticed { get; private set; }
+        public float ViewfinderFieldOfView => filmCamera != null ? filmCamera.fieldOfView : 180f;
         public bool WhiteBalancePracticed { get; private set; }
+        public float WhiteBalanceKelvin => whiteBalance;
         public bool ExposurePracticed { get; private set; }
         private static readonly float[] IsoStops = {100,200,400,800,1250,1600,2500,3200,6400,12800,25600,32000};
         private static readonly float[] IrisStops = {1.4f,2f,2.8f,4f,5.6f,8f,11f,16f,22f};
@@ -72,7 +82,7 @@ namespace Player.Equipment
             if (settingsLoaded) return;
             settingsLoaded = true;
             GridEnabled = PlayerPrefs.GetInt("CameraControls.Grid", 0) == 1;
-            manualFocus = PlayerPrefs.GetInt("CameraControls.Manual",0) == 1;
+            manualFocus = false; // Autofocus only, including previously saved manual settings.
             manualDistance = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.Focus",5f),.1f,100f);
             whiteBalance = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.WB",5600f),2500f,9900f);
             tint = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.Tint",0),-100,100);
@@ -88,36 +98,26 @@ namespace Player.Equipment
             if (featureLevel >= 2 && ruleOfThirdsGrid == null) CreateRuleOfThirdsGrid();
             RefreshGridVisibility();
             EquipmentControls = "[LMB] View | [C] SD | [R] Record | [G] Drop | [Scroll] Zoom | [Q/E] Height | [Ctrl] Smooth move" +
-                (featureLevel >= 2 ? " | [F2] Settings | [ / ] Manual focus" : " | Autofocus");
+                (featureLevel >= 2 ? " | [F2] Settings | Autofocus" : " | Autofocus");
             var key = Keyboard.current;
             if (key == null || featureLevel < 2) { settingsOpen = false; return; }
             if (key.f2Key.wasPressedThisFrame) settingsOpen = !settingsOpen;
             bool changed = false;
-            if (key.leftBracketKey.isPressed || key.rightBracketKey.isPressed)
-            {
-                if (!manualFocus) manualDistance = currentFocusDistance;
-                manualFocus = true;
-                manualDistance = Mathf.Clamp(manualDistance +
-                    (key.rightBracketKey.isPressed ? 1 : -1) * Mathf.Max(.5f,manualDistance*.5f) * Time.deltaTime,.1f,100f);
-                ManualFocusPracticed = changed = true;
-            }
             if (settingsOpen)
             {
-                int rows = featureLevel >= 4 ? 8 : featureLevel >= 3 ? 5 : 3;
+                int rows = featureLevel >= 4 ? 6 : featureLevel >= 3 ? 3 : 1;
                 if (key.upArrowKey.wasPressedThisFrame) settingRow = (settingRow+rows-1)%rows;
                 if (key.downArrowKey.wasPressedThisFrame) settingRow = (settingRow+1)%rows;
                 settingRow = Mathf.Clamp(settingRow,0,rows-1);
                 bool press = key.leftArrowKey.wasPressedThisFrame || key.rightArrowKey.wasPressedThisFrame;
-                if (press || (settingRow > 1 && Time.unscaledTime >= nextSettingRepeat &&
+                if (press || (settingRow > 0 && Time.unscaledTime >= nextSettingRepeat &&
                     (key.leftArrowKey.isPressed || key.rightArrowKey.isPressed)))
                 {
-                    nextSettingRepeat = Time.unscaledTime + .15f;
+                    nextSettingRepeat = Time.unscaledTime + (press ? .3f : .06f);
                     int direction = key.rightArrowKey.isPressed ? 1 : -1;
-                    switch (settingRow - 1)
+                    switch (settingRow == 0 ? -1 : settingRow + 1)
                     {
                         case -1: GridEnabled = direction > 0; break;
-                        case 0: if (!manualFocus) manualDistance = currentFocusDistance; manualFocus = !manualFocus; break;
-                        case 1: manualFocus=true; manualDistance=Mathf.Clamp(manualDistance+direction*.1f,.1f,100f); ManualFocusPracticed=true; break;
                         case 2: whiteBalance=Mathf.Clamp(whiteBalance+direction*100,2500,9900); WhiteBalancePracticed=true; break;
                         case 3: tint=Mathf.Clamp(tint+direction*5,-100,100); WhiteBalancePracticed=true; break;
                         case 4: iso=Step(IsoStops,iso,direction); ExposurePracticed=true; break;
@@ -158,15 +158,15 @@ namespace Player.Equipment
 
         private bool ApplyManualFocus()
         {
-            if (featureLevel < 2 || !manualFocus) return false;
-            currentFocusDistance = targetFocusDistance = manualDistance;
-            if (depthOfField != null) depthOfField.focusDistance.value = manualDistance;
-            return true;
+            manualFocus = false;
+            return false;
         }
 
         private void ApplyCameraLook()
         {
             if (filmCamera == null) return;
+            LoadCameraSettings();
+            featureLevel = CameraFeatureUnlocks.Level;
             if (cameraSettingsVolume == null)
             {
                 var host = new GameObject("Camera settings - local render");
@@ -186,6 +186,13 @@ namespace Player.Equipment
                 var data=filmCamera.GetUniversalAdditionalCameraData();
                 data.requiresDepthTexture=true;
             }
+            // The runtime Volume must be on a layer the film camera actually reads.
+            var cameraData = filmCamera.GetUniversalAdditionalCameraData();
+            int volumeMask = cameraData.volumeLayerMask.value;
+            if (volumeMask == 0) { volumeMask = 1; cameraData.volumeLayerMask = volumeMask; }
+            for (int layer = 0; layer < 32; layer++)
+                if ((volumeMask & (1 << layer)) != 0) { cameraSettingsVolume.gameObject.layer = layer; break; }
+            cameraBalance.active = true;
             // Teaching approximation: aperture/ISO/shutter affect exposure; iris also affects depth of field.
             float exposure=featureLevel>=4 ? Mathf.Log(iso/800f*(16f/(iris*iris))*(shutterAngle/180f),2f) : 0f;
             cameraExposure.postExposure.Override(Mathf.Clamp(exposure,-8,8));
@@ -205,14 +212,19 @@ namespace Player.Equipment
         private void PrepareCameraLook(ScriptableRenderContext context,Camera camera)
         {
             if (camera == filmCamera && isCameraActive) HideCameraBody();
-            if(cameraSettingsVolume!=null)cameraSettingsVolume.weight=camera==filmCamera && isCameraActive ? 1 : 0;
-            if (camera == filmCamera && isCameraActive)
+            if(cameraSettingsVolume!=null)cameraSettingsVolume.weight=camera==filmCamera && (isCameraActive || recordingLookActive) ? 1 : 0;
+            if (camera == filmCamera && (isCameraActive || recordingLookActive))
             {
-                var data = filmCamera.GetUniversalAdditionalCameraData();
-                var trigger = data.volumeTrigger != null ? data.volumeTrigger : filmCamera.transform;
-                if (data.volumeStack != null) VolumeManager.instance.Update(data.volumeStack, trigger, data.volumeLayerMask);
-                else VolumeManager.instance.Update(trigger, data.volumeLayerMask);
+                UpdateSettingsVolumeStack();
             }
+        }
+        private void UpdateSettingsVolumeStack()
+        {
+            if (filmCamera == null) return;
+            var data = filmCamera.GetUniversalAdditionalCameraData();
+            var trigger = data.volumeTrigger != null ? data.volumeTrigger : filmCamera.transform;
+            if (data.volumeStack != null) VolumeManager.instance.Update(data.volumeStack, trigger, data.volumeLayerMask);
+            else VolumeManager.instance.Update(trigger, data.volumeLayerMask);
         }
         private void FinishCameraLook(ScriptableRenderContext context,Camera camera)
         {
@@ -233,18 +245,17 @@ namespace Player.Equipment
         private string SettingsHUDText()
         {
             if (!settingsOpen || featureLevel < 2) return "";
-            string[] rows = { "Grid   " + (GridEnabled ? "ON" : "OFF"), "Focus mode   " + (manualFocus ? "MANUAL" : "AF-C"),
-                "Focus distance   " + manualDistance.ToString("F1") + "m",
+            string[] rows = { "Grid   " + (GridEnabled ? "ON" : "OFF"),
                 "White balance   " + whiteBalance.ToString("F0") + "K",
                 "Tint   " + tint.ToString("F0"),
                 "ISO   " + iso.ToString("F0"),
                 "Aperture   F" + iris.ToString("F1"),
                 "Shutter   " + shutterAngle.ToString("F1") + " deg" };
-            int count = featureLevel >= 4 ? 8 : featureLevel >= 3 ? 5 : 3;
+            int count = featureLevel >= 4 ? 6 : featureLevel >= 3 ? 3 : 1;
             string text = "<color=#FFD866>CAMERA SETTINGS</color>\n<size=75%>Live preview</size>\n\n";
             for (int i = 0; i < count; i++)
                 text += i == settingRow ? "<color=#FFD866>> " + rows[i] + "</color>\n" : "  " + rows[i] + "\n";
-            return text + "\n<size=75%>Up/Down: select   Left/Right: adjust\nF2: close</size>";
+            return text + "\n<size=75%>Up/Down: select | Left/Right: adjust\nHold Left/Right: faster adjustment\n[F2] Close settings</size>";
         }
     }
 }

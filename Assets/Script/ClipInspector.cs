@@ -234,7 +234,7 @@ public class ClipInspector : MonoBehaviour
         LayoutElement layout = currentClip.GetComponent<LayoutElement>();
 
         // Update Layout Component if inside Bin
-        if (layout != null) layout.preferredWidth = Mathf.Max(duration * pixelsPerSecond, 60f);
+        if (layout != null && !currentClip.isOnTimeline) layout.preferredWidth = Mathf.Max(duration * pixelsPerSecond, 60f);
 
         // --- THE FIX: Force the physical timeline clip to sync dimensions! ---
         if (currentClip.isOnTimeline)
@@ -269,7 +269,7 @@ public class ClipInspector : MonoBehaviour
 
                 float duration = (currentClip.endFrame - currentClip.startFrame) / TapeSettings.framesPerSecond;
 
-                if (Mathf.Abs(duration - 10f) > 0.05f)
+                if (Mathf.RoundToInt(duration * 10f) != 100)
                 {
                     EditorTutorialManager.Instance.ShowWarning("It's not 10 seconds yet! Your duration is " + duration.ToString("F1") + " Sec. Adjust the pink handles until it says exactly 10.0 Sec!");
                     return;

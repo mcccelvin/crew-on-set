@@ -2093,7 +2093,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: -16.600014}
+  m_AnchoredPosition: {x: 0, y: -57}
   m_SizeDelta: {x: 400, y: 111.432724}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &470187354
@@ -2598,6 +2598,10 @@ MonoBehaviour:
   volume: {fileID: 845142701}
   sensitivityValue: {fileID: 1935300902}
   volumeValue: {fileID: 245924920}
+  sfx: {fileID: 0}
+  music: {fileID: 0}
+  sfxValue: {fileID: 0}
+  musicValue: {fileID: 0}
   choices:
   - {fileID: 1724051632}
   - {fileID: 495611136}
@@ -9468,6 +9472,7 @@ MonoBehaviour:
   gameNameInput: {fileID: 657106252}
   singlePlayerToggle: {fileID: 1129136744}
   multiPlayerToggle: {fileID: 470989007}
+  gameModeDropdown: {fileID: 0}
   joinCodeInput: {fileID: 887552742}
   errorText: {fileID: 1065114999}
   singlePlayerScene: 2
@@ -10155,7 +10160,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -10186,7 +10191,7 @@ MonoBehaviour:
   checkPaddingRequired: 0
   m_isRichText: 1
   m_parseCtrlCharacters: 1
-  m_isOrthographic: 0
+  m_isOrthographic: 1
   m_isCullingEnabled: 0
   m_horizontalMapping: 0
   m_verticalMapping: 0
@@ -12327,7 +12332,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 32.199974}
+  m_AnchoredPosition: {x: 2, y: 32.199974}
   m_SizeDelta: {x: 400, y: 47.0327}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1558124996
@@ -12577,7 +12582,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -12955,6 +12960,7 @@ MonoBehaviour:
   gameNameInput: {fileID: 1998073894}
   singlePlayerToggle: {fileID: 1558124996}
   multiPlayerToggle: {fileID: 376098425}
+  gameModeDropdown: {fileID: 0}
   joinCodeInput: {fileID: 0}
   errorText: {fileID: 1254834146}
   singlePlayerScene: 2
@@ -13451,7 +13457,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 200

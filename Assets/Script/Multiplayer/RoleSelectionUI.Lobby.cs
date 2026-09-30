@@ -116,7 +116,7 @@ public sealed partial class RoleSelectionUI
         LobbyButton(frame, "Leave room", "", 1688, 106, 80, 79, () =>
         {
             if (PhotonNetwork.InRoom) PhotonNetwork.LeaveRoom();
-            else UnityEngine.SceneManagement.SceneManager.LoadScene("Main Menu");
+            else LoadingScreenController.LoadScene("Main Menu");
         }, true);
         var eventSystem = EventSystem.current;
         if (eventSystem == null) eventSystem = new GameObject("Crew UI Event System", typeof(EventSystem)).GetComponent<EventSystem>();
@@ -124,13 +124,13 @@ public sealed partial class RoleSelectionUI
         var input = eventSystem.GetComponent<InputSystemUIInputModule>() ?? eventSystem.gameObject.AddComponent<InputSystemUIInputModule>();
         if (input.actionsAsset == null) input.AssignDefaultActions();
         input.enabled = true;
-        SelectLobbyPage(0); lobbyRoot.SetActive(true); desk.enabled = true;
+        SelectLobbyPage(0); UITransition.Show(lobbyRoot); desk.enabled = true;
     }
 
     private CrewMember LocalMember() => PhotonNetwork.InRoom ? Crew?.State?.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber) : null;
     private void SelectLobbyPage(int index)
     {
-        for (int i = 0; i < lobbyPages.Length; i++) lobbyPages[i].SetActive(i == index);
+        for (int i = 0; i < lobbyPages.Length; i++) UITransition.SetVisible(lobbyPages[i], i == index);
     }
     private void ShowRoleHelp(int index)
     {
@@ -147,7 +147,7 @@ public sealed partial class RoleSelectionUI
         if (lobbyRoot == null) return;
         bool visible = Crew?.State == null || Crew.State.phase == "lobby";
         if (!visible && lobbyOptions != null && lobbyOptions.IsOpen) lobbyOptions.Close(false);
-        if (lobbyRoot.activeSelf != visible) lobbyRoot.SetActive(visible);
+        if (lobbyRoot.activeSelf != visible) UITransition.SetVisible(lobbyRoot, visible);
         if (!visible) return;
         Open = true;
         if (lobbyOptions != null && lobbyOptions.IsOpen && Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame) lobbyOptions.Close(false);

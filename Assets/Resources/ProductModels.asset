@@ -60,6 +60,10 @@ MonoBehaviour:
     rotation: {x: 0, y: 0, z: 0}
   activeGreenScreen: 0
   flowerTable: {fileID: 919132149155446097, guid: b711466301f508f4a87e5df8b286db87, type: 3}
+  coffeeMixAnimation: {fileID: -623603649343465320, guid: 7b9c9a580712d5f4d8bd0d45998116de, type: 3}
+  coffeePressAnimation: {fileID: -623603649343465320, guid: 7487c8d4ea1518848baa793541e3a2a3, type: 3}
+  gokeBox: {fileID: 919132149155446097, guid: 77e1c4a60b9f5b54e87c10664f35527f, type: 3}
+  gokeBoxMaterial: {fileID: 2100000, guid: e99be81f85e91794f8117a93507dcd13, type: 2}
   coffeeInterior: {fileID: 919132149155446097, guid: a411f49d25aae614b8586211e2358d93, type: 3}
   coffeeInteriorScale: {x: 1.65, y: 1, z: 1.65}
   preserveCoffeeInteriorScale: 1

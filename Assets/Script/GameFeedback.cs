@@ -8,6 +8,7 @@ using System.Collections.Generic;
 // Independent of tutorial visibility and the lifetime of the career manager.
 public sealed class GameFeedback : MonoBehaviour
 {
+    public enum NoticeType { Instruction, Success, Caution }
     private static GameFeedback instance;
     private readonly List<TMP_Text> balances = new List<TMP_Text>();
     [SerializeField] private GameObject panel;
@@ -79,6 +80,22 @@ public sealed class GameFeedback : MonoBehaviour
 
     public static void Show(string text, bool error = false)
     {
+        Show(text, error ? NoticeType.Caution : Classify(text));
+    }
+
+    private static NoticeType Classify(string text)
+    {
+        string title = (text ?? "").Split('\n')[0].ToUpperInvariant();
+        foreach (string word in new[] { "FAILED", "FAILURE", "CAUTION", "WARNING", "INSUFFICIENT", "UNAVAILABLE", "INVENTORY FULL", "BLOCKED", "ALREADY HELD", "OCCUPIED", "NO SD CARD", "ALREADY IN YOUR CART", "NEEDS A HUMANOID", "NEEDS AN ACTIVE HUMANOID" })
+            if (title.Contains(word)) return NoticeType.Caution;
+        foreach (string word in new[] { "SUCCESS", "PURCHASE CONFIRMED", "PURCHASED", "TAKE SAVED", "MARK SAVED", "END SAVED", "START SAVED", "SD CARD STORED", "ACTOR REPOSITIONED", "ACTION COMPLETE", "LOAN REPAID" })
+            if (title.Contains(word)) return NoticeType.Success;
+        return NoticeType.Instruction;
+    }
+
+    public static void Show(string text, NoticeType type)
+    {
+        bool error = type == NoticeType.Caution;
         GameplayAudioManager.Feedback(text, error);
         GameFeedback feedback = EnsureInstance();
         if (feedback.panel == null) feedback.BuildNotification();
@@ -94,7 +111,8 @@ public sealed class GameFeedback : MonoBehaviour
         }
         feedback.heading.text = title;
         feedback.message.text = detail;
-        feedback.badge.text = error ? "!" : title == purchase ? "B" : "i";
+        feedback.badge.text = error ? "!" : type == NoticeType.Success ? "+" : "i";
+        feedback.ApplyNoticeColors(type);
         feedback.heading.ForceMeshUpdate();
         float height = Mathf.Clamp(feedback.heading.GetPreferredValues(title, 440, 0).y +
             feedback.message.GetPreferredValues(detail, 440, 0).y + 38, 100, 240);
@@ -104,6 +122,25 @@ public sealed class GameFeedback : MonoBehaviour
         feedback.panel.SetActive(true);
         feedback.hideAt = Time.unscaledTime + 4f;
         feedback.RefreshBalances();
+    }
+
+    private void ApplyNoticeColors(NoticeType type)
+    {
+        bool caution = type == NoticeType.Caution, success = type == NoticeType.Success;
+        Color background = caution ? new Color32(112,27,27,250) : success ? new Color32(25,83,46,250) : new Color32(49,32,12,250);
+        Color accent = caution ? new Color32(255,112,104,255) : success ? new Color32(111,220,142,255) : new Color32(239,184,71,255);
+        panel.GetComponent<Image>().color = background;
+        var edge = panel.transform.Find("Gold edge");
+        if (edge != null) edge.GetComponent<Image>().color = accent;
+        var key = badge.transform.parent.GetComponent<Image>();
+        if (key != null)
+        {
+            key.color = caution ? new Color32(163,44,40,255) : success ? new Color32(39,119,65,255) : new Color32(121,78,28,255);
+            var border = key.GetComponent<Outline>();
+            if (border != null) border.effectColor = accent;
+        }
+        heading.color = caution || success ? Color.white : new Color32(255,231,173,255);
+        message.color = caution || success ? new Color32(245,245,240,255) : new Color32(218,184,120,255);
     }
 
 #if UNITY_EDITOR

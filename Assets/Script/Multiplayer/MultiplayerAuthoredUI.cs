@@ -273,6 +273,7 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         if (obj == null) return;
         for (var t = obj.transform; t != null; t = t.parent) { t.gameObject.SetActive(true); var c = t.GetComponent<Canvas>(); if (c != null) c.enabled = true; }
         foreach (var group in obj.GetComponentsInChildren<CanvasGroup>(true)) { group.alpha = 1; group.interactable = true; group.blocksRaycasts = true; }
+        UITransition.Replay(obj);
     }
     private static void Bind(Transform root, string name, Action action, string label = null)
     {

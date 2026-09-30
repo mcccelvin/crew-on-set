@@ -92,6 +92,11 @@ public class GokeLevelManager : MonoBehaviour
     private bool hasCompletedRuleOfThirdsPractice = false;
     private bool awaitingFramingAcknowledgement;
     private float ruleOfThirdsPracticeTimer = 0f;
+    public float ThirdsFramingProgress => Mathf.Clamp01(ruleOfThirdsPracticeTimer / 2f);
+    public bool ThirdsPracticeActive => currentStep == GokeLevelStep.InspectCameraFeatures && !hasCompletedRuleOfThirdsPractice;
+    private int thirdsPracticeStage;
+    public int ThirdsPracticeIntersection => thirdsPracticeStage == 0 ? 0 : 2;
+    public bool ThirdsIndependentPractice => thirdsPracticeStage >= 2 && !hasCompletedRuleOfThirdsPractice;
 
     private void Awake()
     {
@@ -554,7 +559,7 @@ public class GokeLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             if (currentStep == GokeLevelStep.BuyCamera)
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Add the NONY FX Camera to your cart", "- Add an SD Card before checkout" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Add the NONY FX Camera to your cart" });
             else
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Add a blank SD Card to your cart and confirm purchase" });
         }
@@ -628,7 +633,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Review your Level 1 equipment and technique guides", "- Press <color=red>[P]</color> or CLOSE when finished" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Review your Level 1 guides. Press <color=red>[P]</color> when finished." });
             }
             return;
         }
@@ -639,7 +644,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Open EQUIPMENT", "- Review the NONY FX Camera features", "- Press <color=red>[P]</color> or CLOSE when finished" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Review EQUIPMENT > NONY FX Camera. Press <color=red>[P]</color> when finished." });
             }
             return;
         }
@@ -650,7 +655,7 @@ public class GokeLevelManager : MonoBehaviour
 
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Open TECHNIQUES", "- Review Rule of Thirds and 3-Point Lighting", "- Press <color=red>[P]</color> or CLOSE when finished" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Review the new TECHNIQUES guides. Press <color=red>[P]</color> when finished." });
             }
         }
 
@@ -660,7 +665,7 @@ public class GokeLevelManager : MonoBehaviour
     {
         if (currentStep == GokeLevelStep.CloseAlmanac)
         {
-            ShowLightPurchaseIntroduction();
+            BeginCompositionPractice();
             return;
         }
 
@@ -686,7 +691,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Review Rule of Thirds", "- Review 3-Point Lighting", "- Press <color=red>[TAB]</color> when finished" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Review Rule of Thirds", "- Review space for branding", "- Press <color=red>[TAB]</color> when finished" });
         }
     }
 
@@ -746,6 +751,7 @@ public class GokeLevelManager : MonoBehaviour
         isBriefingOpen = false;
         hasCompletedRuleOfThirdsPractice = false;
         ruleOfThirdsPracticeTimer = 0f;
+        thirdsPracticeStage = 0;
         if (practiceLesson != null) return;
 
         if (TutorialUIManager.Instance != null)
@@ -764,24 +770,28 @@ public class GokeLevelManager : MonoBehaviour
 
     public void OnRuleOfThirdsPracticeUpdated(bool hasCorrectComposition)
     {
+        if (PauseManager.isPaused || !Application.isFocused) return;
         if (!cameraPracticeViewOpen) return;
         if (currentStep != GokeLevelStep.InspectCameraFeatures || hasCompletedRuleOfThirdsPractice) return;
         if (practiceLesson != null && (practiceLesson.IsExplaining || practiceLesson.CurrentPermission != "camera.frame")) return;
 
         if (!hasCorrectComposition)
         {
-            ruleOfThirdsPracticeTimer = 0f;
+            ruleOfThirdsPracticeTimer = Mathf.Max(0f, ruleOfThirdsPracticeTimer - Time.deltaTime * .5f);
             return;
         }
 
         ruleOfThirdsPracticeTimer += Time.deltaTime;
         if (!DevTutorialBypass.PracticeDelayComplete(ruleOfThirdsPracticeTimer, 2f)) return;
 
+        ruleOfThirdsPracticeTimer = 0f;
+        thirdsPracticeStage++;
+        if (thirdsPracticeStage < 3) return;
         hasCompletedRuleOfThirdsPractice = true;
         if (practiceLesson == null) ShowFramingSuccess();
     }
 
-    public bool ShowThirdsLessonGuide => currentStep == GokeLevelStep.InspectCameraFeatures && !hasCompletedRuleOfThirdsPractice;
+    public bool ShowThirdsLessonGuide => currentStep == GokeLevelStep.InspectCameraFeatures && !hasCompletedRuleOfThirdsPractice && !ThirdsIndependentPractice;
 
     private void ShowFramingSuccess()
     {
@@ -793,7 +803,7 @@ public class GokeLevelManager : MonoBehaviour
         if (ui != null)
         {
             ui.HideTasks();
-            ui.ShowBossDialogue("That's the frame! The product sits on a thirds intersection, so your eye goes straight to it. That space leaves room for our message. The tutorial guide will disappear; your grid stays available through F2 settings.", ui.poseHappy, true, false);
+            ui.ShowBossDialogue("Good framing! Your subject is clear, with room beside it for a message. Use that space when you add graphics.", ui.poseHappy, true, false);
         }
     }
 
@@ -830,7 +840,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("That framing gives our product room to shine, with space beside it for a message. We're done with the demo; your three lights are back at delivery.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("That framing gives our product room to shine, with space beside it for a message. We're done with the ready-lit demo. Use the space beside your subject for the advert's message.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -844,8 +854,12 @@ public class GokeLevelManager : MonoBehaviour
         int amount = Mathf.Max(0, required - PlayerPrefs.GetInt("PlayerMoney", 0));
         PlayerPrefs.SetInt("GokeEquipmentLoanIssued", 1);
         PlayerPrefs.SetInt("GokeEquipmentAdvancePaid", amount);
-        if (CareerManager.Instance != null) CareerManager.Instance.AddMoney(amount);
-        else PlayerPrefs.SetInt("PlayerMoney", PlayerPrefs.GetInt("PlayerMoney", 0) + amount);
+        if (CareerManager.Instance != null) CareerManager.Instance.AddMoney(amount, "Equipment support");
+        else
+        {
+            PlayerAnalytics.TransactionMade(amount, "Equipment support", "Equipment support");
+            PlayerPrefs.SetInt("PlayerMoney", PlayerPrefs.GetInt("PlayerMoney", 0) + amount);
+        }
         PlayerPrefs.Save();
         if (amount > 0) GameFeedback.Show("BOSS EQUIPMENT LOAN\n+" + amount.ToString("N0") + " B-Coins | Deducted when you accept Goke");
     }
@@ -865,7 +879,7 @@ public class GokeLevelManager : MonoBehaviour
             if (alreadyOwnsCamera)
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy a blank SD Card for your NONY FX Camera" });
             else
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy the NONY FX Camera", "- Add an SD Card before checkout" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "- Buy the NONY FX Camera" });
             TutorialUIManager.Instance.SetDynamicGlow("shop", true);
         }
 
@@ -877,7 +891,7 @@ public class GokeLevelManager : MonoBehaviour
         currentStep = GokeLevelStep.IntroduceCamera;
         isBriefingOpen = true;
         if (TutorialUIManager.Instance != null)
-            TutorialUIManager.Instance.ShowBossDialogue("Your camera now has a thirds grid and manual focus. Keep using it! Buy one blank SD Card for practice. In the viewfinder, F2 opens settings; [ and ] pull focus.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Your camera now has a thirds grid. Keep using it! Buy one blank SD Card for practice. In the viewfinder, F2 opens settings. The camera focuses automatically so you can concentrate on framing.", TutorialUIManager.Instance.posePointUp, true, false);
     }
 
     private void ShowNextLevelPreparation()
@@ -910,17 +924,18 @@ public class GokeLevelManager : MonoBehaviour
 
         if (AlmanacManager.Instance == null)
         {
-            ShowLightPurchaseIntroduction();
+            BeginCompositionPractice();
             return;
         }
 
         currentStep = GokeLevelStep.OpenAlmanac;
+        AlmanacManager.Instance.RequestNavigationLesson();
         // The lesson explicitly asks for the book, including direct level/cheat entry.
         AlmanacManager.Instance.UnlockTutorialEquipment();
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Production Almanac", "- Review the guides you unlocked in Level 1" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Production Almanac" });
         }
     }
 
@@ -951,7 +966,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac again", "- Open EQUIPMENT and review the NONY FX Camera" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac" });
         }
     }
 
@@ -978,7 +993,7 @@ public class GokeLevelManager : MonoBehaviour
             isBriefingOpen = true;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola has 10,500 B-Coins for a red set, Rule of Thirds, three-point lighting, and two graphics. Ready to take it on? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
+                TutorialUIManager.Instance.ShowBossDialogue("Goke Cola has 10,500 B-Coins for a red set, Rule of Thirds, readable lighting, and two graphics. Ready to take it on? Press <color=red>[SPACE]</color> to accept.", TutorialUIManager.Instance.poseBoss, true, false);
             }
         }
     }
@@ -1007,6 +1022,28 @@ public class GokeLevelManager : MonoBehaviour
         }
     }
 
+    private void BeginCompositionPractice()
+    {
+        CreateLightingPractice();
+        if (lightingPracticeTarget != null)
+            foreach (var marker in new[] { keyPlacementMarker, fillPlacementMarker, backPlacementMarker })
+            {
+                if (marker == null) continue;
+                marker.gameObject.SetActive(false);
+                var lampObject = new GameObject("Composition practice light", typeof(Light));
+                lampObject.transform.SetParent(lightingPracticeRoot.transform, false);
+                lampObject.transform.position = marker.position + Vector3.up * 2f;
+                lampObject.transform.LookAt(lightingPracticeTarget.position + Vector3.up);
+                var lamp = lampObject.GetComponent<Light>();
+                lamp.type = LightType.Spot;
+                lamp.range = 25f;
+                lamp.spotAngle = 65f;
+                lamp.intensity = marker == fillPlacementMarker ? 1.5f : 3f;
+                lamp.shadows = LightShadows.Soft;
+            }
+        ShowCameraIntroduction();
+    }
+
     private void StartLightPurchase()
     {
         if (lightItemIndex == -1)
@@ -1029,7 +1066,7 @@ public class GokeLevelManager : MonoBehaviour
         if (TutorialUIManager.Instance != null)
         {
             TutorialUIManager.Instance.HideBossDialogue();
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop", "- Keep your owned lights; buy " + lightsRequiredToBuy + " more 160 LED Panels" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Open the Equipment Shop" });
             TutorialUIManager.Instance.SetDynamicGlow("shop", true);
         }
 
@@ -1131,8 +1168,7 @@ public class GokeLevelManager : MonoBehaviour
 
         practiceLesson?.Release();
         practiceLesson = null;
-        light.transform.position = placementMarker.position + Vector3.up * 0.05f;
-        ConfigureProfessionalPracticeLight(light);
+        // Keep the beam width, shadows and output the player saw while aiming.
 
         Rigidbody[] lightBodies = light.GetComponentsInChildren<Rigidbody>(true);
         foreach (Rigidbody lightBody in lightBodies)
@@ -1146,6 +1182,8 @@ public class GokeLevelManager : MonoBehaviour
 
         placementMarker.gameObject.SetActive(false);
         placedPracticeLights.Add(light.GetInstanceID());
+        int roleIndex = currentStep == GokeLevelStep.PlaceKeyLight ? 0 : currentStep == GokeLevelStep.PlaceFillLight ? 1 : 2;
+        observationLights[roleIndex] = light.spotlight;
 
         if (currentStep == GokeLevelStep.PlaceKeyLight)
         {
@@ -1172,8 +1210,6 @@ public class GokeLevelManager : MonoBehaviour
         practiceSpotlight.shadowNormalBias = 0.25f;
         practiceSpotlight.shadowNearPlane = 0.2f;
 
-        float targetHeight = 1.05f;
-
         if (currentStep == GokeLevelStep.PlaceKeyLight)
         {
             practiceSpotlight.spotAngle = 40f;
@@ -1191,10 +1227,9 @@ public class GokeLevelManager : MonoBehaviour
             practiceSpotlight.spotAngle = 34f;
             practiceSpotlight.innerSpotAngle = 6f;
             practiceSpotlight.shadowStrength = 0.55f;
-            targetHeight = 1.2f;
         }
 
-        light.AimAt(lightingPracticeTarget.position + Vector3.up * targetHeight);
+        // Preserve the height and aim the player previewed before pressing G.
     }
 
     private void ShowLightingSetupIntroduction()
@@ -1258,24 +1293,130 @@ public class GokeLevelManager : MonoBehaviour
         BeginGuidedLightPractice();
     }
 
+    [Header("Editable Lighting Observation Tutorial")]
+    private readonly Light[] observationLights = new Light[3];
+    [SerializeField, TextArea(2, 5)] private string[] lightingObservationTasks =
+    {
+        "KEY: Notice the light and shadow.",
+        "FILL: Notice the softer shadows.",
+        "BACK: Notice the bright edge."
+    };
+    [SerializeField] private string lightingObservationContinue = "[ENTER] Next";
+    [SerializeField, TextArea(3, 8)] private string lightingObservationComplete =
+        "There's our three-point setup. Key gives shape, Fill softens the shadows, and Back catches the edge. Leave them there; we'll use this set for the camera test.";
+
     private IEnumerator ObserveLightingSetup()
     {
         currentStep = GokeLevelStep.ObserveLightingSetup;
         isBriefingOpen = false;
 
-        for (int secondsRemaining = 10; secondsRemaining > 0; secondsRemaining--)
+        var player = FindObjectOfType<Player.PlayerController.PlayerController>();
+        var view = player != null ? player.GameplayCamera : null;
+        bool couldMove = player != null && player.canMove, couldLook = player != null && player.canLook;
+        Quaternion savedRotation = view != null ? view.transform.rotation : Quaternion.identity;
+        Vector3 savedPosition = view != null ? view.transform.position : Vector3.zero;
+        float savedFov = view != null ? view.fieldOfView : 60f;
+        var savedLights = new Dictionary<Light, bool>();
+        var targetRenderer = lightingPracticeTarget != null ? lightingPracticeTarget.GetComponentInChildren<Renderer>() : null;
+        Material targetMaterial = targetRenderer != null ? targetRenderer.material : null;
+        Color savedColor = targetMaterial != null ? targetMaterial.color : Color.white;
+        foreach (var lamp in FindObjectsOfType<Light>())
         {
+            savedLights[lamp] = lamp.enabled;
+            lamp.enabled = false;
+        }
+        if (player != null) player.canMove = player.canLook = false;
+        if (targetMaterial != null) targetMaterial.color = new Color(.65f, .65f, .65f);
+        int observationIndex = 0;
+        float orbitAngle = 0f;
+        Vector3 orbitCenter = targetRenderer != null ? targetRenderer.bounds.center : savedPosition;
+        Vector3 orbitDirection = Vector3.ProjectOnPlane(savedPosition - orbitCenter, Vector3.up).normalized;
+        if (orbitDirection.sqrMagnitude < .01f) orbitDirection = Vector3.back;
+        const float observationFov = 55f;
+        float framingRadius = targetRenderer != null ? targetRenderer.bounds.extents.magnitude : .75f;
+        float minimumDistance = framingRadius / Mathf.Sin(observationFov * .5f * Mathf.Deg2Rad) * 1.25f;
+        Vector3 orbitOffset = orbitDirection * Mathf.Max(3.5f, minimumDistance) + Vector3.up * .5f;
+        try
+        {
+        if (view != null && targetRenderer != null)
+        {
+            Quaternion aim = Quaternion.LookRotation(-orbitOffset);
+            for (float t = 0; t < 1f;)
+            {
+                if (!PauseManager.isPaused) t += Time.unscaledDeltaTime;
+                view.transform.rotation = Quaternion.Slerp(savedRotation, aim, Mathf.SmoothStep(0, 1, t));
+                view.transform.position = Vector3.Lerp(savedPosition, orbitCenter + orbitOffset, Mathf.SmoothStep(0, 1, t));
+                view.fieldOfView = Mathf.Lerp(savedFov, observationFov, Mathf.SmoothStep(0, 1, t));
+                yield return null;
+            }
+        }
+        foreach (string instruction in lightingObservationTasks ?? new string[0])
+        {
+            if (string.IsNullOrWhiteSpace(instruction)) continue;
             if (TutorialUIManager.Instance != null)
             {
-                TutorialUIManager.Instance.SetupTasks(new string[]
+                // Also shorten the previous defaults already serialized in a scene.
+                // Leave Inspector-authored instructions untouched.
+                string prompt = instruction;
+                switch (prompt)
                 {
-                    "- Observe how the 75% Key creates the main shape",
-                    "- Compare the softer 40% Fill and the 60% Back separation",
-                    "- Next briefing in " + secondsRemaining + " seconds"
-                });
+                    case "KEY ONLY: Notice the bright side and the shadow side. Hold [B] to compare without the key light.":
+                        prompt = "KEY: Notice the light and shadow."; break;
+                    case "ADD FILL: Watch the shadow side become lighter. Hold [B] to compare key-only lighting.":
+                        prompt = "FILL: Notice the softer shadows."; break;
+                    case "ADD BACK: Look for the bright edge separating the product. Hold [B] to compare without the back light.":
+                        prompt = "BACK: Notice the bright edge."; break;
+                }
+                string next = lightingObservationContinue == "Press [ENTER] when ready"
+                    ? "[ENTER] Next" : lightingObservationContinue;
+                TutorialUIManager.Instance.SetupTasks(new[] { prompt + "\nHold [B] Compare\n" + next });
             }
-
-            yield return new WaitForSeconds(1f);
+            // No timer: each observation stays visible until the player acknowledges it.
+            yield return null;
+            while (Keyboard.current != null && Keyboard.current.enterKey.isPressed) yield return null;
+            while (PauseManager.isPaused || !Application.isFocused || Keyboard.current == null ||
+                   !Keyboard.current.enterKey.wasPressedThisFrame)
+            {
+                if (currentStep != GokeLevelStep.ObserveLightingSetup) yield break;
+                if (!PauseManager.isPaused && Application.isFocused && view != null && targetRenderer != null)
+                {
+                    // Freeze the angle during comparison so only the light changes.
+                    if (Keyboard.current == null || !Keyboard.current.bKey.isPressed)
+                        orbitAngle += 18f * Time.unscaledDeltaTime;
+                    Vector3 offset = Quaternion.AngleAxis(orbitAngle, Vector3.up) * orbitOffset;
+                    Vector3 destination = orbitCenter + offset;
+                    // Keep the orbit in front of walls/fixtures rather than passing through them.
+                    float distance = offset.magnitude;
+                    foreach (var hit in Physics.RaycastAll(orbitCenter, offset.normalized, distance, ~0, QueryTriggerInteraction.Ignore))
+                    {
+                        if (hit.transform.IsChildOf(lightingPracticeTarget)) continue;
+                        if (player != null && hit.transform.IsChildOf(player.transform)) continue;
+                        distance = Mathf.Min(distance, Mathf.Max(.3f, hit.distance - .15f));
+                    }
+                    // If an obstacle leaves too little room, keep the last wide view
+                    // instead of pushing the camera into an extreme product close-up.
+                    if (distance >= minimumDistance)
+                    {
+                        destination = orbitCenter + offset.normalized * distance;
+                        view.transform.SetPositionAndRotation(destination, Quaternion.LookRotation(orbitCenter - destination));
+                    }
+                }
+                if (!PauseManager.isPaused)
+                    for (int i = 0; i < observationLights.Length; i++)
+                        if (observationLights[i] != null)
+                            observationLights[i].enabled = i <= observationIndex &&
+                                !(i == observationIndex && Keyboard.current != null && Keyboard.current.bKey.isPressed);
+                yield return null;
+            }
+            observationIndex++;
+        }
+        }
+        finally
+        {
+            foreach (var entry in savedLights) if (entry.Key != null) entry.Key.enabled = entry.Value;
+            if (targetMaterial != null) targetMaterial.color = savedColor;
+            if (view != null) { view.transform.SetPositionAndRotation(savedPosition, savedRotation); view.fieldOfView = savedFov; }
+            if (player != null) { player.canMove = couldMove; player.canLook = couldLook; player.SyncLookToCamera(); }
         }
 
         ShowLightingPracticeComplete();
@@ -1288,7 +1429,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("There's our three-point setup. Key gives shape, Fill softens the shadows, and Back catches the edge. Leave them there; we'll use this set for the camera test.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue(lightingObservationComplete, TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -1431,10 +1572,11 @@ public class GokeLevelManager : MonoBehaviour
         }
 
         currentStep = GokeLevelStep.OpenTechniquesAlmanac;
+        AlmanacManager.Instance.RequestTechniqueReviewHighlight();
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac", "- Open TECHNIQUES and review the new Level 2 guides" });
+            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac" });
         }
     }
 
@@ -1556,17 +1698,29 @@ public class GokeLevelManager : MonoBehaviour
             "[Left Click] Open the NONY FX Camera viewfinder",
             () => cameraPracticeViewOpen));
         steps.Add(new GuidedPracticeLesson.Step(
-            "Press F2 to open camera settings. Select Grid and press Right to turn it ON. Changes appear immediately. F2 closes settings.",
-            "[F2] Settings > Grid > ON",
+            "First, press F2 to open camera settings. We'll change one setting before returning to the viewfinder.",
+            "Press [F2] to OPEN camera settings",
+            () => { var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>(); return held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem camera && camera.SettingsOpen; }));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "With settings open, select Grid and press the RIGHT ARROW to turn it ON. The grid helps you place your subject.",
+            "Set GRID to ON with the RIGHT ARROW",
             () => { var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>(); return held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem camera && camera.GridEnabled; }));
         steps.Add(new GuidedPracticeLesson.Step(
-            "Place the product where two grid lines cross. Use <color=red>[Scroll]</color> for size and <color=red>[Q/E]</color> for height. Leave room beside it for a message.",
-            "Frame the product at a grid intersection and hold steady for 2 seconds",
-            () => hasCompletedRuleOfThirdsPractice, permission: "camera.frame"));
+            "Now press F2 again to CLOSE settings. This returns you to the clear viewfinder. Then we'll practise framing.",
+            "Press [F2] to CLOSE camera settings",
+            () => { var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>(); return held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem camera && camera.IsCameraViewActive() && !camera.SettingsOpen; }));
         steps.Add(new GuidedPracticeLesson.Step(
-            "Manual focus lets you choose what is sharp. Hold [ or ] to pull focus, or open F2 and use the arrow keys. AF-C remains available. Watch the product become sharp.",
-            "Adjust manual focus with [ / ] or F2 settings",
-            () => { var held = FindObjectOfType<Player.Interactor.EquipmentInteractor>(); return held != null && held.GetHeldItem() is Player.Equipment.FilmCameraItem camera && camera.ManualFocusPracticed; }));
+            "Place the subject on the LOWER-LEFT gold dot. Keep it fully visible. The space on the right is for your message.",
+            "Place the subject on the LOWER-LEFT crossing; leave space on the RIGHT",
+            () => thirdsPracticeStage >= 1, permission: "camera.frame"));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Good! Now frame the subject on the LOWER-RIGHT dot. Notice how your message space moves to the left.",
+            "Place the subject on the LOWER-RIGHT crossing; leave space on the LEFT",
+            () => thirdsPracticeStage >= 2, permission: "camera.frame"));
+        steps.Add(new GuidedPracticeLesson.Step(
+            "Turn Grid OFF in F2, then close settings. Frame the subject lower-right again, leaving message space on the left. The feedback will help.",
+            "Turn Grid OFF; frame the whole subject lower-right with message space on the LEFT",
+            () => hasCompletedRuleOfThirdsPractice, permission: "camera.frame"));
         practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
         {
             practiceLesson = null;
@@ -1602,7 +1756,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Use the three roles we practiced: Key shapes the can, a softer Fill controls shadows from the opposite side, and Back separates it from the set. Choose your own intensities; 75/40/60 was a practice example. Aim all three at the can and power them on.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Use your existing light to keep the subject readable. This job focuses on composition: leave space beside the subject and place your branding there. We'll learn three-point lighting with Better Lights in Level 3.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 
@@ -1695,7 +1849,7 @@ public class GokeLevelManager : MonoBehaviour
         lightingPracticeDirector = FindObjectOfType<DirectorTerminal>();
         if (lightingPracticeDirector != null)
         {
-            lightingPracticeWall = lightingPracticeDirector.CreatePracticeWall(new Color(150f / 255f, 0f, 0f, 1f));
+            lightingPracticeWall = lightingPracticeDirector.CreatePracticeWall(new Color(0.5f, 0.5f, 0.5f, 1f));
         }
         else if (tutorialManager != null)
         {
@@ -1757,7 +1911,7 @@ public class GokeLevelManager : MonoBehaviour
             if (targetRenderer.material.HasProperty("_Smoothness")) targetRenderer.material.SetFloat("_Smoothness", 0.55f);
         }
 
-        CreatePracticeLabel(targetRoot.transform, new Vector3(0f, 1.65f, 0f), "PRACTICE\nPRODUCT", Color.white);
+        CreatePracticeLabel(targetRoot.transform, new Vector3(0f, 1.65f, 0f), "PRACTICE\nSUBJECT", Color.black);
         return targetRoot.transform;
     }
 
@@ -1842,15 +1996,9 @@ public class GokeLevelManager : MonoBehaviour
     private void CleanUpStudio()
     {
         DirectorTerminal stageManager = FindObjectOfType<DirectorTerminal>();
-        if (stageManager != null) stageManager.ClearStage();
+        if (stageManager != null) stageManager.ClearAllProps();
 
-        foreach (GameObject obj in FindObjectsOfType<GameObject>())
-        {
-            if (obj.name.Contains("Cube") || obj.name.Contains("Flower") || obj.name.Contains("Floral") || obj.name.Contains("Cola"))
-            {
-                Destroy(obj);
-            }
-        }
+        // Keep the purchased backdrop; only remove the previous contract's props.
+        // imported studio windows and fixtures also use names such as Cube.001.
     }
 }
-

@@ -92,7 +92,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
             hasPlayerStateSnapshot = true;
         }
 
-        if (computerUICanvas != null) computerUICanvas.SetActive(true);
+        UITransition.Show(computerUICanvas);
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         UpdateUI();

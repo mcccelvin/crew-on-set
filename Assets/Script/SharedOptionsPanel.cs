@@ -111,11 +111,14 @@ public sealed class SharedOptionsPanel
     }
     public void Open()
     {
+        PauseManager.PutOverlayOnTop(root, 30010);
         sensitivity=GameOptions.MouseSensitivityMultiplier;volume=PlayerPrefs.GetFloat("Options.MasterVolume",1);
         sfxVolume=GameOptions.SfxVolume;musicVolume=GameOptions.MusicVolume;
         fullscreen=Application.isEditor ? PlayerPrefs.GetInt(GameOptions.FullscreenKey,1)==1 : Screen.fullScreen;
         quality=GameOptions.SavedQualityPreset;
-        fps=PlayerPrefs.GetInt("Options.FPS",60);section=0;root.SetActive(true);Refresh();Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
+        fps=PlayerPrefs.GetInt("Options.FPS",60);section=0;UITransition.Show(root);Refresh();
+        if (frame != null) UITransition.ConfigurePanel(frame.gameObject);
+        Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
     }
     public void Close(bool save)
     {
@@ -134,7 +137,7 @@ public sealed class SharedOptionsPanel
     {
         for(int i=0;i<3;i++)
         {
-            layout.pages[i].SetActive(i==section);
+            UITransition.SetVisible(layout.pages[i],i==section);
             var image=tabs[i].GetComponent<Image>();ExportUIArt.Apply(image,i==section?"settingsTabSelected":"settingsTab");
             image.color=i==section?Color.white:new Color(.65f,.65f,.65f);
         }

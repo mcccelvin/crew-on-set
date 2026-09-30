@@ -22,6 +22,6 @@ public class SceneController : MonoBehaviour
             GameSaveManager.Ensure().OpenMenu();
             return;
         }
-        SceneManager.LoadScene(scene);
+        LoadingScreenController.LoadScene(scene);
     }
 }

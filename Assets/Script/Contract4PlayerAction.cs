@@ -25,6 +25,9 @@ public sealed class Contract4PlayerAction : MonoBehaviour
     private bool productKinematic;
     private float elapsed;
     private bool holdingProduct;
+    private bool approachingChair, leavingChair;
+    private Vector3 chairPosition;
+    private Quaternion chairRotation;
     private CampaignProduct claimedProduct;
     private readonly CoffeeCharacterMotion coffeeMotion = new CoffeeCharacterMotion();
     public bool IsActive => target != null;
@@ -93,11 +96,15 @@ public sealed class Contract4PlayerAction : MonoBehaviour
         {
             var center = item.SeatPosition;
             if (item.seatAnchor != null) transform.rotation = item.seatAnchor.rotation;
-            transform.position = new Vector3(center.x, returnPosition.y, center.z);
+            chairPosition = new Vector3(center.x, returnPosition.y, center.z);
+            chairRotation = transform.rotation;
+            transform.rotation = returnRotation;
+            approachingChair = true;
+            leavingChair = false;
             if (controller != null) controller.SyncLookToCamera();
         }
         GameFeedback.Show(item.action == Contract4Interactable.Action.Sit
-            ? "Seated. [E] or [G]: stand up." : "Using coffee machine... [E] or [G]: cancel.");
+            ? "Walking to chair. [E/G]: return to your starting position." : "Using coffee machine... [E] or [G]: cancel.");
     }
 
     private void SaveColliders(Collider[] values)
@@ -117,8 +124,38 @@ public sealed class Contract4PlayerAction : MonoBehaviour
     {
         if (handler == null || PauseManager.isPaused) return;
         if (target == null || !target.gameObject.activeInHierarchy || CampaignProgression.GetCurrentLevel() < 4)
-        { Finish(); return; }
+        { CompleteFinish(); return; }
         elapsed += Time.deltaTime;
+        if (approachingChair || leavingChair)
+        {
+            Vector3 destination = leavingChair ? returnPosition : chairPosition;
+            Vector3 direction = destination - transform.position;
+            direction.y = 0f;
+            if (direction.sqrMagnitude > .0025f)
+            {
+                transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                    Quaternion.LookRotation(direction), 360f * Time.deltaTime);
+                transform.position = Vector3.MoveTowards(transform.position, destination, 1.2f * Time.deltaTime);
+                rig.transform.localPosition = visualPosition;
+                if (cameraTransform != null) cameraTransform.localPosition = cameraPosition;
+                handler.GetHumanPose(ref pose);
+                float stride = Mathf.Sin(elapsed * 9f);
+                Muscle("Left Upper Leg Front-Back", stride * .35f, 1f);
+                Muscle("Right Upper Leg Front-Back", -stride * .35f, 1f);
+                Muscle("Left Lower Leg Stretch", -.2f - Mathf.Max(0f, -stride) * .4f, 1f);
+                Muscle("Right Lower Leg Stretch", -.2f - Mathf.Max(0f, stride) * .4f, 1f);
+                Muscle("Left Arm Front-Back", -stride * .2f, 1f);
+                Muscle("Right Arm Front-Back", stride * .2f, 1f);
+                handler.SetHumanPose(ref pose);
+                return;
+            }
+            if (leavingChair) { CompleteFinish(); return; }
+            approachingChair = false;
+            transform.SetPositionAndRotation(chairPosition, chairRotation);
+            controller?.SyncLookToCamera();
+            elapsed = 0f;
+            GameFeedback.Show("Seated. [E/G]: walk back to your starting position.");
+        }
         float weight = Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / .4f));
         rig.transform.localPosition = visualPosition;
         handler.GetHumanPose(ref pose);
@@ -159,7 +196,24 @@ public sealed class Contract4PlayerAction : MonoBehaviour
 
     public void Finish()
     {
+        if (handler == null || leavingChair) return;
+        if (isActiveAndEnabled && target != null && target.action == Contract4Interactable.Action.Sit)
+        {
+            approachingChair = false;
+            leavingChair = true;
+            elapsed = 0f;
+            if (rig != null) rig.transform.localPosition = visualPosition;
+            if (cameraTransform != null) cameraTransform.localPosition = cameraPosition;
+            GameFeedback.Show("Standing up and returning to your starting position.");
+            return;
+        }
+        CompleteFinish();
+    }
+
+    private void CompleteFinish()
+    {
         if (handler == null) return;
+        approachingChair = leavingChair = false;
         coffeeMotion.Reset();
         CoffeeActionAudio.End(gameObject);
         if (holdingProduct && target != null) GameplayAudioManager.Play("Mug on Table");
@@ -183,6 +237,7 @@ public sealed class Contract4PlayerAction : MonoBehaviour
             {
                 controller.StationaryAction = wasStationary;
                 controller.enabled = controllerEnabled;
+                controller.SyncLookToCamera();
             }
         }
         if (rig != null) rig.transform.localPosition = visualPosition;
@@ -192,5 +247,5 @@ public sealed class Contract4PlayerAction : MonoBehaviour
         claimedProduct = null;
         handler.Dispose(); handler = null; target = null;
     }
-    private void OnDisable() { Finish(); }
+    private void OnDisable() { CompleteFinish(); }
 }

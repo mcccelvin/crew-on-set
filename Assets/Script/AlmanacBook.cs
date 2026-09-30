@@ -7,7 +7,7 @@ public partial class AlmanacManager
 {
     [SerializeField] private TextMeshProUGUI bookEntryTitle,bookLeftText,bookRightText,bookHeading,bookPageNumber;
     [SerializeField] private Button bookPrevious,bookNext,bookVideo;
-    private int bookPage,bookCategory;
+    private int bookPage,bookCategory = -1;
     private readonly List<string> bookBodies=new List<string>();
     private readonly List<KnowledgeEntry> bookEntries=new List<KnowledgeEntry>();
     private static readonly string[] BookCategories={"DIRECTOR","LIGHTING","AUDIO","CAMERA","EDITING"};
@@ -15,6 +15,12 @@ public partial class AlmanacManager
     private int navigationStep = -1;
     private const string NavigationLessonKey = "AlmanacGuideShown";
     private const int NavigationLessonVersion = 2;
+    private bool navigationLessonRequested;
+    public void RequestNavigationLesson()
+    {
+        // Replay for an explicit tutorial introduction without erasing saved progress.
+        navigationLessonRequested = true;
+    }
     public bool IsNavigationLessonActive => navigationStep >= 0;
     private TutorialUIManager navigationUI;
     private Canvas navigationCanvas;
@@ -36,6 +42,50 @@ public partial class AlmanacManager
     private int navigationHighlightOrder;
     private bool navigationHighlightOverride;
     private GameObject navigationTaskPanel;
+    private bool techniqueReviewRequested;
+    private Canvas techniqueHighlightCanvas;
+    private int techniqueHighlightOrder;
+    private bool techniqueHighlightOverride, techniqueHighlightOwned;
+
+    public void RequestTechniqueReviewHighlight()
+    {
+        techniqueReviewRequested = true;
+    }
+
+    private void UpdateTechniqueReviewHighlight()
+    {
+        bool show = techniqueReviewRequested && isAlmanacOpen && navigationStep < 0 && knowledgeCategoryFilter != 2;
+        if (!show)
+        {
+            if (techniqueHighlightOwned)
+            {
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
+                if (techniqueHighlightCanvas != null)
+                {
+                    techniqueHighlightCanvas.sortingOrder = techniqueHighlightOrder;
+                    techniqueHighlightCanvas.overrideSorting = techniqueHighlightOverride;
+                }
+                techniqueHighlightOwned = false;
+            }
+            if (isAlmanacOpen && navigationStep < 0 && knowledgeCategoryFilter == 2) techniqueReviewRequested = false;
+            return;
+        }
+        if (techniquesKnowledgeButton == null || TutorialHighlighter.Instance == null) return;
+        if (!techniqueHighlightOwned)
+        {
+            techniqueHighlightCanvas = TutorialHighlighter.Instance.GetComponentInParent<Canvas>();
+            if (techniqueHighlightCanvas != null)
+            {
+                techniqueHighlightOrder = techniqueHighlightCanvas.sortingOrder;
+                techniqueHighlightOverride = techniqueHighlightCanvas.overrideSorting;
+                techniqueHighlightCanvas.overrideSorting = true;
+                var bookCanvas = almanacCanvas.GetComponent<Canvas>();
+                techniqueHighlightCanvas.sortingOrder = bookCanvas != null ? bookCanvas.sortingOrder + 1 : 61;
+            }
+            techniqueHighlightOwned = true;
+            TutorialHighlighter.Instance.HighlightElement(techniquesKnowledgeButton.GetComponent<RectTransform>());
+        }
+    }
     private TextMeshProUGUI navigationTaskText;
     private static readonly string[] NavigationTasks = {
         "Click EQUIPMENTS above the book",
@@ -126,10 +176,11 @@ public partial class AlmanacManager
     private void UpdateNavigationLesson()
     {
         if (navigationStep >= 0 && DevTutorialBypass.Disabled) { EndNavigationLesson(); return; }
-        var keyboard = UnityEngine.InputSystem.Keyboard.current;
         if (!isAlmanacOpen || !navigationAwaitingSpace || navigationUI == null ||
-            PauseManager.isPaused || !Application.isFocused || keyboard == null ||
-            !keyboard.spaceKey.wasPressedThisFrame || !navigationUI.CanAdvanceBossDialogue()) return;
+            PauseManager.isPaused || !Application.isFocused ||
+            !TutorialUIManager.BossContinuePressed) return;
+        if (navigationUI.TryAdvanceBossDialoguePage()) return;
+        if (!navigationUI.CanAdvanceBossDialogue()) return;
         navigationAwaitingSpace = false;
         navigationUI.HideBossDialogue();
         if (navigationStep >= 4) { EndNavigationLesson(); return; }
@@ -141,21 +192,51 @@ public partial class AlmanacManager
     {
         if (navigationTaskPanel == null)
         {
-            navigationTaskPanel = CreatePanel("Almanac tutorial task", almanacCanvas.transform, new Color(0, 0, 0, .75f));
+            var rows = navigationUI != null ? navigationUI.taskRows : null;
+            var sourceRow = rows != null && rows.Length > 0 ? rows[0] : null;
+            var sourceRect = sourceRow != null && sourceRow.rowContainer != null
+                ? sourceRow.rowContainer.transform as RectTransform : null;
+            var sourceImage = sourceRect != null ? sourceRect.GetComponent<Image>() : null;
+            navigationTaskPanel = CreatePanel("Almanac tutorial task",
+                sourceRect != null ? sourceRect.parent : almanacCanvas.transform,
+                sourceImage != null ? sourceImage.color : new Color(0, 0, 0, .2f));
             navigationTaskPanel.GetComponent<Image>().raycastTarget = false;
             var rect = navigationTaskPanel.GetComponent<RectTransform>();
             rect.pivot = new Vector2(0, 1);
             SetRect(rect, new Vector2(0, 1), new Vector2(0, 1), new Vector2(20, -135), new Vector2(330, 90));
+            if (sourceRect != null)
+            {
+                rect.anchorMin = sourceRect.anchorMin;
+                rect.anchorMax = sourceRect.anchorMax;
+                rect.pivot = sourceRect.pivot;
+                rect.sizeDelta = sourceRect.sizeDelta;
+                rect.anchoredPosition = sourceRect.anchoredPosition;
+                rect.localScale = sourceRect.localScale;
+            }
             var canvas = navigationTaskPanel.AddComponent<Canvas>();
             canvas.overrideSorting = true;
             var bookCanvas = almanacCanvas.GetComponent<Canvas>();
             canvas.sortingLayerID = bookCanvas != null ? bookCanvas.sortingLayerID : 0;
             canvas.sortingOrder = bookCanvas != null ? bookCanvas.sortingOrder + 2 : 62;
-            navigationTaskText = CreateText("Instruction", navigationTaskPanel.transform, "", 24, TextAlignmentOptions.MidlineLeft);
+            navigationTaskText = CreateText("Instruction", navigationTaskPanel.transform, "", 20, TextAlignmentOptions.MidlineLeft);
             navigationTaskText.color = Color.white;
-            SetStretchRect(navigationTaskText.rectTransform, Vector2.zero, Vector2.one, new Vector2(12, 8), new Vector2(-12, -8));
+            var font = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+            if (font != null) navigationTaskText.font = font;
+            navigationTaskText.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+            navigationTaskText.enableAutoSizing = false;
+            navigationTaskText.enableWordWrapping = true;
+            navigationTaskText.overflowMode = TextOverflowModes.Overflow;
+            navigationTaskText.raycastTarget = false;
+            navigationTaskText.characterSpacing = 0;
+            SetStretchRect(navigationTaskText.rectTransform, Vector2.zero, Vector2.one, new Vector2(4, 6), new Vector2(-4, -6));
         }
         navigationTaskText.text = NavigationTasks[navigationStep];
+        var taskRect = navigationTaskPanel.GetComponent<RectTransform>();
+        float previousHeight = taskRect.rect.height;
+        float height = Mathf.Max(36f, navigationTaskText.GetPreferredValues(
+            navigationTaskText.text, Mathf.Max(1f, taskRect.rect.width - 8f), Mathf.Infinity).y + 12f);
+        taskRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+        taskRect.anchoredPosition += Vector2.down * ((height - previousHeight) * (1f - taskRect.pivot.y));
         navigationTaskPanel.SetActive(true);
     }
 
@@ -163,7 +244,9 @@ public partial class AlmanacManager
     {
         var ui = TutorialUIManager.Instance;
         if (DevTutorialBypass.Disabled || ui == null || ui.bossHUDCanvas == null ||
-            GameSavePrefs.GetInt(NavigationLessonKey, 0) >= NavigationLessonVersion) return;
+            (!navigationLessonRequested && GameSavePrefs.GetInt(NavigationLessonKey, 0) >= NavigationLessonVersion)) return;
+
+        navigationLessonRequested = false;
 
         navigationUI = ui;
         navigationHighlighter = TutorialHighlighter.Instance;
@@ -209,14 +292,14 @@ public partial class AlmanacManager
         if (navigationUI == null || navigationStep < 0) return;
         string[] instructions = {
             "Welcome to your Almanac! Click EQUIPMENTS above the book. These pages explain what each tool does and its controls.",
-            "The ribbons on the right filter the book by subject. Let's try Lighting: after pressing Space, click the highlighted light ribbon.",
+            "The ribbons on the right filter the book by subject. Let's try Lighting. After our chat, click the highlighted light ribbon.",
             "Now click TECHNIQUES above the book. Equipment pages explain the tools; techniques teach you how and why to use them in your commercial.",
             "Click the right arrow to turn a page. The left arrow takes you back, and the page number tells you where you are.",
             "You've got it! Read at your own pace. Press P or the red X to close. You can reopen the Almanac with P whenever you need a reminder."
         };
         navigationAwaitingSpace = true;
         SetNavigationFocus(null, false);
-        navigationUI.ShowBossDialogue(instructions[Mathf.Min(navigationStep, 4)] + "\n\nPress [SPACE] to continue.", navigationUI.poseOpenHand, true, false);
+        navigationUI.ShowBossDialogue(instructions[Mathf.Min(navigationStep, 4)], navigationUI.poseOpenHand, true, false);
     }
 
     private void EndNavigationLesson()
@@ -257,15 +340,16 @@ public partial class AlmanacManager
         boundBookCanvas = almanacCanvas;
         bookPrevious.onClick.AddListener(() => TurnBookPage(-1));
         bookNext.onClick.AddListener(() => TurnBookPage(1));
-        bookVideo.onClick.AddListener(ShowRuleOfThirdsGuide);
-        equipmentKnowledgeButton.onClick.AddListener(() => { bookPage=0; bookCategory=0; ShowEquipmentKnowledge(); NavigationAction(0); });
-        techniquesKnowledgeButton.onClick.AddListener(() => { bookPage=0; bookCategory=0; ShowTechniqueKnowledge(); NavigationAction(2); });
+        if (bookVideo != null) bookVideo.gameObject.SetActive(false);
+        equipmentKnowledgeButton.onClick.AddListener(() => AnimateBookSelection(equipmentKnowledgeButton, true, () => { bookPage=0; bookCategory=-1; ShowEquipmentKnowledge(); NavigationAction(0); }));
+        techniquesKnowledgeButton.onClick.AddListener(() => AnimateBookSelection(techniquesKnowledgeButton, true, () => { bookPage=0; bookCategory=-1; ShowTechniqueKnowledge(); NavigationAction(2); }));
         var book = equipmentKnowledgeButton.transform.parent;
         for (int i=0;i<BookCategories.Length;i++)
         {
             int category=i;
-            book.Find("Category " + BookCategories[i]).GetComponent<Button>().onClick.AddListener(() =>
-            { bookCategory=category; bookPage=0; OpenTab(1); RefreshBookPage(); if (category == 1) NavigationAction(1); });
+            var bookmark = book.Find("Category " + BookCategories[i]).GetComponent<Button>();
+            bookmark.onClick.AddListener(() => AnimateBookSelection(bookmark, false, () =>
+            { bookCategory=category; bookPage=0; OpenTab(1); RefreshBookPage(); if (category == 1) NavigationAction(1); }));
         }
         if (techniqueGuidePanel != null && ruleOfThirdsGuidePlayer != null)
         {
@@ -278,6 +362,8 @@ public partial class AlmanacManager
     public void BakeHierarchyUI()
     {
         BuildIllustratedBook();
+        EnsureIllustrationNote();
+        BuildProfileUI();
         SetNavigationFocus(bookNext);
         ClearNavigationFocus();
         almanacCanvas.SetActive(false);
@@ -322,13 +408,11 @@ public partial class AlmanacManager
         bookLeftText.alignment=TextAlignmentOptions.Center;bookLeftText.fontStyle=FontStyles.Bold;
         bookRightText.alignment=TextAlignmentOptions.TopLeft;
         bookPageNumber=BookText(knowledgePanel.transform,"Page number",new Vector2(360,-365),new Vector2(500,35),20);
-        bookVideo=BookButton(knowledgePanel.transform,"Watch guide","WATCH GUIDE","blueButton",new Vector2(-360,-357),new Vector2(270,52));
+        // The Almanac uses illustrated notes; no Watch Guide button is created.
 
         // Preserve profile, milestones and the interactive guide without crowding the two main tabs.
         var other=CreatePanel("Other book pages",root.transform,Color.clear);SetStretchRect(other.GetComponent<RectTransform>(),Vector2.zero,Vector2.one,new Vector2(95,70),new Vector2(-95,-100));
         BuildPlayerInfoPanel(other.transform);BuildAchievementsPanel(other.transform);
-        playerInfoTabBtn=BookButton(root.transform,"Director record","DIRECTOR RECORD","psdTab",new Vector2(-490,-413),new Vector2(230,40));
-        achievementsTabBtn=BookButton(root.transform,"Milestones","MILESTONES","psdTab",new Vector2(-235,-413),new Vector2(230,40));
         BuildTechniqueGuidePanel();
         other.GetComponent<Image>().raycastTarget=false;
 
@@ -350,11 +434,52 @@ public partial class AlmanacManager
         var text=CreateText(name,parent,"",font,TextAlignmentOptions.Center);SetRect(text.rectTransform,Vector2.one*.5f,Vector2.one*.5f,position,size);text.color=new Color(.08f,.065f,.04f);text.enableAutoSizing=true;text.fontSizeMin=20;text.fontSizeMax=font;return text;
     }
     private Coroutine pageTurn;
+    private bool bookSelectionAnimating;
+    private bool finishingBookClose;
+
+    private System.Collections.IEnumerator AnimateBookClose()
+    {
+        yield return FlipBookStack(1, () => { }, false, 1, .45f);
+        finishingBookClose = true;
+        ToggleAlmanac();
+        finishingBookClose = false;
+    }
+
+    private void AnimateBookSelection(Button button, bool newBook, System.Action select)
+    {
+        if (bookSelectionAnimating || !isAlmanacOpen) return;
+        CancelPageTurn();
+        StartCoroutine(FlipBookStack(1, select, false, 1, .45f));
+    }
+
     private GameObject turningPaper;
     private bool applyingPageTurn;
+    private readonly System.Collections.Generic.Dictionary<TextMeshProUGUI, bool> turningTextVisibility = new System.Collections.Generic.Dictionary<TextMeshProUGUI, bool>();
+
+    private void RestoreTurningText()
+    {
+        foreach (var entry in turningTextVisibility)
+            if (entry.Key != null) entry.Key.enabled = entry.Value;
+        turningTextVisibility.Clear();
+        RestoreIllustrationAfterTurn();
+    }
+
+    private void CopyWholePage(Transform paper, bool leftPage)
+    {
+        RestoreTurningText();
+        CopyIllustrationForTurn(paper, leftPage);
+        foreach (var text in leftPage ? new[] { bookHeading, bookEntryTitle, bookLeftText } : new[] { bookRightText, bookPageNumber })
+        {
+            if (text == null) continue;
+            CopyTurningText(text, paper);
+            turningTextVisibility[text] = text.enabled;
+            text.enabled = false;
+        }
+    }
 
     private void CancelPageTurn()
     {
+        RestoreTurningText();
         if (pageTurn != null) StopCoroutine(pageTurn);
         pageTurn = null;
         if (turningPaper != null)
@@ -367,10 +492,26 @@ public partial class AlmanacManager
 
     private void TurnBookPage(int direction)
     {
-        if (pageTurn != null || !isAlmanacOpen) return;
+        if (pageTurn != null || bookSelectionAnimating || !isAlmanacOpen) return;
         int next = bookPage + direction;
         if (next < 0 || next >= bookBodies.Count) return;
-        pageTurn = StartCoroutine(AnimateBookPage(direction, next));
+        StartCoroutine(FlipBookStack(direction, () => bookPage = next, true, 1, .45f));
+    }
+
+    private System.Collections.IEnumerator FlipBookStack(int direction, System.Action select, bool notify = true, int turns = 5, float turnDuration = .18f)
+    {
+        bookSelectionAnimating = true;
+        try
+        {
+            for (int i = 0; i < turns && isAlmanacOpen; i++)
+                yield return AnimateBookPage(direction, bookPage, turnDuration, i == turns - 1 ? select : null, false);
+            if (isAlmanacOpen && notify && direction > 0) NavigationAction(3);
+        }
+        finally
+        {
+            CancelPageTurn();
+            bookSelectionAnimating = false;
+        }
     }
 
     private void CopyTurningText(TextMeshProUGUI source, Transform paper)
@@ -380,33 +521,32 @@ public partial class AlmanacManager
         copy.raycastTarget = false;
     }
 
-    private System.Collections.IEnumerator AnimateBookPage(int direction, int next)
+    private System.Collections.IEnumerator AnimateBookPage(int direction, int next, float turnDuration = 1.1f, System.Action select = null, bool notify = true)
     {
-        // Keep the illustrated cover and rings still; only the paper turns.
-        turningPaper = CreatePanel("Turning Almanac page", knowledgePanel.transform, new Color32(238, 207, 151, 255));
+        // Original spine-hinged turn, using the book's own illustrated paper.
+        turningPaper = new GameObject("Turning Almanac leaf", typeof(RectTransform), typeof(AlmanacRoundedPage));
+        turningPaper.transform.SetParent(knowledgePanel.transform, false);
         var paper = turningPaper.GetComponent<RectTransform>();
         paper.anchorMin = paper.anchorMax = Vector2.one * .5f;
         paper.pivot = new Vector2(direction > 0 ? 0 : 1, .5f);
-        paper.anchoredPosition = new Vector2(0, 10);
-        paper.sizeDelta = new Vector2(665, 815);
-        var image = turningPaper.GetComponent<Image>();
-        image.raycastTarget = false;
+        paper.anchoredPosition = new Vector2(0, 15);
+        paper.sizeDelta = new Vector2(705, 865);
+        var leaf = turningPaper.GetComponent<RawImage>();
+        var artwork = ExportUIArt.Get("psdBook");
+        if (artwork != null) leaf.texture = artwork.texture;
+        leaf.uvRect = new Rect((direction > 0 ? 800f : 40f) / 1495f, 50f / 937f, 650f / 1495f, 865f / 937f);
+        leaf.raycastTarget = false;
         var shadow = turningPaper.AddComponent<Shadow>();
-        shadow.effectColor = new Color(0, 0, 0, .22f);
-        shadow.effectDistance = new Vector2(-direction * 14, -3);
-        if (direction > 0) CopyTurningText(bookRightText, paper);
-        else
-        {
-            CopyTurningText(bookHeading, paper);
-            CopyTurningText(bookEntryTitle, paper);
-            CopyTurningText(bookLeftText, paper);
-        }
+        shadow.effectColor = Color.clear;
+        shadow.effectDistance = Vector2.zero;
+        CopyWholePage(paper, direction < 0);
         bookPrevious.interactable = bookNext.interactable = false;
         bool swapped = false;
         float elapsed = 0f;
-        while (elapsed < .42f && isAlmanacOpen && knowledgePanel != null && knowledgePanel.activeInHierarchy)
+        while (elapsed < turnDuration && isAlmanacOpen && knowledgePanel != null && knowledgePanel.activeInHierarchy)
         {
-            float progress = Mathf.SmoothStep(0f, 1f, elapsed / .42f);
+            float t = Mathf.Clamp01(elapsed / turnDuration);
+            float progress = .5f - .5f * Mathf.Cos(t * Mathf.PI);
             if (!swapped && progress >= .5f)
             {
                 // Replace content while the leaf is edge-on, avoiding mirrored text.
@@ -415,23 +555,22 @@ public partial class AlmanacManager
                 foreach (Transform child in paper) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
                 bookPage = next;
                 applyingPageTurn = true;
+                if (select != null) { select(); next = bookPage; }
                 RefreshBookPage();
                 applyingPageTurn = false;
                 paper.pivot = new Vector2(direction > 0 ? 1 : 0, .5f);
-                if (direction > 0)
-                {
-                    CopyTurningText(bookHeading, paper);
-                    CopyTurningText(bookEntryTitle, paper);
-                    CopyTurningText(bookLeftText, paper);
-                }
-                else CopyTurningText(bookRightText, paper);
+                leaf.uvRect = new Rect((direction > 0 ? 40f : 800f) / 1495f, 50f / 937f, 650f / 1495f, 865f / 937f);
+                CopyWholePage(paper, direction > 0);
                 swapped = true;
                 bookPrevious.interactable = bookNext.interactable = false;
             }
             float lift = Mathf.Sin(progress * Mathf.PI);
-            paper.localScale = new Vector3(Mathf.Max(.015f, Mathf.Abs(Mathf.Cos(progress * Mathf.PI))), 1f + lift * .015f, 1f);
-            paper.localRotation = Quaternion.Euler(0, 0, direction * lift * (swapped ? -2f : 2f));
-            image.color = Color.Lerp(new Color32(238, 207, 151, 255), new Color32(186, 149, 97, 255), lift * .45f);
+            paper.localScale = new Vector3(Mathf.Max(.001f, Mathf.Abs(Mathf.Cos(progress * Mathf.PI))), 1f + lift * .008f, 1f);
+            // Continuous tilt crosses zero at the spine instead of snapping signs.
+            paper.localRotation = Quaternion.Euler(0, 0, direction * Mathf.Sin(progress * Mathf.PI * 2f) * .8f);
+            leaf.color = Color.Lerp(Color.white, new Color(.76f, .7f, .6f), lift * .45f);
+            shadow.effectColor = new Color(0, 0, 0, .18f * lift);
+            shadow.effectDistance = new Vector2(direction * 20f * lift * Mathf.Cos(progress * Mathf.PI), -3f * lift);
             elapsed += Time.unscaledDeltaTime;
             yield return null;
         }
@@ -439,9 +578,61 @@ public partial class AlmanacManager
         pageTurn = null;
         if (turningPaper != null) { turningPaper.SetActive(false); Destroy(turningPaper); }
         turningPaper = null;
+        RestoreTurningText();
         if (completed) bookPage = next;
         if (bookEntryTitle != null) RefreshBookPage();
-        if (completed && direction > 0) NavigationAction(3);
+        if (completed && notify && direction > 0) NavigationAction(3);
+    }
+
+    // One owner per guide. Titles are editable and must not determine equipment ownership.
+    // General production/staging guides stay in All Guides, not the actor megaphone ribbon.
+    private static int GetKnowledgeRibbon(string id)
+    {
+        switch (id)
+        {
+            case "actor_megaphone":
+            case "hiring_and_posing_actors":
+            case "lifestyle_staging":
+                return 0; // Director / megaphone: actor performance only.
+
+            case "led_panel":
+            case "level_3_soft_light":
+            case "basic_product_lighting":
+            case "three_point_lighting":
+            case "soft_light_technique":
+            case "motivated_lighting":
+                return 1;
+
+            case "quiet_movement":
+                return 2; // Avoiding footstep noise on set.
+
+            case "nony_fx_camera":
+            case "sd_card":
+            case "camera_white_balance":
+            case "camera_exposure":
+            case "center_framing":
+            case "rule_of_thirds":
+            case "recording_workflow":
+            case "recording_technique":
+            case "automotive_staging":
+            case "vehicle_rim_lighting": // Legacy ID; this now teaches smooth camera movement.
+            case "shot_coverage":
+            case "visual_hierarchy":
+                return 3;
+
+            case "editing_computer":
+            case "post_production_workflow":
+            case "post_production_technique":
+            case "commercial_color_grading":
+            case "advertising_post_production":
+            case "screen_continuity": // Splitting and trimming timeline clips.
+            case "warm_commercial_grade":
+            case "quality_control":
+                return 4;
+
+            default:
+                return -1; // General or unclassified guides are available in All Guides only.
+        }
     }
 
     private void RefreshBookPage()
@@ -452,8 +643,7 @@ public partial class AlmanacManager
         {
             if(!entry.isUnlocked||stagedHiddenKnowledge.Contains(entry.id))continue;
             if(entry.category!=(knowledgeCategoryFilter==2?"Technique":"Equipment"))continue;
-            string content=(entry.id+" "+entry.title).ToLowerInvariant();
-            bool match=bookCategory==0 || bookCategory==1&&(content.Contains("light")||content.Contains("diffusion")) || bookCategory==2&&(content.Contains("audio")||content.Contains("sound")||content.Contains("music")) || bookCategory==3&&(content.Contains("camera")||content.Contains("shot")||content.Contains("framing")||content.Contains("thirds")) || bookCategory==4&&(content.Contains("edit")||content.Contains("trim")||content.Contains("color")||content.Contains("branding")||content.Contains("overlay"));
+            bool match=bookCategory<0 || GetKnowledgeRibbon(entry.id)==bookCategory;
             if(match)entries.Add(entry);
         }
         entries.Sort(CompareKnowledgeEntries);
@@ -464,13 +654,15 @@ public partial class AlmanacManager
         }
         bookPage=Mathf.Clamp(bookPage,0,Mathf.Max(0,bookBodies.Count-1));bookHeading.text=knowledgeCategoryFilter==2?"TECHNIQUES":"EQUIPMENTS";
         bookPrevious.interactable=bookPage>0;bookNext.interactable=bookPage+1<bookBodies.Count;
-        bookVideo.gameObject.SetActive(bookEntries.Count>0&&bookEntries[bookPage].id=="rule_of_thirds");
-        if(bookEntries.Count==0){bookEntryTitle.text=BookCategories[bookCategory];bookLeftText.text="Complete the matching lessons to unlock these pages.";bookRightText.text="Your equipment controls and techniques appear here as you learn them.";bookPageNumber.text="0 / 0";return;}
+        if (bookVideo != null) bookVideo.gameObject.SetActive(false);
+        if(bookEntries.Count==0){if(illustrationNote!=null)illustrationNote.gameObject.SetActive(false);bookLeftText.gameObject.SetActive(true);bookEntryTitle.text=(bookCategory < 0 ? "ALL GUIDES" : BookCategories[bookCategory]);bookLeftText.text="Complete the matching lessons to unlock these pages.";bookRightText.text="Your equipment controls and techniques appear here as you learn them.";bookPageNumber.text="0 / 0";return;}
         bookEntryTitle.text=bookEntries[bookPage].title;string body=bookBodies[bookPage];int cut=Mathf.Min(360,body.Length);
         int instructions=body.IndexOf("HOW TO USE",System.StringComparison.OrdinalIgnoreCase);
         if(instructions>0&&instructions<450)cut=instructions;
         else if(cut<body.Length){int paragraph=body.LastIndexOf('\n',cut-1,cut);if(paragraph>120)cut=paragraph;else {int space=body.LastIndexOf(' ',cut-1,cut);if(space>0)cut=space;}}
         bookLeftText.text=body.Substring(0,cut);bookRightText.text=body.Substring(cut).TrimStart();bookPageNumber.text=(bookPage+1)+" / "+bookBodies.Count;
+        ApplyIllustratedArticle(bookEntries[bookPage], body);
         UpdateKnowledgeFilterButtons();
     }
 }
+

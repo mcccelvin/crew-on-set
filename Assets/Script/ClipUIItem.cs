@@ -24,14 +24,28 @@ public class ClipUIItem : MonoBehaviour
             clipTitleText.text = Path.GetFileNameWithoutExtension(filePath);
         }
 
-        // --- THE FIX: Automatically link the Button so it never misses! ---
-        if (clipButton == null) clipButton = GetComponent<Button>();
-        if (clipButton == null) clipButton = GetComponentInChildren<Button>();
+        // Bind the thumbnail itself, never an arbitrary child (such as Delete).
+        // Replace serialized callbacks too: reused cards must only open their own file.
+        if (previewImage != null)
+        {
+            previewImage.raycastTarget = true;
+            clipButton = previewImage.GetComponent<Button>();
+            if (clipButton == null) clipButton = previewImage.gameObject.AddComponent<Button>();
+            clipButton.targetGraphic = previewImage;
+        }
+        else clipButton = GetComponent<Button>();
 
         if (clipButton != null)
         {
-            clipButton.onClick.RemoveListener(OnPlayButtonClicked);
+            clipButton.onClick = new Button.ButtonClickedEvent();
             clipButton.onClick.AddListener(OnPlayButtonClicked);
+            clipButton.interactable = true;
+        }
+        foreach (var button in GetComponentsInChildren<Button>(true))
+        {
+            if (button == clipButton || !button.name.Equals("Play", System.StringComparison.OrdinalIgnoreCase)) continue;
+            button.onClick = new Button.ButtonClickedEvent();
+            button.onClick.AddListener(OnPlayButtonClicked);
         }
 
         LoadThumbnail();
@@ -73,6 +87,11 @@ public class ClipUIItem : MonoBehaviour
 
     public void OnPlayButtonClicked()
     {
+        if (uiManager == null || string.IsNullOrEmpty(fullFilePath) || !File.Exists(fullFilePath))
+        {
+            GameFeedback.Show("This recording file is unavailable. Reinsert its SD card and try again.");
+            return;
+        }
         // --- NEW: Tutorial Bouncer and Event Trigger ---
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("VideoClip")) return;
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnVideoClipClicked();

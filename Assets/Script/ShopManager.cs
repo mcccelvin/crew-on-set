@@ -27,7 +27,7 @@ public class ShopManager : MonoBehaviour
         if (deliveryZone == null || equipmentPrefabs[itemIndex] == null || cost < 0) return;
 
         // 2. Check if the player has enough B coins in their CareerManager!
-        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(cost))
+        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(cost, PlayerAnalytics.EquipmentCategory(equipmentPrefabs[itemIndex].name), equipmentPrefabs[itemIndex].name))
         {
             // 3. Spawn the brand new equipment at the delivery zone
             GameObject boughtItem = Instantiate(equipmentPrefabs[itemIndex], deliveryZone.position, deliveryZone.rotation);
