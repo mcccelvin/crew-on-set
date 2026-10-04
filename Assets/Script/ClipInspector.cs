@@ -30,6 +30,12 @@ public class ClipInspector : MonoBehaviour
     private Texture2D previewTexture;
     private int totalRawFrames;
     private bool needsToLoad = false;
+    public void RefreshAfterUndo()
+    {
+        if (!gameObject.activeInHierarchy || currentClip == null || totalRawFrames <= 0) return;
+        UpdateHandlePositions();
+        if (frameReader != null) ShowFrame(currentClip.startFrame);
+    }
 
     private void Awake()
     {

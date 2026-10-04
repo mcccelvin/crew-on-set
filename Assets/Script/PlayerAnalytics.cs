@@ -18,6 +18,9 @@ public static class PlayerAnalytics
         public float pre, camera, lighting, post, score;
         public bool partial, closed, assisted;
         public string grade, date;
+        public string submissionId, playedUtc, nextStep, completionFeedback;
+        public ProductionBudgetReview budget;
+        public ProductionLogRecord productionLog;
         public List<Transaction> transactions = new List<Transaction>();
     }
     [Serializable] private class History
@@ -26,11 +29,12 @@ public static class PlayerAnalytics
         public List<Attempt> results = new List<Attempt>();
     }
     private static History Load()
+    { return Load(GameSavePrefs.GetInt(Key + ".Count", 0), key => GameSavePrefs.GetString(key, "")); }
+    private static History Load(int count, Func<string, string> read)
     {
         var json = new StringBuilder();
-        int count = GameSavePrefs.GetInt(Key + ".Count", 0);
-        for (int i = 0; i < count; i++) json.Append(GameSavePrefs.GetString(Key + "." + i, ""));
-        if (count == 0) json.Append(GameSavePrefs.GetString(Key, ""));
+        for (int i = 0; i < Mathf.Clamp(count, 0, 1500); i++) json.Append(read(Key + "." + i));
+        if (count == 0) json.Append(read(Key));
         try { return JsonUtility.FromJson<History>(json.ToString()) ?? new History(); }
         catch (ArgumentException) { return new History(); }
     }
@@ -56,6 +60,7 @@ public static class PlayerAnalytics
     }
     public static void Begin(int level, bool retry = false)
     {
+        CareerProfileProgress.Read();
         var data = Load();
         if (!retry && data.active != null && !data.active.closed && data.active.level == level) return;
         data.active = new Attempt { level = level, opening = GameSavePrefs.GetInt("PlayerMoney", 0) };
@@ -72,6 +77,7 @@ public static class PlayerAnalytics
     // Call before changing the balance, so a pre-existing career gets an honest opening snapshot.
     public static void TransactionMade(int amount, string category, string item)
     {
+        CareerProfileProgress.RecordTransaction(amount, category);
         var data = Load();
         var a = Ensure(data, CampaignProgression.GetCurrentLevel());
         if (a.transactions.Count >= 64) item = "Additional " + category;
@@ -85,8 +91,10 @@ public static class PlayerAnalytics
     {
         var data = Load(); Ensure(data, CampaignProgression.GetCurrentLevel()).failedPurchases++; Save(data);
     }
-    public static void TakeRecorded(int level)
+    public static void TakeRecorded(int level) { TakeRecorded(level, 0); }
+    public static void TakeRecorded(int level, float duration)
     {
+        CareerProfileProgress.RecordTake(duration);
         var data = Load(); Ensure(data, level).takes++; Save(data);
     }
     public static void CaptureScores(int level, float camera, float lighting)
@@ -124,26 +132,72 @@ public static class PlayerAnalytics
             s.AppendLine("You completed the brief and retained enough cash for at least one new SD card. Reuse your setup where possible.");
         else s.AppendLine("You completed the brief with little cash left. Plan consumables before your next purchase.");
         s.AppendLine("Budget feedback is coaching; spending less alone does not improve your technical grade.");
-        return s.ToString();
+        // The paper and cloud record share these exact totals from the existing ledger.
+        a.budget = new ProductionBudgetReview { available = true, complete = !a.partial && !a.assisted && (long)a.opening + income - spent == a.closing,
+            openingCash = a.opening, remainingCash = a.closing, income = income, amountSpent = spent, feedback = s.ToString() };
+        return a.budget.feedback;
     }
     public static string Complete(int level, ProductionGrades grades)
     {
         var data = Load();
-        if (data.active != null && data.active.closed && data.active.level == level) return BudgetReport(data.active);
+        if (data.active != null && data.active.closed && data.active.level == level)
+            return data.active.completionFeedback ?? BudgetReport(data.active);
         var a = Ensure(data, level);
         a.pre = grades.preProductionScore; a.post = grades.postProductionScore;
         a.score = (a.pre + grades.productionScore + a.post) / 3f;
         a.grade = grades.letterGrade; a.closing = GameSavePrefs.GetInt("PlayerMoney", 0);
-        a.date = DateTime.UtcNow.ToString("yyyy-MM-dd"); a.closed = true;
+        a.playedUtc = DateTime.UtcNow.ToString("o"); a.date = a.playedUtc.Substring(0, 10);
+        a.submissionId = Guid.NewGuid().ToString("N"); a.closed = true;
         Attempt previous = data.results.FindLast(x => x.level == level);
         string trend = previous == null ? "First tracked attempt." : $"Score change since your last attempt: {a.score - previous.score:+0.0;-0.0;0.0} points.";
+        CareerProfileProgress.RecordResult(a, grades.productionScore);
         data.results.Add(a);
         if (data.results.Count > 50) data.results.RemoveAt(0);
+        a.nextStep = NextStep(a.pre, grades.productionScore, a.post, a.camera, a.lighting);
+        a.completionFeedback = "<b>YOUR NEXT STEP</b>\n" + a.nextStep + "\n" + trend + $"\nRecorded takes: {a.takes}\n\n" + BudgetReport(a);
         Save(data);
-        string weakest = a.pre <= grades.productionScore && a.pre <= a.post ? "PRE-PRODUCTION: revisit the required set, product and actor setup."
-            : grades.productionScore <= a.post ? (a.camera / 70f <= a.lighting / 30f ? "CAMERA: reframe the required subjects and keep them visible throughout the take." : "LIGHTING: check power, aim and intensity before recording again.")
-            : "POST-PRODUCTION: correct the timing, branding and color issues listed in the detailed feedback.";
-        return "<b>YOUR NEXT STEP</b>\n" + weakest + "\n" + trend + $"\nRecorded takes: {a.takes}\n\n" + BudgetReport(a);
+        return a.completionFeedback;
+    }
+    // Same coaching used by the result papers; an uploader must not generate its own advice.
+    public static string NextStep(float pre, float production, float post, float camera, float lighting) =>
+        pre <= production && pre <= post ? "PRE-PRODUCTION: revisit the required set, product and actor setup."
+        : production <= post ? (camera / 70f <= lighting / 30f ? "CAMERA: reframe the required subjects and keep them visible throughout the take." : "LIGHTING: check power, aim and intensity before recording again.")
+        : "POST-PRODUCTION: correct the timing, branding and color issues listed in the detailed feedback.";
+
+    public static void SaveCompletedResult(int level, ProductionGrades grades)
+    {
+        if (GameSavePrefs.IsRoomSession) return;
+        var data = Load(); var a = data.active;
+        if (a == null || !a.closed || a.level != level || string.IsNullOrEmpty(a.submissionId)) return;
+        if (a.productionLog == null)
+        {
+            string playerId = UnityEngine.PlayerPrefs.GetString("PlayFabId", "");
+            if (playerId == "guest") playerId = "";
+            string careerId = GameSaveManager.Instance?.Active?.id ?? "";
+            a.productionLog = ProductionLogRecord.FromResult(a.submissionId, a.submissionId, careerId, playerId,
+                "singleplayer", new[] { "Director", "Camera", "AV Technician", "Editor" }, level, a.playedUtc, grades, a.budget, a.nextStep);
+            // active and results are independently deserialized instances after a scene change.
+            int index = data.results.FindLastIndex(r => r.submissionId == a.submissionId);
+            if (index >= 0) data.results[index] = a;
+            Save(data);
+        }
+        GameSaveManager.Ensure().RecordProduction(a.productionLog);
+    }
+    // A fresh deserialized snapshot; callers cannot mutate the stored analytics history.
+    public static List<Attempt> ProfileHistory()
+    {
+        var data = Load();
+        var result = data.results ?? new List<Attempt>();
+        if (data.active != null && !data.active.closed) result.Add(data.active);
+        return result;
+    }
+    public static List<Attempt> ProfileHistory(GameSaveSlot slot)
+    {
+        if (slot == null) return new List<Attempt>();
+        var data = Load(slot.Int(Key + ".Count", 0), key => slot.values.Find(v => v.key == key && v.kind == 2)?.text ?? "");
+        var result = data.results ?? new List<Attempt>();
+        if (data.active != null && !data.active.closed) result.Add(data.active);
+        return result;
     }
     public static string Summary()
     {

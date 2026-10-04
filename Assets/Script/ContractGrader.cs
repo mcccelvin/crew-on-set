@@ -10,9 +10,13 @@ public class ContractGrader : MonoBehaviour
         // Grade the contract that opened this editor, not progression changed by a result callback.
         int currentLevel = EditorManager.Instance != null && EditorManager.Instance.EditingLevel >= 1
             ? EditorManager.Instance.EditingLevel : CampaignProgression.GetCurrentLevel();
-        CrossSceneData.submittedLevel = currentLevel;
-        CrossSceneData.resultApplied = false;
-        PlayerAnalytics.CaptureScores(currentLevel, avgCam, avgLight);
+        if (EditorManager.Instance == null || !EditorManager.Instance.IsRoomEditor)
+        {
+            CrossSceneData.submittedLevel = currentLevel;
+            CrossSceneData.resultApplied = false;
+            CrossSceneData.submittedWithTutorial = false;
+            PlayerAnalytics.CaptureScores(currentLevel, avgCam, avgLight);
+        }
 
         if (currentLevel == 1) return GradeLevel1(avgCam, avgLight, totalSeconds);
         if (currentLevel == 2) return GradeLevel2(avgCam, avgLight, totalSeconds);
@@ -194,12 +198,28 @@ public class ContractGrader : MonoBehaviour
         var story = CoffeeStoryRules.Evaluate(editor != null ? editor.timelineContainer : null,
             editor != null ? editor.pixelsPerSecond : 40f);
         float post = 100f;
-        feedback += "<color=white><b>--- COFFEE STORY EDIT ---</b></color>\n";
-        if (!story.beats) { post -= 40f; feedback += "- Include a product-and-packaging overview and a coffee-shop shot of an actor using the coffee. Keep each required shot at least 2 seconds.\n"; }
-        else feedback += "+ Product overview and actor coffee use are shown.\n";
-        if (!story.continuous) { post -= 20f; feedback += "- Join clips from 0s without gaps or overlaps; keep each segment at least 2 seconds.\n"; }
-        if (!story.duration) { post -= 20f; feedback += "- Deliver a 30–45-second commercial.\n"; }
-        if (!story.brand) { post -= 20f; feedback += "- Remove overlays for this contract.\n"; }
+        AddProductionFeedback(GameLevel.Level4, avgCam, avgLight, ref feedback);
+        feedback += "<color=white><b>--- POST-PRODUCTION ---</b></color>\nCOFFEE COMMERCIAL CHECKLIST\n";
+        if (!story.beats)
+        {
+            post -= 40f;
+            if (!story.overview) feedback += "<color=red>- REQUIRED: Add a valid Level 4 Product Overview take lasting at least 2s, with the complete cup and packaging visible throughout the original recording.</color>\n";
+            if (!story.coffeeUse) feedback += "<color=red>- REQUIRED: Add a valid Level 4 Coffee Use take lasting at least 2s. Record the full actor and cup in the coffee shop while drinking (Action) or Using Machine. A wave or seated rest does not count.</color>\n";
+            if (story.overview && story.coffeeUse) feedback += "<color=red>- REQUIRED ORDER: Move the Product Overview before the Coffee Use take.</color>\n";
+            if (story.invalidEvidence > 0) feedback += "Retake mixed/incomplete recordings: set the action before recording and keep all required subjects visible until recording stops. Trimming does not repair the original take's saved evidence.\n";
+        }
+        else feedback += "+ Product Overview appears before Coffee Use; both required takes have valid evidence.\n";
+        if (!story.continuous)
+        {
+            post -= 20f;
+            feedback += "<color=red>- REQUIRED: Start the first clip at 0s and join all clips without gaps or overlaps. Keep trims inside the original source recording.</color>\n";
+            if (story.shortSegments > 0) feedback += $"<color=red>- {story.shortSegments} segment(s) are below {CoffeeStoryRules.MinimumSegmentSeconds:0}s. Lengthen, remove or undo these cuts; the minimum applies to EVERY segment, including split pieces.</color>\n";
+        }
+        else feedback += "+ Continuous timeline from 0s; every segment is at least 2s.\n";
+        if (!story.duration) { post -= 20f; feedback += $"<color=red>- REQUIRED LENGTH: {CoffeeStoryRules.MinimumSeconds:0}-{CoffeeStoryRules.MaximumSeconds:0}s. Your timeline ends at {story.seconds:F2}s.</color>\n"; }
+        else feedback += $"+ Final duration {story.seconds:F2}s meets the 30-45s brief.\n";
+        if (!story.brand) { post -= 20f; feedback += "<color=red>- REQUIRED: Remove every logo, tagline and other overlay from the timeline for this contract.</color>\n"; }
+        else feedback += "+ No overlays on the timeline.\n";
         feedback += "Shot sizes, set color, light model, music, transitions and color grade are creative choices, not repeated checklist requirements.\n";
         bool complete = IsRequiredSetupComplete() && story.beats && story.continuous && story.duration && story.brand;
         return CompileFinalGrade(pre, prod, post, avgCam, avgLight, feedback, ProductionEconomy.CompletionBonus(4), complete);
@@ -302,6 +322,8 @@ public class ContractGrader : MonoBehaviour
     private float GetPreProductionScore(out string feedback)
     {
         feedback = "";
+        if (EditorManager.Instance != null && EditorManager.Instance.IsRoomEditor)
+            return MultiplayerContractManager.PreProduction(MultiplayerRoleManager.Instance.State, out feedback);
         if (ProjectDataManager.Instance == null) return 100f;
 
         feedback = ProjectDataManager.Instance.savedPreProdFeedback;
@@ -315,6 +337,11 @@ public class ContractGrader : MonoBehaviour
 
     private bool IsRequiredSetupComplete()
     {
+        if (EditorManager.Instance != null && EditorManager.Instance.IsRoomEditor)
+        {
+            MultiplayerContractManager.PreProduction(MultiplayerRoleManager.Instance.State, out _, out bool complete);
+            return complete;
+        }
         return ProjectDataManager.Instance != null && ProjectDataManager.Instance.savedRequiredSetupMet;
     }
 
@@ -345,7 +372,7 @@ public class ContractGrader : MonoBehaviour
         }
         else if (level == GameLevel.Level4)
         {
-            feedback += "<color=white>Tip: Record a wide, medium, and close-up while preserving the actor's screen direction and keeping the Kape Kultura product visible.</color>\n\n";
+            feedback += "<color=white>Tip: Frame the full cup and packaging for Product Overview; frame the full actor and cup for Coffee Use. Leave room around frame edges. Shot-size variety and three-point lighting are optional for this contract.</color>\n\n";
         }
         else
         {
@@ -578,6 +605,15 @@ public class ContractGrader : MonoBehaviour
         return grading != null && grading.brightnessSlider != null && grading.contrastSlider != null && grading.saturationSlider != null;
     }
 
+    public static string QualityRank(float pre, float post, float camera, float light, float overall)
+    {
+        if (overall >= 90 && pre >= 90 && post >= 85 && camera >= 60 && light >= 25) return "S";
+        if (overall >= 80 && pre >= 80 && post >= 75 && camera >= 50 && light >= 20) return "A";
+        if (overall >= 70 && pre >= 70 && post >= 65 && camera >= 42 && light >= 16) return "B";
+        if (overall >= 60 && pre >= 60 && post >= 50 && camera >= 30 && light >= 8) return "C";
+        return "F";
+    }
+
     private ProductionGrades CompileFinalGrade(float pre, float prod, float post, float avgCam, float avgLight, string feedback, int maxPayout, bool contractRequirementsMet = true)
     {
         pre = Mathf.Clamp(pre, 0f, 100f);
@@ -590,29 +626,9 @@ public class ContractGrader : MonoBehaviour
             .Replace("--- POST-PRODUCTION ---", $"3. POST-PRODUCTION — {post:F1}/100");
 
         float finalScore = (pre + prod + post) / 3f;
-        string letterGrade = "F";
-        int payout = 0;
-
-        if (finalScore >= 90f && pre >= 90f && post >= 85f && avgCam >= 60f && avgLight >= 25f)
-        {
-            letterGrade = "S";
-            payout = maxPayout;
-        }
-        else if (finalScore >= 80f && pre >= 80f && post >= 75f && avgCam >= 50f && avgLight >= 20f)
-        {
-            letterGrade = "A";
-            payout = (int)(maxPayout * 0.8f);
-        }
-        else if (finalScore >= 70f && pre >= 70f && post >= 65f && avgCam >= 42f && avgLight >= 16f)
-        {
-            letterGrade = "B";
-            payout = (int)(maxPayout * 0.6f);
-        }
-        else if (finalScore >= 60f && pre >= 60f && post >= 50f && avgCam >= 30f && avgLight >= 8f)
-        {
-            letterGrade = "C";
-            payout = (int)(maxPayout * 0.3f);
-        }
+        string letterGrade = QualityRank(pre, post, avgCam, avgLight, finalScore);
+        int payout = letterGrade == "S" ? maxPayout : letterGrade == "A" ? (int)(maxPayout * .8f) :
+            letterGrade == "B" ? (int)(maxPayout * .6f) : letterGrade == "C" ? (int)(maxPayout * .3f) : 0;
 
         if (!contractRequirementsMet)
         {

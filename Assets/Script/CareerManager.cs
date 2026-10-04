@@ -213,6 +213,7 @@ public class CareerManager : MonoBehaviour
 
         UpdateMoneyUI();
         Debug.Log($"Accepted {jobName}. Received {upfrontPayment} B coins upfront!");
+        BudgetRetryPrompt.CaptureStart(true);
         GameSaveManager.Instance?.SaveCheckpoint();
     }
 
@@ -234,11 +235,13 @@ public class CareerManager : MonoBehaviour
     {
         playerMoney = Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0));
         if (amount < 0) return false;
+        BudgetRetryPrompt.CaptureStart();
         if (playerMoney < amount)
         {
             PlayerAnalytics.PurchaseRejected();
             GameFeedback.Show($"INSUFFICIENT BALANCE\nNeed {amount:N0} B-Coins | Balance {playerMoney:N0} | Short {amount - playerMoney:N0}", true);
             UpdateMoneyUI();
+            BudgetRetryPrompt.Show(amount, playerMoney);
             return false;
         }
 
@@ -316,6 +319,23 @@ public class CareerManager : MonoBehaviour
 
             Debug.Log("DEV F10: Added 1,000 B-Coins. Balance: " + PlayerPrefs.GetInt("PlayerMoney", 0).ToString("N0"));
             GameFeedback.Show("CHEAT ACTIVATED: +1,000 B-Coins\nBalance: " + PlayerPrefs.GetInt("PlayerMoney", 0).ToString("N0") + " B-Coins");
+        }
+
+        // Press F11 to remove up to 1000 B-Coins, including balances below 1000.
+        if (keyboard.f11Key.wasPressedThisFrame)
+        {
+            int previousBalance = Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0));
+            int removed = Mathf.Min(1000, previousBalance);
+            int balance = previousBalance - removed;
+            if (removed > 0) PlayerAnalytics.TransactionMade(-removed, "Developer funds", "Developer deduction");
+            PlayerPrefs.SetInt("PlayerMoney", balance);
+            PlayerPrefs.Save();
+            if (Instance == null) Instance = FindObjectOfType<CareerManager>(true);
+            if (Instance != null) Instance.UpdateMoneyUI();
+            else GameFeedback.RefreshBalance();
+            GameSaveManager.Instance?.SaveCheckpoint();
+            Debug.Log("DEV F11: Removed " + removed + " B-Coins. Balance: " + balance.ToString("N0"));
+            GameFeedback.Show("CHEAT ACTIVATED: -" + removed.ToString("N0") + " B-Coins\nBalance: " + balance.ToString("N0") + " B-Coins");
         }
 
         // F12 resets only the active career; account identity and other saves are kept.

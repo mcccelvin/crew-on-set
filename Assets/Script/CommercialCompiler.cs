@@ -8,6 +8,23 @@ public class CommercialCompiler : MonoBehaviour
     public Transform videoTimelineContainer;
     public Transform[] brandingTracks;
 
+    public bool SeekTimeline(float seconds)
+    {
+        if (editorPlayer == null || videoTimelineContainer == null) return false;
+        var clips = new List<DraggableClip>(videoTimelineContainer.GetComponentsInChildren<DraggableClip>());
+        clips.Sort((a,b) => GokeSequence.Left(a).CompareTo(GokeSequence.Left(b)));
+        var sequence = new List<ClipSegment>();
+        foreach (var clip in clips)
+        {
+            if (!clip.isOnTimeline || clip.endFrame <= clip.startFrame || string.IsNullOrEmpty(clip.clipFilePath) || !File.Exists(clip.clipFilePath)) continue;
+            sequence.Add(new ClipSegment { path = clip.clipFilePath, startFrame = clip.startFrame, endFrame = clip.endFrame,
+                uiStartX = GokeSequence.Left(clip), uiWidth = clip.GetComponent<RectTransform>().rect.width,
+                useClipGrade = CampaignProgression.GetCurrentLevel() == 4,
+                brightness = clip.gradeBrightness, contrast = clip.gradeContrast, saturation = clip.gradeSaturation });
+        }
+        return editorPlayer.SeekTimeline(sequence, Mathf.Max(0,seconds));
+    }
+
     public void PlayTimelineSequence(bool useFadeIn = false)
     {
         if (editorPlayer == null || videoTimelineContainer == null)

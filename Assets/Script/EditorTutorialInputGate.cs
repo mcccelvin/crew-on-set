@@ -18,8 +18,9 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
         if (t == null || !t.RestrictsEditor || PauseManager.isPaused) return true;
         var ui = TutorialUIManager.Instance;
         if (ui != null && ui.bossHUDCanvas != null && Within(item, ui.bossHUDCanvas.transform)) return true;
-        if (!t.AcceptsTaskInput) return false;
         var editor = EditorManager.Instance;
+        if (editor != null && editor.IsReviewBackControl(item)) return true;
+        if (!t.AcceptsTaskInput) return false;
         if (editor != null && editor.gradingManager != null && editor.gradingManager.IsComparisonControl(item))
         {
             switch (t.currentStep)
@@ -46,7 +47,10 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
                 return Within(item, t.playButtonRect);
             case EditorTutorialManager.EditorStep.DoubleClickToTrim:
             case EditorTutorialManager.EditorStep.PositionVideoAtStart:
+            case EditorTutorialManager.EditorStep.PracticeUndo:
                 return Within(item, t.timelineVideoTrackRect);
+            case EditorTutorialManager.EditorStep.SeekTimeline:
+                return TimelineManager.Instance != null && Within(item, TimelineManager.Instance.timestampContainer);
             case EditorTutorialManager.EditorStep.TrimLeftHandle: return Within(item, t.leftTrimHandleRect);
             case EditorTutorialManager.EditorStep.TrimRightHandle: return Within(item, t.rightTrimHandleRect);
             case EditorTutorialManager.EditorStep.TrimTo10Seconds:

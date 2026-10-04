@@ -1,6 +1,8 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 
 public partial class AlmanacManager
 {
@@ -35,14 +37,15 @@ public partial class AlmanacManager
             profileAccountId = BookText(playerInfoPanel.transform, "Account ID", new Vector2(95, 137), new Vector2(560, 45), 24);
         profileAccountId.richText = false;
         profileAccountId.color = new Color32(54, 46, 38, 255);
-        profileAccountId.text = PlayerPrefs.GetString("PlayFabId", "GUEST");
+        string accountId = PlayerPrefs.GetString("PlayFabId", "").Trim();
+        profileAccountId.text = string.IsNullOrEmpty(accountId) ? "GUEST" : accountId;
         profileAccountId.enableAutoSizing = true;
         profileAccountId.fontSizeMin = 16;
         profileAccountId.fontSizeMax = 24;
         var rows = new[] { playerMoneyText, totalJobsText, currentLevelText, activeContractText };
         for (int i = 0; i < rows.Length; i++)
             if (rows[i] != null)
-                SetRect(rows[i].rectTransform, Vector2.one * .5f, Vector2.one * .5f, new Vector2(60, -45 - i * 65), new Vector2(640, 60));
+                rows[i].gameObject.SetActive(false); // Career values now live in Stats; this page uses the authored Bio area.
         if (profileCharacterImage == null)
         {
             var preview = new GameObject("Character preview", typeof(RectTransform), typeof(RawImage));
@@ -51,6 +54,10 @@ public partial class AlmanacManager
             profileCharacterImage.raycastTarget = false;
             SetRect(preview.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(-455, -30), new Vector2(560, 700));
         }
+        CCoinProfileWidget.Attach(stage,profileCharacterImage,profileCanvas.transform);
+        var wallet = stage.Find("Account cosmetic wallet/Open cosmetic shop");
+        if (wallet != null) wallet.gameObject.SetActive(false); // Shop is now the shared third sidebar tab.
+        EnsureSharedProfileUI();
     }
 
     private void ReleaseProfilePreview()
@@ -73,11 +80,42 @@ public partial class AlmanacManager
         if (profileCharacterImage == null || portraitModel == null) return;
         var portrait = Instantiate(portraitModel);
         portrait.transform.SetPositionAndRotation(new Vector3(20000, 20000, 20000), Quaternion.identity);
-        foreach (var animator in portrait.GetComponentsInChildren<Animator>()) animator.enabled = false;
-        // Copy meshes only: never clone gameplay scripts, colliders, cameras or inventory.
-        var root = new GameObject("Profile mesh snapshot");
-        var meshes = new System.Collections.Generic.List<Mesh>();
+        foreach (var animator in portrait.GetComponentsInChildren<Animator>())
+        {
+            // Use the same bundled Humanoid idle as the stage actors, then freeze a mesh snapshot.
+            if (animator.avatar != null && animator.avatar.isValid && animator.avatar.isHuman)
+            {
+                animator.runtimeAnimatorController = null;
+                animator.applyRootMotion = false;
+                animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+                animator.Rebind();
+                foreach (var clip in Resources.LoadAll<AnimationClip>("Character/Animations/Stand--Idle.anim"))
+                {
+                    if (clip.name.StartsWith("__preview__") || !clip.humanMotion) continue;
+                    var graph = PlayableGraph.Create("Profile idle snapshot");
+                    try
+                    {
+                        graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+                        var idle = AnimationClipPlayable.Create(graph, clip);
+                        AnimationPlayableOutput.Create(graph, "Portrait", animator).SetSourcePlayable(idle);
+                        graph.Play(); graph.Evaluate(0f);
+                        animator.enabled = false;
+                    }
+                    finally { graph.Destroy(); }
+                    break;
+                }
+            }
+            animator.enabled = false;
+        }
+        // The catalog entry is the imported character FBX, not the player/gameplay prefab.
+        // Render its native skinning once, then discard the temporary rig and scene objects.
+        var root = new GameObject("Profile portrait snapshot");
         root.transform.position = new Vector3(10000, 10000, 10000);
+        portrait.transform.SetParent(root.transform, true);
+        foreach (var script in portrait.GetComponentsInChildren<MonoBehaviour>(true)) script.enabled = false;
+        foreach (var collider in portrait.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
+        foreach (var otherCamera in portrait.GetComponentsInChildren<Camera>(true)) otherCamera.enabled = false;
+        foreach (var otherLight in portrait.GetComponentsInChildren<Light>(true)) otherLight.enabled = false;
         try
         {
             Bounds bounds = new Bounds();
@@ -85,34 +123,25 @@ public partial class AlmanacManager
             foreach (var source in portrait.GetComponentsInChildren<Renderer>())
             {
                 if (!source.enabled) continue;
-                Mesh mesh = null;
-                if (source is SkinnedMeshRenderer skin)
-                {
-                    mesh = new Mesh();
-                    skin.BakeMesh(mesh);
-                    meshes.Add(mesh);
-                }
-                else if (source is MeshRenderer)
-                {
-                    var filter = source.GetComponent<MeshFilter>();
-                    if (filter != null) mesh = filter.sharedMesh;
-                }
-                if (mesh == null) continue;
-                var part = new GameObject(source.name, typeof(MeshFilter), typeof(MeshRenderer));
-                part.layer = 31;
-                part.transform.SetParent(root.transform, false);
-                part.transform.localPosition = source.transform.position - portrait.transform.position;
-                part.transform.localRotation = source.transform.rotation;
-                part.transform.localScale = source.transform.lossyScale;
-                part.GetComponent<MeshFilter>().sharedMesh = mesh;
-                var renderer = part.GetComponent<MeshRenderer>();
-                renderer.sharedMaterials = source.sharedMaterials;
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
+                source.gameObject.layer = 31;
+                source.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                source.receiveShadows = false;
+                if (source is SkinnedMeshRenderer skin) skin.updateWhenOffscreen = true;
+                if (!hasBounds) { bounds = source.bounds; hasBounds = true; }
+                else bounds.Encapsulate(source.bounds);
+            }
+            if (!hasBounds) return;
+            // Imported rigs can carry a 100x scale. Frame the copied meshes at portrait size
+            // instead of assuming their original depth fits inside a 20-metre camera range.
+            float portraitScale = 1.85f / Mathf.Max(.01f, bounds.size.y);
+            root.transform.localScale = Vector3.one * portraitScale;
+            hasBounds = false;
+            foreach (var renderer in portrait.GetComponentsInChildren<Renderer>())
+            {
+                if (!renderer.enabled) continue;
                 if (!hasBounds) { bounds = renderer.bounds; hasBounds = true; }
                 else bounds.Encapsulate(renderer.bounds);
             }
-            if (!hasBounds) return;
             var cameraObject = new GameObject("Portrait camera", typeof(Camera));
             cameraObject.transform.SetParent(root.transform, false);
             var camera = cameraObject.GetComponent<Camera>();
@@ -132,10 +161,11 @@ public partial class AlmanacManager
             lightObject.transform.position = bounds.center + new Vector3(-2, 2, 3);
             lightObject.transform.LookAt(bounds.center);
             var light = lightObject.GetComponent<Light>();
-            light.type = LightType.Spot;
+            // Directional illumination is independent of imported root scale and light range.
+            light.type = LightType.Directional;
             light.range = 12;
             light.spotAngle = 90;
-            light.intensity = 3;
+            light.intensity = 1.3f;
             light.cullingMask = 1 << 31;
             profileCharacterTexture = new RenderTexture(560, 700, 24, RenderTextureFormat.ARGB32);
             profileCharacterTexture.Create();
@@ -150,19 +180,18 @@ public partial class AlmanacManager
             Destroy(portrait);
             root.SetActive(false);
             Destroy(root);
-            foreach (var mesh in meshes) Destroy(mesh);
         }
     }
 
     private void BuildProfileUI()
     {
-        if (profileCanvas != null) { BindProfileButtons(); return; }
-        if (almanacCanvas == null) return;
+        if (profileCanvas != null) { BindProfileButtons(); EnsureProfileProgressUI(); return; }
+        if (almanacCanvas == null && !profileMenuOnly) return;
         // Also hides the controls in previously baked Almanac hierarchies.
         if (playerInfoTabBtn != null) playerInfoTabBtn.gameObject.SetActive(false);
         if (achievementsTabBtn != null) achievementsTabBtn.gameObject.SetActive(false);
         profileCanvas = new GameObject("Player Profile", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        profileCanvas.transform.SetParent(almanacCanvas.transform.parent, false);
+        if (almanacCanvas != null) profileCanvas.transform.SetParent(almanacCanvas.transform.parent, false);
         var canvas = profileCanvas.GetComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
         canvas.sortingOrder = 65;
@@ -209,6 +238,7 @@ public partial class AlmanacManager
         var close = BookButton(stage.transform, "Close profile", "", "profileExit", new Vector2(910, 430), new Vector2(80, 80));
         profileCloseButton = close;
         BindProfileButtons();
+        EnsureProfileProgressUI();
         profileCanvas.SetActive(false);
     }
 
@@ -253,6 +283,7 @@ public partial class AlmanacManager
         BuildProfileUI();
         if (profileCanvas == null) return;
         ApplyAccountProfileStyle();
+        profileInputsDirty = false; RefreshAccountFields(true);
         CaptureInputState();
         previousCursorLockState = CursorLockMode.Locked;
         previousCursorVisible = false;
@@ -260,6 +291,9 @@ public partial class AlmanacManager
         RefreshAllUI();
         OpenTab(0);
         profileCanvas.SetActive(true);
+        profileInputsDirty = false; RefreshAccountFields(true);
+        CCoinService.Ensure().Refresh();
+        AccountProfileData.Refresh();
         RenderProfileCharacter();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -270,8 +304,15 @@ public partial class AlmanacManager
         if (!isProfileOpen) return;
         isProfileOpen = false;
         ReleaseProfilePreview();
+        if (profileCanvas != null)
+        {
+            var cosmeticShop = profileCanvas.transform.Find("C-Coins cosmetic shop");
+            if (cosmeticShop != null) cosmeticShop.gameObject.SetActive(false);
+        }
         if (profileCanvas != null) profileCanvas.SetActive(false);
         RestoreInputState();
+        var callback = profileMenuClosed; profileMenuClosed = null;
+        callback?.Invoke();
     }
 }
 

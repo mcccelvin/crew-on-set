@@ -36,6 +36,7 @@ public class TutorialHighlighter : MonoBehaviour
         }
 
         myCanvas = GetComponentInParent<Canvas>();
+        if (myCanvas != null) FeedbackPaperUI.ConfigureScale(myCanvas.rootCanvas);
 
         if (highlightFrame != null)
         {

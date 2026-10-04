@@ -18,7 +18,9 @@ public class EditorTutorialManager : MonoBehaviour
         ExplainColorGrading, AdjustBrightness, AdjustContrast, AdjustSaturation, ExplainColorSettings,
         ClickExport, ExplainReviewPanel, ReviewAndSubmit,
         ExplainGokePostProduction, ExplainGokePacing, ExplainGokeVisualHierarchy,
-        ExplainGokeGraphicTiming, ExplainGokeColorSeparation, ChooseGokeIntro, ChooseGokeOutro
+        ExplainGokeGraphicTiming, ExplainGokeColorSeparation, ChooseGokeIntro, ChooseGokeOutro,
+        // Append only: existing serialized step values must not change.
+        SeekTimeline, PracticeUndo
     }
 
     public EditorStep currentStep;
@@ -29,7 +31,8 @@ public class EditorTutorialManager : MonoBehaviour
     private bool isTutorialReady = false;
     private bool ownsInstance = false;
     private bool isGokeTutorial = false;
-    public bool RestrictsEditor => enabled && !submitted && !DevTutorialBypass.Disabled;
+    public bool RevisingReview { get; private set; }
+    public bool RestrictsEditor => enabled && !submitted && !RevisingReview && !DevTutorialBypass.Disabled;
     public bool AcceptsTaskInput => isTutorialReady && isTaskPhaseActive && !isTransitioning && !isWarningActive;
 
     private const float brandingTimeTolerance = 0.15f;
@@ -40,6 +43,7 @@ public class EditorTutorialManager : MonoBehaviour
 
     private bool leftTrimmed = false, rightTrimmed = false;
     private bool brightAdjusted = false, contAdjusted = false, satAdjusted = false;
+    private bool undoPracticeEdited;
     public bool exported = false, submitted = false;
 
     [Header("Cinematic Title Cards")]
@@ -162,10 +166,9 @@ public class EditorTutorialManager : MonoBehaviour
 
         if (spacePromptText != null)
         {
-            spacePromptText.text = "[SPACE / LMB] CONTINUE";
             bool canShowPrompt = isTutorialReady && (!isTaskPhaseActive || isWarningActive) && !isTransitioning && (Time.unscaledTime >= spacebarCooldown) &&
                                  bossDialogueReady && currentStep != EditorStep.ShowPostProductionTitle;
-            spacePromptText.gameObject.SetActive(canShowPrompt);
+            BossDialogueStyle.UpdateContinueHint(spacePromptText, canShowPrompt);
         }
 
         if (TutorialUIManager.BossContinuePressed && isTutorialReady && !isTransitioning && currentStep != EditorStep.ShowPostProductionTitle)
@@ -195,7 +198,7 @@ public class EditorTutorialManager : MonoBehaviour
                 }
             }
         }
-        if (keyboard != null && keyboard.f8Key.wasPressedThisFrame && isTutorialReady && currentStep != EditorStep.ShowPostProductionTitle)
+        if (keyboard != null && keyboard.f6Key.wasPressedThisFrame && isTutorialReady && currentStep != EditorStep.ShowPostProductionTitle)
         {
             CheatCompleteCurrentStep();
         }
@@ -206,7 +209,7 @@ public class EditorTutorialManager : MonoBehaviour
         // Don't interrupt if we are already switching steps
         if (isTransitioning) return;
 
-        // If we are just reading dialogue, treat F8 like pressing Space
+        // If we are just reading dialogue, treat F6 like pressing Space
         if (!isTaskPhaseActive)
         {
             AdvanceDialogue();
@@ -224,12 +227,14 @@ public class EditorTutorialManager : MonoBehaviour
         switch (currentStep)
         {
             case EditorStep.DragVideoToTimeline: StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokePacing : EditorStep.PlayPreview, true)); break;
-            case EditorStep.PlayPreview: StartCoroutine(TransitionToNextStep(EditorStep.DoubleClickToTrim, true)); break;
+            case EditorStep.PlayPreview: StartCoroutine(TransitionToNextStep(EditorStep.SeekTimeline, true)); break;
+            case EditorStep.SeekTimeline: StartCoroutine(TransitionToNextStep(EditorStep.DoubleClickToTrim, true)); break;
+            case EditorStep.PracticeUndo: StartCoroutine(TransitionToNextStep(EditorStep.GoToBrandingPhase, true)); break;
             case EditorStep.DoubleClickToTrim: StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.TrimTo10Seconds : EditorStep.TrimLeftHandle, true)); break;
             case EditorStep.TrimLeftHandle: leftTrimmed = true; StartCoroutine(TransitionToNextStep(EditorStep.TrimRightHandle, true)); break;
             case EditorStep.TrimRightHandle: rightTrimmed = true; StartCoroutine(TransitionToNextStep(EditorStep.TrimTo10Seconds, true)); break;
             case EditorStep.TrimTo10Seconds: StartCoroutine(TransitionToNextStep(EditorStep.PositionVideoAtStart, true)); break;
-            case EditorStep.PositionVideoAtStart: StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokeVisualHierarchy : EditorStep.GoToBrandingPhase, true)); break;
+            case EditorStep.PositionVideoAtStart: StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokeVisualHierarchy : EditorStep.PracticeUndo, true)); break;
             case EditorStep.GoToBrandingPhase: StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.DragLogoToScreen : EditorStep.ExplainBrandingPhase, true)); break;
 
             case EditorStep.DragLogoToScreen: StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokeGraphicTiming : EditorStep.ExplainBrandingTimeline, true)); break;
@@ -339,6 +344,16 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.PlayPreview:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Click Play to preview your raw footage", "- Watch until the video finishes" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(playButtonRect); break;
+            case EditorStep.SeekTimeline:
+                TutorialUIManager.Instance.SetupTasks(new[] { "- Click a time number above the timeline to move the red playhead" });
+                if (TutorialHighlighter.Instance != null && TimelineManager.Instance != null)
+                    TutorialHighlighter.Instance.HighlightElement(TimelineManager.Instance.timestampContainer);
+                break;
+            case EditorStep.PracticeUndo:
+                undoPracticeEdited = false;
+                TutorialUIManager.Instance.SetupTasks(new[] { "- Slide the blue clip a little to the right", "- Press CTRL + Z to put it back" });
+                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(timelineVideoTrackRect);
+                break;
             case EditorStep.DoubleClickToTrim:
                 TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Double-click the Goke clip to open the Trim Inspector" : "- Double-Click the video clip on the Timeline to trim it" });
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(timelineVideoTrackRect); break;
@@ -487,6 +502,8 @@ public class EditorTutorialManager : MonoBehaviour
         string task = "Finish the instruction in your green checklist first. Then we’ll move on together.";
         switch (currentStep)
         {
+            case EditorStep.SeekTimeline: task = "Click a time number above the timeline to place the red playhead there."; break;
+            case EditorStep.PracticeUndo: task = "Slide the clip a little to the right, then press CTRL + Z to restore its previous position."; break;
             case EditorStep.TrimTo10Seconds: task = "Trim your clip to 10.0 seconds, then click X to close the inspector."; break;
             case EditorStep.TrimLeftHandle: task = "Try dragging the left pink handle first. It sets where your shot begins."; break;
             case EditorStep.TrimRightHandle: task = "Try dragging the right pink handle first. It sets where your shot ends."; break;
@@ -531,7 +548,7 @@ public class EditorTutorialManager : MonoBehaviour
         tutorialPreviewStarted = false;
         TutorialUIManager.Instance.MarkTaskComplete(1);
         if (currentStep == EditorStep.PlayPreview)
-            StartCoroutine(TransitionToNextStep(EditorStep.DoubleClickToTrim, true));
+            StartCoroutine(TransitionToNextStep(EditorStep.SeekTimeline, true));
         else if (currentStep == EditorStep.PlayBrandingPreview)
             StartCoroutine(TransitionToNextStep(EditorStep.DragToOtherTimeline, true));
         else if (currentStep == EditorStep.PreviewCommercialFinish)
@@ -563,8 +580,32 @@ public class EditorTutorialManager : MonoBehaviour
         if (currentStep == EditorStep.PositionVideoAtStart && isTaskPhaseActive)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
-            StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokeVisualHierarchy : EditorStep.GoToBrandingPhase, true));
+            StartCoroutine(TransitionToNextStep(isGokeTutorial ? EditorStep.ExplainGokeVisualHierarchy : EditorStep.PracticeUndo, true));
         }
+    }
+
+    public void OnTimelineSeeked()
+    {
+        if (!AcceptsTaskInput || currentStep != EditorStep.SeekTimeline) return;
+        TutorialUIManager.Instance?.MarkTaskComplete(0);
+        StartCoroutine(TransitionToNextStep(EditorStep.DoubleClickToTrim, true));
+    }
+    public void OnEditorEditRecorded()
+    {
+        if (!AcceptsTaskInput || currentStep != EditorStep.PracticeUndo) return;
+        undoPracticeEdited = true;
+        TutorialUIManager.Instance?.MarkTaskComplete(0);
+    }
+    public void OnEditorUndo()
+    {
+        if (!AcceptsTaskInput || currentStep != EditorStep.PracticeUndo || !undoPracticeEdited) return;
+        // Multiple trial moves can be undone; finish only once the clip is back at zero.
+        var editor = EditorManager.Instance;
+        if (editor == null || editor.timelineContainer == null) return;
+        var clips = editor.timelineContainer.GetComponentsInChildren<DraggableClip>();
+        if (clips.Length == 0 || Mathf.Abs(GokeSequence.Left(clips[0]) / EditorRectState.PixelsPerSecond) > .01f) return;
+        TutorialUIManager.Instance?.MarkTaskComplete(1);
+        StartCoroutine(TransitionToNextStep(EditorStep.GoToBrandingPhase, true));
     }
 
     private bool CheckBrandingPlacement()
@@ -742,12 +783,30 @@ public class EditorTutorialManager : MonoBehaviour
 
     public void OnExportClicked()
     {
+        if (RevisingReview)
+        {
+            RevisingReview = false; exported = true; submitted = false;
+            currentStep = EditorStep.ReviewAndSubmit; isTransitioning = false;
+            UpdateBossDialogue();
+            return;
+        }
         if (currentStep == EditorStep.ClickExport && isTaskPhaseActive && !exported)
         {
             exported = true;
             TutorialUIManager.Instance.MarkTaskComplete(0);
             StartCoroutine(TransitionToNextStep(EditorStep.ExplainReviewPanel, true));
         }
+    }
+
+    public void OnReviewBack()
+    {
+        if (!isActiveAndEnabled || submitted || !exported) return;
+        // Cancel a pending review-dialogue transition before releasing editing controls.
+        StopAllCoroutines(); RevisingReview = true; isTransitioning = false;
+        isTaskPhaseActive = false; isWarningActive = false;
+        if (spacePromptText != null) spacePromptText.gameObject.SetActive(false);
+        TutorialUIManager.Instance?.HideBossDialogue(); TutorialUIManager.Instance?.HideTasks();
+        TutorialHighlighter.Instance?.HideHighlight();
     }
 
     public void OnVideoSubmitted()
@@ -790,6 +849,8 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.ExplainPostProduction: ui.ShowBossDialogue("Welcome to the editor! The Clips panel holds your recorded takes. The large Program Monitor shows the picture at the playhead, the red line on the timeline below. The timeline is your commercial arranged from left to right in seconds. We will place a clip, trim it, add messages and sound, then adjust its colors together.", ui.poseHappy, false, false); break;
             case EditorStep.DragVideoToTimeline: ui.ShowBossDialogue("Drag your take from the Clips panel onto the Video Track below. A clip is one piece of footage. The bank keeps your source; the timeline decides which parts the audience sees and in what order.", ui.posePoint, false, false); break;
             case EditorStep.PlayPreview: ui.ShowBossDialogue("Press PLAY to watch the timeline. The red playhead moves through time and the Program Monitor shows that moment. Pause stops there; dragging the playback bar lets you inspect a moment. For this first preview, watch the whole take before we trim it.", ui.poseOpenHand, false, false); break;
+            case EditorStep.SeekTimeline: ui.ShowBossDialogue("Click a <color=red>TIME NUMBER</color> above the timeline. The red playhead jumps to that time, and the Program Monitor shows that frame. You can also drag along this ruler to inspect nearby moments. This changes where you look, not the clip's length.", ui.posePoint, false, false); break;
+            case EditorStep.PracticeUndo: ui.ShowBossDialogue("You can reverse an edit with <color=red>CTRL + Z</color>. Try sliding the blue clip a little to the right, then press CTRL + Z to put it back at zero. Undo works one edit at a time for clip placement, movement, trimming, graphics, color and effects. It does not undo Play, a playhead move, or changing tabs.", ui.poseOpenHand, false, false); break;
             case EditorStep.DoubleClickToTrim: ui.ShowBossDialogue("Let's tidy up the take. Double-click the clip on the timeline to open the Trim Inspector.", ui.posePointUp, false, false); break;
 
             case EditorStep.TrimLeftHandle: ui.ShowBossDialogue("Try pulling the left pink handle inward. You're choosing where the shot begins, leaving the unwanted opening frames out.", ui.posePoint, false, false); break;
@@ -825,8 +886,8 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("You have tried all three controls. Before / After compares your grade with the original picture. Reset returns the controls to 1.00. You can keep the original look if it reads best. Take your time comparing the product, not just the background. When ready, press SPACE for the delivery lesson.", ui.poseHappy, false, false); break;
             case EditorStep.ClickExport: ui.ShowBossDialogue(isGokeTutorial ? "Click EXPORT when the 12-second cut is ready. Effects and color changes are optional. You'll review it before submitting." : "Export prepares your timeline as the finished commercial. You can still adjust your grade before clicking it. Check that the product is clear, the text is readable, and the colors suit the brief. Click EXPORT when you are satisfied; the next screen lets you watch it before submitting to the client.", ui.poseBoss, false, false); break;
 
-            case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. Watch it through once: check the opening, the product, graphic timing, sound, and color. This is our last look before delivery.", ui.poseOpenHand, false, false); break;
-            case EditorStep.ReviewAndSubmit: ui.ShowBossDialogue("Happy it matches the brief? Click <color=red>SUBMIT VIDEO</color> and let's see what the client thinks.", ui.poseHappy, false, false); break;
+            case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. Watch it through once: check the opening, product, embedded graphics, sound and color. Need a change? Click <color=red>BACK</color> to return to the editor, make your changes, then <color=red>EXPORT</color> again. Only <color=red>SUBMIT VIDEO</color> delivers it to the client.", ui.poseOpenHand, false, false); break;
+            case EditorStep.ReviewAndSubmit: ui.ShowBossDialogue("Happy it matches the brief? Click <color=red>SUBMIT VIDEO</color>. We'll read five result papers: pre-production, production, post-production, budget and the client's decision. Use <color=red>NEXT</color> and <color=red>BACK</color>; scroll for every note. The final stamp shows whether the contract passed.", ui.poseHappy, false, false); break;
         }
     }
 

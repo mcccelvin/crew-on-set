@@ -1977,7 +1977,7 @@ namespace Player.Equipment
 
         private GameObject EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
         {
-            PlayerAnalytics.TakeRecorded(recordingCampaignLevel);
+            PlayerAnalytics.TakeRecorded(recordingCampaignLevel, duration);
             isSDCardInserted = false;
             if (sdCardPrefab != null)
             {

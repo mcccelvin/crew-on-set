@@ -5,7 +5,7 @@ using UnityEngine;
 // Called only by the master. UI restrictions are repeated at the command boundary.
 public static class MultiplayerRoomActions
 {
-    public static bool IsEquipment(string kind) => kind == "camera" || kind == "megaphone" || kind == "sd" || kind == "light" || kind == "audio";
+    public static bool IsEquipment(string kind) => kind == "camera" || kind == "megaphone" || kind == "sd" || kind == "light" || kind == "softlight" || kind == "audio";
     public static bool Holding(CrewSession s, int player, string kind) => s.objects.Any(o => o.holder == player && o.kind == kind);
     public static bool Equipped(CrewSession s, int player, string kind) => s.members.Any(m => m.id == player && s.objects.Any(o => o.id == m.equipped && o.holder == player && o.kind == kind));
     public static bool Handle(MultiplayerRoleManager manager, CrewCommand c, int sender, out string error)
@@ -25,6 +25,7 @@ public static class MultiplayerRoomActions
             var refs = Resources.Load<GameObject>("CrewUI/Studio")?.GetComponent<MultiplayerUIReferences>();
             if (refs == null) { error = "The studio UI copy has not been generated yet."; return true; }
             s.budget -= cost;
+            CrewProductionResults.BudgetChanged(s, -cost);
             foreach (string kind in c.items)
             {
                 int offset = s.objects.Count(o => o.action == "delivery");

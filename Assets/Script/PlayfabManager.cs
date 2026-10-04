@@ -50,14 +50,25 @@ public class PlayfabManager : MonoBehaviour
         var request = new LoginWithEmailAddressRequest
         {
             Email = emailInput.text,
-            Password = passwordInput.text
+            Password = passwordInput.text,
+            InfoRequestParameters = new GetPlayerCombinedInfoRequestParams
+            {
+                GetPlayerProfile = true,
+                GetUserAccountInfo = true,
+                ProfileConstraints = new PlayerProfileViewConstraints { ShowDisplayName = true }
+            }
         };
         PlayFabClientAPI.LoginWithEmailAddress(request, OnLoginSuccess, OnError);
     }
 
     void OnLoginSuccess(LoginResult result)
     {
-        PlayerPrefs.SetString("PlayerName", result.InfoResultPayload?.PlayerProfile?.DisplayName ?? "Player");
+        var payload = result.InfoResultPayload;
+        string accountName = payload?.PlayerProfile?.DisplayName;
+        if (string.IsNullOrWhiteSpace(accountName)) accountName = payload?.AccountInfo?.TitleInfo?.DisplayName;
+        if (string.IsNullOrWhiteSpace(accountName)) accountName = payload?.AccountInfo?.Username;
+        PlayerPrefs.SetString("PlayerName", string.IsNullOrWhiteSpace(accountName) ? "Player" : accountName.Trim());
+        PlayerPrefs.Save();
         GameSaveManager.Ensure().SetAccount(result.PlayFabId);
         if (messageText != null) messageText.text = "Logged In!";
         Debug.Log("Login successful!");

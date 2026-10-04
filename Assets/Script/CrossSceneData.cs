@@ -15,4 +15,5 @@ public static class CrossSceneData
     public static ProductionGrades finalGrades;
     public static int submittedLevel;
     public static bool resultApplied;
+    public static bool submittedWithTutorial;
 }

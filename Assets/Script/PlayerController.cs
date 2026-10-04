@@ -19,6 +19,10 @@ namespace Player.PlayerController
         private PlayerCameraPose cameraHoldingPose;
         private UnityEngine.Camera heldViewCamera;
         private float heldViewNearClip;
+        private UnityEngine.Camera firstPersonView;
+        private const float FirstPersonNearClip = .025f;
+        private const float ViewWallSkin = .025f;
+        private readonly RaycastHit[] viewWallHits = new RaycastHit[32];
 
         private void RestoreHeldViewClip()
         {
@@ -101,7 +105,13 @@ namespace Player.PlayerController
             {
                 playerRigidbody.freezeRotation = true;
                 playerRigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+                // Thin studio walls must also stop the body while sprinting.
+                // Speculative CCD also remains valid when chair interactions make this body kinematic.
+                playerRigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             }
+            firstPersonView = GameplayCamera;
+            if (firstPersonView != null)
+                firstPersonView.nearClipPlane = Mathf.Min(firstPersonView.nearClipPlane, FirstPersonNearClip);
 
             xVelHash = Animator.StringToHash("x_velocity");
             yVelHash = Animator.StringToHash("y_velocity");
@@ -310,7 +320,7 @@ namespace Player.PlayerController
 
             var MouseX = inputManager.Look.x;
             var MouseY = inputManager.Look.y;
-            Camera.position = CameraRoot.position;
+            Camera.position = ResolveFirstPersonCameraPosition(CameraRoot.position);
 
             // Mouse delta already measures movement per frame; only sticks need delta time.
             float lookScale = MouseSensitivity * (inputManager.IsPointerLook ? GameOptions.MouseSensitivityMultiplier / 60f : Time.deltaTime);
@@ -324,6 +334,59 @@ namespace Player.PlayerController
             cameraPitch = Mathf.SmoothDampAngle(cameraPitch, xRotation, ref pitchVelocity, precision ? .12f : .045f);
             // Render the view independently of the body's fixed-step rotation.
             Camera.rotation = Quaternion.Euler(cameraPitch, cameraYaw, 0f);
+        }
+
+        private Vector3 ResolveFirstPersonCameraPosition(Vector3 desired)
+        {
+            // Scripted or seated actions own their camera; do not pull a showcase back to the player.
+            if (StationaryAction || bodyCollider == null || !bodyCollider.enabled ||
+                firstPersonView == null || !firstPersonView.enabled) return desired;
+            Bounds bounds = bodyCollider.bounds;
+            Vector3 origin = new Vector3(bounds.center.x, desired.y, bounds.center.z);
+            Vector3 offset = desired - origin;
+            float distance = offset.magnitude;
+            if (distance <= .001f) return desired;
+
+            // Enclose all four near-plane corners, not only the crosshair. Looking sideways
+            // along a wall should not reveal the room through the edge of the screen either.
+            float radius = ViewProbeRadius(firstPersonView.nearClipPlane, firstPersonView.fieldOfView, firstPersonView.aspect);
+            Vector3 direction = offset / distance;
+            int count = Physics.SphereCastNonAlloc(origin, radius, direction, viewWallHits, distance,
+                Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+            float safeDistance = distance;
+            for (int i = 0; i < count; i++)
+            {
+                if (!IsViewObstacle(viewWallHits[i].collider)) continue;
+                safeDistance = Mathf.Min(safeDistance, Mathf.Max(0f, viewWallHits[i].distance - ViewWallSkin));
+            }
+            // NonAlloc results are unordered. Only allocate in the unusual crowded case
+            // where the buffer fills, so a wall cannot be lost behind many held colliders.
+            if (count == viewWallHits.Length)
+            {
+                foreach (var hit in Physics.SphereCastAll(origin, radius, direction, distance,
+                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                {
+                    if (!IsViewObstacle(hit.collider)) continue;
+                    safeDistance = Mathf.Min(safeDistance, Mathf.Max(0f, hit.distance - ViewWallSkin));
+                }
+            }
+            // Snap inward immediately; the unobstructed authored position returns as you move away.
+            // Do not move CameraRoot or the body: controls, interactions and saved anchors stay intact.
+            return origin + direction * safeDistance;
+        }
+
+        private bool IsViewObstacle(Collider obstacle)
+        {
+            return obstacle != null && !obstacle.isTrigger && obstacle != bodyCollider &&
+                obstacle.attachedRigidbody != playerRigidbody && !obstacle.transform.IsChildOf(transform);
+        }
+
+        private static float ViewProbeRadius(float nearClip, float fieldOfView, float aspect)
+        {
+            float halfHeight = nearClip * Mathf.Tan(fieldOfView * .5f * Mathf.Deg2Rad);
+            float halfWidth = halfHeight * Mathf.Max(1f, aspect);
+            float cornerDistance = Mathf.Sqrt(nearClip * nearClip + halfHeight * halfHeight + halfWidth * halfWidth);
+            return Mathf.Max(.08f, cornerDistance + .015f);
         }
 
         private void HandleJump()

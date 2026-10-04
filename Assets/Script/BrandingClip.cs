@@ -16,6 +16,43 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
     private Transform dragOriginalParent;
     private int dragOriginalSiblingIndex;
     private Vector2 dragOriginalPosition;
+    private bool restoredFromUndo;
+
+    internal EditorEditState CaptureUndo(EditorManager editor)
+    {
+        var overlay = linkedOverlay;
+        var rect = new EditorRectState(myRect, true);
+        return new EditorEditState {
+            // Stable across removal/recreation of the card; its overlay is retained.
+            key = "branding/" + EditorEditState.Id(overlay), fingerprint = rect.Fingerprint(true),
+            remove = () => {
+                if (editor == null || overlay == null || editor.brandingTracks == null) return;
+                foreach (var track in editor.brandingTracks)
+                    if (track != null) foreach (var candidate in track.GetComponentsInChildren<BrandingClip>(true))
+                        if (candidate.linkedOverlay == overlay) {
+                            candidate.linkedOverlay = null; candidate.gameObject.SetActive(false); Destroy(candidate.gameObject);
+                        }
+            },
+            restore = () => {
+                if (editor == null || overlay == null || rect.parent == null) return;
+                BrandingClip card = null;
+                if (editor.brandingTracks != null) foreach (var track in editor.brandingTracks)
+                    if (track != null) foreach (var candidate in track.GetComponentsInChildren<BrandingClip>(true))
+                        if (candidate.gameObject.activeSelf && candidate.linkedOverlay == overlay) card = candidate;
+                if (card == null && editor.brandClipPrefab != null)
+                    card = Instantiate(editor.brandClipPrefab, rect.parent).GetComponent<BrandingClip>();
+                if (card == null) return;
+                card.gameObject.SetActive(true);
+                if (card.myRect == null) card.myRect = card.GetComponent<RectTransform>();
+                if (card.canvasGroup == null) card.canvasGroup = card.GetComponent<CanvasGroup>();
+                if (card.canvasGroup == null) card.canvasGroup = card.gameObject.AddComponent<CanvasGroup>();
+                card.parentCanvas = card.GetComponentInParent<Canvas>();
+                card.linkedOverlay = overlay; card.restoredFromUndo = true;
+                rect.Restore(card.myRect); card.SetupHandles();
+                card.canvasGroup.alpha = 1f; card.canvasGroup.blocksRaycasts = true;
+            }
+        };
+    }
 
     void Awake()
     {
@@ -31,6 +68,7 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
 
     void Start()
     {
+        if (restoredFromUndo) { SetupHandles(); return; }
         if (myRect.sizeDelta.x < 30f) myRect.sizeDelta = new Vector2(80f, myRect.sizeDelta.y);
         myRect.anchoredPosition = new Vector2(myRect.anchoredPosition.x, 0f);
         SetupHandles();

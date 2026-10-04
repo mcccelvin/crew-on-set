@@ -8,6 +8,16 @@ public static class LegacyGameSave
     public static List<GameSaveValue> Read(bool prepareCheckpoint = true)
     {
         var values = new List<GameSaveValue>();
+        if (PlayerPrefs.HasKey(CareerProfileProgress.SaveKey))
+            values.Add(new GameSaveValue { key = CareerProfileProgress.SaveKey, kind = 2, text = PlayerPrefs.GetString(CareerProfileProgress.SaveKey) });
+        foreach (var achievement in CareerProfileProgress.Achievements)
+        {
+            foreach (string prefix in new[] { "AchivProg_", "AchivDone_" })
+            {
+                string key = prefix + achievement.id;
+                if (PlayerPrefs.HasKey(key)) values.Add(new GameSaveValue { key = key, kind = 0, integer = PlayerPrefs.GetInt(key) });
+            }
+        }
         if (PlayerPrefs.HasKey("Analytics.Career.v1"))
             values.Add(new GameSaveValue { key = "Analytics.Career.v1", kind = 2, text = PlayerPrefs.GetString("Analytics.Career.v1") });
         int analyticsChunks = PlayerPrefs.GetInt("Analytics.Career.v1.Count", 0);

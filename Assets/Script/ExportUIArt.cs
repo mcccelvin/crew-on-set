@@ -33,7 +33,13 @@ public sealed class ExportUIArt : ScriptableObject
         return CreateWhiteSprite(original, "sprite/" + original.GetInstanceID() + "/white");
     }
 
-    private static Sprite CreateWhiteSprite(Sprite original, string cacheKey)
+    // Neutralize the hue while retaining the original button's bevel, outline and alpha.
+    public static Sprite GetTintable(string key)
+    {
+        return CreateWhiteSprite(Get(key), key + "/tintable", true);
+    }
+
+    private static Sprite CreateWhiteSprite(Sprite original, string cacheKey, bool preserveShading = false)
     {
         if (sprites.TryGetValue(cacheKey, out var cached) && cached != null) return cached;
         if (original == null) return null;
@@ -47,7 +53,11 @@ public sealed class ExportUIArt : ScriptableObject
             RenderTexture.active = target;
             white.ReadPixels(new Rect(0, 0, source.width, source.height), 0, 0);
             Color32[] pixels = white.GetPixels32();
-            for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color32(255, 255, 255, pixels[i].a);
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                byte value = preserveShading ? (byte)Mathf.Max(pixels[i].r, Mathf.Max(pixels[i].g, pixels[i].b)) : (byte)255;
+                pixels[i] = new Color32(value, value, value, pixels[i].a);
+            }
             white.SetPixels32(pixels);
             white.Apply();
         }

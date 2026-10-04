@@ -103,6 +103,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void Start()
     {
+        if (profileMenuOnly) return;
         InitializeAlmanacUI();
     }
 
@@ -168,6 +169,7 @@ public partial class AlmanacManager : MonoBehaviour
         RemoveUIListeners();
 
         profileCanvas = null;
+        ResetProfileProgressUI();
         almanacCanvas = sceneAlmanacCanvas;
         bookEntryTitle=null;
         bookPage=0;
@@ -213,11 +215,18 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void Update()
     {
+        PollProfileProgress();
         UpdateNavigationLesson();
         UpdateTechniqueReviewHighlight();
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
 
         Keyboard keyboard = Keyboard.current;
+        if (isProfileOpen && ProfileInputFocused) return;
+        if (profileMenuOnly)
+        {
+            if (isProfileOpen && keyboard != null && keyboard.escapeKey.wasPressedThisFrame) ClosePlayerProfile();
+            return;
+        }
         if (Application.isFocused && keyboard != null && keyboard.iKey.wasPressedThisFrame)
         {
             OpenPlayerProfile();
@@ -506,23 +515,23 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void OpenTab(int tabIndex)
     {
-        if (profileCardImage != null)
-        {
-            profileCardImage.sprite = tabIndex == 0 ? ExportUIArt.Get("profileAccount") : null;
-            profileCardImage.color = tabIndex == 0 ? Color.white : new Color32(252, 245, 220, 255);
-        }
+        ApplySharedProfileTab(tabIndex);
         if (tabIndex != 1) CloseTechniqueGuide();
         if (playerInfoPanel != null) playerInfoPanel.SetActive(tabIndex == 0);
         if (knowledgePanel != null) knowledgePanel.SetActive(tabIndex == 1);
         if (achievementsPanel != null) achievementsPanel.SetActive(tabIndex == 2);
+        if (profileStatsPanel != null) profileStatsPanel.SetActive(tabIndex == 3);
+        if (profileShopPanel != null) profileShopPanel.SetActive(tabIndex == 4);
         if (playerInfoTabBtn != null) playerInfoTabBtn.interactable = tabIndex != 0;
         if (knowledgeTabBtn != null) knowledgeTabBtn.interactable = tabIndex != 1;
         if (achievementsTabBtn != null) achievementsTabBtn.interactable = tabIndex != 2;
+        if (profileStatsButton != null) profileStatsButton.interactable = tabIndex != 3;
+        if (profileShopButton != null) profileShopButton.interactable = tabIndex != 4;
     }
 
     public void OpenPlayerInfoTab() { OpenTab(0); }
     private void OpenKnowledgeTab() { OpenTab(1); RefreshKnowledgeUI(); }
-    public void OpenAchievementsTab() { OpenTab(2); }
+    public void OpenAchievementsTab() { EnsureCareerAchievements(); RefreshAchievementsUI(); OpenTab(2); }
 
     private void ShowAllKnowledge() { SetKnowledgeCategoryFilter(0); }
     private void ShowEquipmentKnowledge() { SetKnowledgeCategoryFilter(1); }
@@ -788,6 +797,7 @@ public partial class AlmanacManager : MonoBehaviour
 
         foreach (var ach in achievements)
         {
+            if (CareerProfileProgress.IsBuiltIn(ach.id)) continue;
             PlayerPrefs.SetInt("AchivProg_" + ach.id, ach.currentProgress);
             PlayerPrefs.SetInt("AchivDone_" + ach.id, ach.isUnlocked ? 1 : 0);
         }
@@ -816,11 +826,13 @@ public partial class AlmanacManager : MonoBehaviour
 
     public void AddAchievementProgress(string id, int amount)
     {
+        // Built-in career achievements are based on real gameplay, not arbitrary UI increments.
+        if (CareerProfileProgress.IsBuiltIn(id) || amount <= 0) return;
         foreach (var ach in achievements)
         {
             if (ach.id == id && !ach.isUnlocked)
             {
-                ach.currentProgress += amount;
+                ach.currentProgress = (int)System.Math.Min(ach.maxProgress, (long)ach.currentProgress + amount);
                 if (ach.currentProgress >= ach.maxProgress)
                 {
                     ach.currentProgress = ach.maxProgress;
@@ -843,28 +855,31 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void RefreshAllUI()
     {
-        AddKnowledgeEntry("career_analytics", "YOUR CAREER ANALYTICS", PlayerAnalytics.Summary(), "Technique", 1, -1);
+        EnsureCareerAchievements();
+        if (!profileMenuOnly) AddKnowledgeEntry("career_analytics", "YOUR CAREER ANALYTICS", PlayerAnalytics.Summary(), "Technique", 1, -1);
         foreach (var entry in database)
             if (entry.id == "career_analytics") entry.isUnlocked = true;
         RefreshDirectorName();
 
-        if (CareerManager.Instance != null && playerMoneyText != null)
-            playerMoneyText.text = "Bank: " + CareerManager.Instance.playerMoney + " B-Coins";
+        if (playerMoneyText != null)
+            playerMoneyText.text = "Bank: " + PlayerPrefs.GetInt("PlayerMoney", 0).ToString("N0") + " B-Coins";
 
-        int jobsDone = PlayerPrefs.GetInt("TotalJobsCompleted", 0);
-        if (totalJobsText != null) totalJobsText.text = "Commercials Completed: " + jobsDone;
+        int jobsDone = ProfileRecord().CompletedCount;
+        if (totalJobsText != null) totalJobsText.text = "Commercials Completed: " + jobsDone + " / 5";
 
         int currentLevel = CampaignProgression.GetCurrentLevel();
-        if (currentLevelText != null) currentLevelText.text = "Current Production Level: " + currentLevel;
+        if (currentLevelText != null) currentLevelText.text = jobsDone == 5 ? "Campaign Complete" : "Current Production Level: " + currentLevel;
 
         if (activeContractText != null)
         {
-            string activeContract = CareerManager.Instance != null ? CareerManager.Instance.currentActiveJob : "None";
+            string activeContract = jobsDone == 5 ? "None — campaign complete" : CareerManager.Instance != null ? CareerManager.Instance.currentActiveJob : "None";
             activeContractText.text = "Active Contract: " + activeContract;
         }
 
         RefreshKnowledgeUI();
         RefreshAchievementsUI();
+        RefreshProfileStats();
+        RefreshAccountFields();
     }
 
     private void RefreshKnowledgeUI()
@@ -978,7 +993,9 @@ public partial class AlmanacManager : MonoBehaviour
     {
         if (achievementListContainer == null) return;
 
-        foreach (Transform child in achievementListContainer) Destroy(child.gameObject);
+        var scroll = achievementListContainer.GetComponentInParent<ScrollRect>(true);
+        float position = achievementListContainer.childCount == 0 || scroll == null ? 1 : scroll.verticalNormalizedPosition;
+        foreach (Transform child in achievementListContainer) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
 
         if (achievements.Count == 0)
         {
@@ -990,6 +1007,8 @@ public partial class AlmanacManager : MonoBehaviour
         {
             CreateAchievementEntryUI(ach);
         }
+        LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)achievementListContainer);
+        if (scroll != null) scroll.verticalNormalizedPosition = position;
     }
 
     private void CreateKnowledgeEntryUI(KnowledgeEntry entry)
@@ -1022,23 +1041,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void CreateAchievementEntryUI(AchievementEntry achievement)
     {
-        GameObject entryObject = CreatePanel("Achievement Entry", achievementListContainer, entryColor);
-        LayoutElement layoutElement = entryObject.AddComponent<LayoutElement>();
-        layoutElement.preferredHeight = 145f;
-
-        CanvasGroup canvasGroup = entryObject.AddComponent<CanvasGroup>();
-        canvasGroup.alpha = achievement.isUnlocked ? 1f : 0.5f;
-
-        TextMeshProUGUI titleText = CreateText("Title", entryObject.transform, achievement.title, 28, TextAlignmentOptions.Left);
-        SetStretchRect(titleText.rectTransform, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(25f, -65f), new Vector2(-250f, -20f));
-        titleText.fontStyle = FontStyles.Bold;
-
-        TextMeshProUGUI descriptionText = CreateText("Description", entryObject.transform, achievement.description, 19, TextAlignmentOptions.TopLeft);
-        SetStretchRect(descriptionText.rectTransform, Vector2.zero, Vector2.one, new Vector2(25f, 18f), new Vector2(-250f, -70f));
-
-        string progress = achievement.isUnlocked ? "COMPLETED" : achievement.currentProgress + " / " + achievement.maxProgress;
-        TextMeshProUGUI progressText = CreateText("Progress", entryObject.transform, progress, 20, TextAlignmentOptions.Center);
-        SetStretchRect(progressText.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(-220f, 20f), new Vector2(-30f, -20f));
+        CreateCareerAchievementCard(achievement);
     }
 
     private void CreateEmptyMessage(Transform parent, string message)
@@ -1417,6 +1420,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        ResetSharedProfileUI();
         ReleaseProfilePreview();
         EndNavigationLesson();
         if (isAlmanacOpen || isProfileOpen) RestoreInputState();

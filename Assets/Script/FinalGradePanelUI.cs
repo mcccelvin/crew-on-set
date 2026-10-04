@@ -24,16 +24,34 @@ public class FinalGradePanelUI : MonoBehaviour
     public TextMeshProUGUI feedbackDetailedText;
     public TextMeshProUGUI feedbackButtonText;
     public TextMeshProUGUI returnButtonText;
+    private FeedbackPaperUI paperReview;
+    private ProductionGrades displayedGrades;
+    private System.Action continueAction;
+    private string continueLabel;
+
+    private void Awake() { HideLegacySummary(); }
+
+    private void HideLegacySummary()
+    {
+        // Keep the scene controller and serialized UnityEvents intact, but retire
+        // its old summary/feedback visuals. The paper review owns a separate canvas.
+        foreach (Transform child in transform) child.gameObject.SetActive(false);
+        var canvas = GetComponent<Canvas>();
+        if (canvas != null) canvas.enabled = false;
+        var raycaster = GetComponent<GraphicRaycaster>();
+        if (raycaster != null) raycaster.enabled = false;
+    }
 
     public bool IsFeedbackOpen
     {
-        get { return feedbackPanel != null && feedbackPanel.activeInHierarchy; }
+        get { return paperReview != null && paperReview.IsOpen; }
     }
 
     public void DisplayResults(ProductionGrades grades)
     {
         gameObject.SetActive(true);
-        ApplyMenuTheme();
+        HideLegacySummary();
+        displayedGrades = grades;
 
         // Score Calculation
         float overallScore = (grades.preProductionScore + grades.productionScore + grades.postProductionScore) / 3f;
@@ -83,7 +101,9 @@ public class FinalGradePanelUI : MonoBehaviour
 
         if (feedbackButtonText != null) feedbackButtonText.text = "FEEDBACK & BUDGET";
         if (returnButtonText != null) returnButtonText.text = grades.letterGrade == "F" ? "REPLAY CONTRACT" : "RETURN TO STUDIO";
+        continueLabel = grades.letterGrade == "F" ? "REPLAY CONTRACT" : "RETURN TO STUDIO";
         if (feedbackPanel != null) feedbackPanel.SetActive(false);
+        OpenFeedbackPanel();
     }
 
     public void ShowFailureQuestion(int level)
@@ -91,7 +111,6 @@ public class FinalGradePanelUI : MonoBehaviour
         if (contractStatusText != null) contractStatusText.text = "REPLAY LEVEL " + level + "?";
     }
 
-    private bool themeApplied;
     [SerializeField] private ScrollRect feedbackScroll;
 #if UNITY_EDITOR
     public void BakeHierarchyUI() { ApplyMenuTheme(); }
@@ -99,76 +118,37 @@ public class FinalGradePanelUI : MonoBehaviour
 
     private void ApplyMenuTheme()
     {
-        if (themeApplied || feedbackPanel == null || feedbackDetailedText == null) return;
-        themeApplied = true;
-        if (feedbackScroll != null)
-        {
-            var button = feedbackPanel.transform.Find("CLOSE");
-            if (button != null) button.GetComponent<Button>().onClick.AddListener(CloseFeedbackPanel);
-            return;
-        }
-        // Leave the original Review scene artwork, positions and buttons untouched.
-        Image background = feedbackPanel.GetComponent<Image>();
-        if (background != null) { background.sprite = null; background.color = EditorWorkspaceUI.Panel; }
-        feedbackDetailedText.color = EditorWorkspaceUI.Ink;
-        feedbackDetailedText.font = TMP_Settings.defaultFontAsset;
-        feedbackDetailedText.fontSize = 28;
-        feedbackDetailedText.enableAutoSizing = false;
-        feedbackDetailedText.enableWordWrapping = true;
-        feedbackDetailedText.alignment = TextAlignmentOptions.TopLeft;
-        feedbackDetailedText.raycastTarget = false;
-        feedbackDetailedText.lineSpacing = 8;
-        GameObject headingObject = new GameObject("Feedback Heading", typeof(RectTransform), typeof(TextMeshProUGUI));
-        headingObject.transform.SetParent(feedbackPanel.transform, false);
-        TMP_Text heading = headingObject.GetComponent<TMP_Text>();
-        heading.font = TMP_Settings.defaultFontAsset;
-        heading.text = "CLIENT FEEDBACK  <size=55%>/  SCROLL TO READ</size>";
-        heading.fontSize = 36; heading.color = EditorWorkspaceUI.Ink; heading.raycastTarget = false;
-        EditorWorkspaceUI.Place(heading.rectTransform, .06f, .87f, .8f, .97f);
-        GameObject viewport = new GameObject("Feedback Viewport", typeof(RectTransform), typeof(Image), typeof(RectMask2D), typeof(ScrollRect));
-        viewport.transform.SetParent(feedbackPanel.transform, false);
-        RectTransform rect = viewport.GetComponent<RectTransform>();
-        EditorWorkspaceUI.Place(rect, .06f, .08f, .94f, .84f);
-        viewport.GetComponent<Image>().color = Color.clear;
-        feedbackDetailedText.transform.SetParent(rect, false);
-        RectTransform content = feedbackDetailedText.rectTransform;
-        content.anchorMin = new Vector2(0, 1); content.anchorMax = Vector2.one;
-        content.pivot = new Vector2(.5f, 1); content.anchoredPosition = Vector2.zero; content.sizeDelta = Vector2.zero;
-        ContentSizeFitter fitter = content.GetComponent<ContentSizeFitter>() ?? content.gameObject.AddComponent<ContentSizeFitter>();
-        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-        feedbackScroll = viewport.GetComponent<ScrollRect>();
-        feedbackScroll.viewport = rect; feedbackScroll.content = content;
-        feedbackScroll.horizontal = false; feedbackScroll.scrollSensitivity = 35;
-        feedbackScroll.movementType = ScrollRect.MovementType.Clamped;
-        Transform close = feedbackPanel.transform.Find("Close");
-        if (close != null)
-        {
-            close.gameObject.SetActive(false);
-            Button closeButton = EditorWorkspaceUI.Button(feedbackPanel.transform, "CLOSE", .82f, .89f, .95f, .96f, CloseFeedbackPanel);
-            closeButton.transform.SetAsLastSibling();
-        }
+        foreach (var canvas in GetComponentsInParent<Canvas>(true))
+            FeedbackPaperUI.ConfigureScale(canvas.rootCanvas);
     }
 
     public void SetSuccessfulContinueLabel(int completedLevel)
     {
-        if (returnButtonText == null) return;
-
-        if (completedLevel >= CampaignProgression.MaximumLevel)
-        {
-            returnButtonText.text = "FINISH CAMPAIGN";
-            return;
-        }
-
-        returnButtonText.text = "CONTINUE TO LEVEL " + (completedLevel + 1);
+        continueLabel = completedLevel >= CampaignProgression.MaximumLevel ? "FINISH CAMPAIGN" : "CONTINUE TO LEVEL " + (completedLevel + 1);
+        if (returnButtonText != null) returnButtonText.text = continueLabel;
+        if (paperReview != null) paperReview.SetContinueLabel(continueLabel);
     }
+
+    public void SetContinueAction(System.Action action) { continueAction = action; }
 
     public void OpenFeedbackPanel()
     {
-        if (feedbackPanel == null) return;
-        feedbackPanel.transform.SetAsLastSibling();
-        feedbackPanel.SetActive(true);
-        Canvas.ForceUpdateCanvases();
-        if (feedbackScroll != null) feedbackScroll.verticalNormalizedPosition = 1;
+        if (string.IsNullOrEmpty(displayedGrades.letterGrade)) return;
+        if (paperReview == null) paperReview = FeedbackPaperUI.Create();
+        // There is no older result screen to return to. Continue/Replay on the
+        // decision paper is the exit, without silently advancing the contract.
+        paperReview.AllowClose = false;
+        int level = Mathf.Clamp(CrossSceneData.submittedLevel,1,5);
+        string budget = "Current balance: " + PlayerPrefs.GetInt("PlayerMoney",0).ToString("N0") + " B-Coins.\n" +
+            "Detailed spending was not tracked for this older result. Owned equipment is not charged again.";
+        paperReview.Present(displayedGrades,level,budget,continueLabel,continueAction,null,
+            CrossSceneData.submittedWithTutorial && !DevTutorialBypass.Disabled
+            && level == 1 && PlayerPrefs.GetInt("FeedbackPaper.TutorialSeen",0) == 0);
     }
-    public void CloseFeedbackPanel() { if (feedbackPanel != null) feedbackPanel.SetActive(false); }
+    public void CloseFeedbackPanel()
+    {
+        if (paperReview != null) paperReview.RequestClose();
+        if (feedbackPanel != null) feedbackPanel.SetActive(false);
+    }
+    private void OnDestroy() { if (paperReview != null) Destroy(paperReview.gameObject); }
 }

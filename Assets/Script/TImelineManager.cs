@@ -23,6 +23,7 @@ public class TimelineManager : MonoBehaviour
 
     private void Start()
     {
+        TimelineRuler.Install(this);
         RefreshTimeline();
     }
 
@@ -99,6 +100,7 @@ public class TimelineManager : MonoBehaviour
 
         foreach (Transform child in timestampContainer)
         {
+            child.gameObject.SetActive(false);
             Destroy(child.gameObject);
         }
 
@@ -119,15 +121,17 @@ public class TimelineManager : MonoBehaviour
             rt.pivot = new Vector2(0.5f, 0.5f); 
             
             rt.anchoredPosition = new Vector2(i * pixelsPerSecond, 0);
-            rt.sizeDelta = new Vector2(100, 50); 
+            rt.sizeDelta = new Vector2(Mathf.Min(100, pixelsPerSecond * interval), 50);
 
             TextMeshProUGUI tmp = tickObj.AddComponent<TextMeshProUGUI>();
             tmp.text = "|\n" + i + "s"; 
             tmp.fontSize = 14;
             tmp.alignment = TextAlignmentOptions.Top; 
             tmp.color = new Color(0.8f, 0.8f, 0.8f, 1f); 
-            tmp.raycastTarget = false; 
+            tmp.raycastTarget = true;
             tmp.overflowMode = TextOverflowModes.Overflow;
+            var target = tickObj.AddComponent<TimelineRulerTick>();
+            target.ruler = TimelineRuler.Install(this); target.seconds = i;
         }
     }
 

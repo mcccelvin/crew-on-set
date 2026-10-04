@@ -25,9 +25,9 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     public static DraggableClip Selected { get; private set; }
     public static int SplitCount { get; private set; }
     public static int SplitUndoCount { get; private set; }
-    private static readonly System.Collections.Generic.Stack<System.Action> splitUndo = new System.Collections.Generic.Stack<System.Action>();
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    public static void ResetSplitHistory() { splitUndo.Clear(); Selected = null; SplitCount = SplitUndoCount = 0; }
+    public static void ResetSplitHistory() { Selected = null; SplitCount = SplitUndoCount = 0; }
+    internal static void NotifySplitUndone(DraggableClip clip) { SplitUndoCount++; Selected = clip; }
 
     private void Update()
     {
@@ -37,11 +37,6 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         if (focused != null && (focused.GetComponent<TMPro.TMP_InputField>() != null || focused.GetComponent<InputField>() != null)) return;
         var keyboard = UnityEngine.InputSystem.Keyboard.current;
         if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsQualificationsOpen()) return;
-        if (keyboard != null && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed) && keyboard.zKey.wasPressedThisFrame)
-        {
-            if (splitUndo.Count > 0) { splitUndo.Pop().Invoke(); SplitUndoCount++; }
-            return;
-        }
         if (keyboard == null || !keyboard.bKey.wasPressedThisFrame || endFrame - startFrame < 2) return;
         var player = FindObjectOfType<CommercialCompiler>()?.editorPlayer;
         if (player == null || player.playheadLine == null) return;
@@ -56,9 +51,6 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             return;
         }
         player.StopTape();
-        int oldEnd = endFrame;
-        Vector2 oldPosition = rectTransform.anchoredPosition;
-        float oldRightTrim = rightTrimPixels;
         var copy = Instantiate(gameObject, transform.parent).GetComponent<DraggableClip>();
         copy.startFrame = cut;
         copy.endFrame = endFrame;
@@ -79,16 +71,6 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         rightTrimPixels = (totalFrames - endFrame) * pixelsPerFrame;
         copy.leftTrimPixels = copy.startFrame * pixelsPerFrame;
         copy.rightTrimPixels = (copy.totalFrames - copy.endFrame) * pixelsPerFrame;
-        splitUndo.Push(() => {
-            if (this == null || copy == null) return;
-            player?.StopTape();
-            copy.gameObject.SetActive(false); Destroy(copy.gameObject);
-            endFrame = oldEnd; rightTrimPixels = oldRightTrim;
-            rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
-            rectTransform.anchoredPosition = oldPosition;
-            Selected = this;
-            GameFeedback.Show("SPLIT UNDONE");
-        });
         SplitCount++;
         GameFeedback.Show("SPLIT AT PLAYHEAD\nCTRL + Z: UNDO SPLIT");
     }
@@ -116,6 +98,38 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     private float lastLeftClickTime = 0f;
     private const float doubleClickThreshold = 0.3f;
     private bool tutorialRejectedDrag;
+
+    internal EditorEditState CaptureUndo()
+    {
+        var rect = new EditorRectState(rectTransform, isOnTimeline);
+        bool onTrack = isOnTimeline;
+        int first = startFrame, last = endFrame, bankIndex = trueBankSiblingIndex;
+        Transform bank = trueBankParent, original = originalParent;
+        float bankSize = binWidth, pps = EditorRectState.PixelsPerSecond;
+        float sourceSize = originalWidth / (onTrack ? pps : 1f);
+        float left = leftTrimPixels / (onTrack ? pps : 1f), right = rightTrimPixels / (onTrack ? pps : 1f);
+        Vector3 grade = new Vector3(gradeBrightness, gradeContrast, gradeSaturation);
+        var grading = EditorManager.Instance != null ? EditorManager.Instance.gradingManager : null;
+        if (CampaignProgression.GetCurrentLevel() == 4 && grading != null && grading.SelectedClip == this &&
+            grading.brightnessSlider != null && grading.contrastSlider != null && grading.saturationSlider != null)
+            grade = new Vector3(grading.brightnessSlider.value, grading.contrastSlider.value, grading.saturationSlider.value);
+        return new EditorEditState {
+            key = "clip/" + GetInstanceID(),
+            fingerprint = onTrack + "/" + first + "/" + last + "/" + rect.Fingerprint(onTrack) + "/" +
+                EditorEditState.Number(grade.x) + "/" + EditorEditState.Number(grade.y) + "/" + EditorEditState.Number(grade.z),
+            remove = onTrack ? (System.Action)(() => { if (this != null) { isOnTimeline = false; gameObject.SetActive(false); Destroy(gameObject); } }) : null,
+            restore = () => {
+                if (this == null) return;
+                isOnTimeline = onTrack; startFrame = first; endFrame = last;
+                trueBankParent = bank; trueBankSiblingIndex = bankIndex; originalParent = original; binWidth = bankSize;
+                float zoom = onTrack ? EditorRectState.PixelsPerSecond : 1f;
+                originalWidth = sourceSize * zoom; leftTrimPixels = left * zoom; rightTrimPixels = right * zoom;
+                gradeBrightness = grade.x; gradeContrast = grade.y; gradeSaturation = grade.z;
+                rect.Restore(rectTransform); canvasGroup.alpha = 1f; canvasGroup.blocksRaycasts = true;
+                tutorialRejectedDrag = false;
+            }
+        };
+    }
 
     private void Awake()
     {
@@ -245,7 +259,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         var lesson = EditorTutorialManager.Instance;
         tutorialRejectedDrag = lesson != null && lesson.RestrictsEditor &&
             (!lesson.AcceptsTaskInput || (lesson.currentStep != EditorTutorialManager.EditorStep.DragVideoToTimeline &&
-             lesson.currentStep != EditorTutorialManager.EditorStep.PositionVideoAtStart));
+             lesson.currentStep != EditorTutorialManager.EditorStep.PositionVideoAtStart &&
+             lesson.currentStep != EditorTutorialManager.EditorStep.PracticeUndo));
         if (tutorialRejectedDrag) return;
         if (eventData.button == PointerEventData.InputButton.Right) return;
         if (originalWidth <= 0) originalWidth = rectTransform.rect.width;
@@ -294,7 +309,8 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             {
                 if (EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
                 {
-                    if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.PositionVideoAtStart)
+                    if (EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.PositionVideoAtStart ||
+                        EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.PracticeUndo)
                     {
                         currentDragMode = DragMode.SlideTimeline; // Force slide mode!
                     }
@@ -416,6 +432,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                         // More generous distance check in case the user's mouse stopped early
                         if (leftEdge <= 25f && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.PositionVideoAtStart)
                         {
+                            rectTransform.anchoredPosition = new Vector2(myWidth * rectTransform.pivot.x, rectTransform.anchoredPosition.y);
                             EditorTutorialManager.Instance.OnVideoRepositioned();
                         }
                     }

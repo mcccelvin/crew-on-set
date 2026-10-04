@@ -102,7 +102,7 @@ public sealed class MultiplayerCrewController : MonoBehaviour
             if (key.jKey.wasPressedThisFrame) Command("return");
             if (key.oKey.wasPressedThisFrame) Command("stop");
         }
-        if (selected?.kind == "light" && crew.HasRole(CrewRole.AVTechnician))
+        if ((selected?.kind == "light" || selected?.kind == "softlight") && crew.HasRole(CrewRole.AVTechnician))
         {
             float kelvin = selected.kelvin, intensity = selected.intensity;
             if (key.zKey.wasPressedThisFrame) kelvin -= 100;

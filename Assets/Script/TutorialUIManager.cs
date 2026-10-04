@@ -115,15 +115,27 @@ public class TutorialUIManager : MonoBehaviour
     {
         Instance = this;
         RecoverTaskPanel();
-
-
+        if (taskPanel != null)
+        {
+            var taskCanvas = taskPanel.GetComponentInParent<Canvas>(true);
+            if (taskCanvas != null) FeedbackPaperUI.ConfigureScale(taskCanvas.rootCanvas);
+        }
         if (bossHUDCanvas != null)
         {
+            var canvas = bossHUDCanvas.GetComponentInParent<Canvas>(true);
+            if (canvas != null) FeedbackPaperUI.ConfigureScale(canvas.rootCanvas);
             bossCanvasGroup = bossHUDCanvas.GetComponent<CanvasGroup>();
             if (bossCanvasGroup == null) bossCanvasGroup = bossHUDCanvas.AddComponent<CanvasGroup>();
         }
 
-        if (bossText != null) bossTextBasePosition = bossText.rectTransform.anchoredPosition;
+        if (bossHUDCanvas != null)
+            foreach (var label in bossHUDCanvas.GetComponentsInChildren<TMP_Text>(true))
+                BossDialogueStyle.Apply(label, label != bossText);
+        if (bossText != null)
+        {
+            bossText.rectTransform.anchoredPosition = new Vector2(0, bossText.rectTransform.anchoredPosition.y);
+            bossTextBasePosition = bossText.rectTransform.anchoredPosition;
+        }
         if (bossPortraitDisplay != null) bossPortraitBaseScale = bossPortraitDisplay.rectTransform.localScale;
     }
 
@@ -170,7 +182,7 @@ public class TutorialUIManager : MonoBehaviour
             message = message.Replace("<color=yellow>", "<color=" + bossEmphasisColor + ">");
         }
 
-        bossDialoguePages = SplitDialogueIntoPages(message);
+        bossDialoguePages = SplitDialogueIntoPages(BossDialogueStyle.HighlightControls(message));
         bossDialoguePageIndex = 0;
         bossDialoguePose = pose;
         bossDialogueShowOk = showOk;
@@ -220,6 +232,7 @@ public class TutorialUIManager : MonoBehaviour
         if (taskPanel != null) taskPanel.SetActive(false);
         if (bossText != null)
         {
+            BossDialogueStyle.Apply(bossText);
             bossText.text = message;
             bossText.maxVisibleCharacters = 0;
         }

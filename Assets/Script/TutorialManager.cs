@@ -360,9 +360,8 @@ public class TutorialManager : MonoBehaviour
 
         if (spacePromptText != null)
         {
-            spacePromptText.text = "[SPACE / LMB] CONTINUE";
             bool canShowPrompt = !isTaskPhaseActive && !isTransitioning && (Time.unscaledTime >= spacebarCooldown) && bossDialogueReady && (currentStep != TutorialStep.WaitForPrompt) && canAdvanceCampaignDialogue;
-            spacePromptText.gameObject.SetActive(canShowPrompt);
+            BossDialogueStyle.UpdateContinueHint(spacePromptText, canShowPrompt);
         }
 
         bool isJumpCurrentlyHeld = (pInput != null && pInput.Jump) || spaceHeld;
@@ -470,7 +469,7 @@ public class TutorialManager : MonoBehaviour
                 }
             }
         }
-        if (keyboard != null && keyboard.f8Key.wasPressedThisFrame)
+        if (keyboard != null && keyboard.f6Key.wasPressedThisFrame)
         {
             CheatCompleteCurrentStep();
         }

@@ -16,6 +16,7 @@ public sealed partial class RoleSelectionUI
     private readonly TMP_Text[] memberLabels = new TMP_Text[4];
     private TMP_Text roomCode, memberCount, lobbyNotice, helpDescription;
     private Button lockButton, readyButton, startButton, retryButton;
+    private Button contractChoice;
     private SharedOptionsPanel lobbyOptions;
     private static readonly CrewRole[] LobbyRoles = { CrewRole.Director, CrewRole.Camera, CrewRole.AVTechnician, CrewRole.Editor };
     private static readonly Color Paper = new Color32(235, 223, 167, 255);
@@ -62,6 +63,11 @@ public sealed partial class RoleSelectionUI
         LobbyBlock(start, "Room code tile", 342, 345, 585, 82, new Color32(116, 111, 80, 255));
         roomCode = LobbyText(start, "Room code", 342, 350, 585, 68, 44, TextAlignmentOptions.Center);
         roomCode.color = Color.white;
+        contractChoice = LobbyButton(start, "Contract choice", "CONTRACT", 342, 615, 585, 48, () =>
+        {
+            if (PhotonNetwork.IsMasterClient && Crew?.State != null)
+                Send("contract", Crew.State.contractLevel % 5 + 1);
+        });
         memberCount = LobbyText(start, "Crew count", 1280, 277, 270, 48, 27, TextAlignmentOptions.Right);
         for (int i = 0; i < LobbyRoles.Length; i++)
         {
@@ -82,8 +88,8 @@ public sealed partial class RoleSelectionUI
         lockButton = LobbyButton(start, "Lock roles", "LOCK ROLES", 342, 559, 285, 47,
             () => Send("lockRoles", LocalMember()?.rolesLocked == true ? 0 : 1));
         readyButton = LobbyButton(start, "Ready", "READY", 642, 559, 285, 47, () => Send("ready"));
-        lobbyNotice = LobbyText(start, "Lobby status", 342, 613, 585, 54, 21, TextAlignmentOptions.Center);
-        startButton = LobbyButton(start, "Host start", "START COFFEE COMMERCIAL", 342, 678, 585, 44, () => Send("start"));
+        lobbyNotice = LobbyText(start, "Lobby status", 342, 732, 1210, 40, 21, TextAlignmentOptions.Center);
+        startButton = LobbyButton(start, "Host start", "START CONTRACT", 342, 678, 585, 44, () => Send("start"));
         retryButton = LobbyButton(start, "Retry connection", "RETRY CONNECTION", 342, 678, 585, 44, () => Crew.RequestRoomState());
         LobbyText(start, "Role help", 1006, 685, 548, 42, 21, TextAlignmentOptions.Center).text = "Choose roles  >  LOCK ROLES  >  READY";
 
@@ -107,7 +113,7 @@ public sealed partial class RoleSelectionUI
             lobbyOptions.Open();
         });
         LobbyText(settings, "Room rules", 435, 591, 1050, 104, 27, TextAlignmentOptions.Center).text =
-            "2–4 crew members · Four roles · Shared B20,000 budget\nSmaller crews may select several roles. Only the host starts.";
+            "2–4 crew members · Four roles · Shared contract budget\nSmaller crews may select several roles. The host chooses a contract and starts.";
 
         // Transparent click targets match the three painted navigation buttons and the red X.
         LobbyButton(frame, "Help tab", "", 505, 780, 192, 101, () => SelectLobbyPage(1), true);
@@ -135,10 +141,10 @@ public sealed partial class RoleSelectionUI
     private void ShowRoleHelp(int index)
     {
         string[] lessons = {
-            "DIRECTOR\n\nUse the tablet to choose the set, add actors and products. Buy and collect a megaphone to cue movement, sitting and holding coffee. Call ACTION when the crew is ready.",
-            "CAMERA\n\nBuy a camera and blank SD cards. Collect them, hold the camera and press C to insert a card. After ACTION, use R to record Wide, Medium and Close shots. Deliver recorded cards to the computer.",
+            "DIRECTOR\n\nUse the tablet to build the selected contract's set and add products or actors. R rotates a placement. For actor contracts, buy and hold the megaphone to cue movement or interactions inside the stage, then call ACTION.",
+            "CAMERA\n\nBuy a camera and blank SD cards. Collect them, hold the camera and press C to insert a card. R records; Contracts 4 and 5 require ACTION first. Follow the selected brief's shots and duration. Deliver recorded cards to the computer.",
             "AV TECHNICIAN\n\nBuy and place lights and audio equipment. Select a light: Z/X adjusts Kelvin, C/V adjusts intensity, F switches power. T repositions equipment; Q/E turns it.",
-            "EDITOR\n\nUse the computer to receive and download recordings. Trim and order shots, add branding and adjust color. Include five seconds each of Wide, Medium and Close coverage, then submit."
+            "EDITOR\n\nUse the same singleplayer editor to receive recordings, drag/trim/split clips, arrange branding, choose music and adjust color. Follow the selected contract's duration and shot requirements. Export, review and submit to the crew."
         };
         helpDescription.text = lessons[index];
     }
@@ -179,7 +185,9 @@ public sealed partial class RoleSelectionUI
         SetLobbyButton(readyButton, local?.ready == true ? "NOT READY" : "READY");
         startButton.gameObject.SetActive(local != null);
         startButton.interactable = PhotonNetwork.IsMasterClient && state != null && MultiplayerContractManager.CanStart(state);
-        SetLobbyButton(startButton, PhotonNetwork.IsMasterClient ? "START COFFEE COMMERCIAL" : "WAITING FOR HOST TO START");
+        SetLobbyButton(startButton, PhotonNetwork.IsMasterClient ? "START CONTRACT" : "WAITING FOR HOST TO START");
+        contractChoice.interactable = PhotonNetwork.IsMasterClient && state != null;
+        SetLobbyButton(contractChoice, state == null ? "CONTRACT" : MultiplayerContractManager.Title(state.contractLevel) + "  •  B " + state.budget.ToString("N0") + (PhotonNetwork.IsMasterClient ? "  >" : ""));
         retryButton.gameObject.SetActive(local == null);
         retryButton.interactable = PhotonNetwork.InRoom;
         lobbyNotice.text = local == null ? (Time.unscaledTime - openedAt > 15 ? "Waiting for host. Retry or create a fresh room using the same updated game." : "Joining the host's crew lobby...") : Crew.Notice;

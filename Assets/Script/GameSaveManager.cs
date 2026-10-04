@@ -6,7 +6,7 @@ using PlayFab.ClientModels;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-public sealed class GameSaveManager : MonoBehaviour
+public sealed partial class GameSaveManager : MonoBehaviour
 {
     public static GameSaveManager Instance { get; private set; }
     public GameSaveRepository Repository { get; private set; }
@@ -35,7 +35,7 @@ public sealed class GameSaveManager : MonoBehaviour
         DontDestroyOnLoad(gameObject);
         SceneManager.sceneLoaded += OnSceneLoaded;
     }
-    private void OnDestroy() { SceneManager.sceneLoaded -= OnSceneLoaded; if (Instance == this) Instance = null; }
+    private void OnDestroy() { SceneManager.sceneLoaded -= OnSceneLoaded; productionUpload?.Dispose(); if (Instance == this) Instance = null; }
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
         if(scene.name=="Account"){SaveLoadPanelHost.AddLogoutButton();return;}
@@ -56,18 +56,23 @@ public sealed class GameSaveManager : MonoBehaviour
     {
         if (string.IsNullOrWhiteSpace(playFabId)) return;
         session++;
+        productionUpload?.Dispose();
         authenticatedId = playFabId;
         PlayerPrefs.SetString("PlayFabId", playFabId);
         PlayerPrefs.Save();
+        AccountProfileData.Bind(playFabId);
+        CCoinService.Ensure().BindAccount(playFabId);
         Active = null;
         GameSavePrefs.Activate(null);
         Repository = null;
         Syncing = false;
         OpenRepository();
+        BindProductionLogs(playFabId);
         try
         {
             var guest = new GameSaveRepository(Path.Combine(Application.persistentDataPath, "CareerSaves"), "guest");
             Repository.ImportUnclaimedGuestSaves(guest);
+            CCoinService.Ensure().LinkGuestRewards();
         }
         catch (Exception)
         {
@@ -124,14 +129,18 @@ public sealed class GameSaveManager : MonoBehaviour
     {
         // Invalidate in-flight callbacks before changing the save owner.
         session++;authenticatedId=null;Syncing=false;nextSync=float.PositiveInfinity;
+        productionUpload?.Dispose(); productionUpload = null; productionJournal = null;
         PlayFabClientAPI.ForgetAllCredentials();
         Active=null;GameSavePrefs.Activate(null);Repository=null;
         PlayerPrefs.DeleteKey("PlayFabId");PlayerPrefs.DeleteKey("PlayerName");PlayerPrefs.Save();
+        AccountProfileData.Bind("guest");
+        CCoinService.Ensure().BindAccount("guest");
         OpenRepository();Changed?.Invoke();
         LoadingScreenController.LoadScene("Main Menu");
     }
     public void SaveCheckpoint()
     {
+        if (GameSavePrefs.IsRoomSession) return;
         if (Active == null || GameSavePrefs.Values == null || Repository == null) return;
         try
         {
@@ -148,6 +157,7 @@ public sealed class GameSaveManager : MonoBehaviour
     private void Update()
     {
         if (!Syncing && Time.unscaledTime >= nextSync) { nextSync = float.PositiveInfinity; SyncCloud(); }
+        TickProductionLogs();
     }
     public void SyncCloud()
     {
@@ -159,6 +169,7 @@ public sealed class GameSaveManager : MonoBehaviour
             return;
         }
         var repo = Repository;
+        RecoverProductionLogs();
         int requestSession = session;
         Syncing = true;
         Status = "Syncing saves with PlayFab…";

@@ -13,6 +13,39 @@ public class ColorGradingManager : MonoBehaviour
     public RawImage computerScreen;
     private Material gradingMat;
     public DraggableClip SelectedClip { get; private set; }
+    internal EditorEditState CaptureUndo()
+    {
+        bool perClip = CampaignProgression.GetCurrentLevel() == 4;
+        float b = brightnessSlider != null ? brightnessSlider.value : 1f;
+        float c = contrastSlider != null ? contrastSlider.value : 1f;
+        float s = saturationSlider != null ? saturationSlider.value : 1f;
+        bool fade = fadeInToggle != null && fadeInToggle.isOn;
+        return new EditorEditState {
+            key = "grade", fingerprint = fade + (perClip ? "" : "/" + EditorEditState.Number(b) + "/" + EditorEditState.Number(c) + "/" + EditorEditState.Number(s)),
+            restore = () => {
+                if (this == null) return;
+                if (!perClip) {
+                    brightnessSlider?.SetValueWithoutNotify(b); contrastSlider?.SetValueWithoutNotify(c); saturationSlider?.SetValueWithoutNotify(s);
+                }
+                fadeInToggle?.SetIsOnWithoutNotify(fade);
+                RefreshAfterUndo();
+            }
+        };
+    }
+    public void RefreshAfterUndo()
+    {
+        if (CampaignProgression.GetCurrentLevel() == 4)
+        {
+            if (SelectedClip == null || !SelectedClip.isOnTimeline) SelectedClip = DraggableClip.Selected;
+            if (SelectedClip != null && SelectedClip.isOnTimeline) {
+                brightnessSlider?.SetValueWithoutNotify(SelectedClip.gradeBrightness);
+                contrastSlider?.SetValueWithoutNotify(SelectedClip.gradeContrast);
+                saturationSlider?.SetValueWithoutNotify(SelectedClip.gradeSaturation);
+            }
+        }
+        appliedB = appliedC = appliedS = float.NaN;
+        UpdateReadouts();
+    }
     public void SelectClip(DraggableClip clip)
     {
         SelectedClip = clip;

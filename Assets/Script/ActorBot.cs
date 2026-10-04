@@ -364,9 +364,14 @@ public sealed class ActorBot : MonoBehaviour
 
     private bool WalkRouteClear()
     {
-        int samples = Mathf.Max(1, Mathf.CeilToInt(Vector3.Distance(startMark, endMark) / .15f));
+        return CanWalkBetween(startMark, endMark);
+    }
+
+    public bool CanWalkBetween(Vector3 start, Vector3 end)
+    {
+        int samples = Mathf.Max(1, Mathf.CeilToInt(Vector3.Distance(start, end) / .15f));
         for (int i = 0; i <= samples; i++)
-            if (!CanStandAt(Vector3.Lerp(startMark, endMark, (float)i / samples))) return false;
+            if (!CanStandAt(Vector3.Lerp(start, end, (float)i / samples))) return false;
         return true;
     }
 

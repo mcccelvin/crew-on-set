@@ -138,6 +138,25 @@ public class PlayerEditTools : MonoBehaviour
     public RectTransform GetGraphicAnimationButtonRect() { return graphicAnimationButtonRect; }
     public RectTransform GetTransitionButtonRect() { return transitionButtonRect; }
     public RectTransform GetMusicButtonRect() { return musicButtonRect; }
+    internal EditorEditState CaptureUndo()
+    {
+        var motion = selectedCameraMotion; var animation = selectedGraphicAnimation;
+        var transition = selectedTransition; var music = selectedMusic;
+        return new EditorEditState {
+            key = "effects", fingerprint = motion + "/" + animation + "/" + transition + "/" + music,
+            restore = () => {
+                if (this == null) return;
+                selectedCameraMotion = motion; selectedGraphicAnimation = animation;
+                selectedTransition = transition; selectedMusic = music;
+                RefreshAfterUndo();
+            }
+        };
+    }
+    public void RefreshAfterUndo()
+    {
+        RefreshLabels();
+        foreach (var player in FindObjectsOfType<TruePixelPlayer>(true)) player.RefreshPlayerCreatedEffects();
+    }
     public void CycleCameraMotion()
     {
         selectedCameraMotion = (CameraMotionMode)(((int)selectedCameraMotion + 1) % 5);

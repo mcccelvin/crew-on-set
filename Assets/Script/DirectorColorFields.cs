@@ -69,7 +69,7 @@ public sealed class DirectorColorFields : MonoBehaviour
             new GameObject("Tablet Controls Guide", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
         guide.transform.SetParent(parent, false);
         guide.font = TMP_Settings.defaultFontAsset;
-        guide.text = "<b>CONTROLS</b>\nLMB  Select / place\nRMB  Remove element\nT  Reposition selected\nENTER  Apply typed color";
+        guide.text = "<b>CONTROLS</b>\nLMB  Select / place\nRMB  Remove element\nT  Reposition selected\nR  Rotate object (15°)\nENTER  Apply typed color";
         guide.color = new Color(.12f,.18f,.26f);
         guide.fontSize = 22; guide.enableAutoSizing = true; guide.fontSizeMin = 17; guide.fontSizeMax = 22;
         guide.alignment = TextAlignmentOptions.TopLeft; guide.raycastTarget = false;

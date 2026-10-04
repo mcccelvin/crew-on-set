@@ -11,7 +11,8 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
 {
     public static MultiplayerRoleManager Instance { get; private set; }
     public const string StateKey = "COS.Crew.V1";
-    private const byte CommandEvent = 171, NoticeEvent = 172, SnapshotRequestEvent = 173;
+    private const byte CommandEvent = 171, NoticeEvent = 172, SnapshotRequestEvent = 173, ProductionResultEvent = 174;
+    private string productionOwner;
     public CrewSession State { get; private set; }
     public string Notice { get; private set; } = "Connecting to crew...";
     public NetworkStudioFactory Studio { get; private set; }
@@ -23,6 +24,8 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     private void Awake()
     {
         Instance = this;
+        productionOwner = GameSaveManager.Ensure().AuthenticatedPlayerId;
+        GameSavePrefs.BeginRoomSession();
         Studio = gameObject.AddComponent<NetworkStudioFactory>();
         gameObject.AddComponent<RoleSelectionUI>();
         gameObject.AddComponent<MultiplayerRecording>();
@@ -68,6 +71,12 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     public void OnEvent(EventData data)
     {
         if (!PhotonNetwork.InRoom) return;
+        if (data.Code == ProductionResultEvent && data.Sender == PhotonNetwork.MasterClient.ActorNumber && data.CustomData is string resultJson)
+        {
+            try { RecordLocalProduction(JsonUtility.FromJson<CrewProductionResult>(resultJson)); }
+            catch (Exception ex) { Debug.LogWarning("Crew result log could not be saved: " + ex.Message); }
+            return;
+        }
         if (data.Code == SnapshotRequestEvent)
         {
             if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.Players.ContainsKey(data.Sender))
@@ -76,7 +85,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         }
         if (data.Code == NoticeEvent && data.Sender == PhotonNetwork.MasterClient.ActorNumber)
         { Notice = data.CustomData as string ?? ""; Changed?.Invoke(); return; }
-        if (data.Code != CommandEvent || !PhotonNetwork.IsMasterClient || !(data.CustomData is string json) || json.Length > 2048) return;
+        if (data.Code != CommandEvent || !PhotonNetwork.IsMasterClient || !(data.CustomData is string json) || json.Length > 32768) return;
         try { Handle(JsonUtility.FromJson<CrewCommand>(json), data.Sender); }
         catch (Exception ex) { Debug.LogWarning("Crew command rejected: " + ex.Message); }
     }
@@ -94,6 +103,35 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         lastCommand[sender] = Time.unscaledTime;
         var member = State.members.Find(m => m.id == sender);
         if (member == null) return;
+        if (c.action == "contract")
+        {
+            if (sender != PhotonNetwork.MasterClient.ActorNumber || State.phase != "lobby" || c.value < 1 || c.value > 5) return;
+            State.contractLevel = c.value; State.budget = MultiplayerContractManager.InitialBudget(c.value);
+            State.commercialTitle = MultiplayerContractManager.Title(c.value);
+            foreach (var person in State.members) person.ready = false;
+            State.message = "Selected " + State.commercialTitle + ". Review the contract, then ready up.";
+            Publish(); return;
+        }
+        if (c.action == "nextContract" || c.action == "retryContract")
+        {
+            if (sender != PhotonNetwork.MasterClient.ActorNumber || State.recording || (State.phase != "review" && State.phase != "build")) return;
+            if (c.action == "nextContract" && (!State.contractPaid || State.contractLevel >= 5)) return;
+            if (c.action == "retryContract")
+            {
+                if (!MultiplayerContractManager.Retry(State)) { Reject(sender, "This room has no starting checkpoint. Start a fresh updated room."); return; }
+                ReconcileMembers(); Publish(); return;
+            }
+            State.contractLevel++; State.contractPaid = false; State.result = default;
+            State.budget += ProductionEconomy.Advance(State.contractLevel);
+            State.objects.RemoveAll(o => !MultiplayerRoomActions.IsEquipment(o.kind) || o.kind == "sd" && o.tape != 0);
+            State.shots.Clear(); State.cuts.Clear(); State.takeArmed = false;
+            foreach (var person in State.members) if (!State.objects.Any(o => o.id == person.equipped)) person.equipped = 0;
+            State.commercialTitle = MultiplayerContractManager.Title(State.contractLevel);
+            MultiplayerContractManager.SaveCheckpoint(State);
+            State.phase = "briefing"; State.briefingPage = 0;
+            State.message = "Next contract: " + State.commercialTitle + ". Your shared equipment and unspent budget carry forward.";
+            Publish(); return;
+        }
         if (c.action == "role")
         {
             if (c.value != 1 && c.value != 2 && c.value != 4 && c.value != 8) return;
@@ -137,6 +175,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             if (sender != PhotonNetwork.MasterClient.ActorNumber || State.phase != "lobby") return;
             if (!MultiplayerContractManager.CanStart(State)) { Reject(sender, "Need 2–4 players covering all four roles, with roles locked and everyone ready."); return; }
             foreach (var person in State.members) person.briefed = false;
+            MultiplayerContractManager.SaveCheckpoint(State);
             State.briefingPage = 0;
             State.phase = "briefing"; State.message = "Meet the Boss: read your crew briefing."; Publish(); return;
         }
@@ -156,13 +195,24 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             if (!HasRole(sender, MultiplayerContractManager.RoleFor(c.kind))) { Reject(sender, "Only the assigned role can buy this kit."); return; }
             int cost = MultiplayerContractManager.Price(c.kind);
             if (State.recording || State.equipment.Contains(c.kind) || State.budget < cost) { Reject(sender, "Already owned, recording, or insufficient team budget."); return; }
-            State.budget -= cost; State.equipment.Add(c.kind);
+            State.budget -= cost; CrewProductionResults.BudgetChanged(State, -cost); State.equipment.Add(c.kind);
             State.message = c.kind + " kit ready for its crew role."; Publish(); return;
         }
         if (c.action == "footage")
         {
             var take = State.shots.Find(s => s.id == c.id && s.owner == sender);
-            if (take != null) { take.footageReady = true; Publish(); }
+            if (take != null && !float.IsNaN(c.number) && !float.IsInfinity(c.number) && c.number >= 1f / MultiplayerRecording.FPS && c.number <= 31)
+            {
+                // Timeline length comes from the saved tape, not host/network elapsed time.
+                take.duration = c.number; take.footageReady = true; Publish();
+            }
+            return;
+        }
+        if (c.action == "cachedFootage")
+        {
+            var take = State.shots.Find(s => s.id == c.id && s.footageReady && s.uploaded);
+            if (take != null && HasRole(sender,CrewRole.Editor) && !take.cachedBy.Contains(sender))
+            { take.cachedBy.Add(sender); Publish(); }
             return;
         }
         if (c.action == "cut" || c.action == "removeCut" || c.action == "raiseCut")
@@ -187,6 +237,17 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             {
                 State.samples++;
                 if (Studio.GoodFrame(c.position, Quaternion.Euler(c.rotation), c.number, State.shotSize, State)) State.goodSamples++;
+                var rotation = Quaternion.Euler(c.rotation);
+                if (Studio.RequiredSubjectsVisible(State,c.position,rotation,c.number)) State.visibleSamples++;
+                if (Studio.HasSoftLighting(State)) State.softSamples++;
+                if (Studio.ThreePointRoles(State,c.position)) State.threePointSamples++;
+                State.lightTotal += Studio.LightingScore(State) * 30 / 25;
+                var actor = State.objects.Find(o=>o.kind=="actor");
+                if (actor != null && Studio.Objects.TryGetValue(actor.id,out var view)) State.directionTotal += (Quaternion.Inverse(rotation)*view.transform.forward).x;
+                string pose = State.contractLevel == 4 ? Studio.CoffeeEvidence(State,c.position,rotation,c.number) :
+                    actor != null && (actor.performance != 0 || actor.action != "idle") ? "Directed" : "Neutral";
+                if (State.recordedPose == null) State.recordedPose = pose;
+                else if (State.recordedPose != pose) State.recordedPose = "Mixed";
             }
             return;
         }
@@ -194,8 +255,8 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         {
             if (!MultiplayerRoomActions.Holding(State, sender, "megaphone")) { Reject(sender, "Buy and collect the Director megaphone first."); return; }
             if (State.recording) return;
-            if (!State.objects.Any(o => o.kind == "actor") || !State.objects.Any(o => o.kind == "cup" || o.kind == "product"))
-            { Reject(sender, "Place an actor and coffee product before calling ACTION."); return; }
+            if (!State.objects.Any(o => o.kind == "product") || State.contractLevel >= 4 && !State.objects.Any(o => o.kind == "actor"))
+            { Reject(sender, "Place the contract product and required actor before calling ACTION."); return; }
             State.takeArmed = true; State.message = "ACTION! Camera operator: press R to record."; Publish(); return;
         }
         if (c.action == "record" && HasRole(sender, CrewRole.Camera))
@@ -206,7 +267,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
                 if (sender != State.recorder) return;
                 FinishTake(); Publish(); return;
             }
-            if (!State.takeArmed) { Reject(sender, "Ask the Director to call ACTION first."); return; }
+            if (!State.takeArmed && State.contractLevel >= 4) { Reject(sender, "Ask the Director to call ACTION first."); return; }
             var camera = State.objects.Find(o => o.kind == "camera" && o.holder == sender);
             if (camera == null || !State.objects.Any(o => o.kind == "sd" && o.loadedInto == camera.id && o.tape == 0))
             { Reject(sender, "Collect an unused SD card, hold the camera and press C to insert it."); return; }
@@ -215,15 +276,51 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             State.activeShot = State.nextShot++;
             State.recording = true; State.phase = "build"; State.recordStarted = PhotonNetwork.Time;
             State.recorder = sender; State.samples = State.goodSamples = 0; State.shotSize = c.kind;
-            State.message = "Recording " + c.kind + ". Hold a readable composition for at least 5 seconds."; Publish(); return;
+            State.visibleSamples = State.softSamples = State.threePointSamples = 0;
+            State.directionTotal = State.lightTotal = 0; State.recordedPose = null;
+            State.message = "Recording " + c.kind + ". Keep the required subjects readable and follow this contract's shot duration."; Publish(); return;
         }
         if (c.action == "submit" && HasRole(sender, CrewRole.Editor) && !State.recording)
         {
-            if (new[] { "Wide", "Medium", "Close" }.Any(size =>
-                State.cuts.Where(cut => State.shots.Any(s => s.id == cut.shot && s.size == size && s.footageReady)).Sum(cut => cut.end - cut.start) < 5))
-            { Reject(sender, "Add five seconds of Wide, Medium and Close footage to the Editor cut list."); return; }
-            float grade = State.cuts.Average(cut => State.shots.First(s => s.id == cut.shot).score);
-            State.phase = "review"; State.message = "TEAM COMMERCIAL: " + Mathf.RoundToInt(grade) + "/100. Review your coverage, or call ACTION to improve a take.";
+            // Editing belongs to the Editor role. They calculate the real ContractGrader report;
+            // the host validates room sources/ranges and exclusively applies shared payouts.
+            if (c.value != State.contractLevel || c.cuts == null || c.cuts.Count < 1 || c.cuts.Count > 96 ||
+                !(new[] { "S", "A", "B", "C", "F" }).Contains(c.result.letterGrade) ||
+                !MultiplayerContractManager.Finite(new Vector3(c.result.preProductionScore,c.result.productionScore,c.result.postProductionScore)) ||
+                c.result.preProductionScore < 0 || c.result.preProductionScore > 100 || c.result.productionScore < 0 || c.result.productionScore > 100 ||
+                c.result.postProductionScore < 0 || c.result.postProductionScore > 100 || (c.result.feedback?.Length ?? 0) > 16000)
+            { Reject(sender, "Use the shared editor's EXPORT, then SUBMIT, to send this contract's review."); return; }
+            foreach (var cut in c.cuts)
+            {
+                var take = State.shots.Find(s => s.id == cut.shot && s.contractLevel == State.contractLevel && s.uploaded && s.footageReady);
+                if (take == null || !MultiplayerContractManager.Finite(new Vector3(cut.start,cut.end,0)) || cut.start < 0 ||
+                    cut.end <= cut.start || cut.end > take.duration + 1f / MultiplayerRecording.FPS)
+                { Reject(sender, "The timeline refers to unavailable footage or invalid source ranges."); return; }
+            }
+            var result = c.result;
+            result.preProductionScore = MultiplayerContractManager.PreProduction(State, out _, out bool complete);
+            float usable = c.cuts.Sum(cut => cut.end - cut.start);
+            float cam = c.cuts.Sum(cut => State.shots.First(s => s.id == cut.shot).cameraScore * (cut.end-cut.start)) / usable;
+            float light = c.cuts.Sum(cut => State.shots.First(s => s.id == cut.shot).lightScore * (cut.end-cut.start)) / usable;
+            result.productionScore = Mathf.Clamp(cam + light, 0, 100);
+            result.letterGrade = !complete || c.result.letterGrade == "F" ? "F" : ContractGrader.QualityRank(result.preProductionScore, result.postProductionScore, cam, light,
+                (result.preProductionScore + result.productionScore + result.postProductionScore) / 3);
+            int max = ProductionEconomy.CompletionBonus(State.contractLevel);
+            result.earnedBCoins = State.contractPaid ? 0 : result.letterGrade == "S" ? max : result.letterGrade == "A" ? (int)(max*.8f) :
+                result.letterGrade == "B" ? (int)(max*.6f) : result.letterGrade == "C" ? (int)(max*.3f) : 0;
+            State.budget += result.earnedBCoins;
+            CrewProductionResults.BudgetChanged(State, result.earnedBCoins);
+            if (result.letterGrade != "F") State.contractPaid = true;
+            string nextStep = PlayerAnalytics.NextStep(result.preProductionScore, result.productionScore, result.postProductionScore, cam, light);
+            result.feedback = "<b>YOUR NEXT STEP</b>\n" + nextStep + "\n\n" + result.feedback;
+            State.result = result; State.cuts = c.cuts;
+            State.resultLog = CrewProductionResults.Freeze(State, nextStep);
+            // Reliable delivery survives an immediate next-contract room-property update.
+            // This payload contains no PlayFab ID, credentials or account data.
+            PhotonNetwork.RaiseEvent(ProductionResultEvent, JsonUtility.ToJson(State.resultLog),
+                new RaiseEventOptions { Receivers = ReceiverGroup.Others }, SendOptions.SendReliable);
+            State.phase = "review"; State.message = MultiplayerContractManager.Title(State.contractLevel) + " — TEAM GRADE " + result.letterGrade +
+                ". Payment " + result.earnedBCoins + " B-Coins. Review the shared feedback; revise and resubmit if needed.";
             Publish(); return;
         }
         if (c.action == "spawn")
@@ -233,6 +330,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             if (price < 0 || !HasRole(sender, MultiplayerContractManager.RoleFor(c.kind))) { Reject(sender, "This item belongs to another crew role."); return; }
             if (State.recording || State.objects.Count >= 32 || State.budget < price) { Reject(sender, "Cannot buy: recording, object limit, or insufficient team budget."); return; }
             if (!Studio.ValidPosition(c.position) || float.IsNaN(c.number) || float.IsInfinity(c.number)) { Reject(sender, "Place the item near the studio stage."); return; }
+            if (c.kind == "actor" && !ActorBot.IsInsideStage(c.position)) { Reject(sender, "Place the actor inside the stage."); return; }
             if (!Studio.CanCreate(c.kind)) { Reject(sender, "Missing model assignment for " + c.kind + ". No money spent."); return; }
             if (c.kind == "interior" || c.kind == "backdrop")
             {
@@ -240,6 +338,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
                 State.objects.RemoveAll(o => o.kind == "interior" || o.kind == "backdrop");
             }
             State.budget -= price;
+            CrewProductionResults.BudgetChanged(State, -price);
             if ((c.kind == "backdrop" || c.kind == "interior") && !State.equipment.Contains(c.kind)) State.equipment.Add(c.kind);
             State.objects.Add(new CrewObject { id = State.nextId++, revision = 1, kind = c.kind, position = c.position,
                 rotation = new Vector3(0, c.number, 0), color = State.backdropColor, tier = Mathf.Clamp(c.value, 0, 2) });
@@ -254,11 +353,13 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             else
             {
                 if (!Studio.ValidPosition(c.position) || !MultiplayerContractManager.Finite(c.rotation)) return;
+                if (item.kind == "actor" && Studio.Objects.TryGetValue(item.id,out var actorView) && actorView.Bot != null && !actorView.Bot.CanStandAt(c.position))
+                { Reject(sender, "Reposition the actor inside the stage, away from obstacles."); return; }
                 item.position = c.position; item.rotation = c.rotation; item.action = "idle"; item.target = 0; item.revision++;
             }
             State.message = "Stage updated."; Publish(); return;
         }
-        if (item.kind == "light" && c.action == "light")
+        if ((item.kind == "light" || item.kind == "softlight") && c.action == "light")
         {
             if (float.IsNaN(c.number) || float.IsNaN(c.number2) || !MultiplayerContractManager.Finite(c.rotation)) return;
             item.powered = c.value != 0; item.kelvin = Mathf.Clamp(c.number, 2500, 8500);
@@ -278,6 +379,8 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
                 item.end = item.position; item.end.y = item.start.y; item.hasEnd = true; break;
             case "walk":
                 if (!item.hasEnd) { Reject(sender, "Save START and END marks first."); return; }
+                if (!Studio.Objects.TryGetValue(item.id,out var actorView) || actorView.Bot == null || !actorView.Bot.CanWalkBetween(item.start,item.end))
+                { Reject(sender, "Reposition the actor and END mark inside the stage. Leave a clear walking route away from obstacles."); return; }
                 item.action = "walk"; item.target = 0; item.walkTime = PhotonNetwork.Time; item.position = item.start; break;
             case "return": if (item.hasStart) item.position = item.start; item.action = "idle"; item.target = 0; break;
             case "clear": item.hasStart = item.hasEnd = false; item.action = "idle"; break;
@@ -307,18 +410,21 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     {
         float duration = (float)(PhotonNetwork.Time - State.recordStarted);
         float frame = State.samples > 0 ? (float)State.goodSamples / State.samples : 0;
-        bool actor = State.objects.Any(o => o.kind == "actor" && (o.performance != 0 || o.action != "idle" || o.heldProduct != 0));
-        bool set = State.objects.Any(o => o.kind == "interior" || o.kind == "backdrop");
-        float score = frame * 45 + Studio.LightingScore(State) + (actor ? 20 : 0) + (set ? 10 : 0);
-        if (duration < 5) score *= .25f;
-        State.shots.Add(new CrewShot { id = State.activeShot, owner = State.recorder, size = State.shotSize, duration = duration, score = score });
+        float lighting = State.samples > 0 ? State.lightTotal / State.samples : 0;
+        float score = frame * 70 + lighting;
+        State.shots.Add(new CrewShot { id = State.activeShot, owner = State.recorder, size = State.shotSize, duration = duration, score = score,
+            contractLevel = State.contractLevel, cameraScore = frame * 70, lightScore = lighting,
+            actorPose = State.recordedPose ?? "Neutral", screenDirection = State.samples > 0 ? State.directionTotal / State.samples : 0,
+            requiredSubjectsVisible = State.samples > 0 && State.visibleSamples == State.samples,
+            usedSoftLight = State.samples > 0 && State.softSamples >= Mathf.CeilToInt(State.samples * .5f),
+            hasThreePointRoles = State.samples > 0 && State.threePointSamples == State.samples });
         var camera = State.objects.Find(o => o.kind == "camera" && o.holder == State.recorder);
         var card = camera != null ? State.objects.Find(o => o.loadedInto == camera.id) : null;
         if (card != null) { card.loadedInto = 0; card.tape = State.activeShot; card.revision++; }
         if (State.shots.Count > 12) State.shots.RemoveAt(0);
         State.recording = State.takeArmed = false;
-        State.message = State.shotSize + " saved: " + Mathf.RoundToInt(score) + "/100. " +
-            (duration < 5 ? "Too short: retake for at least 5 seconds." : "Framing " + Mathf.RoundToInt(frame * 100) + "%. Keep continuity for the next angle.");
+        State.message = State.shotSize + " saved: " + Mathf.RoundToInt(score) + "/100. Framing " +
+            Mathf.RoundToInt(frame * 100) + "%. Follow the contract's duration and continuity requirements.";
     }
 
     private void Update()
@@ -348,7 +454,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         if (State.phase == "briefing" && State.briefingPage >= MultiplayerContractManager.Briefing.Length)
         {
             foreach (var member in State.members) member.briefed = true;
-            State.phase = "build"; State.message = "CONTRACT 4: shop for your role's kit, stage the coffee commercial, record and edit together.";
+            State.phase = "build"; State.message = MultiplayerContractManager.Title(State.contractLevel) + ": follow the contract specifications. Shop, stage, record and edit together.";
         }
     }
 
@@ -366,18 +472,37 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         {
             var next = JsonUtility.FromJson<CrewSession>(json);
             if (next == null || next.schema != 1 || (State != null && next.revision <= State.revision)) return;
+            next.contractLevel = Mathf.Clamp(next.contractLevel,1,5);
+            foreach (var shot in next.shots) if (shot.cachedBy == null) shot.cachedBy = new System.Collections.Generic.List<int>();
             State = next; Apply();
         }
         catch (Exception ex) { Notice = "Could not read room state: " + ex.Message; }
     }
 
-    private void Apply() { Notice = State.message; Studio.Apply(State); Changed?.Invoke(); }
+    private void Apply()
+    {
+        Notice = State.message; Studio.Apply(State);
+        RecordLocalProduction(State.resultLog);
+        Changed?.Invoke();
+    }
+    private void RecordLocalProduction(CrewProductionResult result)
+    {
+        var saves = GameSaveManager.Ensure();
+        if (saves.AuthenticatedPlayerId != productionOwner) return;
+        var record = CrewProductionResults.ForPlayer(result, PhotonNetwork.LocalPlayer.ActorNumber, productionOwner);
+        if (record != null) saves.RecordProduction(record);
+    }
     public override void OnJoinedRoom() { RequestRoomState(); }
     public override void OnRoomPropertiesUpdate(Hashtable changed) { if (changed.ContainsKey(StateKey)) ReadSnapshot(); }
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); Publish(); } }
     public override void OnPlayerLeftRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "Crew member left. Reassign their roles from the crew menu."; Publish(); } }
     public override void OnMasterClientSwitched(Photon.Realtime.Player player) { ReadSnapshot(); if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "New host selected. Crew session continues."; Publish(); } }
-    public override void OnLeftRoom() { LoadingScreenController.LoadScene("Main Menu"); }
-    public override void OnDisconnected(DisconnectCause cause) { LoadingScreenController.LoadScene("Main Menu"); }
-    private void OnDestroy() { if (Instance == this) Instance = null; }
+    private void ReturnToMenu()
+    {
+        if (Instance == this) { Instance = null; GameSavePrefs.EndRoomSession(); }
+        LoadingScreenController.LoadScene("Main Menu");
+    }
+    public override void OnLeftRoom() { ReturnToMenu(); }
+    public override void OnDisconnected(DisconnectCause cause) { ReturnToMenu(); }
+    private void OnDestroy() { if (Instance == this) { Instance = null; GameSavePrefs.EndRoomSession(); } }
 }

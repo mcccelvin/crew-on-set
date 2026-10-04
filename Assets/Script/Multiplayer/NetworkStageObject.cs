@@ -26,7 +26,7 @@ public sealed class NetworkStageObject : MonoBehaviour
                 renderer.GetPropertyBlock(block); block.SetColor("_BaseColor", item.color); block.SetColor("_Color", item.color); renderer.SetPropertyBlock(block);
             }
         }
-        if (item.kind == "light")
+        if (item.kind == "light" || item.kind == "softlight")
         {
             var lamp = transform.Find("Crew Spotlight")?.GetComponent<Light>();
             if (lamp != null) { lamp.enabled = item.powered; lamp.intensity = item.intensity; lamp.color = Mathf.CorrelatedColorTemperatureToRGB(item.kelvin); lamp.spotAngle = Mathf.Lerp(25, 100, item.diffusion / 100); }
@@ -49,6 +49,8 @@ public sealed class NetworkStageObject : MonoBehaviour
             var member = crew?.State?.members.Find(m => m.id == data.holder);
             bool visible = data.loadedInto == 0 && (data.holder == 0 || member != null && member.equipped == data.id);
             foreach (var renderer in visuals) renderer.enabled = visible;
+            var lamp = transform.Find("Crew Spotlight")?.GetComponent<Light>();
+            if (lamp != null) lamp.enabled = visible && data.powered;
             foreach (var collider in GetComponentsInChildren<Collider>()) collider.enabled = data.holder == 0 && data.loadedInto == 0;
             if (data.holder != 0)
             {

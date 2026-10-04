@@ -42,12 +42,63 @@ public class TruePixelPlayer : MonoBehaviour
     private List<byte[]> preloadedFrames = new List<byte[]>();
     private Texture2D playbackTexture;
     private DraggableOverlay[] timelineOverlays;
+    private RawImage overlaySourceScreen;
+    private VideoFrameCompositor compositor;
+    private bool compositeSequence;
+    private bool compositeActive;
+    private readonly List<CanvasRenderer> suppressedGraphics = new List<CanvasRenderer>();
     private bool isPaused = true;
     private bool isLoading;
     private bool configuringScrubBar;
+    private float? pendingTimelineSeek;
+    private bool showingTimelineGap;
+    public bool IsLoading => isLoading;
     public bool CanStartPlayback => !isLoading && preloadedFrames.Count > 0;
     public bool isFinished = false;
     public bool HasPlaybackReachedEnd { get; private set; }
+
+    public bool SeekTimeline(List<ClipSegment> sequence, float seconds)
+    {
+        if (sequence == null) return false;
+        if (sequence.Count == 0)
+        {
+            StopTape(); currentSequence = sequence; preloadedFrames.Clear();
+            RefreshOverlays(); ApplyTimelineSeek(seconds);
+            isFinished = true; UpdatePlayPauseUI();
+            return true;
+        }
+        float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : 40f;
+        if (playheadLine != null) playheadLine.anchoredPosition = new Vector2(seconds * Mathf.Max(1,pps), playheadLine.anchoredPosition.y);
+        bool same = compositeSequence && currentSequence.Count == sequence.Count;
+        for (int i=0; same && i<sequence.Count; i++)
+        {
+            var a=currentSequence[i]; var b=sequence[i];
+            same = a.path==b.path && a.startFrame==b.startFrame && a.endFrame==b.endFrame && a.uiStartX==b.uiStartX && a.uiWidth==b.uiWidth
+                && a.brightness==b.brightness && a.contrast==b.contrast && a.saturation==b.saturation && a.useClipGrade==b.useClipGrade;
+        }
+        if (same && isLoading) { pendingTimelineSeek=seconds; return true; }
+        if (!same || preloadedFrames.Count == 0)
+        {
+            PlaySequence(sequence,false,true); pendingTimelineSeek=seconds; return true;
+        }
+        ApplyTimelineSeek(seconds); return true;
+    }
+    private void ApplyTimelineSeek(float seconds)
+    {
+        float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : 40f;
+        currentFrameIndex = TimelineSeekMath.FrameAt(currentSequence,seconds,pps,framesPerSecond,out bool picture);
+        isPaused=true; isFinished=false; HasPlaybackReachedEnd=false; playbackTimer=0;
+        showingTimelineGap=!picture;
+        if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.PausePlayback();
+        if (picture) RenderCurrentFrame();
+        else if (computerScreen != null) computerScreen.texture=Texture2D.blackTexture;
+        float x=seconds*Mathf.Max(1,pps);
+        if (playheadLine != null) playheadLine.anchoredPosition=new Vector2(x,playheadLine.anchoredPosition.y);
+        if (timelineOverlays != null) foreach(var overlay in timelineOverlays)
+            if (overlay != null && overlay.isOnTimeline) overlay.EvaluateVisibility(Mathf.RoundToInt(seconds*framesPerSecond),false);
+        if (exportProgressBar != null) exportProgressBar.SetValueWithoutNotify(currentFrameIndex);
+        SyncPlayerCreatedAudio(); UpdatePlayPauseUI();
+    }
 
     private List<ClipSegment> currentSequence = new List<ClipSegment>();
     private int currentFrameIndex = 0;
@@ -64,6 +115,44 @@ public class TruePixelPlayer : MonoBehaviour
     private int preparedMusicFrameCount = 0;
     private bool editorialAudioStarted = false;
     private bool editorialAudioPaused = false;
+
+    public void SetOverlaySource(RawImage source) { overlaySourceScreen = source; }
+    private void OnEnable() { Canvas.willRenderCanvases += SuppressEmbeddedGraphics; }
+    private void OnDisable() { Canvas.willRenderCanvases -= SuppressEmbeddedGraphics; RestoreEmbeddedGraphics(); }
+    private void SuppressEmbeddedGraphics()
+    {
+        if (!compositeActive) return;
+        foreach (var graphic in suppressedGraphics) if (graphic != null)
+        {
+            var overlay = graphic.GetComponentInParent<DraggableOverlay>();
+            graphic.cull = overlay != null && overlay.isOnTimeline;
+        }
+    }
+    private void RestoreEmbeddedGraphics()
+    {
+        compositeActive = false;
+        foreach (var graphic in suppressedGraphics) if (graphic != null) graphic.cull = false;
+        suppressedGraphics.Clear();
+    }
+    private void LateUpdate()
+    {
+        if (!compositeSequence || showingTimelineGap || isLoading || playbackTexture == null || computerScreen == null || PauseManager.isPaused) return;
+        var source = overlaySourceScreen != null ? overlaySourceScreen : computerScreen;
+        // Culled UI skips mesh rebuilds. Refresh authoring geometry before capturing it,
+        // then suppress it again before the real canvas renders (no duplicate logo).
+        compositeActive = false;
+        foreach (var renderer in suppressedGraphics) if (renderer != null)
+        {
+            renderer.cull = false;
+            var graphic = renderer.GetComponent<Graphic>();
+            if (graphic != null) { graphic.SetVerticesDirty(); graphic.SetMaterialDirty(); }
+        }
+        Canvas.ForceUpdateCanvases();
+        compositor = compositor ?? new VideoFrameCompositor();
+        computerScreen.texture = compositor.Compose(playbackTexture, source.rectTransform, timelineOverlays);
+        compositeActive = true;
+        SuppressEmbeddedGraphics();
+    }
 
     private void Update()
     {
@@ -199,6 +288,7 @@ public class TruePixelPlayer : MonoBehaviour
     public void PlaySequence(List<ClipSegment> sequence, bool useFadeIn, bool startPaused = false)
     {
         StopTape();
+        compositeSequence = true;
         currentSequence = sequence;
         isFadingIn = useFadeIn;
         StartCoroutine(LoadSequenceCoroutine(startPaused));
@@ -260,6 +350,7 @@ public class TruePixelPlayer : MonoBehaviour
             RefreshOverlays();
             SetupScrubBar();
             RenderCurrentFrame();
+            if (pendingTimelineSeek.HasValue) { float seconds=pendingTimelineSeek.Value; pendingTimelineSeek=null; ApplyTimelineSeek(seconds); }
             UpdatePlayPauseUI();
 
             if (preloadedFrames.Count == 0 && EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.gameObject.activeInHierarchy)
@@ -272,6 +363,7 @@ public class TruePixelPlayer : MonoBehaviour
     public void TogglePlayPause()
     {
         if (!CanStartPlayback) return;
+        showingTimelineGap=false;
 
         if (isFinished)
         {
@@ -295,6 +387,10 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void StopTape()
     {
+        compositeSequence = false;
+        pendingTimelineSeek=null; showingTimelineGap=false;
+        RestoreEmbeddedGraphics();
+        if (computerScreen != null && playbackTexture != null) computerScreen.texture = playbackTexture;
         HasPlaybackReachedEnd = false;
         StopAllCoroutines();
         HideLoading();
@@ -348,8 +444,8 @@ public class TruePixelPlayer : MonoBehaviour
 
                 if (framesInClip > 1)
                 {
-                    float clipProgress = (float)(currentFrameIndex - activeClip.globalStartFrame) / (framesInClip - 1);
-                    newX = activeClip.uiStartX + (clipProgress * activeClip.uiWidth);
+                    float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : 40f;
+                    newX = activeClip.uiStartX + (currentFrameIndex - activeClip.globalStartFrame) * pps / Mathf.Max(1,framesPerSecond);
                 }
                 else newX = activeClip.uiStartX;
             }
@@ -368,6 +464,7 @@ public class TruePixelPlayer : MonoBehaviour
 
         if (playheadLine != null)
         {
+            var graphic=playheadLine.GetComponent<Graphic>(); if(graphic!=null)graphic.raycastTarget=false;
             playheadLine.anchoredPosition = new Vector2(newX, playheadLine.anchoredPosition.y);
         }
 
@@ -400,6 +497,7 @@ public class TruePixelPlayer : MonoBehaviour
     public void OnScrub(float value)
     {
         if (configuringScrubBar || isLoading || preloadedFrames.Count == 0) return;
+        showingTimelineGap=false; playbackTimer=0;
 
         isPaused = true;
         if (TimelinePlayhead.Instance != null) TimelinePlayhead.Instance.PausePlayback();
@@ -425,6 +523,14 @@ public class TruePixelPlayer : MonoBehaviour
             float pixelsPerFrame = TimelineManager.Instance.pixelsPerSecond / Mathf.Max(1f, framesPerSecond);
             if (pixelsPerFrame > 0) currentTimelineFrame = Mathf.RoundToInt(timelinePixelX / pixelsPerFrame);
         }
+        // Frame indices are end-exclusive. Do not stretch the last frame to the clip's end.
+        if (currentSequence != null) foreach (var clip in currentSequence)
+            if (compiledFrameIndex >= clip.globalStartFrame && compiledFrameIndex < clip.globalEndFrame)
+            {
+                float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : 40f;
+                currentTimelineFrame = Mathf.RoundToInt(clip.uiStartX * framesPerSecond / Mathf.Max(1, pps)) + compiledFrameIndex - clip.globalStartFrame;
+                break;
+            }
 
         if (timelineOverlays == null) return;
 
@@ -439,7 +545,12 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void RefreshOverlays()
     {
-        timelineOverlays = FindObjectsOfType<DraggableOverlay>();
+        RestoreEmbeddedGraphics();
+        var source = overlaySourceScreen != null ? overlaySourceScreen : computerScreen;
+        timelineOverlays = source != null ? source.GetComponentsInChildren<DraggableOverlay>() : new DraggableOverlay[0];
+        // Export reads the editor's originals but never hides or duplicates them.
+        if (source == computerScreen) foreach (var overlay in timelineOverlays)
+            if (overlay.isOnTimeline) foreach (var graphic in overlay.GetComponentsInChildren<Graphic>()) suppressedGraphics.Add(graphic.canvasRenderer);
         float x = playheadLine != null ? playheadLine.anchoredPosition.x : 0f;
         UpdateOverlays(currentFrameIndex, x);
     }
@@ -810,6 +921,9 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void OnDestroy()
     {
+        Canvas.willRenderCanvases -= SuppressEmbeddedGraphics;
+        RestoreEmbeddedGraphics();
+        compositor?.Dispose();
         if (exportProgressBar != null)
             exportProgressBar.onValueChanged.RemoveListener(OnScrub);
 

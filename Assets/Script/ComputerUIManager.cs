@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using TMPro;
 using Player.Equipment;
+using UnityEngine.UI;
 
 public class ComputerUIManager : MonoBehaviour
 {
@@ -62,25 +63,43 @@ public class ComputerUIManager : MonoBehaviour
 
     private void RefreshGrid()
     {
+        if (gridContentContainer == null || clipCardPrefab == null) return;
+        if (physicalComputer == null) physicalComputer = FindObjectOfType<ComputerStation>();
         int cardIndex = 0;
+        var seenFiles = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var cards = new List<ClipUIItem>();
+        foreach (Transform child in gridContentContainer)
+        {
+            ClipUIItem card = child.GetComponent<ClipUIItem>();
+            if (card != null) cards.Add(card);
+        }
+
+        // Negative authored spacing makes the card bodies share a click area.
+        var grid = gridContentContainer.GetComponent<GridLayoutGroup>();
+        if (grid != null)
+            grid.spacing = new Vector2(Mathf.Max(0, grid.spacing.x), Mathf.Max(0, grid.spacing.y));
 
         if (physicalComputer != null)
         {
             List<FootageData> insertedTapes = physicalComputer.GetInsertedFiles();
             foreach (FootageData data in insertedTapes)
             {
+                if (data == null || string.IsNullOrEmpty(data.fileName) || !seenFiles.Add(data.fileName)) continue;
                 string fullPath = Path.Combine(Application.persistentDataPath, data.fileName);
                 if (File.Exists(fullPath))
                 {
                     GameObject newCard;
-                    if (cardIndex < gridContentContainer.childCount)
+                    if (cardIndex < cards.Count)
                     {
-                        newCard = gridContentContainer.GetChild(cardIndex).gameObject;
+                        newCard = cards[cardIndex].gameObject;
                         newCard.SetActive(true);
                     }
                     else
                     {
                         newCard = Instantiate(clipCardPrefab, gridContentContainer);
+                        ClipUIItem created = newCard.GetComponent<ClipUIItem>();
+                        if (created == null) { Destroy(newCard); continue; }
+                        cards.Add(created);
                     }
 
                     ClipUIItem clipScript = newCard.GetComponent<ClipUIItem>();
@@ -90,10 +109,13 @@ public class ComputerUIManager : MonoBehaviour
             }
         }
 
-        for (int i = cardIndex; i < gridContentContainer.childCount; i++)
+        for (int i = cardIndex; i < cards.Count; i++)
         {
-            gridContentContainer.GetChild(i).gameObject.SetActive(false);
+            cards[i].gameObject.SetActive(false);
         }
+        Canvas.ForceUpdateCanvases();
+        if (gridContentContainer is RectTransform content)
+            LayoutRebuilder.ForceRebuildLayoutImmediate(content);
     }
 
     public void CloseComputerUI()
@@ -499,9 +521,9 @@ public class ComputerUIManager : MonoBehaviour
         if (actorReady) score += 35f;
         if (productReady) score += 35f;
         if (!setReady || !actorReady || !productReady) MarkRequiredSetupMissing();
-        feedback += setReady ? "+ Coffee-shop set ready.\n" : "- Place a coffee-shop interior.\n";
-        feedback += actorReady ? "+ Actor ready.\n" : "- Hire an actor.\n";
-        feedback += productReady ? "+ Coffee and packaging ready.\n" : "- Place both Kape packaging and a cup of coffee.\n";
+        feedback += setReady ? "<color=green>+ Coffee-shop set ready.</color>\n" : "<color=red>- REQUIRED SET: Use CHOOSE SET to place Cafe Corner or Coffee Interior. A plain backdrop does not count.</color>\n";
+        feedback += actorReady ? "<color=green>+ Actor ready.</color>\n" : "<color=red>- REQUIRED ACTOR: Hire and place at least one actor before importing footage.</color>\n";
+        feedback += productReady ? "<color=green>+ Coffee cup and Kape packaging ready.</color>\n" : "<color=red>- REQUIRED PRODUCTS: Place BOTH the coffee cup and Kape packaging. Keep them on the set until footage is imported.</color>\n";
     }
 
     private void GradeLevel5Stage(DirectorTerminal stage, ref float score, ref string feedback)

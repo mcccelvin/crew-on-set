@@ -153,3 +153,39 @@ MonoBehaviour:
     texture: {fileID: 2800000, guid: 7c625806d664273498216dc4c0f0fa66, type: 3}
   - key: profileExit
     texture: {fileID: 2800000, guid: a4a1a688cc58c9b418ca93009b36de9a, type: 3}
+  - key: profileStats
+    texture: {fileID: 2800000, guid: 4da2736978d35704b948d03a2f0b6b3b, type: 3}
+  - key: profileShop
+    texture: {fileID: 2800000, guid: 2c8b67a82fa44494a9d9f1025e639227, type: 3}
+  - key: profileStatsLabel
+    texture: {fileID: 2800000, guid: 8a6076d864bfbf2498f61ab207b96d09, type: 3}
+  - key: profileShopLabel
+    texture: {fileID: 2800000, guid: 0e17844f224cdc647b78c89916204686, type: 3}
+  - key: profileSave
+    texture: {fileID: 2800000, guid: 387b3a9451393954091e8178c3a5ea32, type: 3}
+  - key: feedbackPaper1
+    texture: {fileID: 2800000, guid: 8014ed6a635c93340979ccc420380027, type: 3}
+  - key: feedbackPaper2
+    texture: {fileID: 2800000, guid: 14baaab8bedcd11478e33b917e9640ef, type: 3}
+  - key: feedbackPaper3
+    texture: {fileID: 2800000, guid: 36a91d28261b9c64ca4fa53d80f08b13, type: 3}
+  - key: feedbackPaper4
+    texture: {fileID: 2800000, guid: cc44824f1b7986f4db25e2655230aa28, type: 3}
+  - key: feedbackPaper5
+    texture: {fileID: 2800000, guid: abc2f306634888c409ef62b89f0cda0e, type: 3}
+  - key: feedbackApproved
+    texture: {fileID: 2800000, guid: 1e6007ce21b37a848af42e62cf061730, type: 3}
+  - key: feedbackFailed
+    texture: {fileID: 2800000, guid: 44b74a559aed0494db5edac7f60e1076, type: 3}
+  - key: feedbackBackground
+    texture: {fileID: 2800000, guid: d40e39e944953cf40acbeb1d3bfde278, type: 3}
+  - key: feedbackHand
+    texture: {fileID: 2800000, guid: 00209b8f8ba92e14c9a5d08b6fc43442, type: 3}
+  - key: feedbackPaperclip
+    texture: {fileID: 2800000, guid: 3cf576a92106e5b41990d1e3769de4b4, type: 3}
+  - key: feedbackBossOpen
+    texture: {fileID: 2800000, guid: 1e688eb665d016f44939a116deaab27d, type: 3}
+  - key: feedbackBossHappy
+    texture: {fileID: 2800000, guid: 804bf6e6f077fc7418cfdc65391f92e2, type: 3}
+  - key: feedbackBoss
+    texture: {fileID: 2800000, guid: cc8a59fa07cc1d748b5ca8ecb5bc3ef4, type: 3}

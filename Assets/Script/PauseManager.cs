@@ -119,6 +119,9 @@ public class PauseManager : MonoBehaviour
         AudioListener.pause = false;
         Cursor.visible = previousCursorVisible;
 
+        if (ContractUIManager.Instance != null)
+            ContractUIManager.Instance.RestoreOpenContractPresentation();
+
         // Tutorial movement permissions remain owned by the tutorial.
         if (UnityEngine.EventSystems.EventSystem.current != null)
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
@@ -133,7 +136,7 @@ public class PauseManager : MonoBehaviour
         resumeCursorRoutine = null;
         if (isPaused || !Application.isFocused) yield break;
         if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) yield break;
-        if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) yield break;
+        if (ContractUIManager.Instance != null && ContractUIManager.Instance.RestoreOpenContractPresentation()) yield break;
         if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) yield break;
         Cursor.lockState = previousCursorLockState;
         Cursor.visible = previousCursorVisible;

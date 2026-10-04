@@ -41,8 +41,8 @@ public sealed partial class MultiplayerAuthoredUI
         var selectedCards = new HashSet<string>();
         foreach (Transform child in root)
         {
-            string kind = child.name == "Camera" ? "camera" : child.name == "Light" ? "light" : child.name == "SDCard" ? "sd" : child.name == "Director Megaphone" ? "megaphone" : child.name == "Crew Audio" ? "audio" : null;
-            if (child.name.Contains("Level ") || child.name == "LIGHT STRIP") { child.gameObject.SetActive(false); continue; }
+            string kind = child.name == "Camera" ? "camera" : child.name == "Light" ? "light" : child.name == "SDCard" ? "sd" : child.name == "Director Megaphone" ? "megaphone" : child.name == "Crew Audio" ? "audio" : child.name == "Level 3 Soft Light" || child.name == "Better Lights" ? "softlight" : null;
+            if ((child.name.Contains("Level ") && kind == null) || child.name == "LIGHT STRIP") { child.gameObject.SetActive(false); continue; }
             if (kind == null) continue;
             bool first = selectedCards.Add(kind); child.gameObject.SetActive(first); if (!first) continue;
             Set(Find(child, "ItemName")?.GetComponent<TMP_Text>(), EquipmentName(kind));
@@ -99,7 +99,7 @@ public sealed partial class MultiplayerAuthoredUI
         {
             foreach (Transform child in container) child.gameObject.SetActive(false);
             int index = 0;
-            foreach (string kind in new[] { "actor", "actor", "actor", "chair", "product", "cup", "table" })
+            foreach (string kind in new[] { "actor", "actor", "actor", "chair", "product", "cup", "table", "vehicle" })
             {
                 int tier = kind == "actor" ? index : 0;
                 string caption = kind == "actor" ? "ACTOR " + (char)('A' + tier) : kind.ToUpperInvariant();
@@ -141,7 +141,7 @@ public sealed partial class MultiplayerAuthoredUI
         if (viewport == null || Mouse.current == null) return;
         UpdateTabletColor();
         var mouse = Mouse.current; var key = Keyboard.current;
-        if (key != null) { if (key.qKey.isPressed) placementYaw -= Time.deltaTime * 70; if (key.eKey.isPressed) placementYaw += Time.deltaTime * 70; }
+        if (key != null) { if (key.qKey.isPressed) placementYaw -= Time.deltaTime * 70; if (key.eKey.isPressed) placementYaw += Time.deltaTime * 70; if (key.rKey.wasPressedThisFrame) placementYaw += 45; }
         var rect = viewport.rectTransform;
         if (!RectTransformUtility.RectangleContainsScreenPoint(rect, mouse.position.ReadValue())) return;
         RectTransformUtility.ScreenPointToLocalPointInRectangle(rect, mouse.position.ReadValue(), null, out var local);
@@ -159,7 +159,7 @@ public sealed partial class MultiplayerAuthoredUI
         {
             if (marker == null) { marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder); Destroy(marker.GetComponent<Collider>()); marker.transform.localScale = new Vector3(.5f,.02f,.5f); }
             marker.SetActive(true); marker.transform.position = surface.point + Vector3.up * .02f;
-            Set(refs.Get<TMP_Text>("DirectorTerminal.selectionIndicatorText"), "Place " + pendingProp + " • Q/E rotate");
+            Set(refs.Get<TMP_Text>("DirectorTerminal.selectionIndicatorText"), "Place " + pendingProp + " • R rotate • Q/E fine rotate");
             if ((!dragging && mouse.leftButton.wasPressedThisFrame) || (dragging && mouse.leftButton.wasReleasedThisFrame))
             {
                 Crew.Send(new CrewCommand { action = dragging ? "move" : "spawn", id = Control.Selected, kind = pendingProp,
@@ -188,6 +188,7 @@ public sealed partial class MultiplayerAuthoredUI
     private void SetupBoss()
     {
         bossText = refs.Get<TMP_Text>("TutorialUIManager.bossText");
+        BossDialogueStyle.Apply(bossText);
         var root = panels["boss"]?.transform; if (root == null) return;
         foreach (var button in root.GetComponentsInChildren<Button>(true)) button.gameObject.SetActive(false);
         refs.Get<GameObject>("TutorialUIManager.okButton")?.SetActive(false);
@@ -200,7 +201,8 @@ public sealed partial class MultiplayerAuthoredUI
     }
     private void ShowBoss()
     {
-        Set(bossText, MultiplayerContractManager.Briefing[Mathf.Clamp(Crew.State.briefingPage, 0, MultiplayerContractManager.Briefing.Length - 1)]);
+        Set(bossText, BossDialogueStyle.HighlightControls(MultiplayerContractManager.Briefing[Mathf.Clamp(Crew.State.briefingPage, 0, MultiplayerContractManager.Briefing.Length - 1)] +
+            (Crew.State.briefingPage == 0 ? "\n" + MultiplayerContractManager.Title(Crew.State.contractLevel) + " — team balance " + Crew.State.budget.ToString("N0") + " B-Coins." : "")));
         if (bossText != null) bossText.maxVisibleCharacters = int.MaxValue;
     }
     private void NextBoss()
@@ -252,13 +254,51 @@ public sealed partial class MultiplayerAuthoredUI
     {
         var root = panels["contract"]?.transform; if (root == null) return;
         foreach (var button in root.GetComponentsInChildren<Button>(true)) button.onClick.AddListener(Close);
+        var continueButton = Button(root, "Crew next contract", "NEXT CONTRACT (HOST)", () => Crew.Send(new CrewCommand { action = "nextContract" }));
+        Anchor(continueButton.transform, new Vector2(.52f,.02f), new Vector2(.72f,.075f));
+        var revise = Button(root, "Crew revise commercial", "REVISE COMMERCIAL", () => Open("computer"));
+        Anchor(revise.transform, new Vector2(.74f,.02f), new Vector2(.95f,.075f));
+        var retry = Button(root, "Crew retry contract", "RETRY CONTRACT (HOST)", RequestCrewRetry);
+        Anchor(retry.transform, new Vector2(.28f,.02f), new Vector2(.50f,.075f));
     }
     private void RefreshContract()
     {
         refs.Get<GameObject>("ContractUIManager.offerPanel")?.SetActive(false);
         var brief = refs.Get<GameObject>("ContractUIManager.qualificationsPanel"); if (brief != null) Activate(brief);
-        Set(refs.Get<TMP_Text>("ContractUIManager.briefTitle"), "KAPE KULTURA — CREW COMMERCIAL");
-        Set(refs.Get<TMP_Text>("ContractUIManager.briefBody"), "Create a coffee commercial together.\n\n" + string.Join("\n\n", new[] {CrewRole.Director,CrewRole.Camera,CrewRole.AVTechnician,CrewRole.Editor}.Select(r => MultiplayerContractManager.RoleName(r) + ": " + MultiplayerContractManager.Tasks(Crew.State,r))) + "\n\n" + Crew.Notice);
+        var book = brief != null ? Find(brief.transform,"Qualifications Book") : null;
+        string key = Crew.State.contractLevel == 1 ? "contractArtisanOpen" : Crew.State.contractLevel == 2 ? "contractGokeOpen" :
+            Crew.State.contractLevel == 3 ? "contractTerrariOpen" : Crew.State.contractLevel == 4 ? "contractKapeOpen" : "contractHarayaOpen";
+        if (book != null) ExportUIArt.Apply(book.GetComponent<Image>(),key);
+        Set(refs.Get<TMP_Text>("ContractUIManager.briefTitle"), MultiplayerContractManager.Title(Crew.State.contractLevel) + " — CREW COMMERCIAL");
+        var body = refs.Get<TMP_Text>("ContractUIManager.briefBody");
+        string result = Crew.State.phase == "review" ? "<b>TEAM GRADE: " + Crew.State.result.letterGrade + "</b>\n" + Crew.State.result.feedback + "\n\n" : "";
+        Set(body, result + MultiplayerContractManager.Specifications(Crew.State) + "\n\n" + Crew.Notice);
+        if (body != null)
+        {
+            var content = body.transform.parent as RectTransform;
+            var footer = content?.Find("Agreement signature"); if (footer != null) footer.gameObject.SetActive(false);
+            float height = body.GetPreferredValues(body.text, body.rectTransform.rect.width, 0).y + 30;
+            body.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            if (content != null) content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height + 20);
+        }
+        var scroll = refs.Get<ScrollRect>("ContractUIManager.briefScroll"); if (scroll != null) scroll.verticalNormalizedPosition = 1;
+        var root = panels["contract"]?.transform;
+        var next = Find(root,"Crew next contract"); if (next != null) next.gameObject.SetActive(Crew.State.phase == "review" && Crew.State.contractPaid && Crew.State.contractLevel < 5 && PhotonNetwork.IsMasterClient);
+        var revise = Find(root,"Crew revise commercial"); if (revise != null) revise.gameObject.SetActive(Crew.State.phase == "review" && Crew.HasRole(CrewRole.Editor));
+        var retry = Find(root,"Crew retry contract"); if (retry != null) retry.gameObject.SetActive(PhotonNetwork.IsMasterClient && !Crew.State.recording);
+    }
+    private void RequestCrewRetry()
+    {
+        if (!PhotonNetwork.IsMasterClient || Crew.State.recording) return;
+        Open("boss");
+        Set(bossText, "Restart this contract? Your crew's current footage and edit will be cleared. The starting budget and equipment will be restored. Your offline career is kept.");
+        if (bossText != null) bossText.maxVisibleCharacters = int.MaxValue;
+        var root = panels["boss"]?.transform; if (root == null) return;
+        var confirm = Find(root,"Crew confirm retry")?.GetComponent<Button>() ?? Button(root,"Crew confirm retry","RETRY CONTRACT", () => { Close(); Crew.Send(new CrewCommand { action = "retryContract" }); });
+        var cancel = Find(root,"Crew cancel retry")?.GetComponent<Button>() ?? Button(root,"Crew cancel retry","KEEP WORKING", Close);
+        Anchor(confirm.transform,new Vector2(.36f,.02f),new Vector2(.59f,.085f));
+        Anchor(cancel.transform,new Vector2(.64f,.02f),new Vector2(.88f,.085f));
+        confirm.gameObject.SetActive(true); cancel.gameObject.SetActive(true);
     }
     private void SetupPause()
     {

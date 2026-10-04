@@ -81,6 +81,8 @@ public class GradeManager : MonoBehaviour
 
                 if (CareerManager.Instance != null) CareerManager.Instance.CompleteActiveJob(grades.earnedBCoins);
 
+                if (CCoinService.Ensure().QueueContractReward(submittedLevel,grades.letterGrade))
+                    grades.feedback += "\nC-COINS: +5 cosmetic coins pending account verification. This reward is separate from your B-Coins production budget.\n";
                 CampaignProgression.CompleteLevel(submittedLevel);
             }
 
@@ -90,16 +92,18 @@ public class GradeManager : MonoBehaviour
             PlayerPrefs.Save();
         }
 
+        PlayerAnalytics.SaveCompletedResult(submittedLevel, grades);
+
         if (gradePanelUI != null)
         {
+            gradePanelUI.SetContinueAction(ReturnToStudio);
             gradePanelUI.DisplayResults(grades);
             if (grades.letterGrade != "F") gradePanelUI.SetSuccessfulContinueLabel(submittedLevel);
         }
 
-        if (grades.letterGrade == "F")
-        {
-            ShowFailureDialogue(submittedLevel);
-        }
+        // The five-paper review supplies Boss coaching and the final failure stamp.
+        // Do not cover it with the legacy, automatic retry popup.
+        if (failureDialogue != null) failureDialogue.SetActive(false);
         // Results stay open until the player chooses Continue to Level.
         // A reading timer must not skip the review or erase the current project.
     }
@@ -261,6 +265,7 @@ public class GradeManager : MonoBehaviour
         CrossSceneData.finalGrades = default(ProductionGrades);
         CrossSceneData.submittedLevel = 0;
         CrossSceneData.resultApplied = false;
+        CrossSceneData.submittedWithTutorial = false;
 
         isLoadingScene = true;
         PrepareForStudioLoad();

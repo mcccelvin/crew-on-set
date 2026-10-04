@@ -15,15 +15,20 @@ public sealed class MultiplayerRecording : MonoBehaviour, IOnEventCallback
     private const int ChunkSize = 12000, MaxBytes = 4 * 1024 * 1024;
     public const int FPS = 6;
     public static MultiplayerRecording Instance { get; private set; }
-    public string Status = "Silent preview footage: 320 x 180, 6 fps. Camera player must stay connected for downloads.";
+    public string Status = "Silent preview footage: 320 x 180, 6 fps. Keep the Camera player or a downloaded-copy holder connected.";
     private readonly Dictionary<int, byte[]> tapes = new Dictionary<int, byte[]>();
     private readonly HashSet<int> sending = new HashSet<int>();
     private readonly Dictionary<int, float> requests = new Dictionary<int, float>();
     private TruePixelRecorder recorder;
     private int capturing, wanted, received;
+    private int wantedPeer;
     private byte[] incoming;
     private float lastReceive, nextAnnounce;
     private readonly HashSet<int> pendingReady = new HashSet<int>();
+    private readonly HashSet<int> pendingCache = new HashSet<int>();
+    private readonly string sessionFolder = "CrewSessions/" + Guid.NewGuid().ToString("N");
+    private readonly Dictionary<int, FootageData> editorFootage = new Dictionary<int, FootageData>();
+    public bool Downloading => wanted != 0;
     private MultiplayerRoleManager Crew => MultiplayerRoleManager.Instance;
     private void OnEnable() { Instance = this; PhotonNetwork.AddCallbackTarget(this); }
     private void OnDisable() { PhotonNetwork.RemoveCallbackTarget(this); if (Instance == this) Instance = null; }
@@ -52,11 +57,22 @@ public sealed class MultiplayerRecording : MonoBehaviour, IOnEventCallback
                 var take = state.shots.Find(s => s.id == id);
                 if (take == null) continue;
                 if (take.footageReady) pendingReady.Remove(id);
-                else { Crew.Send(new CrewCommand { action = "footage", id = id }); break; }
+                else
+                {
+                    var saved = Frames(id);
+                    if (saved != null) Crew.Send(new CrewCommand { action = "footage", id = id, number = saved.Count / (float)FPS });
+                    break;
+                }
+            }
+            foreach (int id in pendingCache.ToArray())
+            {
+                var take = state.shots.Find(s => s.id == id);
+                if (take == null || take.cachedBy.Contains(PhotonNetwork.LocalPlayer.ActorNumber)) pendingCache.Remove(id);
+                else { Crew.Send(new CrewCommand { action = "cachedFootage", id = id }); break; }
             }
         }
         if (wanted != 0 && Time.unscaledTime - lastReceive > 20)
-        { wanted = 0; incoming = null; Status = "Download timed out. Ask the Camera player to stay connected and retry."; }
+        { wanted = 0; incoming = null; Status = "Download timed out. Keep a player with the footage connected, then select the take again."; }
     }
 
     private void SaveTake()
@@ -67,6 +83,11 @@ public sealed class MultiplayerRecording : MonoBehaviour, IOnEventCallback
         try
         {
             string path = Path.Combine(Application.persistentDataPath, file);
+            // Keep room captures out of the offline recordings folder/index.
+            string archive = Path.Combine(Application.persistentDataPath, sessionFolder, "Capture_" + id + ".tape");
+            Directory.CreateDirectory(Path.GetDirectoryName(archive));
+            File.Move(path, archive);
+            path = archive;
             if (new FileInfo(path).Length > MaxBytes) { Status = "Take too large for crew transfer; local tape kept."; return; }
             byte[] bytes = File.ReadAllBytes(path);
             if (ReadFrames(bytes) == null) { Status = "Invalid take; record again."; return; }
@@ -78,14 +99,45 @@ public sealed class MultiplayerRecording : MonoBehaviour, IOnEventCallback
 
     public bool Has(int id) => tapes.ContainsKey(id);
     public List<byte[]> Frames(int id) => tapes.TryGetValue(id, out var bytes) ? ReadFrames(bytes) : null;
+    public FootageData EditorFootage(CrewShot take)
+    {
+        if (editorFootage.TryGetValue(take.id, out var cached)) return cached;
+        var source = Frames(take.id);
+        if (source == null) return null;
+        string file = sessionFolder + "/Take_" + take.id + ".tape";
+        string path = Path.Combine(Application.persistentDataPath, file);
+        Directory.CreateDirectory(Path.GetDirectoryName(path));
+        // The real editor uses 24 frames/second. Repeat preview frames on that clock,
+        // rather than letting a six-fps tape play four times faster or trim too short.
+        int count = Mathf.Max(1, Mathf.RoundToInt(source.Count * TapeSettings.framesPerSecond / FPS));
+        using (var writer = new BinaryWriter(File.Create(path)))
+        {
+            writer.Write(count);
+            for (int i = 0; i < count; i++)
+            {
+                byte[] frame = source[Mathf.Min(source.Count - 1, (int)(i * FPS / TapeSettings.framesPerSecond))];
+                writer.Write(frame.Length); writer.Write(frame);
+            }
+        }
+        var result = new FootageData { fileName = file, campaignLevel = take.contractLevel,
+            camScore = take.cameraScore, lightScore = take.lightScore,
+            shotType = take.size == "Wide" ? 1 : take.size == "Medium" ? 2 : 3,
+            screenDirection = take.screenDirection, actorPose = take.actorPose,
+            requiredSubjectsVisible = take.requiredSubjectsVisible, usedSoftLight = take.usedSoftLight,
+            hasThreePointRoles = take.hasThreePointRoles };
+        editorFootage[take.id] = result;
+        return result;
+    }
     public void Download(CrewShot take)
     {
         if (Has(take.id)) { Status = "Take ready."; return; }
         if (wanted != 0) { Status = "Wait for the current download, or retry after timeout."; return; }
-        if (!take.footageReady || !PhotonNetwork.CurrentRoom.Players.ContainsKey(take.owner))
-        { Status = "Footage unavailable. The Camera player must finish saving and stay connected."; return; }
+        int source = PhotonNetwork.CurrentRoom.Players.ContainsKey(take.owner) ? take.owner : take.cachedBy.FirstOrDefault(peer => PhotonNetwork.CurrentRoom.Players.ContainsKey(peer));
+        if (!take.footageReady || source == 0)
+        { Status = "Footage unavailable. Keep the Camera player or a crew member with a downloaded copy connected."; return; }
         wanted = take.id; received = 0; incoming = null; lastReceive = Time.unscaledTime;
-        PhotonNetwork.RaiseEvent(Request, take.id, new RaiseEventOptions { TargetActors = new[] { take.owner } }, SendOptions.SendReliable);
+        wantedPeer = source;
+        PhotonNetwork.RaiseEvent(Request, take.id, new RaiseEventOptions { TargetActors = new[] { source } }, SendOptions.SendReliable);
         Status = "Downloading take " + take.id + "...";
     }
 
@@ -94,7 +146,7 @@ public sealed class MultiplayerRecording : MonoBehaviour, IOnEventCallback
         if (!PhotonNetwork.InRoom || Crew?.State == null || !PhotonNetwork.CurrentRoom.Players.ContainsKey(data.Sender)) return;
         if (data.Code == Request && data.CustomData is int id)
         {
-            var take = Crew.State.shots.Find(s => s.id == id && s.owner == PhotonNetwork.LocalPlayer.ActorNumber);
+            var take = Crew.State.shots.Find(s => s.id == id && (s.owner == PhotonNetwork.LocalPlayer.ActorNumber || s.cachedBy.Contains(PhotonNetwork.LocalPlayer.ActorNumber)));
             if (take == null || !tapes.ContainsKey(id) || sending.Contains(data.Sender)) return;
             if (requests.TryGetValue(data.Sender, out float last) && Time.unscaledTime - last < 2) return;
             requests[data.Sender] = Time.unscaledTime;
@@ -102,14 +154,14 @@ public sealed class MultiplayerRecording : MonoBehaviour, IOnEventCallback
         }
         if (data.Code != Chunk || !(data.CustomData is object[] values) || values.Length != 4 ||
             !(values[0] is int shot) || !(values[1] is int total) || !(values[2] is int offset) || !(values[3] is byte[] bytes)) return;
-        var source = Crew.State.shots.Find(s => s.id == shot && s.owner == data.Sender);
+        var source = Crew.State.shots.Find(s => s.id == shot && data.Sender == wantedPeer && (s.owner == data.Sender || s.cachedBy.Contains(data.Sender)));
         if (source == null || shot != wanted || total < 8 || total > MaxBytes || offset != received || bytes.Length == 0 || bytes.Length > ChunkSize || offset > total - bytes.Length) return;
         if (incoming == null) incoming = new byte[total];
         if (incoming.Length != total) return;
         Buffer.BlockCopy(bytes, 0, incoming, offset, bytes.Length); received += bytes.Length; lastReceive = Time.unscaledTime;
         Status = "Downloading take " + shot + ": " + received * 100 / total + "%";
         if (received != total) return;
-        if (ReadFrames(incoming) != null) { tapes[shot] = incoming; Status = "Take " + shot + " ready to preview."; }
+        if (ReadFrames(incoming) != null) { tapes[shot] = incoming; pendingCache.Add(shot); Status = "Take " + shot + " ready to preview."; }
         else Status = "Invalid tape received; retry download.";
         incoming = null; wanted = 0;
     }

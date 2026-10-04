@@ -27,10 +27,10 @@ public sealed class CoffeeStoryEditLesson : MonoBehaviour
         ui.HideTasks();
         string[] messages = {
             "Build a 30–45-second commercial. Start with coffee and packaging, then show an actor using coffee in the shop. No overlays. First drag a recording to the timeline and click it.",
-            "Drag the playback slider below the preview to move the red timeline line. Stop inside your selected clip where you want the cut, then press B. The cut follows the red line, not the middle.",
-            "Want to reverse that split? Press Ctrl + Z to join the pieces back together. Try undoing the split now.",
+            "Click a time number above the timeline to move the red playhead there. You can also drag along the ruler or the playback slider. Stop inside your selected clip where you want the cut, then press B. The cut follows the red line, not the middle.",
+            "Press Ctrl + Z to undo your latest edit. It also reverses movement, trimming, graphics, color, effects and music. Try undoing the split now; if you made another edit after it, undo that first.",
             "Select a clip, then open COLOR GRADE. Adjust a slider: it changes only the selected clip, not the whole commercial.",
-            "Finish your edit and preview all 30–45 seconds. Keep at least 2 seconds of each required shot. Press TAB to read your current contract; press TAB again to return to editing."
+            "Finish your edit and preview all 30–45 seconds. Show Product Overview before Coffee Use, with no overlays. Every segment, including split pieces, must last at least 2 seconds. Press TAB to read your current contract; press TAB again to return to editing."
         };
         ui.ShowBossDialogue(messages[step], ui.poseOpenHand, false, false);
     }
@@ -59,6 +59,6 @@ public sealed class CoffeeStoryEditLesson : MonoBehaviour
         ui.HideBossDialogue();
         if (step == 4) { showing = false; ui.HideTasks(); Destroy(this); return; }
         waitingForAction = true;
-        ui.SetupTasks(new[] { step == 0 ? "ADD A CLIP TO THE TIMELINE AND CLICK IT" : step == 1 ? "DRAG THE PLAYBACK SLIDER TO POSITION THE RED LINE; PRESS [B] TO CUT THERE" : step == 2 ? "[CTRL + Z] UNDO THE SPLIT" : "SELECT ONE CLIP; OPEN COLOR GRADE AND ADJUST A SLIDER" });
+        ui.SetupTasks(new[] { step == 0 ? "ADD A CLIP TO THE TIMELINE AND CLICK IT" : step == 1 ? "CLICK A TIMELINE TIME TO POSITION THE RED LINE; PRESS [B] TO CUT THERE" : step == 2 ? "[CTRL + Z] UNDO THE SPLIT" : "SELECT ONE CLIP; OPEN COLOR GRADE AND ADJUST A SLIDER" });
     }
 }

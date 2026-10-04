@@ -33,6 +33,35 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public int fadeFrames = 24;
 
+    internal EditorEditState CaptureUndo()
+    {
+        if (rectTransform == null) rectTransform = GetComponent<RectTransform>();
+        var rect = new EditorRectState(rectTransform, false,
+            isOnTimeline && commercialTransformCached ? (Vector2?)commercialPosition : null,
+            isOnTimeline && commercialTransformCached ? (Vector3?)commercialScale : null);
+        bool onTrack = isOnTimeline;
+        int first = startFrame, last = endFrame, bankIndex = originalSiblingIndex;
+        Transform bank = originalParent;
+        Vector2 bankSize = origSizeDelta, bankMin = origAnchorMin, bankMax = origAnchorMax, bankPivot = origPivot, bankPos = origPosition;
+        Vector3 bankScale = origLocalScale;
+        return new EditorEditState {
+            key = "overlay/" + GetInstanceID(),
+            fingerprint = onTrack + "/" + first + "/" + last + "/" + rect.Fingerprint(onTrack),
+            restore = () => {
+                if (this == null) return;
+                isOnTimeline = onTrack; startFrame = first; endFrame = last;
+                originalParent = bank; originalSiblingIndex = bankIndex;
+                origSizeDelta = bankSize; origAnchorMin = bankMin; origAnchorMax = bankMax;
+                origPivot = bankPivot; origPosition = bankPos; origLocalScale = bankScale;
+                rect.Restore(rectTransform); isDragging = false;
+                if (canvasGroup == null) canvasGroup = GetComponent<CanvasGroup>();
+                if (canvasGroup != null) { canvasGroup.alpha = 1f; canvasGroup.blocksRaycasts = true; }
+                commercialTransformCached = false;
+                if (onTrack) CacheCommercialTransform(true);
+            }
+        };
+    }
+
     private void Start()
     {
         canvasGroup = GetComponent<CanvasGroup>();

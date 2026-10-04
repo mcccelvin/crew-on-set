@@ -12,6 +12,9 @@ public class EditorManager : MonoBehaviour
     public static EditorManager Instance;
     public int EditingLevel { get; private set; }
     private bool submissionStarted;
+    public List<FootageData> RoomFootage { get; set; }
+    public bool IsRoomEditor => RoomFootage != null;
+    public bool ReviewIsOpen => submissionStarted || reviewVideoPanel != null && reviewVideoPanel.activeInHierarchy;
 
     [Header("UI References - Graphics Track")]
     public Transform[] brandingTracks;
@@ -45,7 +48,7 @@ public class EditorManager : MonoBehaviour
     private int currentPhase = 0;
     private int cheatClipCounter = 0;
 
-    private List<GameObject> clonedLogos = new List<GameObject>();
+    private Button reviewBackButton;
     private List<Texture2D> generatedThumbnails = new List<Texture2D>();
     private Material exportMaterial;
     private float pendingCam = 0f;
@@ -62,11 +65,15 @@ public class EditorManager : MonoBehaviour
     {
         PauseManager.isPaused = false;
         DraggableClip.ResetSplitHistory();
-        PauseManager.EnsureEditorPause();
+        if (GetComponent<EditorUndoHistory>() == null) gameObject.AddComponent<EditorUndoHistory>();
+        if (!IsRoomEditor) PauseManager.EnsureEditorPause();
+        if (!IsRoomEditor)
+        {
         var contractReference = ContractUIManager.Instance;
         if (contractReference == null)
             contractReference = new GameObject("Editor contract reference").AddComponent<ContractUIManager>();
         contractReference.ConfigureEditorReference();
+        }
         Time.timeScale = 1f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -75,6 +82,7 @@ public class EditorManager : MonoBehaviour
         activeTabColor = EditorWorkspaceUI.Accent;
         inactiveTabColor = EditorWorkspaceUI.Control;
         BuildProfessionalPreview();
+        BuildReviewBackButton();
         SetupPlayerEditTools();
         // Keep the clip bank sprite, CLIPS heading, and typography authored in the scene.
         EditorWorkspaceUI.Surface(brandingBinPanel != null ? brandingBinPanel.transform : null);
@@ -86,7 +94,7 @@ public class EditorManager : MonoBehaviour
         {
             AddProvidedGokeClip("GokeIntro", "GOKE INTRO", ProvidedClipRole.GokeIntro);
             AddProvidedGokeClip("GokeOutro", "GOKE OUTRO", ProvidedClipRole.GokeOutro);
-            gameObject.AddComponent<GokeIntroOutroLesson>();
+            if (!IsRoomEditor) gameObject.AddComponent<GokeIntroOutroLesson>();
         }
         else if (CampaignProgression.GetCurrentLevel() == 3)
         {
@@ -94,7 +102,7 @@ public class EditorManager : MonoBehaviour
             AddGeneratedTerrariClip("TerrariOutro", "TERRARI OUTRO", ProvidedClipRole.TerrariOutro);
             // Terrari editing is independent; supplied clips remain available without a lesson.
         }
-        else if (EditingLevel == 4) gameObject.AddComponent<CoffeeStoryEditLesson>();
+        else if (EditingLevel == 4 && !IsRoomEditor) gameObject.AddComponent<CoffeeStoryEditLesson>();
     }
 
     private void Update()
@@ -106,10 +114,10 @@ public class EditorManager : MonoBehaviour
             emptyPreviewMessage.gameObject.SetActive(texture == null || texture == Texture2D.blackTexture);
         }
         Keyboard keyboard = Keyboard.current;
-        if (Application.isFocused && keyboard != null && keyboard.f11Key.wasPressedThisFrame)
+        if (!IsRoomEditor && Application.isFocused && keyboard != null && keyboard.f8Key.wasPressedThisFrame)
         {
             GenerateCheatClip();
-            GameFeedback.Show("CHEAT ACTIVATED\nTest clip added to the clip bank");
+            GameFeedback.Show("CHEAT ACTIVATED\n12-second test clip added to the clip bank");
         }
     }
 
@@ -169,15 +177,24 @@ public class EditorManager : MonoBehaviour
         }
     }
 
+    public void ImportRoomFootage(List<FootageData> footage)
+    {
+        if (!IsRoomEditor) return;
+        RoomFootage = footage;
+        LoadClipsFromBridge();
+    }
+
     private void LoadClipsFromBridge()
     {
-        if (ProjectDataManager.Instance == null || ProjectDataManager.Instance.compiledFootage == null || clipPrefab == null || clipBankContainer == null) return;
+        var footage = RoomFootage ?? ProjectDataManager.Instance?.compiledFootage;
+        if (footage == null || clipPrefab == null || clipBankContainer == null) return;
 
-        foreach (var data in ProjectDataManager.Instance.compiledFootage)
+        foreach (var data in footage)
         {
             if (data == null || string.IsNullOrEmpty(data.fileName)) continue;
 
             string fullPath = Path.Combine(Application.persistentDataPath, data.fileName);
+            if (IsRoomEditor && System.Array.Exists(clipBankContainer.GetComponentsInChildren<DraggableClip>(true), c => c.clipFilePath == fullPath)) continue;
             if (!IsReadableTape(fullPath))
             {
                 Debug.LogWarning("Editor skipped missing or unreadable footage: " + data.fileName);
@@ -653,12 +670,10 @@ public class EditorManager : MonoBehaviour
         }
 
         UITransition.Show(reviewVideoPanel);
+        BuildReviewBackButton();
 
         CommercialCompiler compiler = FindObjectOfType<CommercialCompiler>();
         if (compiler != null && compiler.editorPlayer != null) compiler.editorPlayer.StopTape();
-
-        foreach (GameObject clone in clonedLogos) if (clone != null) Destroy(clone);
-        clonedLogos.Clear();
 
         if (exportPlayer != null && exportPlayer.computerScreen != null)
         {
@@ -673,43 +688,56 @@ public class EditorManager : MonoBehaviour
                 exportPlayer.computerScreen.material = exportMaterial;
             }
 
-            DraggableOverlay[] allOverlays = FindObjectsOfType<DraggableOverlay>();
-            foreach (var overlay in allOverlays)
-            {
-                if (overlay.isOnTimeline)
-                {
-                    GameObject clone = Instantiate(overlay.gameObject, exportPlayer.computerScreen.transform);
-                    RectTransform cloneRT = clone.GetComponent<RectTransform>();
-                    RectTransform origRT = overlay.GetComponent<RectTransform>();
-
-                    RectTransform smallTV = overlay.transform.parent.GetComponent<RectTransform>();
-                    RectTransform bigTV = exportPlayer.computerScreen.GetComponent<RectTransform>();
-
-                    if (cloneRT == null || origRT == null || smallTV == null || bigTV == null || smallTV.rect.width <= 0f || smallTV.rect.height <= 0f)
-                    {
-                        Destroy(clone);
-                        continue;
-                    }
-
-                    float ratioX = bigTV.rect.width / smallTV.rect.width;
-                    float ratioY = bigTV.rect.height / smallTV.rect.height;
-
-                    cloneRT.anchoredPosition = new Vector2(origRT.anchoredPosition.x * ratioX, origRT.anchoredPosition.y * ratioY);
-                    cloneRT.sizeDelta = new Vector2(origRT.sizeDelta.x * ratioX, origRT.sizeDelta.y * ratioY);
-                    cloneRT.localScale = origRT.localScale;
-
-                    clonedLogos.Add(clone);
-                }
-            }
+            exportPlayer.SetOverlaySource(gradingManager != null ? gradingManager.computerScreen : null);
         }
 
         exportPlayer.PlaySequence(sequence, hasFadeIn);
         return true;
     }
 
+    public bool IsReviewBackControl(Transform item) => reviewBackButton != null &&
+        (item == reviewBackButton.transform || item.IsChildOf(reviewBackButton.transform));
+    private void BuildReviewBackButton()
+    {
+        if (reviewBackButton != null || reviewVideoPanel == null) return;
+        var root = new GameObject("Back to edit", typeof(RectTransform), typeof(Image), typeof(Button));
+        root.layer = reviewVideoPanel.layer;
+        root.transform.SetParent(reviewVideoPanel.transform, false);
+        var rect = root.GetComponent<RectTransform>();
+        // Match the authored Submit corner, without covering the picture or scrub bar.
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0,1);
+        rect.anchoredPosition = new Vector2(16,-18); rect.sizeDelta = new Vector2(104,80);
+        root.GetComponent<Image>().color = EditorWorkspaceUI.Control;
+        reviewBackButton = root.GetComponent<Button>(); reviewBackButton.targetGraphic = root.GetComponent<Image>();
+        reviewBackButton.onClick.AddListener(BackToEditor);
+        var label = new GameObject("Back label", typeof(RectTransform), typeof(TextMeshProUGUI)); label.transform.SetParent(root.transform,false);
+        var text = label.GetComponent<TextMeshProUGUI>();
+        text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF") ?? TMP_Settings.defaultFontAsset;
+        text.text = "BACK"; text.color = Color.white; text.alignment = TextAlignmentOptions.Center;
+        text.fontSize = text.fontSizeMax = 28; text.fontSizeMin = 18; text.enableAutoSizing = true; text.raycastTarget = false;
+        text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one;
+        text.rectTransform.offsetMin = new Vector2(8,4); text.rectTransform.offsetMax = new Vector2(-8,-4);
+    }
+    public void BackToEditor()
+    {
+        if (submissionStarted || reviewVideoPanel == null || !reviewVideoPanel.activeInHierarchy || PauseManager.isPaused) return;
+        if (exportPlayer != null) exportPlayer.StopTape();
+        reviewVideoPanel.SetActive(false);
+        if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnReviewBack();
+        var compiler = FindObjectOfType<CommercialCompiler>();
+        if (compiler != null && compiler.editorPlayer != null) compiler.editorPlayer.RefreshPlayerCreatedEffects();
+        UnityEngine.EventSystems.EventSystem.current?.SetSelectedGameObject(null);
+        Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
+    }
+
     public void SubmitVideo()
     {
-        if(submissionStarted)return;
+        if (submissionStarted || reviewVideoPanel == null || !reviewVideoPanel.activeInHierarchy || exportPlayer == null || !exportPlayer.CanStartPlayback) return;
+        if (IsRoomEditor)
+        {
+            MultiplayerAuthoredUI.Instance?.SubmitSharedCommercial(pendingCam, pendingLight, pendingSec);
+            return;
+        }
         if (grader == null)
         {
             ShowEditorWarning("The grading system is not ready. Your commercial has not been submitted.");
@@ -718,13 +746,10 @@ public class EditorManager : MonoBehaviour
 
         submissionStarted=true;
         CrossSceneData.finalGrades = grader.GenerateGrades(pendingCam, pendingLight, pendingSec);
+        CrossSceneData.submittedWithTutorial = EditorTutorialManager.Instance != null
+            && EditorTutorialManager.Instance.isActiveAndEnabled && EditorTutorialManager.Instance.RestrictsEditor
+            && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.ReviewAndSubmit;
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnVideoSubmitted();
-
-        foreach (GameObject clone in clonedLogos)
-        {
-            if (clone != null) Destroy(clone);
-        }
-        clonedLogos.Clear();
 
         if (reviewVideoPanel != null) reviewVideoPanel.SetActive(false);
         if (exportPlayer != null) exportPlayer.StopTape();

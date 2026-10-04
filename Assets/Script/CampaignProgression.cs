@@ -10,6 +10,9 @@ public static class CampaignProgression
 
     public static int GetCurrentLevel()
     {
+        // Shared editor/product/branding rules use the room contract, never the offline career.
+        if (MultiplayerRoleManager.Instance != null && MultiplayerRoleManager.Instance.State != null)
+            return Mathf.Clamp(MultiplayerRoleManager.Instance.State.contractLevel, MinimumLevel, MaximumLevel);
         int cheatLevel = PlayerPrefs.GetInt(levelCheatOverrideKey, 0);
         if (cheatLevel >= MinimumLevel && cheatLevel <= MaximumLevel)
         {

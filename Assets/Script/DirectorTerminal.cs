@@ -356,6 +356,18 @@ public class DirectorTerminal : MonoBehaviour
 
         if (colorFields != null && colorFields.IsEditing) return;
 
+        // Handle rotation before the placement branch returns, so the same key
+        // works on an already placed prop and on the current placement preview.
+        GameObject rotationTarget = draggedObject != null ? draggedObject : selectedObject;
+        if (keyboard != null && keyboard.rKey.wasPressedThisFrame && rotationTarget != null &&
+            !IsWallObject(rotationTarget) && CanUseContract4Practice("tablet.move"))
+        {
+            ActorBot rotatingActor = rotationTarget.GetComponent<ActorBot>();
+            if (rotatingActor != null) rotatingActor.StopFurnitureAction();
+            rotationTarget.transform.Rotate(0f, 15f, 0f, Space.World);
+            Physics.SyncTransforms();
+        }
+
         ActorBot actorBot = selectedObject != null ? selectedObject.GetComponent<ActorBot>() : null;
         if (actorBot != null)
         {
@@ -370,18 +382,18 @@ public class DirectorTerminal : MonoBehaviour
             if (keyboard.qKey.wasPressedThisFrame) grip.transform.Rotate(0,-15,0,Space.World);
             if (keyboard.eKey.wasPressedThisFrame) grip.transform.Rotate(0,15,0,Space.World);
             if (keyboard.fKey.wasPressedThisFrame) grip.CyclePower();
-            if (selectionIndicatorText != null) selectionIndicatorText.text=grip.Controls;
+            if (selectionIndicatorText != null) selectionIndicatorText.text=grip.Controls + "  |  R: rotate";
         }
 
         StageLightStrip strip = selectedObject != null ? selectedObject.GetComponent<StageLightStrip>() : null;
         if (strip != null && keyboard != null)
         {
-            if (keyboard.rKey.wasPressedThisFrame) strip.CycleTilt();
+            if (keyboard.yKey.wasPressedThisFrame) strip.CycleTilt();
             if (keyboard.qKey.wasPressedThisFrame) strip.transform.Rotate(0, -15, 0, Space.World);
             if (keyboard.eKey.wasPressedThisFrame) strip.transform.Rotate(0, 15, 0, Space.World);
             if (keyboard.fKey.wasPressedThisFrame) strip.CyclePower();
             if (selectionIndicatorText != null)
-                selectionIndicatorText.text = "LIGHT STRIP  |  R: tilt  Q/E: turn  F: " + strip.PowerLabel;
+                selectionIndicatorText.text = "LIGHT STRIP  |  R: rotate  Y: tilt  Q/E: turn  F: " + strip.PowerLabel;
         }
 
         if (draggedObject != null)
@@ -928,7 +940,7 @@ public class DirectorTerminal : MonoBehaviour
                 selectedRenderers = selectedObject.GetComponentsInChildren<Renderer>();
                 if (selectionIndicatorText != null) selectionIndicatorText.text = "Selected: " + selectedObject.name.Replace("(Clone)", "").Replace("_Wrapper", "");
                 if (selectionIndicatorText != null && selectedObject.GetComponent<StageLightStrip>() != null)
-                    selectionIndicatorText.text += "  |  R: tilt  Q/E: turn";
+                    selectionIndicatorText.text += "  |  R: rotate  Y: tilt  Q/E: turn";
 
                 if (selectedRenderers.Length > 0)
                 {

@@ -69,7 +69,7 @@ public sealed partial class RoleSelectionUI : MonoBehaviour
                 var local = state.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
                 if (GUILayout.Button(local.rolesLocked ? "UNLOCK ROLES" : "LOCK ROLES", GUILayout.Height(36))) Send("lockRoles", local.rolesLocked ? 0 : 1);
                 if (GUILayout.Button("READY / NOT READY", GUILayout.Height(36))) Send("ready");
-                if (PhotonNetwork.IsMasterClient && GUILayout.Button("START COFFEE COMMERCIAL", GUILayout.Height(36))) Send("start");
+                if (PhotonNetwork.IsMasterClient && GUILayout.Button("START " + MultiplayerContractManager.Title(state.contractLevel), GUILayout.Height(36))) Send("start");
             }
             else if (state.phase == "briefing") GUILayout.Label(MultiplayerAuthoredUI.Instance?.Message ?? "Preparing the authored station UI. If this remains, stop Play Mode and use Crew-On-Set > Refresh Multiplayer UI Copies.");
             else if (control != null)
@@ -77,30 +77,31 @@ public sealed partial class RoleSelectionUI : MonoBehaviour
                 MultiplayerWorkbench.Instance?.Draw();
                 if (MultiplayerWorkbench.Instance == null || MultiplayerWorkbench.Instance.ShowRoleTools)
                 {
-                GUILayout.Label("Stage a coffee commercial. Buy your kit in SHOP. Record Wide, Medium and Close takes; Editor assembles five seconds of each. ALMANAC explains the controls.");
+                GUILayout.Label("Produce " + MultiplayerContractManager.Title(state.contractLevel) + ". Follow its singleplayer shot, duration and branding requirements. ALMANAC explains the controls.");
                 foreach (CrewRole role in new[] { CrewRole.Director, CrewRole.Camera, CrewRole.AVTechnician, CrewRole.Editor })
                     if (crew.HasRole(role)) GUILayout.Label(MultiplayerContractManager.Tasks(state, role));
                 if (crew.HasRole(CrewRole.Director))
                 {
                     GUILayout.BeginHorizontal();
-                    if (GUILayout.Button("Hire actor — B900")) control.BeginPlace("actor");
+                    if (GUILayout.Button("Hire actor — B" + MultiplayerContractManager.Price("actor"))) control.BeginPlace("actor");
                     if (GUILayout.Button("CALL ACTION")) Send("action");
                     GUILayout.EndHorizontal();
                     GUILayout.Label("Select actor with LMB. Aim at a chair/machine/product and click to cue interaction. H clears selection. T previews a new actor position; LMB confirms. O releases the prop and stops the pose.");
                 }
-                if (crew.HasRole(CrewRole.AVTechnician))
+                if (crew.HasRole(CrewRole.Director))
                 {
                     GUILayout.BeginHorizontal();
-                    foreach (string kind in new[] { "chair", "cup", "product", "table", "backdrop", "interior" })
+                    foreach (string kind in new[] { "chair", "cup", "product", "vehicle", "table", "backdrop", "interior" })
                         if (GUILayout.Button(kind + "\nB" + MultiplayerContractManager.Price(kind))) control.BeginPlace(kind);
                     GUILayout.EndHorizontal();
                 }
                 if (crew.HasRole(CrewRole.AVTechnician))
                 {
-                    if (GUILayout.Button("Add light — B750")) control.BeginPlace("light");
+                    if (GUILayout.Button("Add light — B" + MultiplayerContractManager.Price("light"))) control.BeginPlace("light");
+                    if (GUILayout.Button("Add Better Light — B" + MultiplayerContractManager.Price("softlight"))) control.BeginPlace("softlight");
                     GUILayout.Label("Select a light: Z/X Kelvin, C/V intensity, F power, T move. Aim direction can be adjusted below.");
                     var lamp = crew.Object(control.Selected);
-                    if (lamp?.kind == "light")
+                    if (lamp?.kind == "light" || lamp?.kind == "softlight")
                     {
                         GUILayout.Label(lamp.kelvin + " K | Intensity " + lamp.intensity);
                         float yaw = GUILayout.HorizontalSlider(lamp.rotation.y, 0, 360);
