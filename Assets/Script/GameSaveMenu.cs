@@ -14,6 +14,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private GameObject newGameDialog;
     private GameSaveSlot selected;
     private bool joining;
+    private Button cloudSync;
     [SerializeField] private Transform paper;
     private SaveLoadPanelHost sourceHost;
 
@@ -24,9 +25,21 @@ public sealed class GameSaveMenu : MonoBehaviour
     [SerializeField] private GameSetupMenu createSetup;
     private void BindMainButtons()
     {
-        // Hide the obsolete control in any previously baked menu hierarchy.
         var sync = paper.Find("Retry cloud sync");
-        if (sync != null) sync.gameObject.SetActive(false);
+        if (sync == null)
+            cloudSync = Button(paper, "Retry cloud sync", new Vector2(.70f,.17f), new Vector2(.845f,.235f), () => saves.RetryCloudSync());
+        else cloudSync = sync.GetComponent<Button>();
+        var syncRect = cloudSync.GetComponent<RectTransform>();
+        syncRect.anchorMin = new Vector2(.70f,.17f); syncRect.anchorMax = new Vector2(.845f,.235f);
+        syncRect.offsetMin = syncRect.offsetMax = Vector2.zero;
+        cloudSync.gameObject.SetActive(true);
+        Bind(cloudSync.transform, () => saves.RetryCloudSync());
+        StyleDeleteButton(cloudSync, "SYNC", false);
+        var syncLabel = cloudSync.GetComponentInChildren<TMP_Text>();
+        syncLabel.rectTransform.anchorMin = new Vector2(.08f,.08f);
+        syncLabel.rectTransform.anchorMax = new Vector2(.92f,.92f);
+        syncLabel.rectTransform.offsetMin = syncLabel.rectTransform.offsetMax = Vector2.zero;
+        syncLabel.fontSizeMin = 16; syncLabel.fontSizeMax = 24;
         Bind(paper.Find("Close"),CloseMenu);
         Bind(paper.Find("JOIN"),()=>{
             if(sourceHost==null)return;
@@ -246,6 +259,11 @@ public sealed class GameSaveMenu : MonoBehaviour
         float height=Math.Max(1,rowCount)*295f;
         rows.sizeDelta=new Vector2(0,height);
         status.text=saves.Status;
+        if (cloudSync != null)
+        {
+            cloudSync.interactable = !saves.Syncing;
+            cloudSync.GetComponentInChildren<TMP_Text>().text = saves.Syncing ? "SYNCING…" : saves.HasCloudSession ? "SYNC NOW" : "SIGN IN TO SYNC";
+        }
         if(selected==null||!slots.Contains(selected))selected=slots.FirstOrDefault();
         var deleteButton=paper.Find("Delete selected save").GetComponent<Button>();
         deleteButton.interactable=selected!=null&&!saves.Syncing;
