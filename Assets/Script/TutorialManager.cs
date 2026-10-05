@@ -469,14 +469,11 @@ public class TutorialManager : MonoBehaviour
                 }
             }
         }
-        if (keyboard != null && keyboard.f6Key.wasPressedThisFrame)
-        {
-            CheatCompleteCurrentStep();
-        }
     }
 
-    private void CheatCompleteCurrentStep()
+    public void CheatCompleteCurrentStep()
     {
+        if (!DevCommandsPanel.CommandsAllowed || !isActiveAndEnabled || !isTutorialInitialized) return;
         // 1. Block if we are currently loading the next screen
         if (isTransitioning) return;
 

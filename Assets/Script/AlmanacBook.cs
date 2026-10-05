@@ -523,6 +523,7 @@ public partial class AlmanacManager
 
     private System.Collections.IEnumerator AnimateBookPage(int direction, int next, float turnDuration = 1.1f, System.Action select = null, bool notify = true)
     {
+        PaperMenuAudio.Play(false);
         // Original spine-hinged turn, using the book's own illustrated paper.
         turningPaper = new GameObject("Turning Almanac leaf", typeof(RectTransform), typeof(AlmanacRoundedPage));
         turningPaper.transform.SetParent(knowledgePanel.transform, false);

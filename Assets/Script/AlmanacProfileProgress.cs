@@ -27,7 +27,7 @@ public partial class AlmanacManager
             profileStatsPanel = authored != null ? authored.gameObject : CreatePanel("Career stats", card, Color.clear);
             SetStretchRect(profileStatsPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(100, 20), new Vector2(-24, -20));
             profileStatsPanel.GetComponent<Image>().color = new Color32(252, 245, 220, 255);
-            if (authored == null) ProfileText(profileStatsPanel.transform, "Stats heading", "Career statistics", 40, 12, 8, 48, true);
+            if (authored == null) ProfileText(profileStatsPanel.transform, "Stats heading", "Account statistics", 40, 12, 8, 48, true);
             profileStatsSubtitle = profileStatsPanel.transform.Find("Stats subtitle")?.GetComponent<TMP_Text>() ??
                 ProfileText(profileStatsPanel.transform, "Stats subtitle", "Your saved production record", 20, 14, 54, 36);
             profileStatsContent = profileStatsPanel.transform.Find("Stats list/Viewport/Content") ?? CreateScrollList("Stats list", profileStatsPanel.transform);
@@ -47,15 +47,8 @@ public partial class AlmanacManager
         }
         profileStatsButton.onClick.RemoveListener(OpenStatsTab);
         profileStatsButton.onClick.AddListener(OpenStatsTab);
-        if (profileCareerCaption == null)
-        {
-            var authored = stage.Find("Career save badge");
-            var badge = authored != null ? authored.gameObject : CreatePanel("Career save badge", stage, new Color32(252, 245, 220, 245));
-            SetRect(badge.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(-455, 357), new Vector2(560, 44));
-            badge.GetComponent<Image>().raycastTarget = false;
-            profileCareerCaption = badge.transform.Find("Career name")?.GetComponent<TMP_Text>() ?? ProfileText(badge.transform, "Career name", "", 22, 14, 2, 38);
-            profileCareerCaption.alignment = TextAlignmentOptions.Center;
-        }
+        var oldCareerBadge=stage.Find("Career save badge");
+        if(oldCareerBadge!=null)oldCareerBadge.gameObject.SetActive(false);
         if (achievementsPanel != null && achievementSummary == null)
         {
             var heading = achievementsPanel.transform.Find("Section Title")?.GetComponent<TMP_Text>();
@@ -75,10 +68,7 @@ public partial class AlmanacManager
 
     private string ProfileCareerName()
     {
-        if (profileMenuOnly) return profileMenuSlot == null ? "No saved career yet" : "Career: " + profileMenuSlot.name;
-        if (GameSavePrefs.IsRoomSession) return "Crew session · separate from your solo career";
-        string name = GameSaveManager.Instance?.Active?.name;
-        return string.IsNullOrWhiteSpace(name) ? "Local career" : name;
+        return AccountProfileData.Owner=="guest" ? "Guest stats · saved on this device" : "Your PlayFab account production record";
     }
     private void EnsureCareerAchievements()
     {
@@ -87,7 +77,7 @@ public partial class AlmanacManager
         {
             var entry = achievements.Find(a => a.id == definition.id);
             if (entry == null) { entry = new AchievementEntry { id = definition.id }; achievements.Add(entry); }
-            entry.title = definition.title; entry.description = definition.description; entry.maxProgress = definition.goal;
+            entry.title = definition.title; entry.description = definition.description.Replace("in this career","on this account"); entry.maxProgress = definition.goal;
             entry.currentProgress = Mathf.Clamp(definition.progress(record), 0, definition.goal);
             entry.isUnlocked = entry.currentProgress == definition.goal || ProfilePreference("AchivDone_" + entry.id) == 1;
             if (entry.isUnlocked) entry.currentProgress = definition.goal;
@@ -102,10 +92,12 @@ public partial class AlmanacManager
     {
         if (!isProfileOpen || Time.unscaledTime < profileRefreshAt) return;
         profileRefreshAt = Time.unscaledTime + 1f;
+        RefreshProfileSyncStatus();
         string stamp = GameSavePrefs.GetString(CareerProfileProgress.SaveKey, "") + GameSavePrefs.GetInt("PlayerMoney", 0) +
             AccountProfileData.Name + AccountProfileData.Bio + AccountProfileData.Owner + ProfileCareerName();
         if (stamp == profileProgressStamp) return;
         profileProgressStamp = stamp;
+        profileAccountStats=null;
         RefreshAllUI();
     }
     private void ResetProfileProgressUI()
@@ -201,10 +193,16 @@ public partial class AlmanacManager
         double seconds = r.recordedSeconds;
         string duration = $"{(long)(seconds / 60):N0}m {(int)(seconds % 60):00}s" + (r.partialDuration ? "+" : "");
         StatsTiles(new[] { "Recorded footage", "B-Coins spent", "B-Coin income" }, new[] { duration, r.spent.ToString("N0"), r.income.ToString("N0") });
-        var explanation = ProfileRow(profileStatsContent, "Tracking note", r.partialHistory ? 152 : 96);
-        string note = "Stats belong to this saved career. Income includes advances and rewards; developer funds are excluded. Replays count as attempts, not new clients.";
+        var account=ProfileSnapshot();
+        StatsTiles(new[] { account.currentBudget ? "Current production B-Coins" : "Latest saved B-Coin budget", "Account C-Coins" }, new[] {
+            account.hasBudget ? account.bCoins.ToString("N0") : "—",
+            profileWallet?.Verified==true ? profileWallet.Balance.ToString("N0") : (profileWallet?.Balance ?? 0).ToString("N0")+" · cached" });
+        float noteHeight = r.partialHistory || account.conflictingHistory ? 270 : 180;
+        var explanation = ProfileRow(profileStatsContent, "Tracking note", noteHeight);
+        string note = "Stats combine this account's saved productions. B-Coins remain separate production budgets, not a combined wallet. C-Coins need server confirmation. Income excludes developer funds; replays are attempts, not new clients.";
+        if(account.conflictingHistory)note+=" Conflicting checkpoint copies share history and are not counted twice; totals are conservative.";
         if (r.partialHistory) note += " Older totals are partial: only retained records are included. A + marks footage with unknown earlier duration.";
-        ProfileText(explanation.transform, "Tracking details", note, 20, 14, 8, r.partialHistory ? 136 : 80).color = ProfileMuted;
+        ProfileText(explanation.transform, "Tracking details", note, 20, 14, 8, noteHeight-16).color = ProfileMuted;
         var title = ProfileRow(profileStatsContent, "Portfolio heading", 48);
         ProfileText(title.transform, "Heading", "Your client portfolio", 30, 14, 2, 42, true);
         for (int level = 1; level <= 5; level++)
@@ -232,5 +230,6 @@ public partial class AlmanacManager
         }
         LayoutRebuilder.ForceRebuildLayoutImmediate((RectTransform)profileStatsContent);
         scroll.verticalNormalizedPosition = position;
+        ApplyProfileTypography();
     }
 }

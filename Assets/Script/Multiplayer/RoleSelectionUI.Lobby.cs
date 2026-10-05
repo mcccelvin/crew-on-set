@@ -40,6 +40,7 @@ public sealed partial class RoleSelectionUI
         scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
         if (desk.GetComponent<GraphicRaycaster>() == null) desk.gameObject.AddComponent<GraphicRaycaster>();
         foreach (Transform child in desk.transform) child.gameObject.SetActive(false);
+        if (MultiplayerRoleManager.IsLobbyScene) MainMenuMotion.AddLobbyBackdrop(desk.transform);
         var frame = new GameObject("Crew lobby layout", typeof(RectTransform)).GetComponent<RectTransform>();
         frame.SetParent(desk.transform, false);
         frame.anchorMin = frame.anchorMax = frame.pivot = new Vector2(.5f, .5f);

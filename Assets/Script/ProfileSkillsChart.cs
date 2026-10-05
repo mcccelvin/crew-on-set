@@ -3,7 +3,7 @@ using UnityEngine.UI;
 
 // A native UI mesh, not the fixed sample polygon embedded in the old stats PNG.
 [RequireComponent(typeof(CanvasRenderer))]
-public sealed class ProfileSkillsChart : Graphic
+public sealed class ProfileSkillsChart : MaskableGraphic
 {
     public float[] scores = new float[5];
     protected override void OnPopulateMesh(VertexHelper mesh)

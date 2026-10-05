@@ -36,6 +36,7 @@ public sealed class GameSaveSlot
 // File names are generated IDs, never player-entered save names. Each account has its own directory.
 public sealed class GameSaveRepository
 {
+    public const string ProfileOriginKey = "Profile.CareerOrigin.v1";
     public readonly string Owner;
     public readonly string Folder;
     public readonly List<GameSaveSlot> Slots = new List<GameSaveSlot>();
@@ -62,6 +63,7 @@ public sealed class GameSaveRepository
     {
         name = string.IsNullOrWhiteSpace(name) ? "Game " + (Slots.Count + 1) : name.Trim();
         var slot = new GameSaveSlot { id = Guid.NewGuid().ToString("N"), owner = Owner, name = name.Substring(0, Math.Min(name.Length, 40)), values = Clone(values ?? new List<GameSaveValue>()) };
+        PreserveProfileOrigin(slot.values,slot.id);
         Commit(slot);
         Slots.Add(slot);
         return slot;
@@ -69,6 +71,7 @@ public sealed class GameSaveRepository
 
     public void Commit(GameSaveSlot slot)
     {
+        PreserveProfileOrigin(slot.values,slot.id);
         slot.revision = Guid.NewGuid().ToString("N");
         slot.updatedUtc = DateTime.UtcNow.ToString("o");
         Write(slot);
@@ -133,6 +136,7 @@ public sealed class GameSaveRepository
     public void MergeCloud(GameSaveSlot remote, string activeId)
     {
         Validate(remote, Owner);
+        PreserveProfileOrigin(remote.values,remote.id);
         var local = Slots.Find(s => s.id == remote.id);
         if (local != null && local.revision == remote.revision)
         {
@@ -158,4 +162,12 @@ public sealed class GameSaveRepository
     }
 
     public static List<GameSaveValue> Clone(List<GameSaveValue> source) => source.Select(v => new GameSaveValue { key = v.key, kind = v.kind, integer = v.integer, number = v.number, text = v.text }).ToList();
+
+    private static void PreserveProfileOrigin(List<GameSaveValue> values,string id)
+    {
+        if(values.Exists(v=>v.key==ProfileOriginKey && v.kind==2 && !string.IsNullOrEmpty(v.text)))return;
+        string rewardOrigin=values.Find(v=>v.key=="CCoins.CareerRewardId" && v.kind==2)?.text;
+        values.RemoveAll(v=>v.key==ProfileOriginKey);
+        values.Add(new GameSaveValue {key=ProfileOriginKey,kind=2,text=string.IsNullOrEmpty(rewardOrigin)?id:rewardOrigin});
+    }
 }

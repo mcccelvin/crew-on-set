@@ -14,17 +14,41 @@ public sealed class CCoinService : MonoBehaviour
     public event Action Changed;
     public CCoinWallet Wallet => state.wallet;
     public string SelectedCosmetic => state.selectedCosmetic;
+    public string[] EquippedParts => state.equippedParts.ToArray();
+    public bool IsEquipped(string id) => state.selectedCosmetic == id || state.equippedParts.Contains(id);
     public int PendingRewards => state.pendingRewards.Count;
     public int Balance => state.wallet?.balance ?? 0;
     public bool Busy { get; private set; }
     public bool Verified { get; private set; }
     public string Status { get; private set; } = "Sign in to sync your cosmetic wallet.";
     private CCoinLocalState state = new CCoinLocalState();
+    private CCoinLocalState realState;
+    public bool DevWalletActive => realState != null;
     private string owner = "guest";
     private int session, requestGeneration;
     private float nextRefresh, deadline;
     public bool Authenticated => owner != "guest" && PlayFabSettings.staticPlayer.PlayFabId == owner && PlayFabClientAPI.IsClientLoggedIn();
-    public bool CanBuy => Verified && !Busy && Authenticated && state.pendingPurchase == null;
+    public bool CanBuy => DevWalletActive || Verified && !Busy && Authenticated && state.pendingPurchase == null;
+
+    public void DevAddCoins(int amount)
+    {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        if(amount<=0)return;
+        if(!DevWalletActive)
+        {
+            session++;requestGeneration++;Busy=Verified=false;realState=state;
+            state=new CCoinLocalState { wallet=new CCoinWallet { accountId=owner,currency="CC",cosmetics=CharacterCosmetics.Items,owned=new string[0] } };
+        }
+        state.wallet.balance=(int)Math.Min(int.MaxValue,(long)state.wallet.balance+amount);
+        Publish("TEST WALLET · "+state.wallet.balance+" C-Coins · session only, never synced or saved.");
+#endif
+    }
+    public void DevEndWallet()
+    {
+        if(!DevWalletActive)return;
+        session++;requestGeneration++;state=realState;realState=null;Busy=Verified=false;nextRefresh=Time.unscaledTime;
+        Publish("Real wallet restored. Test coins and test purchases discarded.");
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() { Instance = null; }
@@ -49,6 +73,7 @@ public sealed class CCoinService : MonoBehaviour
     private static string CacheKey(string account) => "SaveSystem.CCoins.v1." + account;
     public void BindAccount(string account)
     {
+        realState=null; // Never carry developer funds/equipment across accounts.
         session++; requestGeneration++; Busy = Verified = false;
         owner = CCoinRules.ValidId(account) ? account : "guest";
         try { state = JsonUtility.FromJson<CCoinLocalState>(UnityEngine.PlayerPrefs.GetString(CacheKey(owner),"")) ?? new CCoinLocalState(); }
@@ -59,6 +84,7 @@ public sealed class CCoinService : MonoBehaviour
             || CCoinRules.Reward(x.careerId,x.contractLevel)?.completionId != x.completionId);
         if (state.pendingPurchase != null && (!CCoinRules.ValidId(state.pendingPurchase.itemId) || !CCoinRules.ValidId(state.pendingPurchase.operationId))) state.pendingPurchase = null;
         if (!CCoinRules.Owns(state.wallet,state.selectedCosmetic)) state.selectedCosmetic = null;
+        ValidateEquipment();
         nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Sign in to sync C-Coins. Offline rewards stay pending." : "Cached wallet · waiting for account sync.");
     }
@@ -69,11 +95,12 @@ public sealed class CCoinService : MonoBehaviour
         if (!Busy && Time.unscaledTime >= nextRefresh) { nextRefresh = Time.unscaledTime + 60; Refresh(); }
     }
     private void OnApplicationFocus(bool focused) { if (focused) nextRefresh = Time.unscaledTime; }
-    private void Save() { UnityEngine.PlayerPrefs.SetString(CacheKey(owner),JsonUtility.ToJson(state)); UnityEngine.PlayerPrefs.Save(); }
+    private void Save() { if(DevWalletActive)return; UnityEngine.PlayerPrefs.SetString(CacheKey(owner),JsonUtility.ToJson(state)); UnityEngine.PlayerPrefs.Save(); }
     private void Publish(string message) { Status = message; Changed?.Invoke(); }
 
     public bool QueueContractReward(int level,string rank)
     {
+        if(DevWalletActive)return false;
         if (GameSavePrefs.IsRoomSession || !CCoinRules.Passed(rank)) return false;
         // Reward identity follows checkpoint copies; returning to the result or
         // restoring the same checkpoint cannot create a different claim.
@@ -94,6 +121,7 @@ public sealed class CCoinService : MonoBehaviour
     // Invoke only after the existing save system has linked unclaimed guest careers.
     public void LinkGuestRewards()
     {
+        if(DevWalletActive)return;
         if (owner == "guest") return;
         CCoinLocalState guest;
         try { guest = JsonUtility.FromJson<CCoinLocalState>(UnityEngine.PlayerPrefs.GetString(CacheKey("guest"),"")); }
@@ -110,6 +138,7 @@ public sealed class CCoinService : MonoBehaviour
     }
     public void Refresh()
     {
+        if(DevWalletActive){Publish("TEST WALLET · "+Balance+" C-Coins · local testing, purchases are temporary. Use F12 to restore real wallet.");return;}
         if (Busy) return;
         if (!Authenticated) { Verified = false; Publish("Offline wallet · sign in to sync rewards and buy cosmetics."); return; }
         if (string.IsNullOrEmpty(CCoinSettings.FunctionName)) { Verified = false; Publish("C-Coins connection is not configured. Rewards are kept pending."); return; }
@@ -158,7 +187,17 @@ public sealed class CCoinService : MonoBehaviour
         if (!CCoinRules.ValidWallet(wallet,owner) || (state.wallet != null && wallet.revision < state.wallet.revision)) return false;
         state.wallet = wallet;
         if (!CCoinRules.Owns(wallet,state.selectedCosmetic)) state.selectedCosmetic = null;
+        ValidateEquipment();
         Save(); return true;
+    }
+    private void ValidateEquipment()
+    {
+        if(state.equippedParts==null)state.equippedParts=new List<string>();
+        var slots=new HashSet<string>();
+        state.equippedParts.RemoveAll(id=> {
+            var item=CharacterCosmetics.Find(id);
+            return item==null || !CCoinRules.Owns(state.wallet,id) || !slots.Add(item.kind);
+        });
     }
     private void Finish(bool verified,string message) { Busy = false; Verified = verified; nextRefresh = Time.unscaledTime + 60; Publish(message); }
     private void Request(string action,object data,Action<CCoinOperationResult> callback)
@@ -185,16 +224,30 @@ public sealed class CCoinService : MonoBehaviour
         var item = CCoinRules.Find(state.wallet,id);
         if (!CanBuy || item == null || CCoinRules.Owns(state.wallet,id)) return;
         if (Balance < item.price) { Publish("Not enough C-Coins. B-Coins cannot pay for cosmetics."); return; }
+        if(DevWalletActive)
+        {
+            state.wallet.balance-=item.price;
+            var owned=new List<string>(state.wallet.owned);owned.Add(id);state.wallet.owned=owned.ToArray();
+            Publish("TEST PURCHASE · "+item.name+" · no real coins charged; equip to test the look.");return;
+        }
         state.pendingPurchase = new CCoinPurchase { itemId = id, operationId = "buy:" + Guid.NewGuid().ToString("N") };
         Save(); Refresh(); // Backend determines price, settles atomically and returns ownership.
     }
     public void Equip(string id)
     {
         if (!string.IsNullOrEmpty(id) && (!CCoinRules.Owns(state.wallet,id) || CCoinRules.Find(state.wallet,id) == null)) return;
-        state.selectedCosmetic = id; Save(); Changed?.Invoke();
+        var part=CharacterCosmetics.Find(id);
+        if(part!=null)
+        {
+            state.equippedParts.RemoveAll(x=>CharacterCosmetics.Find(x)?.kind==part.kind);
+            state.equippedParts.Add(id);
+        }
+        else { state.selectedCosmetic=id; if(string.IsNullOrEmpty(id))state.equippedParts.Clear(); }
+        Save(); Changed?.Invoke();
     }
     public void RequestCoinPurchase()
     {
+        if(DevWalletActive){Publish("Restore your real wallet in F12 before opening paid checkout.");return;}
         if (!Authenticated) { Publish("Sign in before buying C-Coins."); return; }
         if (!CCoinSettings.WebsitePurchasesEnabled || string.IsNullOrEmpty(CCoinSettings.WebsiteUrl))
         { Publish("PayMongo checkout is not enabled yet. The website's wallet and payment webhook must be connected first."); return; }
@@ -205,6 +258,7 @@ public sealed class CCoinService : MonoBehaviour
     // nor account ID comes from the client; the server validates and deduplicates it.
     public void ValidateStoreReceipt(string provider,string productId,string receipt)
     {
+        if(DevWalletActive){Publish("Store validation is disabled in the test wallet.");return;}
         if (string.Equals(provider,"paymongo",StringComparison.OrdinalIgnoreCase))
         { Publish("PayMongo coins are credited by the verified website webhook. Return to the game and sync your wallet."); return; }
         if (!CanBuy || !CCoinRules.ValidId(provider) || !CCoinRules.ValidId(productId) || string.IsNullOrWhiteSpace(receipt) || receipt.Length > 65536) return;

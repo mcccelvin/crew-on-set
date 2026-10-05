@@ -39,6 +39,7 @@ using System.Collections.Generic;
     public List<CCoinReward> pendingRewards = new List<CCoinReward>();
     public CCoinPurchase pendingPurchase;
     public string selectedCosmetic;
+    public List<string> equippedParts = new List<string>();
 }
 public static class CCoinRules
 {
@@ -65,11 +66,13 @@ public static class CCoinRules
         foreach (var id in wallet.owned) if (!ValidId(id) || !ids.Add(id)) return false;
         ids.Clear();
         foreach (var item in wallet.cosmetics)
-            if (item == null || !ValidId(item.id) || !ids.Add(item.id) || item.kind != "profile_frame" || item.price < 1
+            if (item == null || !ValidId(item.id) || !ids.Add(item.id) || !Supported(item) || item.price < 1
                 || string.IsNullOrWhiteSpace(item.name) || item.name.Length > 80 || (item.description != null && item.description.Length > 300)
-                || !ValidColor(item.color)) return false;
+                || (item.kind == "profile_frame" && !ValidColor(item.color))) return false;
         return true;
     }
+    public static bool Supported(CCoinCosmetic item) => item != null && (item.kind == "profile_frame" ||
+        (CharacterCosmetics.Find(item.id) != null && CharacterCosmetics.Find(item.id).kind == item.kind && item.price == CharacterCosmetics.Price));
     public static bool ValidColor(string value)
     {
         if (value == null || value.Length != 7 || value[0] != '#') return false;
@@ -80,4 +83,27 @@ public static class CCoinRules
     public static CCoinCosmetic Find(CCoinWallet wallet,string id) => wallet?.cosmetics == null ? null : Array.Find(wallet.cosmetics,x => x != null && x.id == id);
     public static bool Completed(CCoinOperationResult result,string id) => result != null && result.operationId == id
         && (result.status == "applied" || result.status == "already_applied");
+}
+
+// Stable server item IDs map only to bundled models, never a URL or client path.
+public static class CharacterCosmetics
+{
+    public const int Price = 10;
+    public static readonly string[] Slots = { "accessory", "hair", "face", "body", "shirt", "pants", "shoe" };
+    public static readonly CCoinCosmetic[] Items = Create();
+    public static CCoinCosmetic Find(string id) => Array.Find(Items,x=>x.id==id);
+    public static string ModelKey(string id) => Find(id)==null ? null : id.Substring("character_".Length);
+    private static CCoinCosmetic[] Create()
+    {
+        var items = new List<CCoinCosmetic>();
+        int[] counts = {6,6,5,2,5,6,6};
+        for(int slot=0;slot<Slots.Length;slot++) for(int n=1;n<=counts[slot];n++)
+        {
+            string key=Slots[slot]=="body" ? (n==1 ? "body_boy" : "body_girl") : Slots[slot]+n;
+            string title=Slots[slot]=="body" ? (n==1 ? "Boy body" : "Girl body") : char.ToUpper(Slots[slot][0])+Slots[slot].Substring(1)+" "+n;
+            items.Add(new CCoinCosmetic {id="character_"+key,kind=Slots[slot],name=title,price=Price,
+                description="Character customization · "+title+". Appearance only."});
+        }
+        return items.ToArray();
+    }
 }

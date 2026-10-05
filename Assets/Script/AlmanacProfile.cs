@@ -11,8 +11,37 @@ public partial class AlmanacManager
     private bool isProfileOpen;
     private RawImage profileCharacterImage;
     private RenderTexture profileCharacterTexture;
+    private ProfileCharacterPreview profileLivePreview;
+    private static TMP_FontAsset profileLabelFont;
+    private static Material profileLabelMaterial;
+
+    private void ApplyProfileTypography()
+    {
+        if (profileCanvas == null) return;
+        if (profileLabelFont == null)
+            profileLabelFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF") ?? TMP_Settings.defaultFontAsset;
+        if (profileLabelFont == null) return;
+        if (profileLabelMaterial == null)
+        {
+            profileLabelMaterial = new Material(profileLabelFont.material) { name = "Profile white lettering - black outline" };
+            profileLabelMaterial.EnableKeyword("OUTLINE_ON");
+            profileLabelMaterial.SetColor("_FaceColor", Color.white);
+            profileLabelMaterial.SetColor("_OutlineColor", Color.black);
+            profileLabelMaterial.SetFloat("_OutlineWidth", .22f);
+            profileLabelMaterial.SetFloat("_OutlineSoftness", 0);
+        }
+        foreach (var text in profileCanvas.GetComponentsInChildren<TMP_Text>(true))
+        {
+            text.font = profileLabelFont;
+            text.fontSharedMaterial = profileLabelMaterial;
+            text.fontStyle = FontStyles.Bold;
+            text.color = Color.white;
+            text.UpdateMeshPadding();
+        }
+    }
     private TMP_Text profileAccountId;
     private Image profileCardImage;
+    private readonly System.Collections.Generic.List<string> profileTryOnParts = new System.Collections.Generic.List<string>();
 
     private void ApplyAccountProfileStyle()
     {
@@ -52,7 +81,7 @@ public partial class AlmanacManager
             preview.transform.SetParent(stage, false);
             profileCharacterImage = preview.GetComponent<RawImage>();
             profileCharacterImage.raycastTarget = false;
-            SetRect(preview.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(-455, -30), new Vector2(560, 700));
+            SetRect(preview.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(-455, -90), new Vector2(560, 700));
         }
         CCoinProfileWidget.Attach(stage,profileCharacterImage,profileCanvas.transform);
         var wallet = stage.Find("Account cosmetic wallet/Open cosmetic shop");
@@ -62,6 +91,7 @@ public partial class AlmanacManager
 
     private void ReleaseProfilePreview()
     {
+        if (profileLivePreview != null) profileLivePreview.Release();
         if (profileCharacterImage != null) profileCharacterImage.texture = null;
         if (profileCharacterTexture == null) return;
         profileCharacterTexture.Release();
@@ -71,6 +101,12 @@ public partial class AlmanacManager
 
     private void RenderProfileCharacter()
     {
+        profileTryOnParts.Clear();
+        RenderDressedProfileCharacter(CCoinService.Ensure().EquippedParts);
+    }
+
+    private void RenderDressedProfileCharacter(string[] parts)
+    {
         ReleaseProfilePreview();
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         GameObject portraitModel = null;
@@ -79,6 +115,8 @@ public partial class AlmanacManager
                 if (model != null && model.name == "DefaultCharacGirlRig") { portraitModel = model; break; }
         if (profileCharacterImage == null || portraitModel == null) return;
         var portrait = Instantiate(portraitModel);
+        // Dress the actual character at rest, then pose its original skeleton.
+        CharacterCosmeticRig.Load()?.Apply(portrait,parts);
         portrait.transform.SetPositionAndRotation(new Vector3(20000, 20000, 20000), Quaternion.identity);
         foreach (var animator in portrait.GetComponentsInChildren<Animator>())
         {
@@ -108,7 +146,7 @@ public partial class AlmanacManager
             animator.enabled = false;
         }
         // The catalog entry is the imported character FBX, not the player/gameplay prefab.
-        // Render its native skinning once, then discard the temporary rig and scene objects.
+        // Keep the isolated rig alive while the profile is open, for idle and greeting motion.
         var root = new GameObject("Profile portrait snapshot");
         root.transform.position = new Vector3(10000, 10000, 10000);
         portrait.transform.SetParent(root.transform, true);
@@ -116,6 +154,7 @@ public partial class AlmanacManager
         foreach (var collider in portrait.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
         foreach (var otherCamera in portrait.GetComponentsInChildren<Camera>(true)) otherCamera.enabled = false;
         foreach (var otherLight in portrait.GetComponentsInChildren<Light>(true)) otherLight.enabled = false;
+        bool retained = false;
         try
         {
             Bounds bounds = new Bounds();
@@ -173,13 +212,18 @@ public partial class AlmanacManager
             camera.Render();
             camera.targetTexture = null;
             profileCharacterImage.texture = profileCharacterTexture;
+            profileLivePreview = profileCharacterImage.GetComponent<ProfileCharacterPreview>();
+            if (profileLivePreview == null) profileLivePreview = profileCharacterImage.gameObject.AddComponent<ProfileCharacterPreview>();
+            profileLivePreview.Initialize(root, portrait, camera, light, profileCharacterTexture);
+            retained = true;
         }
         finally
         {
-            portrait.SetActive(false);
-            Destroy(portrait);
-            root.SetActive(false);
-            Destroy(root);
+            if (!retained)
+            {
+                root.SetActive(false);
+                Destroy(root);
+            }
         }
     }
 
@@ -280,6 +324,7 @@ public partial class AlmanacManager
         if (shop != null && shop.IsTerminalActive()) return;
         var computer = FindObjectOfType<ComputerStation>();
         if (computer != null && computer.computerUICanvas != null && computer.computerUICanvas.activeInHierarchy) return;
+        profileMenuOnly=false;profileMenuClosed=null;profileAccountStats=null;profileAccountSyncRequested=false;
         BuildProfileUI();
         if (profileCanvas == null) return;
         ApplyAccountProfileStyle();
@@ -308,6 +353,8 @@ public partial class AlmanacManager
         {
             var cosmeticShop = profileCanvas.transform.Find("C-Coins cosmetic shop");
             if (cosmeticShop != null) cosmeticShop.gameObject.SetActive(false);
+            var coinShop = profileCanvas.transform.Find("C-Coins pack shop");
+            if (coinShop != null) coinShop.gameObject.SetActive(false);
         }
         if (profileCanvas != null) profileCanvas.SetActive(false);
         RestoreInputState();

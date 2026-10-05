@@ -15,3 +15,20 @@ MonoBehaviour:
   functionName: CrewCCoins
   websiteUrl: https://crewon-set-web.vercel.app/
   websitePurchasesEnabled: 0
+  coinPacks:
+  - id: starter_50
+    title: STARTER PACK
+    coins: 50
+    priceCentavos: 4900
+  - id:
+    title: STUDIO PACK
+    coins: 0
+    priceCentavos: 0
+  - id:
+    title: DIRECTOR PACK
+    coins: 0
+    priceCentavos: 0
+  - id:
+    title: PREMIERE PACK
+    coins: 0
+    priceCentavos: 0

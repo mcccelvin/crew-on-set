@@ -7,6 +7,8 @@ using UnityEngine.UI;
 // No camera, scene layer, external encoder or Editor-only API is needed.
 public sealed class VideoFrameCompositor : System.IDisposable
 {
+    public const int OutputWidth = 1920;
+    public const int OutputHeight = 1080;
     private sealed class Drawing
     {
         public readonly Mesh mesh = new Mesh();
@@ -20,11 +22,13 @@ public sealed class VideoFrameCompositor : System.IDisposable
     public Texture Compose(Texture footage, RectTransform monitor, DraggableOverlay[] overlays)
     {
         if (footage == null || monitor == null || monitor.rect.width <= 0 || monitor.rect.height <= 0) return footage;
-        if (frame == null || frame.width != footage.width || frame.height != footage.height)
+        // Graphics use the commercial output resolution, even over a 64x64 test
+        // tape. Upscale the footage first, then rasterize the original artwork.
+        if (frame == null)
         {
-            if (frame != null) { frame.Release(); Release(frame); }
-            frame = new RenderTexture(footage.width, footage.height, 0, RenderTextureFormat.ARGB32)
-                { name = "Commercial footage with embedded graphics", filterMode = FilterMode.Bilinear };
+            frame = new RenderTexture(OutputWidth, OutputHeight, 0, RenderTextureFormat.ARGB32)
+                { name = "Commercial footage with embedded graphics", filterMode = FilterMode.Bilinear,
+                  useMipMap = false, autoGenerateMips = false };
             frame.Create();
         }
         // Always start from the source frame: repeated scrubs must not accumulate logos.

@@ -23,7 +23,7 @@ using System.Collections.Generic;
         string playerId, string mode, string[] roles, int level, string playedUtc, ProductionGrades grades,
         ProductionBudgetReview budget, string nextStep)
     {
-        var paper = new FeedbackReport(grades, budget?.feedback);
+        var paper = new FeedbackReport(grades, budget?.feedback, level);
         return new ProductionLogRecord {
             id = submissionId + ":" + playerId, productionId = productionId, submissionId = submissionId,
             careerId = careerId ?? "", playerId = playerId ?? "", mode = mode, roles = roles,

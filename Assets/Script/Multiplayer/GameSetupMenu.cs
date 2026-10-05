@@ -226,7 +226,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
         if (PhotonNetwork.IsMasterClient && loadingRoom != PhotonNetwork.CurrentRoom.Name)
         {
             loadingRoom = PhotonNetwork.CurrentRoom.Name;
-            LoadingScreenController.LoadNetworkScene(multiplayerScene);
+            LoadingScreenController.LoadNetworkScene("MultiplayerLobby");
         }
     }
 

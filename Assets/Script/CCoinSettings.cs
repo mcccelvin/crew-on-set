@@ -10,6 +10,9 @@ public sealed class CCoinSettings : ScriptableObject
     public string websiteUrl = "https://crewon-set-web.vercel.app/";
     [Tooltip("Enable only after the website's PayMongo checkout/webhook is deployed and tested.")]
     public bool websitePurchasesEnabled;
+    [Tooltip("Display offers only. The website must independently resolve and validate prices before payment.")]
+    public CCoinPackOffer[] coinPacks = CCoinPackOffer.Defaults();
+    public static CCoinPackOffer[] Packs => Resources.Load<CCoinSettings>("CCoinSettings")?.coinPacks ?? CCoinPackOffer.Defaults();
     public static bool WebsitePurchasesEnabled => Resources.Load<CCoinSettings>("CCoinSettings")?.websitePurchasesEnabled ?? false;
     public static string WebsiteUrl
     {
@@ -32,4 +35,19 @@ public sealed class CCoinSettings : ScriptableObject
             return CCoinRules.ValidId(value) ? value : "";
         }
     }
+}
+
+[Serializable]
+public sealed class CCoinPackOffer
+{
+    public string id, title;
+    public int coins, priceCentavos;
+    public bool Configured => CCoinRules.ValidId(id) && coins > 0 && priceCentavos > 0;
+    public string PriceLabel => "PHP " + (priceCentavos / 100m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+    public static CCoinPackOffer[] Defaults() => new[] {
+        new CCoinPackOffer { id="starter_50", title="STARTER PACK", coins=50, priceCentavos=4900 },
+        new CCoinPackOffer { title="STUDIO PACK" },
+        new CCoinPackOffer { title="DIRECTOR PACK" },
+        new CCoinPackOffer { title="PREMIERE PACK" }
+    };
 }

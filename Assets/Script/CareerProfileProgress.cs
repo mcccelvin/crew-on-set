@@ -48,7 +48,7 @@ public static class CareerProfileProgress
     private static Achievement Client(string id, string name, int level) =>
         new Achievement(id, name + " approved", "Pass the " + name + " contract and all its mandatory requirements.", 1, r => r.Completed(level) ? 1 : 0);
     public static bool IsBuiltIn(string id) => Array.Exists(Achievements, a => a.id == id);
-    public static bool RetainOnContractRetry(string key) => key == SaveKey ||
+    public static bool RetainOnContractRetry(string key) => key == SaveKey || key == GameSaveRepository.ProfileOriginKey ||
         key.StartsWith("AchivDone_", StringComparison.Ordinal) || key.StartsWith("AchivProg_", StringComparison.Ordinal);
     public static bool IsPassed(string grade) => grade == "S" || grade == "A" || grade == "B" || grade == "C";
     private static int Rank(string grade) => grade == "S" ? 5 : grade == "A" ? 4 : grade == "B" ? 3 : grade == "C" ? 2 : grade == "F" ? 1 : 0;

@@ -13,7 +13,7 @@ public sealed class FeedbackReport
     public readonly float overall;
     private static readonly Regex Tags = new Regex("<[^>]+>");
 
-    public FeedbackReport(ProductionGrades grades, string budgetFallback)
+    public FeedbackReport(ProductionGrades grades, string budgetFallback, int contractLevel = 0)
     {
         rank = (grades.letterGrade ?? "F").ToUpperInvariant();
         passed = rank == "S" || rank == "A" || rank == "B" || rank == "C";
@@ -41,6 +41,14 @@ public sealed class FeedbackReport
         if (string.IsNullOrWhiteSpace(bodies[3])) bodies[3] = PaperInk(budgetFallback ?? "No tracked budget breakdown is available for this submission.");
         bodies[4] = (passed ? "<b>CONTRACT PASSED</b>\nThe client approved this submission.\n\n" :
             "<color=#A32323><b>CONTRACT FAILED</b></color>\nA high overall score does not override a missing mandatory requirement or department minimum.\n\n") + bodies[4];
+        // No guessed contract for legacy callers. Actual career/crew presenters
+        // supply their result level; saved grades, evidence and rewards stay intact.
+        if (contractLevel >= 1 && contractLevel <= 5)
+        {
+            for (int i = 0; i < 3; i++) bodies[i] = FeedbackLearningGuide.Department(i, contractLevel, bodies[i]);
+            bodies[3] = FeedbackLearningGuide.Budget(bodies[3]);
+            bodies[4] = FeedbackLearningGuide.Decision(bodies[4], passed, contractLevel);
+        }
     }
     private static bool Heading(string value, string heading) =>
         value.StartsWith("--- " + heading + " ---", StringComparison.Ordinal) ||

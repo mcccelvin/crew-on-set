@@ -81,6 +81,7 @@ public class PauseManager : MonoBehaviour
         bool pausePressed = inputManager != null ?
                             inputManager.ConsumePause() :
                             keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+        if (DevCommandsPanel.BlocksInputThisFrame) return;
 
         if (pausePressed)
         {

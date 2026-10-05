@@ -287,26 +287,13 @@ public class CareerManager : MonoBehaviour
         }
     }
 
-    private static int lastCheatInputFrame = -1;
-
+    // Compatibility entry point; old shortcut polling has moved to the F12 menu.
     public static void HandleDevCheats(Keyboard keyboard)
     {
-        if (keyboard == null || !Application.isFocused || lastCheatInputFrame == Time.frameCount) return;
-        lastCheatInputFrame = Time.frameCount;
-
-        // --- SECRET DEVELOPER CHEAT CODES ---
-
-        bool capsLockHeld = keyboard.capsLockKey.isPressed;
-        if (capsLockHeld)
-        {
-            if (keyboard.digit1Key.wasPressedThisFrame) { SwitchLevelCheat(1); return; }
-            if (keyboard.digit2Key.wasPressedThisFrame) { SwitchLevelCheat(2); return; }
-            if (keyboard.digit3Key.wasPressedThisFrame) { SwitchLevelCheat(3); return; }
-            if (keyboard.digit4Key.wasPressedThisFrame) { SwitchLevelCheat(4); return; }
-        }
-
-        // Press F10 to instantly add 1000 B-Coins
-        if (keyboard.f10Key.wasPressedThisFrame)
+    }
+    public static void DevAddBudget()
+    {
+        if (DevCommandsPanel.CommandsAllowed)
         {
             if (Instance == null) Instance = FindObjectOfType<CareerManager>(true);
             if (Instance != null) Instance.AddMoney(1000, "Developer funds");
@@ -317,12 +304,14 @@ public class CareerManager : MonoBehaviour
                 PlayerPrefs.Save();
             }
 
-            Debug.Log("DEV F10: Added 1,000 B-Coins. Balance: " + PlayerPrefs.GetInt("PlayerMoney", 0).ToString("N0"));
+            Debug.Log("DEV: Added 1,000 B-Coins. Balance: " + PlayerPrefs.GetInt("PlayerMoney", 0).ToString("N0"));
             GameFeedback.Show("CHEAT ACTIVATED: +1,000 B-Coins\nBalance: " + PlayerPrefs.GetInt("PlayerMoney", 0).ToString("N0") + " B-Coins");
         }
 
-        // Press F11 to remove up to 1000 B-Coins, including balances below 1000.
-        if (keyboard.f11Key.wasPressedThisFrame)
+    }
+    public static void DevRemoveBudget()
+    {
+        if (DevCommandsPanel.CommandsAllowed)
         {
             int previousBalance = Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0));
             int removed = Mathf.Min(1000, previousBalance);
@@ -334,12 +323,14 @@ public class CareerManager : MonoBehaviour
             if (Instance != null) Instance.UpdateMoneyUI();
             else GameFeedback.RefreshBalance();
             GameSaveManager.Instance?.SaveCheckpoint();
-            Debug.Log("DEV F11: Removed " + removed + " B-Coins. Balance: " + balance.ToString("N0"));
+            Debug.Log("DEV: Removed " + removed + " B-Coins. Balance: " + balance.ToString("N0"));
             GameFeedback.Show("CHEAT ACTIVATED: -" + removed.ToString("N0") + " B-Coins\nBalance: " + balance.ToString("N0") + " B-Coins");
         }
 
-        // F12 resets only the active career; account identity and other saves are kept.
-        if (keyboard.f12Key.wasPressedThisFrame)
+    }
+    public static void DevRestartCareer()
+    {
+        if (DevCommandsPanel.CommandsAllowed)
         {
             ResetCareerForTesting();
             string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
@@ -359,6 +350,7 @@ public class CareerManager : MonoBehaviour
 
     public static void ResetCareerForTesting()
     {
+        if (!DevCommandsPanel.CommandsAllowed) return;
         foreach (TruePixelPlayer player in FindObjectsOfType<TruePixelPlayer>(true)) player.StopTape();
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
         CrossSceneData.finalGrades = default;
@@ -377,12 +369,13 @@ public class CareerManager : MonoBehaviour
         }
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-        Debug.Log("DEV F12: Current career reset; fast dialogue " + (DevTutorialBypass.FastBossDialogue ? "ON" : "OFF"));
+        Debug.Log("DEV: Current career reset; fast dialogue " + (DevTutorialBypass.FastBossDialogue ? "ON" : "OFF"));
         GameFeedback.Show("DEV RESET ACTIVATED\nCareer restarted | Fast dialogue " + (DevTutorialBypass.FastBossDialogue ? "ON" : "OFF"));
     }
 
-    private static void SwitchLevelCheat(int targetLevel)
+    public static void SwitchLevelCheat(int targetLevel)
     {
+        if (!DevCommandsPanel.CommandsAllowed || targetLevel<1 || targetLevel>4) return;
         CampaignProgression.SetCheatLevel(targetLevel);
         // Restart the flower setup only for an explicit level-one cheat.
         if (targetLevel == 1)

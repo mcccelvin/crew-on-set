@@ -28,12 +28,13 @@ public static class EditorReviewVerification
         UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(root, scene);
         var compositor = new VideoFrameCompositor();
         Texture2D footage = null, white = null, readback = null; Sprite sprite = null; Mesh mesh = null;
+        Color Sample(int x,int y) => readback.GetPixel(Mathf.FloorToInt((x+.5f)*readback.width/256f),Mathf.FloorToInt((y+.5f)*readback.height/128f));
         try
         {
             if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null) throw new Exception("No graphics device; this GPU check cannot run with -nographics.");
             var monitorGO = new GameObject("Test monitor", typeof(RectTransform), typeof(RawImage)); monitorGO.transform.SetParent(root.transform,false);
             var monitor = monitorGO.GetComponent<RectTransform>(); monitor.sizeDelta = new Vector2(256,128);
-            footage = new Texture2D(256,128,TextureFormat.RGBA32,false); var pixels = new Color[256*128];
+            footage = new Texture2D(64,64,TextureFormat.RGBA32,false); var pixels = new Color[64*64];
             for (int i=0;i<pixels.Length;i++) pixels[i] = Color.blue; footage.SetPixels(pixels); footage.Apply();
             white = new Texture2D(2,2); white.SetPixels(new[]{Color.white,Color.white,Color.white,Color.white}); white.Apply();
             sprite = Sprite.Create(white,new Rect(0,0,2,2),new Vector2(.5f,.5f));
@@ -51,20 +52,22 @@ public static class EditorReviewVerification
             var overlays = new[]{overlay}; var group = graphicGO.GetComponent<CanvasGroup>();
             // Evaluate actual timing; Cut avoids a player's optional fade selection affecting fixtures.
             overlay.EvaluateVisibility(23,false);
-            readback = Read(compositor.Compose(footage,monitor,overlays)); Check(readback.GetPixel(168,44).b>.9f,"Graphic appeared before its start frame"); Destroy(readback);
+            readback = Read(compositor.Compose(footage,monitor,overlays));
+            Check(readback.width==1920 && readback.height==1080,"Tiny tape reduced the output resolution");
+            Check(Sample(168,44).b>.9f,"Graphic appeared before its start frame"); Destroy(readback);
             group.alpha = 1;
             readback = Read(compositor.Compose(footage,monitor,overlays));
             File.WriteAllBytes(Path.Combine(ResultRoot,"editor-review-embedded-gpu.png"),readback.EncodeToPNG());
-            Check(readback.GetPixel(168,44).r>.9f && readback.GetPixel(168,44).b<.1f,"Overlay not embedded at the expected pixel / wrong Y orientation");
-            Check(readback.GetPixel(10,10).b>.9f,"Graphic covered footage outside its bounds");
+            Check(Sample(168,44).r>.9f && Sample(168,44).b<.1f,"Overlay not embedded at the expected pixel / wrong Y orientation");
+            Check(Sample(10,10).b>.9f,"Graphic covered footage outside its bounds");
             File.WriteAllBytes(Path.Combine(ResultRoot,"editor-review-embedded-gpu.png"),readback.EncodeToPNG()); Destroy(readback);
             group.alpha = .5f;
-            readback = Read(compositor.Compose(footage,monitor,overlays)); var blended = readback.GetPixel(168,44);
+            readback = Read(compositor.Compose(footage,monitor,overlays)); var blended = Sample(168,44);
             Check(blended.r>.1f && blended.b>.1f,"Graphic transparency lost"); Destroy(readback);
-            readback = Read(compositor.Compose(footage,monitor,overlays)); var repeated = readback.GetPixel(168,44);
+            readback = Read(compositor.Compose(footage,monitor,overlays)); var repeated = Sample(168,44);
             Check(Mathf.Abs(repeated.r-blended.r)<.02f && Mathf.Abs(repeated.b-blended.b)<.02f,"Scrubbing accumulates a logo each frame"); Destroy(readback);
             overlay.EvaluateVisibility(48,false);
-            readback = Read(compositor.Compose(footage,monitor,overlays)); Check(readback.GetPixel(168,44).b>.9f,"End frame is not exclusive");
+            readback = Read(compositor.Compose(footage,monitor,overlays)); Check(Sample(168,44).b>.9f,"End frame is not exclusive");
             Destroy(readback); group.alpha=1;
             // A differently sized monitor and a non-centred pivot must map to identical video pixels.
             monitor.sizeDelta=new Vector2(512,256); monitor.pivot=Vector2.zero;
@@ -72,13 +75,14 @@ public static class EditorReviewVerification
             mesh.vertices=new[]{new Vector3(-64,-32),new Vector3(-64,32),new Vector3(64,32),new Vector3(64,-32)};
             graphic.canvasRenderer.SetMesh(mesh);
             readback=Read(compositor.Compose(footage,monitor,overlays));
-            Check(readback.GetPixel(168,44).r>.9f && readback.GetPixel(10,10).b>.9f,"Monitor resizing/pivot changed video placement");
+            Check(Sample(168,44).r>.9f && Sample(10,10).b>.9f,"Monitor resizing/pivot changed video placement");
             Destroy(readback);
             // Pixels outside the source monitor cannot turn into floating screen UI.
             graphicRect.localPosition=new Vector3(500,240,0);
             readback=Read(compositor.Compose(footage,monitor,overlays));
-            Check(readback.GetPixel(255,127).r>.9f && readback.GetPixel(10,10).b>.9f,"Output bounds/edge clipping failed");
-            File.WriteAllText(Path.Combine(ResultRoot,"editor-review-gpu-result.txt"),"PASS: actual Unity GPU compositor, position/Y orientation, monitor resizing/pivots, output clipping, background preservation, transparency, repeat-frame reset and exclusive start/end visibility. Device: "+SystemInfo.graphicsDeviceType);
+            Check(Sample(255,127).r>.9f && Sample(10,10).b>.9f,"Output bounds/edge clipping failed");
+            VerifyArtwork(compositor,footage,monitor,graphic,overlay,mesh);
+            File.WriteAllText(Path.Combine(ResultRoot,"editor-review-gpu-result.txt"),"PASS: actual Unity GPU compositor at 1920x1080 over a 64x64 tape; fine graphic detail, original wordmark render, position/Y orientation, monitor resizing/pivots, output clipping, background preservation, transparency, repeat-frame reset and exclusive start/end visibility. Device: "+SystemInfo.graphicsDeviceType);
             Debug.Log("Embedded commercial graphics GPU checks passed.");
         }
         catch(Exception ex)
@@ -88,6 +92,36 @@ public static class EditorReviewVerification
             compositor.Dispose(); Destroy(readback); Destroy(mesh); Destroy(sprite); Destroy(white); Destroy(footage);
             UnityEngine.Object.DestroyImmediate(root); EditorSceneManager.ClosePreviewScene(scene);
         }
+    }
+    private static void VerifyArtwork(VideoFrameCompositor compositor,Texture2D footage,RectTransform monitor,Image graphic,DraggableOverlay overlay,Mesh mesh)
+    {
+        Texture2D detail=null,render=null;Sprite art=null;
+        try
+        {
+            monitor.sizeDelta=new Vector2(1920,1080);monitor.pivot=Vector2.one*.5f;
+            graphic.rectTransform.localPosition=Vector3.zero;
+            detail=new Texture2D(1024,64,TextureFormat.RGBA32,false);
+            var pixels=new Color[1024*64];
+            for(int y=0;y<64;y++)for(int x=0;x<1024;x++)pixels[y*1024+x]=(x/4)%2==0?Color.white:Color.black;
+            detail.SetPixels(pixels);detail.Apply();
+            art=Sprite.Create(detail,new Rect(0,0,1024,64),Vector2.one*.5f);graphic.sprite=art;
+            mesh.vertices=new[]{new Vector3(-512,-32),new Vector3(-512,32),new Vector3(512,32),new Vector3(512,-32)};
+            mesh.colors=new[]{Color.white,Color.white,Color.white,Color.white};graphic.canvasRenderer.SetMesh(mesh);
+            render=Read(compositor.Compose(footage,monitor,new[]{overlay}));
+            for(int x=32;x<992;x+=8)
+                Check(render.GetPixel(448+x+1,540).r>.9f && render.GetPixel(448+x+5,540).r<.1f,"Fine graphic stripes blurred with low-resolution footage");
+            Destroy(render);render=null;Destroy(art);art=null;
+            detail.LoadImage(File.ReadAllBytes(Path.Combine(Application.dataPath,"UI/UI-EXPORT/PRODUCT/VASE/FLORA & FORM HOME.png")));
+            art=Sprite.Create(detail,new Rect(0,0,detail.width,detail.height),Vector2.one*.5f);graphic.sprite=art;
+            float halfHeight=500f*detail.height/detail.width;
+            mesh.vertices=new[]{new Vector3(-500,-halfHeight),new Vector3(-500,halfHeight),new Vector3(500,halfHeight),new Vector3(500,-halfHeight)};
+            graphic.canvasRenderer.SetMesh(mesh);
+            var background=new Color[64*64];for(int i=0;i<background.Length;i++)background[i]=new Color(.18f,.75f,.44f);
+            footage.SetPixels(background);footage.Apply();
+            render=Read(compositor.Compose(footage,monitor,new[]{overlay}));
+            File.WriteAllBytes(Path.Combine(ResultRoot,"embedded-branding-fullhd.png"),render.EncodeToPNG());
+        }
+        finally { Destroy(render);Destroy(art);Destroy(detail); }
     }
     private static Texture2D Read(Texture source)
     {

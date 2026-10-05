@@ -113,16 +113,11 @@ public class EditorManager : MonoBehaviour
             Texture texture = gradingManager.computerScreen.texture;
             emptyPreviewMessage.gameObject.SetActive(texture == null || texture == Texture2D.blackTexture);
         }
-        Keyboard keyboard = Keyboard.current;
-        if (!IsRoomEditor && Application.isFocused && keyboard != null && keyboard.f8Key.wasPressedThisFrame)
-        {
-            GenerateCheatClip();
-            GameFeedback.Show("CHEAT ACTIVATED\n12-second test clip added to the clip bank");
-        }
     }
 
-    private void GenerateCheatClip()
+    public void GenerateCheatClip()
     {
+        if (!DevCommandsPanel.CommandsAllowed || IsRoomEditor) return;
         // --- MODIFIED: Generates 12 seconds! ---
         Debug.Log("<color=red>DEV COMMAND: Generating 12-second fake clip for testing!</color>");
         cheatClipCounter++;
@@ -703,20 +698,65 @@ public class EditorManager : MonoBehaviour
         var root = new GameObject("Back to edit", typeof(RectTransform), typeof(Image), typeof(Button));
         root.layer = reviewVideoPanel.layer;
         root.transform.SetParent(reviewVideoPanel.transform, false);
-        var rect = root.GetComponent<RectTransform>();
-        // Match the authored Submit corner, without covering the picture or scrub bar.
-        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0,1);
-        rect.anchoredPosition = new Vector2(16,-18); rect.sizeDelta = new Vector2(104,80);
-        root.GetComponent<Image>().color = EditorWorkspaceUI.Control;
         reviewBackButton = root.GetComponent<Button>(); reviewBackButton.targetGraphic = root.GetComponent<Image>();
         reviewBackButton.onClick.AddListener(BackToEditor);
-        var label = new GameObject("Back label", typeof(RectTransform), typeof(TextMeshProUGUI)); label.transform.SetParent(root.transform,false);
+        StyleReviewButton(reviewBackButton, "BACK", "blueButton", false);
+
+        // The old backdrop contains a gray picture placeholder. Do not let its
+        // edges peek around the real video at fractional Canvas scales.
+        var background = reviewVideoPanel.GetComponent<Image>();
+        if (background != null) { background.sprite = null; background.color = new Color(.075f,.08f,.095f,1); }
+        var submit = reviewVideoPanel.transform.Find("Submit");
+        if (submit != null && submit.TryGetComponent<Button>(out var submitButton))
+            StyleReviewButton(submitButton, "SUBMIT", "greenButton", true);
+
+        var title = ReviewLabel(reviewVideoPanel.transform, "Preview heading", "FINAL PREVIEW", 24);
+        title.color = new Color(.76f,.8f,.86f,1); title.characterSpacing = 4;
+        title.rectTransform.anchorMin = new Vector2(0,1); title.rectTransform.anchorMax = Vector2.one;
+        title.rectTransform.pivot = new Vector2(.5f,1);
+        title.rectTransform.offsetMin = new Vector2(230,-78); title.rectTransform.offsetMax = new Vector2(-230,-24);
+
+        if (exportPlayer != null && exportPlayer.computerScreen != null)
+        {
+            var viewport = new GameObject("Review picture area", typeof(RectTransform), typeof(Image));
+            viewport.layer = reviewVideoPanel.layer; viewport.transform.SetParent(reviewVideoPanel.transform,false);
+            viewport.GetComponent<Image>().color = Color.black; viewport.GetComponent<Image>().raycastTarget = false;
+            var area = viewport.GetComponent<RectTransform>();
+            area.anchorMin = Vector2.zero; area.anchorMax = Vector2.one;
+            area.offsetMin = new Vector2(32,112); area.offsetMax = new Vector2(-32,-100);
+            viewport.transform.SetAsFirstSibling();
+            var screen = exportPlayer.computerScreen;
+            screen.transform.SetParent(area,false);
+            screen.rectTransform.localScale = Vector3.one;
+            screen.raycastTarget = false;
+            var fit = screen.GetComponent<AspectRatioFitter>() ?? screen.gameObject.AddComponent<AspectRatioFitter>();
+            fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent; fit.aspectRatio = 16f/9f;
+        }
+    }
+    private static void StyleReviewButton(Button button, string caption, string artwork, bool right)
+    {
+        var rect = button.GetComponent<RectTransform>();
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(right ? 1 : 0,1);
+        rect.anchoredPosition = new Vector2(right ? -32 : 32,-24); rect.sizeDelta = new Vector2(176,54);
+        var image = button.GetComponent<Image>();
+        if (image != null) { ExportUIArt.Apply(image,artwork); button.targetGraphic = image; }
+        var colors = button.colors; colors.normalColor = Color.white; colors.highlightedColor = new Color(1,.95f,.82f);
+        colors.pressedColor = new Color(.7f,.75f,.8f); colors.selectedColor = Color.white; colors.fadeDuration = .12f;
+        button.colors = colors; button.transition = Selectable.Transition.ColorTint;
+        var text = ReviewLabel(button.transform,"Review button label",caption,25);
+        text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one;
+        text.rectTransform.offsetMin = new Vector2(12,6); text.rectTransform.offsetMax = new Vector2(-12,-6);
+    }
+    private static TextMeshProUGUI ReviewLabel(Transform parent, string name, string caption, float size)
+    {
+        var label = new GameObject(name, typeof(RectTransform), typeof(TextMeshProUGUI));
+        label.layer = parent.gameObject.layer; label.transform.SetParent(parent,false);
         var text = label.GetComponent<TextMeshProUGUI>();
         text.font = Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF") ?? TMP_Settings.defaultFontAsset;
-        text.text = "BACK"; text.color = Color.white; text.alignment = TextAlignmentOptions.Center;
-        text.fontSize = text.fontSizeMax = 28; text.fontSizeMin = 18; text.enableAutoSizing = true; text.raycastTarget = false;
-        text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one;
-        text.rectTransform.offsetMin = new Vector2(8,4); text.rectTransform.offsetMax = new Vector2(-8,-4);
+        text.text = caption; text.color = Color.white; text.alignment = TextAlignmentOptions.Center;
+        text.fontSize = text.fontSizeMax = size; text.fontSizeMin = 18; text.enableAutoSizing = true;
+        text.enableWordWrapping = false; text.raycastTarget = false;
+        return text;
     }
     public void BackToEditor()
     {

@@ -1,0 +1,257 @@
+{
+  "currency": "CC",
+  "cosmetics": [
+    {
+      "id": "character_accessory1",
+      "kind": "accessory",
+      "name": "Accessory 1",
+      "description": "Character customization · Accessory 1. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_accessory2",
+      "kind": "accessory",
+      "name": "Accessory 2",
+      "description": "Character customization · Accessory 2. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_accessory3",
+      "kind": "accessory",
+      "name": "Accessory 3",
+      "description": "Character customization · Accessory 3. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_accessory4",
+      "kind": "accessory",
+      "name": "Accessory 4",
+      "description": "Character customization · Accessory 4. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_accessory5",
+      "kind": "accessory",
+      "name": "Accessory 5",
+      "description": "Character customization · Accessory 5. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_accessory6",
+      "kind": "accessory",
+      "name": "Accessory 6",
+      "description": "Character customization · Accessory 6. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_hair1",
+      "kind": "hair",
+      "name": "Hair 1",
+      "description": "Character customization · Hair 1. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_hair2",
+      "kind": "hair",
+      "name": "Hair 2",
+      "description": "Character customization · Hair 2. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_hair3",
+      "kind": "hair",
+      "name": "Hair 3",
+      "description": "Character customization · Hair 3. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_hair4",
+      "kind": "hair",
+      "name": "Hair 4",
+      "description": "Character customization · Hair 4. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_hair5",
+      "kind": "hair",
+      "name": "Hair 5",
+      "description": "Character customization · Hair 5. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_hair6",
+      "kind": "hair",
+      "name": "Hair 6",
+      "description": "Character customization · Hair 6. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_face1",
+      "kind": "face",
+      "name": "Face 1",
+      "description": "Character customization · Face 1. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_face2",
+      "kind": "face",
+      "name": "Face 2",
+      "description": "Character customization · Face 2. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_face3",
+      "kind": "face",
+      "name": "Face 3",
+      "description": "Character customization · Face 3. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_face4",
+      "kind": "face",
+      "name": "Face 4",
+      "description": "Character customization · Face 4. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_face5",
+      "kind": "face",
+      "name": "Face 5",
+      "description": "Character customization · Face 5. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_body_boy",
+      "kind": "body",
+      "name": "Boy body",
+      "description": "Character customization · Boy body. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_body_girl",
+      "kind": "body",
+      "name": "Girl body",
+      "description": "Character customization · Girl body. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shirt1",
+      "kind": "shirt",
+      "name": "Shirt 1",
+      "description": "Character customization · Shirt 1. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shirt2",
+      "kind": "shirt",
+      "name": "Shirt 2",
+      "description": "Character customization · Shirt 2. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shirt3",
+      "kind": "shirt",
+      "name": "Shirt 3",
+      "description": "Character customization · Shirt 3. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shirt4",
+      "kind": "shirt",
+      "name": "Shirt 4",
+      "description": "Character customization · Shirt 4. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shirt5",
+      "kind": "shirt",
+      "name": "Shirt 5",
+      "description": "Character customization · Shirt 5. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_pants1",
+      "kind": "pants",
+      "name": "Pants 1",
+      "description": "Character customization · Pants 1. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_pants2",
+      "kind": "pants",
+      "name": "Pants 2",
+      "description": "Character customization · Pants 2. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_pants3",
+      "kind": "pants",
+      "name": "Pants 3",
+      "description": "Character customization · Pants 3. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_pants4",
+      "kind": "pants",
+      "name": "Pants 4",
+      "description": "Character customization · Pants 4. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_pants5",
+      "kind": "pants",
+      "name": "Pants 5",
+      "description": "Character customization · Pants 5. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_pants6",
+      "kind": "pants",
+      "name": "Pants 6",
+      "description": "Character customization · Pants 6. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shoe1",
+      "kind": "shoe",
+      "name": "Shoe 1",
+      "description": "Character customization · Shoe 1. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shoe2",
+      "kind": "shoe",
+      "name": "Shoe 2",
+      "description": "Character customization · Shoe 2. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shoe3",
+      "kind": "shoe",
+      "name": "Shoe 3",
+      "description": "Character customization · Shoe 3. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shoe4",
+      "kind": "shoe",
+      "name": "Shoe 4",
+      "description": "Character customization · Shoe 4. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shoe5",
+      "kind": "shoe",
+      "name": "Shoe 5",
+      "description": "Character customization · Shoe 5. Appearance only.",
+      "price": 10
+    },
+    {
+      "id": "character_shoe6",
+      "kind": "shoe",
+      "name": "Shoe 6",
+      "description": "Character customization · Shoe 6. Appearance only.",
+      "price": 10
+    }
+  ]
+}

@@ -215,6 +215,7 @@ public partial class AlmanacManager : MonoBehaviour
 
     private void Update()
     {
+        if (DevCommandsPanel.BlocksInputThisFrame) return;
         PollProfileProgress();
         UpdateNavigationLesson();
         UpdateTechniqueReviewHighlight();
@@ -293,6 +294,7 @@ public partial class AlmanacManager : MonoBehaviour
 
         if (isAlmanacOpen) EndNavigationLesson();
         isAlmanacOpen = !isAlmanacOpen;
+        PaperMenuAudio.Play(!isAlmanacOpen);
         UITransition.SetVisible(almanacCanvas, isAlmanacOpen);
 
         if (isAlmanacOpen)

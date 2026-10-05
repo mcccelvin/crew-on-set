@@ -16,15 +16,29 @@ public partial class AlmanacManager
     private Transform profileShopContent;
     private CCoinService profileWallet;
     private string profileInputOwner;
-    private int profileShopCategory = 4;
+    private int profileShopCategory = 0;
+    private static readonly string[] ProfileShopKinds = { "accessory", "hair", "face", "body", "shirt", "pants", "shoe", "profile_frame" };
+    private AccountProductionProfile.Snapshot profileAccountStats;
+    private Button profileAccountSyncButton;
+    private TMP_Text profileProgressSyncStatus;
+    private bool profileAccountSyncRequested;
     private bool ProfileInputFocused => (profileNameInput != null && profileNameInput.isFocused) || (profileBioInput != null && profileBioInput.isFocused);
 
-    private CareerProfileProgress.Record ProfileRecord() => profileMenuOnly ? CareerProfileProgress.ReadStored(profileMenuSlot) : CareerProfileProgress.Read();
-    private List<PlayerAnalytics.Attempt> ProfileHistory() => profileMenuOnly ? PlayerAnalytics.ProfileHistory(profileMenuSlot) : PlayerAnalytics.ProfileHistory();
-    private int ProfilePreference(string key) => profileMenuOnly ? profileMenuSlot?.Int(key, 0) ?? 0 : GameSavePrefs.GetInt(key, 0);
+    private AccountProductionProfile.Snapshot ProfileSnapshot()
+    {
+        AccountProfileData.EnsureBound();
+        if(profileAccountStats!=null && profileAccountStats.owner==AccountProfileData.Owner)return profileAccountStats;
+        var saves=GameSaveManager.Ensure();
+        try { saves.OpenRepository(); } catch(Exception) { }
+        return profileAccountStats=AccountProductionProfile.Capture(AccountProfileData.Owner,
+            saves.Repository?.Slots,saves.Active,GameSavePrefs.Values);
+    }
+    private CareerProfileProgress.Record ProfileRecord() => ProfileSnapshot().record;
+    private List<PlayerAnalytics.Attempt> ProfileHistory() => ProfileSnapshot().history;
+    private int ProfilePreference(string key) => ProfileSnapshot().Preference(key);
     public void OpenMenuProfile(Action closed)
     {
-        profileMenuOnly = true; profileMenuClosed = closed;
+        profileMenuOnly = true; profileMenuClosed = closed; profileAccountStats=null;profileAccountSyncRequested=false;
         var saves = GameSaveManager.Ensure();
         try
         {
@@ -43,12 +57,8 @@ public partial class AlmanacManager
     }
     private void NextProfileCareer()
     {
-        if (!profileMenuOnly) return;
-        var slots = GameSaveManager.Instance?.Repository?.Slots.FindAll(s => s.Int("SaveDeleted", 0) == 0);
-        if (slots == null || slots.Count == 0) return;
-        slots.Sort((a, b) => string.CompareOrdinal(b.updatedUtc, a.updatedUtc));
-        int current = slots.FindIndex(s => s.id == profileMenuSlot?.id);
-        profileMenuSlot = slots[(current + 1) % slots.Count];
+        // Compatibility for an older baked button; profiles no longer select careers.
+        profileAccountStats=null;
         RefreshAllUI();
     }
     private void StyleProfileSideTab(Button button, int index)
@@ -112,20 +122,39 @@ public partial class AlmanacManager
             profileReturnStats = BookButton(stage, "Back to skill statistics", "STATS", "blueButton", new Vector2(340, -425), new Vector2(235, 72));
             profileReturnStats.onClick.AddListener(OpenStatsTab); profileReturnStats.gameObject.SetActive(false);
         }
-        if (profileMenuOnly && stage.Find("Choose profile career") == null)
+        var oldCareerButton=stage.Find("Choose profile career");
+        if(oldCareerButton!=null)oldCareerButton.gameObject.SetActive(false);
+        var oldCareerBadge=stage.Find("Career save badge");
+        if(oldCareerBadge!=null)oldCareerBadge.gameObject.SetActive(false);
+        if(profileAccountSyncButton==null)
         {
-            var choose = BookButton(stage, "Choose profile career", "SWITCH CAREER", "blueButton", new Vector2(-455, 309), new Vector2(250, 40));
-            choose.onClick.AddListener(NextProfileCareer);
+            profileAccountSyncButton=stage.Find("Sync account progress")?.GetComponent<Button>() ??
+                BookButton(stage,"Sync account progress","SYNC ACCOUNT","blueButton",new Vector2(-455,-475),new Vector2(350,62));
+            profileAccountSyncButton.onClick.RemoveListener(SyncProfileAccount);
+            profileAccountSyncButton.onClick.AddListener(SyncProfileAccount);
+            profileProgressSyncStatus=stage.Find("Progress and wallet sync status")?.GetComponent<TMP_Text>() ??
+                BookText(stage,"Progress and wallet sync status",new Vector2(475,-367),new Vector2(805,36),20);
+            FeedbackTypography.Apply(profileProgressSyncStatus);profileProgressSyncStatus.color=ProfileMuted;
+            profileProgressSyncStatus.richText=false;profileProgressSyncStatus.enableAutoSizing=true;
+            profileProgressSyncStatus.fontSizeMin=16;profileProgressSyncStatus.fontSizeMax=20;
         }
-        if (profileMenuOnly && GameSaveManager.Instance != null)
+        var statusPaper=stage.Find("Account sync paper");
+        if(statusPaper==null)
+        {
+            statusPaper=CreatePanel("Account sync paper",stage,new Color32(252,245,220,255)).transform;
+            SetRect(statusPaper.GetComponent<RectTransform>(),Vector2.one*.5f,Vector2.one*.5f,new Vector2(475,-367),new Vector2(805,40));
+            statusPaper.GetComponent<Image>().raycastTarget=false;
+            statusPaper.SetSiblingIndex(profileSyncStatus.transform.GetSiblingIndex());
+        }
+        if (GameSaveManager.Instance != null)
         { GameSaveManager.Instance.Changed -= OnProfileSavesChanged; GameSaveManager.Instance.Changed += OnProfileSavesChanged; }
         if (playerInfoTabBtn.onClick.GetPersistentEventCount() == 0)
         { playerInfoTabBtn.onClick.RemoveListener(OpenPlayerInfoTab); playerInfoTabBtn.onClick.AddListener(OpenPlayerInfoTab); }
         if (achievementsTabBtn.onClick.GetPersistentEventCount() == 0)
         { achievementsTabBtn.onClick.RemoveListener(OpenAchievementsTab); achievementsTabBtn.onClick.AddListener(OpenAchievementsTab); }
         AccountProfileData.Changed -= OnAccountProfileChanged; AccountProfileData.Changed += OnAccountProfileChanged;
-        if (profileWallet == null) { profileWallet = CCoinService.Ensure(); profileWallet.Changed += RefreshProfileShop; }
-        foreach (var button in new[] { profileSaveButton, profileBackButton, profileCloseButton, profileReturnStats, achievementsTabBtn,
+        if (profileWallet == null) { profileWallet = CCoinService.Ensure(); profileWallet.Changed += OnProfileWalletChanged; }
+        foreach (var button in new[] { profileSaveButton, profileBackButton, profileCloseButton, profileReturnStats, achievementsTabBtn,profileAccountSyncButton,
             stage.Find("Buy account C-Coins")?.GetComponent<Button>(), playerInfoPanel.transform.Find("Account sign in or logout")?.GetComponent<Button>() })
         {
             if (button == null) continue;
@@ -152,10 +181,39 @@ public partial class AlmanacManager
     }
     private void SaveAccountProfile()
     {
+        profileAccountSyncRequested=false;
         if (AccountProfileData.Save(profileNameInput.text, profileBioInput.text))
         { profileInputsDirty = false; RefreshAccountFields(true); }
     }
-    private void OnAccountProfileChanged() { if (this != null) RefreshAccountFields(); }
+    private void OnAccountProfileChanged()
+    {
+        if(this==null)return;
+        if(profileAccountStats!=null && profileAccountStats.owner!=AccountProfileData.Owner)
+        { profileAccountStats=null;profileAccountSyncRequested=false;if(isProfileOpen)RefreshAllUI(); }
+        RefreshAccountFields();
+    }
+    private void SyncProfileAccount()
+    {
+        profileAccountSyncRequested=true;
+        GameSaveManager.Ensure().SyncAccountProgress();
+        profileAccountStats=null;RefreshAllUI();
+    }
+    private void OnProfileWalletChanged()
+    {
+        if(this==null)return;
+        RefreshProfileShop();RefreshProfileSyncStatus();
+        if(isProfileOpen){RefreshProfileStats();RenderProfileCharacter();}
+    }
+    private void RefreshProfileSyncStatus()
+    {
+        var saves=GameSaveManager.Instance;
+        if(profileAccountSyncButton!=null)profileAccountSyncButton.interactable=!(saves?.Syncing ?? false) && !(profileWallet?.Busy ?? false);
+        string progress=saves?.Status ?? "Stats are saved on this device.";
+        string coins=profileWallet?.Status ?? "C-Coins: sign in to sync.";
+        if(profileProgressSyncStatus!=null)profileProgressSyncStatus.text=progress;
+        if(profileSyncStatus!=null && !profileInputsDirty)profileSyncStatus.text=profileAccountSyncRequested ? progress : AccountProfileData.Status;
+        if(profileWalletStatus!=null)profileWalletStatus.text=$"{profileWallet?.Balance ?? 0:N0} C-Coins{(profileWallet?.Verified==true ? "" : " · cached")}\n"+coins;
+    }
     private void RefreshAccountFields(bool force = false)
     {
         if (profileNameInput == null) return;
@@ -167,10 +225,13 @@ public partial class AlmanacManager
         if (profileSyncStatus != null) profileSyncStatus.text = profileInputsDirty ? "Unsaved changes · click SAVE" : AccountProfileData.Status;
         var label = playerInfoPanel.transform.Find("Account sign in or logout")?.GetComponentInChildren<TMP_Text>();
         if (label != null) label.text = AccountProfileData.Owner == "guest" ? "SIGN IN" : "LOG OUT";
+        RefreshProfileSyncStatus();
+        ApplyProfileTypography();
     }
     private void ApplySharedProfileTab(int tab)
     {
         if (profileCardImage == null) return;
+        if(tab!=4 && isProfileOpen)RenderProfileCharacter(); // Discard any unowned try-on preview.
         ExportUIArt.Apply(profileCardImage, tab == 0 ? "profileAccount" : tab == 4 ? "profileShop" : "profileStats");
         var stage = profileCanvas.transform.Find("Profile backdrop/Profile stage");
         var title = stage.Find("Player profile label")?.GetComponent<Image>();
@@ -179,13 +240,16 @@ public partial class AlmanacManager
         if (achievementsTabBtn != null) achievementsTabBtn.gameObject.SetActive(tab == 3);
         if (profileReturnStats != null) profileReturnStats.gameObject.SetActive(tab == 2);
         if (profileSyncStatus != null) profileSyncStatus.gameObject.SetActive(tab == 0);
+        if(profileProgressSyncStatus!=null)profileProgressSyncStatus.gameObject.SetActive(tab!=0);
         var buyCoins = stage.Find("Buy account C-Coins");
         if (buyCoins != null) buyCoins.gameObject.SetActive(tab == 4);
+        ApplyProfileTypography();
     }
     public void OpenProfileShop() { RefreshProfileShop(); OpenTab(4); }
     private void OnProfileSavesChanged()
     {
-        if (!profileMenuOnly || !isProfileOpen) return;
+        profileAccountStats=null;
+        if (!isProfileOpen) return;
         var slots = GameSaveManager.Instance.Repository?.Slots.FindAll(s => s.Int("SaveDeleted", 0) == 0);
         if (slots == null) return;
         slots.Sort((a, b) => string.CompareOrdinal(b.updatedUtc, a.updatedUtc));
@@ -197,11 +261,11 @@ public partial class AlmanacManager
         var card = stage.Find("Career card");
         profileShopPanel = CreatePanel("Shared cosmetic shop", card, new Color32(252, 245, 220, 255));
         SetStretchRect(profileShopPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(103, 19), new Vector2(-29, -19));
-        string[] categories = { "HAT", "SHIRT", "PANTS", "SHOES", "FRAMES" };
+        string[] categories = { "ACCESSORIES", "HAIR", "FACE", "BODY", "SHIRT", "PANTS", "SHOES", "FRAMES" };
         for (int i = 0; i < categories.Length; i++)
         {
             int category = i; var button = CreateButton("Cosmetic category " + i, profileShopPanel.transform, categories[i]);
-            SetRect(button.GetComponent<RectTransform>(), new Vector2((i + .5f) / 5, 1), new Vector2((i + .5f) / 5, 1), new Vector2(0, -25), new Vector2(136, 48));
+            SetRect(button.GetComponent<RectTransform>(), new Vector2((i % 4 + .5f) / 4, 1), new Vector2((i % 4 + .5f) / 4, 1), new Vector2(0, -22-44*(i/4)), new Vector2(168, 40));
             button.GetComponent<Image>().sprite = null;
             var colors = button.colors; colors.normalColor = new Color32(252, 245, 220, 255); colors.highlightedColor = new Color32(224, 207, 179, 255);
             colors.pressedColor = colors.disabledColor = new Color32(181, 145, 112, 255); colors.selectedColor = colors.highlightedColor; button.colors = colors;
@@ -211,22 +275,22 @@ public partial class AlmanacManager
             label.enableAutoSizing = true; label.fontSizeMin = 16; label.fontSizeMax = 22;
             button.onClick.AddListener(() => { profileShopCategory = category; RefreshProfileShop(); });
         }
-        profileWalletStatus = ProfileText(profileShopPanel.transform, "Shop wallet status", "", 19, 8, 60, 118);
+        profileWalletStatus = ProfileText(profileShopPanel.transform, "Shop wallet status", "", 19, 8, 100, 118);
         var sync = CreateButton("Sync shared wallet", profileShopPanel.transform, "SYNC");
-        SetRect(sync.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-50, -87), new Vector2(96, 42));
+        SetRect(sync.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-50, -127), new Vector2(96, 42));
         sync.onClick.AddListener(() => profileWallet.Refresh());
         var reset = CreateButton("Default profile appearance", profileShopPanel.transform, "DEFAULT LOOK");
-        SetRect(reset.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-86, -141), new Vector2(166, 40));
+        SetRect(reset.GetComponent<RectTransform>(), new Vector2(1, 1), new Vector2(1, 1), new Vector2(-86, -181), new Vector2(166, 40));
         var resetLabel = reset.GetComponentInChildren<TextMeshProUGUI>();
         resetLabel.enableWordWrapping = false; resetLabel.enableAutoSizing = true; resetLabel.fontSizeMin = 14; resetLabel.fontSizeMax = 18;
         reset.onClick.AddListener(() => profileWallet.Equip(null));
-        profileWalletStatus.rectTransform.offsetMax = new Vector2(-181, -60);
+        profileWalletStatus.rectTransform.offsetMax = new Vector2(-181, -100);
         profileShopContent = CreateScrollList("Shared shop items", profileShopPanel.transform);
         var scroll = profileShopContent.GetComponentInParent<ScrollRect>(true);
-        scroll.GetComponent<RectTransform>().offsetMax = new Vector2(-2, -186);
+        scroll.GetComponent<RectTransform>().offsetMax = new Vector2(-2, -226);
         scroll.GetComponent<Image>().color = new Color32(252, 245, 220, 255); AddProfileScrollbar(profileShopContent);
         var coins = BookButton(stage, "Buy account C-Coins", "BUY C-COINS", "blueButton", new Vector2(340, -425), new Vector2(265, 72));
-        coins.onClick.AddListener(() => profileWallet.RequestCoinPurchase());
+        coins.onClick.AddListener(() => CCoinPackShopUI.Show(profileCanvas.transform));
         profileShopPanel.SetActive(false);
     }
     private void RefreshProfileShop()
@@ -235,33 +299,60 @@ public partial class AlmanacManager
         if (profileWalletStatus != null)
             profileWalletStatus.text = $"{profileWallet.Balance:N0} C-Coins{(profileWallet.Verified ? "" : " · cached")}\n" + profileWallet.Status;
         foreach (Transform child in profileShopContent) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < ProfileShopKinds.Length; i++)
         {
             var button = profileShopPanel.transform.Find("Cosmetic category " + i)?.GetComponent<Button>();
             if (button != null) button.interactable = i != profileShopCategory;
         }
-        var items = profileWallet.Wallet?.cosmetics ?? new CCoinCosmetic[0]; int shown = 0;
+        var items = new List<CCoinCosmetic>(CharacterCosmetics.Items);
+        foreach(var remote in profileWallet.Wallet?.cosmetics ?? new CCoinCosmetic[0])
+            if(remote!=null && remote.kind=="profile_frame")items.Add(remote);
+        int shown = 0;
         foreach (var item in items)
         {
-            if (item == null || profileShopCategory != 4 || item.kind != "profile_frame") continue;
-            shown++; var row = ProfileRow(profileShopContent, "Shared cosmetic " + item.id, 168);
-            ProfileText(row.transform, "Name", item.name, 26, 16, 6, 38);
-            var detail = ProfileText(row.transform, "Description", item.description ?? "Profile frame", 20, 16, 48, 66);
+            if (item == null || item.kind != ProfileShopKinds[profileShopCategory]) continue;
+            bool isPart=CharacterCosmetics.Find(item.id)!=null;
+            var art=CharacterCosmeticCatalog.Load();
+            bool available=!isPart || art?.Model(CharacterCosmetics.ModelKey(item.id))!=null;
+            bool listed=CCoinRules.Find(profileWallet.Wallet,item.id)!=null;
+            shown++; var row = ProfileRow(profileShopContent, "Shared cosmetic " + item.id, 200);
+            float inset=isPart ? 150 : 16;
+            ProfileText(row.transform, "Name", item.name, 26, inset, 6, 38);
+            var detail = ProfileText(row.transform, "Description", !available ? "Model unavailable in this build." : !listed ? "10 C-Coins · purchases await account shop connection." : item.description ?? "Profile frame", 19, inset, 48, 80);
             detail.rectTransform.offsetMax = new Vector2(-170, -48);
-            bool owned = CCoinRules.Owns(profileWallet.Wallet, item.id), equipped = owned && profileWallet.SelectedCosmetic == item.id;
+            bool owned = CCoinRules.Owns(profileWallet.Wallet, item.id), equipped = owned && profileWallet.IsEquipped(item.id);
+            if(isPart && available)
+            {
+                var thumb=CCoinShopUI.Rect(row.transform,"Item preview",Vector2.zero,new Vector2(124,124)).gameObject.AddComponent<RawImage>();
+                thumb.rectTransform.anchorMin=thumb.rectTransform.anchorMax=thumb.rectTransform.pivot=new Vector2(0,1);
+                thumb.rectTransform.anchoredPosition=new Vector2(12,-10);thumb.texture=art.Thumbnail(item.id);thumb.raycastTarget=false;
+                var preview=CreateButton("Try cosmetic",row.transform,"TRY ON");
+                SetRect(preview.GetComponent<RectTransform>(),new Vector2(0,1),new Vector2(0,1),new Vector2(74,-167),new Vector2(122,40));
+                preview.onClick.AddListener(()=>PreviewProfileCosmetic(item.id));
+            }
             var buy = CreateButton("Buy or equip cosmetic", row.transform, equipped ? "EQUIPPED" : owned ? "EQUIP" : "BUY");
             SetRect(buy.GetComponent<RectTransform>(), new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-86, -4), new Vector2(145, 52));
             buy.onClick.AddListener(() => { if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });
-            buy.interactable = !equipped && (owned || profileWallet.CanBuy && profileWallet.Balance >= item.price);
-            ProfileText(row.transform, "Price", owned ? "OWNED" : item.price + " C-Coins", 21, 16, 125, 32).color = ProfileGreen;
+            buy.interactable = available && listed && !equipped && (owned || profileWallet.CanBuy && profileWallet.Balance >= item.price);
+            ProfileText(row.transform, "Price", owned ? "OWNED" : item.price + " C-Coins", 21, inset, 154, 32).color = ProfileGreen;
         }
         if (shown == 0)
         {
             var row = ProfileRow(profileShopContent, "Unavailable cosmetic category", 215);
-            string message = profileShopCategory == 4 ? "Your profile-frame catalog appears here when the account shop is connected. No coins are charged while it is unavailable."
-                : "No items are available in this clothing category yet. Your current account catalog supports profile frames; choose FRAMES to view them. No coins are charged.";
+            string message = "Your profile-frame catalog appears here when the account shop is connected. No coins are charged while it is unavailable.";
             ProfileText(row.transform, "Availability", message, 24, 18, 12, 185);
         }
+        ApplyProfileTypography();
+    }
+    private void PreviewProfileCosmetic(string id)
+    {
+        var rig=CharacterCosmeticRig.Load();var item=CharacterCosmetics.Find(id);
+        if(item==null || profileCharacterImage==null)return;
+        if(rig==null || !rig.Contains(id)){profileWalletStatus.text="This item's character fitting is not available in this build.";return;}
+        if(profileTryOnParts.Count==0)profileTryOnParts.AddRange(profileWallet.EquippedParts);
+        profileTryOnParts.RemoveAll(x=>CharacterCosmetics.Find(x)?.kind==item.kind);profileTryOnParts.Add(id);
+        RenderDressedProfileCharacter(profileTryOnParts.ToArray());
+        profileWalletStatus.text="TRYING ON: "+item.name+"\nPreview only · not purchased or equipped. DEFAULT LOOK restores your default appearance.";
     }
     private void CreateProfileSkillsRow()
     {
@@ -288,9 +379,10 @@ public partial class AlmanacManager
     private void ResetSharedProfileUI()
     {
         AccountProfileData.Changed -= OnAccountProfileChanged;
-        if (profileWallet != null) profileWallet.Changed -= RefreshProfileShop;
+        if (profileWallet != null) profileWallet.Changed -= OnProfileWalletChanged;
         if (GameSaveManager.Instance != null) GameSaveManager.Instance.Changed -= OnProfileSavesChanged;
         profileWallet = null; profileNameInput = profileBioInput = null; profileSyncStatus = profileWalletStatus = null;
         profileSaveButton = profileShopButton = profileReturnStats = null; profileShopPanel = null; profileShopContent = null; profileInputOwner = null;
+        profileAccountStats=null;profileAccountSyncButton=null;profileProgressSyncStatus=null;profileAccountSyncRequested=false;
     }
 }

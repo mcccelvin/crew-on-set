@@ -32,6 +32,7 @@ public sealed class DevTutorialBypass : MonoBehaviour
 
     public static void ToggleFastBossDialogue()
     {
+        if (!DevCommandsPanel.CommandsAllowed) return;
         FastBossDialogue = !FastBossDialogue;
         if (FastBossDialogue && TutorialUIManager.Instance != null)
             TutorialUIManager.Instance.CompleteBossRevealForTesting();
@@ -41,6 +42,7 @@ public sealed class DevTutorialBypass : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Install()
     {
+        if (!DevCommandsPanel.Available) return;
         if (FindObjectOfType<DevTutorialBypass>() != null) return;
         var host = new GameObject("Dev Tutorial Bypass");
         DontDestroyOnLoad(host);
@@ -49,25 +51,18 @@ public sealed class DevTutorialBypass : MonoBehaviour
     private void Update()
     {
         if (!Application.isFocused) return;
-        if (Keyboard.current != null && Keyboard.current.f4Key.wasPressedThisFrame) ToggleFastBossDialogue();
-        if (Keyboard.current != null && Keyboard.current.f5Key.wasPressedThisFrame)
-        {
-            Disabled = true;
-            GameFeedback.Show("CHEAT ACTIVATED\nTutorials disabled for this session");
-            Debug.Log("DEV: Tutorials OFF for this session. Restart Play Mode/game to restore tutorials.");
-        }
-        Keyboard keyboard = Keyboard.current;
-        CareerManager.HandleDevCheats(keyboard);
-        if (keyboard != null && keyboard.f9Key.wasPressedThisFrame)
-        {
-            if (TutorialManager.Instance != null) TutorialManager.Instance.SpawnCheatSDCard();
-            else GameFeedback.Show("CHEAT UNAVAILABLE\nEnter the studio to spawn a test SD card.", true);
-        }
+        if (!DevCommandsPanel.CommandsAllowed) return;
         if (!Disabled) return;
         if (TutorialManager.Instance != null && TutorialManager.Instance.enabled) TutorialManager.Instance.DisableForDevTesting();
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.enabled) GokeLevelManager.Instance.DisableForDevTesting();
         if (Level3Manager.Instance != null && Level3Manager.Instance.enabled) Level3Manager.Instance.DisableForDevTesting();
         if (CampaignLevelManager.Instance != null && CampaignLevelManager.Instance.enabled) CampaignLevelManager.Instance.DisableForDevTesting();
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.DisableForDevTesting();
+    }
+    public static void DisableTutorials()
+    {
+        if (!DevCommandsPanel.CommandsAllowed) return;
+        Disabled=true;
+        GameFeedback.Show("DEV: Tutorials disabled for this session");
     }
 }

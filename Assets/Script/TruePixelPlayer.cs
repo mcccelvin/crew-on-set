@@ -45,8 +45,6 @@ public class TruePixelPlayer : MonoBehaviour
     private RawImage overlaySourceScreen;
     private VideoFrameCompositor compositor;
     private bool compositeSequence;
-    private bool compositeActive;
-    private readonly List<CanvasRenderer> suppressedGraphics = new List<CanvasRenderer>();
     private bool isPaused = true;
     private bool isLoading;
     private bool configuringScrubBar;
@@ -117,41 +115,16 @@ public class TruePixelPlayer : MonoBehaviour
     private bool editorialAudioPaused = false;
 
     public void SetOverlaySource(RawImage source) { overlaySourceScreen = source; }
-    private void OnEnable() { Canvas.willRenderCanvases += SuppressEmbeddedGraphics; }
-    private void OnDisable() { Canvas.willRenderCanvases -= SuppressEmbeddedGraphics; RestoreEmbeddedGraphics(); }
-    private void SuppressEmbeddedGraphics()
-    {
-        if (!compositeActive) return;
-        foreach (var graphic in suppressedGraphics) if (graphic != null)
-        {
-            var overlay = graphic.GetComponentInParent<DraggableOverlay>();
-            graphic.cull = overlay != null && overlay.isOnTimeline;
-        }
-    }
-    private void RestoreEmbeddedGraphics()
-    {
-        compositeActive = false;
-        foreach (var graphic in suppressedGraphics) if (graphic != null) graphic.cull = false;
-        suppressedGraphics.Clear();
-    }
+    // An external source identifies the final review. The authoring monitor keeps
+    // its real UI graphics visible so Unity can hit-test and drag them normally.
+    public bool EmbedsReviewGraphics => overlaySourceScreen != null && overlaySourceScreen != computerScreen;
     private void LateUpdate()
     {
-        if (!compositeSequence || showingTimelineGap || isLoading || playbackTexture == null || computerScreen == null || PauseManager.isPaused) return;
-        var source = overlaySourceScreen != null ? overlaySourceScreen : computerScreen;
-        // Culled UI skips mesh rebuilds. Refresh authoring geometry before capturing it,
-        // then suppress it again before the real canvas renders (no duplicate logo).
-        compositeActive = false;
-        foreach (var renderer in suppressedGraphics) if (renderer != null)
-        {
-            renderer.cull = false;
-            var graphic = renderer.GetComponent<Graphic>();
-            if (graphic != null) { graphic.SetVerticesDirty(); graphic.SetMaterialDirty(); }
-        }
+        if (!EmbedsReviewGraphics || !compositeSequence || showingTimelineGap || isLoading || playbackTexture == null || computerScreen == null || PauseManager.isPaused) return;
+        var source = overlaySourceScreen;
         Canvas.ForceUpdateCanvases();
         compositor = compositor ?? new VideoFrameCompositor();
         computerScreen.texture = compositor.Compose(playbackTexture, source.rectTransform, timelineOverlays);
-        compositeActive = true;
-        SuppressEmbeddedGraphics();
     }
 
     private void Update()
@@ -389,7 +362,6 @@ public class TruePixelPlayer : MonoBehaviour
     {
         compositeSequence = false;
         pendingTimelineSeek=null; showingTimelineGap=false;
-        RestoreEmbeddedGraphics();
         if (computerScreen != null && playbackTexture != null) computerScreen.texture = playbackTexture;
         HasPlaybackReachedEnd = false;
         StopAllCoroutines();
@@ -545,12 +517,8 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void RefreshOverlays()
     {
-        RestoreEmbeddedGraphics();
         var source = overlaySourceScreen != null ? overlaySourceScreen : computerScreen;
         timelineOverlays = source != null ? source.GetComponentsInChildren<DraggableOverlay>() : new DraggableOverlay[0];
-        // Export reads the editor's originals but never hides or duplicates them.
-        if (source == computerScreen) foreach (var overlay in timelineOverlays)
-            if (overlay.isOnTimeline) foreach (var graphic in overlay.GetComponentsInChildren<Graphic>()) suppressedGraphics.Add(graphic.canvasRenderer);
         float x = playheadLine != null ? playheadLine.anchoredPosition.x : 0f;
         UpdateOverlays(currentFrameIndex, x);
     }
@@ -921,8 +889,6 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void OnDestroy()
     {
-        Canvas.willRenderCanvases -= SuppressEmbeddedGraphics;
-        RestoreEmbeddedGraphics();
         compositor?.Dispose();
         if (exportProgressBar != null)
             exportProgressBar.onValueChanged.RemoveListener(OnScrub);

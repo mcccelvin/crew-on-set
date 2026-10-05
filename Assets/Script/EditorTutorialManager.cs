@@ -198,14 +198,11 @@ public class EditorTutorialManager : MonoBehaviour
                 }
             }
         }
-        if (keyboard != null && keyboard.f6Key.wasPressedThisFrame && isTutorialReady && currentStep != EditorStep.ShowPostProductionTitle)
-        {
-            CheatCompleteCurrentStep();
-        }
     }
 
-    private void CheatCompleteCurrentStep()
+    public void CheatCompleteCurrentStep()
     {
+        if (!DevCommandsPanel.CommandsAllowed || !isActiveAndEnabled || !isTutorialReady || currentStep==EditorStep.ShowPostProductionTitle) return;
         // Don't interrupt if we are already switching steps
         if (isTransitioning) return;
 

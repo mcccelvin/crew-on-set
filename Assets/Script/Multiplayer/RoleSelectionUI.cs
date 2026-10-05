@@ -14,6 +14,8 @@ public sealed partial class RoleSelectionUI : MonoBehaviour
     private void LateUpdate()
     {
         UpdateLobby();
+        if (MultiplayerRoleManager.IsLobbyScene)
+        { Open = true; Cursor.lockState = CursorLockMode.None; Cursor.visible = true; return; }
         if (MultiplayerAuthoredUI.Instance != null && MultiplayerAuthoredUI.Instance.Ready && Crew?.State != null && Crew.State.phase != "lobby") return;
         var key = Keyboard.current;
         if (key != null && (key.tabKey.wasPressedThisFrame || key.escapeKey.wasPressedThisFrame)) Open = !Open;
@@ -24,6 +26,7 @@ public sealed partial class RoleSelectionUI : MonoBehaviour
     private void Send(string action, int value = 0) => Crew.Send(new CrewCommand { action = action, value = value });
     private void OnGUI()
     {
+        if (MultiplayerRoleManager.IsLobbyScene && Crew?.State != null && Crew.State.phase != "lobby") return;
         if (lobbyRoot != null && (Crew?.State == null || Crew.State.phase == "lobby")) return;
         if (MultiplayerAuthoredUI.Instance != null && MultiplayerAuthoredUI.Instance.Ready && Crew?.State != null && Crew.State.phase != "lobby") return;
         GUI.matrix = Matrix4x4.Scale(new Vector3(Screen.width / 1280f, Screen.height / 720f, 1));

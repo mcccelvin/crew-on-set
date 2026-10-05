@@ -32,6 +32,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public bool isOnTimeline = false;
 
     public int fadeFrames = 24;
+    private bool CanEdit => !PauseManager.isPaused && (EditorManager.Instance == null || !EditorManager.Instance.ReviewIsOpen);
 
     internal EditorEditState CaptureUndo()
     {
@@ -117,7 +118,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnBeginDrag(PointerEventData eventData)
     {
-        if (eventData.button != PointerEventData.InputButton.Left) return;
+        if (!CanEdit || eventData.button != PointerEventData.InputButton.Left) return;
         if (isOnTimeline) RestoreCommercialTransform();
         isDragging = true;
 
@@ -160,7 +161,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnDrag(PointerEventData eventData)
     {
-        if (eventData.button != PointerEventData.InputButton.Left) return;
+        if (!CanEdit || !isDragging || eventData.button != PointerEventData.InputButton.Left) return;
         if (parentCanvas != null && rectTransform != null)
         {
             rectTransform.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
@@ -202,12 +203,14 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public void OnEndDrag(PointerEventData eventData)
     {
         if (eventData.button != PointerEventData.InputButton.Left) return;
+        if (!isDragging) return;
         isDragging = false;
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 1f;
             canvasGroup.blocksRaycasts = true;
         }
+        if (!CanEdit) { if (isOnTimeline) RestoreCommercialTransform(); return; }
 
         if (isOnTimeline)
         {
@@ -316,6 +319,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnPointerClick(PointerEventData eventData)
     {
+        if (!CanEdit) return;
         if (eventData.button == PointerEventData.InputButton.Right && isOnTimeline)
             ReturnToBin();
     }
@@ -484,7 +488,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
                 RestoreCommercialTransform();
             }
 
-            canvasGroup.blocksRaycasts = (targetAlpha > 0f);
+            canvasGroup.blocksRaycasts = CanEdit && targetAlpha > 0f;
         }
         else
         {

@@ -56,7 +56,7 @@ public sealed class FeedbackPaperUI : MonoBehaviour
     public void Present(ProductionGrades grades, int contractLevel, string budget, string actionLabel, Action action, Action onClose, bool teach = false)
     {
         StopTransition();
-        report = new FeedbackReport(grades,budget); level = contractLevel;
+        report = new FeedbackReport(grades,budget,contractLevel); level = contractLevel;
         proceed = action; closed = onClose; proceedLabel = actionLabel; tutorial = teach;
         page = highestPage = 0; actionTaken = false;
         if (papers[0] == null) Build();

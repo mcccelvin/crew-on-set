@@ -253,7 +253,7 @@ public class ContractGrader : MonoBehaviour
             feedback += $"<color=red>- Timing: Target 20.0 seconds. Your cut is {totalSeconds:F1} seconds.</color>\n";
         }
 
-        if (hasMinimumClips) feedback += "<color=green>+ The final edit uses at least four separate takes.</color>\n";
+        if (hasMinimumClips) feedback += "<color=green>+ The final edit contains at least four clips. Review their source variety and narrative purpose yourself.</color>\n";
         else
         {
             post -= 15f;
@@ -267,7 +267,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=red>- Shot coverage: The final campaign needs wide, medium, and close-up shots.</color>\n";
         }
 
-        if (hasConsistentDirection) feedback += "<color=green>+ Spatial continuity is maintained.</color>\n";
+        if (hasConsistentDirection) feedback += "<color=green>+ Recorded screen-direction checks passed. Review spatial continuity across the actual cuts as well.</color>\n";
         else
         {
             post -= 15f;
@@ -350,13 +350,13 @@ public class ContractGrader : MonoBehaviour
         feedback += "<color=white><b>--- PRODUCTION ---</b></color>\n";
         feedback += $"Camera setup: <b>{avgCam:F1}/70</b> | Lighting setup: <b>{avgLight:F1}/30</b>\n";
 
-        if (avgCam >= 60f) feedback += "<color=green>+ Camera settings and composition were excellent.</color>\n";
-        else if (avgCam >= 42f) feedback += "<color=yellow>~ Camera result is usable, but framing and zoom can improve.</color>\n";
-        else feedback += "<color=red>- Camera result needs a major framing and zoom adjustment.</color>\n";
+        if (avgCam >= 60f) feedback += "<color=green>+ Camera setup scored strongly against the game's checks. Review the image's visual hierarchy and narrative purpose yourself.</color>\n";
+        else if (avgCam >= 42f) feedback += "<color=yellow>~ Camera setup has room to improve. Compare subject framing, camera position and zoom in the recorded takes.</color>\n";
+        else feedback += "<color=red>- Low camera setup score: review framing, zoom and required subject visibility before recording again.</color>\n";
 
-        if (avgLight >= 25f) feedback += "<color=green>+ Light placement, aim, and intensity were excellent.</color>\n";
-        else if (avgLight >= 16f) feedback += "<color=yellow>~ Lighting is usable, but intensity or aim can improve.</color>\n";
-        else feedback += "<color=red>- Lighting needs better placement, aim, and intensity.</color>\n";
+        if (avgLight >= 25f) feedback += "<color=green>+ Lighting setup scored strongly against the game's checks. Inspect the finished image's contrast, texture and separation yourself.</color>\n";
+        else if (avgLight >= 16f) feedback += "<color=yellow>~ Lighting setup has room to improve. Compare placement, aim and intensity in the recorded takes.</color>\n";
+        else feedback += "<color=red>- Low lighting setup score: check power, placement, aim and intensity before recording again.</color>\n";
 
         if (level == GameLevel.Level1)
         {
@@ -591,12 +591,12 @@ public class ContractGrader : MonoBehaviour
     {
         if (value >= minimum && value <= maximum)
         {
-            feedback += "<color=green>+ " + label + " supports the requested commercial look.</color>\n";
+            feedback += $"<color=green>+ {label}: {value:F2}, within this brief's {minimum:F2}-{maximum:F2} range. Review the actual image before finalizing the look.</color>\n";
         }
         else
         {
             post -= deduction;
-            feedback += "<color=yellow>- " + label + ": " + correction + "</color>\n";
+            feedback += $"<color=yellow>- {label}: {value:F2}, outside this brief's {minimum:F2}-{maximum:F2} range. {correction}</color>\n";
         }
     }
 

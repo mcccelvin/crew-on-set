@@ -154,6 +154,16 @@ public sealed partial class GameSaveManager : MonoBehaviour
         }
         catch (Exception) { Status = "Checkpoint could not be saved. Check available disk space."; GameFeedback.Show(Status, true); }
     }
+    // Profile button: existing private checkpoint transport owns stats and B-Coins.
+    // C-Coins are reconciled separately by their authoritative account-wallet service.
+    public void SyncAccountProgress()
+    {
+        AccountProfileData.EnsureBound();
+        try { OpenRepository(); SaveCheckpoint(); SyncCloud(); }
+        catch (Exception) { Status = "Account progress could not sync. Existing local saves have been kept."; Changed?.Invoke(); }
+        AccountProfileData.Refresh();
+        CCoinService.Ensure().Refresh();
+    }
     private void Update()
     {
         if (!Syncing && Time.unscaledTime >= nextSync) { nextSync = float.PositiveInfinity; SyncCloud(); }
@@ -162,7 +172,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
     public void SyncCloud()
     {
         if (Syncing || Repository == null) return;
-        if (authenticatedId != Repository.Owner || !PlayFabClientAPI.IsClientLoggedIn())
+        if (authenticatedId != Repository.Owner || PlayFabSettings.staticPlayer.PlayFabId != authenticatedId || !PlayFabClientAPI.IsClientLoggedIn())
         {
             Status = "Saved on this device · log in to sync with PlayFab";
             Changed?.Invoke();
@@ -178,7 +188,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         {
             PlayFabClientAPI.GetUserData(new GetUserDataRequest(), result =>
             {
-                if (session != requestSession || Repository != repo) return;
+                if (!CurrentSaveSync(repo,requestSession)) return;
                 try
                 {
                     if (result.Data != null)
@@ -192,18 +202,18 @@ public sealed partial class GameSaveManager : MonoBehaviour
                     UploadNext(repo, requestSession);
                 }
                 catch (Exception) { SyncFailed("Some cloud saves could not be read. Local saves are still available."); }
-            }, error => { if (session == requestSession) SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); });
+            }, error => { if (CurrentSaveSync(repo,requestSession)) SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); });
         }
         catch (Exception) { SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); }
     }
     private void UploadNext(GameSaveRepository repo, int requestSession)
     {
-        if (session != requestSession || Repository != repo) return;
+        if (!CurrentSaveSync(repo,requestSession)) return;
         var slot = repo.Slots.Find(s => s.cloudRevision != s.revision);
         if (slot == null)
         {
             Syncing = false;
-            Status = repo.Warning ?? "All checkpoints synced with PlayFab.";
+            Status = repo.Warning ?? "Stats and B-Coin budgets synced with PlayFab.";
             Changed?.Invoke();
             return;
         }
@@ -215,11 +225,13 @@ public sealed partial class GameSaveManager : MonoBehaviour
             Data = new Dictionary<string, string> { { CloudPrefix + slot.id, json } }
         }, result =>
         {
-            if (session != requestSession || Repository != repo) return;
+            if (!CurrentSaveSync(repo,requestSession)) return;
             try { slot.cloudRevision = revision; repo.Write(slot); UploadNext(repo, requestSession); }
             catch (Exception) { SyncFailed("Cloud sync paused. Your local checkpoint is still available."); }
-        }, error => { if (session == requestSession) SyncFailed("Cloud upload failed. Checkpoint saved locally; retrying automatically."); });
+        }, error => { if (CurrentSaveSync(repo,requestSession)) SyncFailed("Cloud upload failed. Checkpoint saved locally; retrying automatically."); });
     }
+    private bool CurrentSaveSync(GameSaveRepository repo,int requestSession) => session==requestSession && Repository==repo &&
+        authenticatedId==repo.Owner && PlayFabSettings.staticPlayer.PlayFabId==authenticatedId && PlayFabClientAPI.IsClientLoggedIn();
     private void SyncFailed(string message)
     {
         Syncing = false; Status = message;

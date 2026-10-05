@@ -160,9 +160,9 @@ public static class PlayerAnalytics
     }
     // Same coaching used by the result papers; an uploader must not generate its own advice.
     public static string NextStep(float pre, float production, float post, float camera, float lighting) =>
-        pre <= production && pre <= post ? "PRE-PRODUCTION: revisit the required set, product and actor setup."
-        : production <= post ? (camera / 70f <= lighting / 30f ? "CAMERA: reframe the required subjects and keep them visible throughout the take." : "LIGHTING: check power, aim and intensity before recording again.")
-        : "POST-PRODUCTION: correct the timing, branding and color issues listed in the detailed feedback.";
+        pre <= production && pre <= post ? "PRE-PRODUCTION: start with the saved set, product and actor corrections. Make a shot plan linking each required subject and action to the client message; rehearse before spending on another recording."
+        : production <= post ? (camera / 70f <= lighting / 30f ? "CAMERA: compare framing and subject visibility in the first, middle and last frames, then play the whole take. Reposition before adding zoom; explain how the revised composition directs attention." : "LIGHTING: correct the saved power, aim and intensity issues one variable at a time. Compare highlights, shadows and subject separation before recording a replacement take.")
+        : "POST-PRODUCTION: resolve the saved delivery and sequence corrections first, then refine pacing, graphics and color only as relevant to the brief. Watch the complete export and document one before/after editing choice.";
 
     public static void SaveCompletedResult(int level, ProductionGrades grades)
     {

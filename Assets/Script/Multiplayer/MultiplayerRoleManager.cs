@@ -20,14 +20,36 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     private readonly System.Collections.Generic.Dictionary<int, float> lastCommand = new System.Collections.Generic.Dictionary<int, float>();
     private float nextRecordTick;
     private float nextRoomSync;
+    private bool loadingStudio;
+    public static bool IsLobbyScene => SceneManager.GetActiveScene().name == "MultiplayerLobby";
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void RegisterLobby()
+    {
+        SceneManager.sceneLoaded -= InstallLobby;
+        SceneManager.sceneLoaded += InstallLobby;
+    }
+
+    private static void InstallLobby(Scene scene, LoadSceneMode mode)
+    {
+        if (scene.name != "MultiplayerLobby" || Instance != null) return;
+        Time.timeScale = 1; AudioListener.pause = false;
+        PhotonNetwork.AutomaticallySyncScene = true;
+        Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
+        var camera = new GameObject("Lobby background", typeof(Camera), typeof(AudioListener)).GetComponent<Camera>();
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.backgroundColor = new Color32(25, 34, 51, 255); camera.cullingMask = 0;
+        new GameObject("Crew lobby session").AddComponent<MultiplayerRoleManager>();
+    }
 
     private void Awake()
     {
         Instance = this;
         productionOwner = GameSaveManager.Ensure().AuthenticatedPlayerId;
         GameSavePrefs.BeginRoomSession();
-        Studio = gameObject.AddComponent<NetworkStudioFactory>();
         gameObject.AddComponent<RoleSelectionUI>();
+        if (IsLobbyScene) return;
+        Studio = gameObject.AddComponent<NetworkStudioFactory>();
         gameObject.AddComponent<MultiplayerRecording>();
         gameObject.AddComponent<MultiplayerAuthoredUI>();
     }
@@ -187,6 +209,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             AdvanceBriefing(); Publish(); return;
         }
         if (State.phase != "build" && State.phase != "review") return;
+        if (IsLobbyScene) return; // Never execute studio/world commands in the waiting room.
         if (MultiplayerRoomActions.Handle(this, c, sender, out var actionError))
         { if (actionError != null) Reject(sender, actionError); else Publish(); return; }
         if (c.action == "buy")
@@ -481,7 +504,8 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
 
     private void Apply()
     {
-        Notice = State.message; Studio.Apply(State);
+        Notice = State.message;
+        if (Studio != null) Studio.Apply(State);
         RecordLocalProduction(State.resultLog);
         Changed?.Invoke();
     }
@@ -493,7 +517,21 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         if (record != null) saves.RecordProduction(record);
     }
     public override void OnJoinedRoom() { RequestRoomState(); }
-    public override void OnRoomPropertiesUpdate(Hashtable changed) { if (changed.ContainsKey(StateKey)) ReadSnapshot(); }
+    public override void OnRoomPropertiesUpdate(Hashtable changed)
+    {
+        if (!changed.ContainsKey(StateKey)) return;
+        ReadSnapshot();
+        // Wait for the room property's server acknowledgement before loading the studio,
+        // so every client can restore the chosen roles, contract and briefing there.
+        EnterStudioIfStarted();
+    }
+    private void EnterStudioIfStarted()
+    {
+        if (!IsLobbyScene || loadingStudio || !PhotonNetwork.IsMasterClient || State == null || State.phase == "lobby") return;
+        loadingStudio = true;
+        PhotonNetwork.CurrentRoom.IsOpen = false;
+        LoadingScreenController.LoadNetworkScene("MultiStudio");
+    }
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); Publish(); } }
     public override void OnPlayerLeftRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "Crew member left. Reassign their roles from the crew menu."; Publish(); } }
     public override void OnMasterClientSwitched(Photon.Realtime.Player player) { ReadSnapshot(); if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "New host selected. Crew session continues."; Publish(); } }

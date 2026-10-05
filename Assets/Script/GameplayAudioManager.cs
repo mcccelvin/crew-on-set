@@ -106,7 +106,9 @@ public sealed class GameplayAudioManager : MonoBehaviour
         if (Time.unscaledTime >= voiceUntil) voice.Stop();
         effects.volume = .45f * GameOptions.SfxVolume;
         voice.volume = .25f * GameOptions.SfxVolume;
-        music.volume = (PauseManager.isPaused || MultiplayerPauseManager.isPaused || voice.isPlaying ? .035f : .12f) * GameOptions.MusicVolume;
+        bool mainMenu = SceneManager.GetActiveScene().name == "Main Menu" || SceneManager.GetActiveScene().name == "MultiplayerLobby";
+        music.ignoreListenerPause = mainMenu;
+        music.volume = ((!mainMenu && (PauseManager.isPaused || MultiplayerPauseManager.isPaused)) || voice.isPlaying ? .035f : .12f) * GameOptions.MusicVolume;
         if (Time.unscaledTime < scanAt) return;
         scanAt = Time.unscaledTime + .5f;
         buttons.RemoveWhere(b => b == null);
@@ -122,7 +124,7 @@ public sealed class GameplayAudioManager : MonoBehaviour
         level = current;
         string scene = SceneManager.GetActiveScene().name;
         music.Stop();
-        if (scene != "SingleStudio" && scene != "MultiStudio") return;
+        if (scene != "SingleStudio" && scene != "MultiStudio" && scene != "Main Menu" && scene != "MultiplayerLobby") return;
         music.clip = Clip("BG Music by Andrii");
         if (music.clip != null) music.Play();
     }

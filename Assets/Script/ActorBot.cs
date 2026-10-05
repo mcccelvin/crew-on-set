@@ -162,13 +162,28 @@ public sealed class ActorBot : MonoBehaviour
     private AnimationMixerPlayable coffeeActionMixer;
     private AnimationClipPlayable coffeeActionPlayable;
     private AnimationClip activeCoffeeClip;
+    private static AnimationClip actorWaveClip;
 
-    private bool EvaluateCoffeeAnimation()
+    private static AnimationClip ActorWaveClip()
+    {
+        if (actorWaveClip != null) return actorWaveClip;
+        var controller = Resources.Load<RuntimeAnimatorController>("ProfileWave");
+        if (controller != null)
+            foreach (var clip in controller.animationClips)
+                if (clip != null && clip.isHumanMotion && clip.length > 0)
+                { actorWaveClip = clip; break; }
+        return actorWaveClip;
+    }
+
+    private bool EvaluateAuthoredAnimation()
     {
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         AnimationClip clip = catalog == null ? null :
             furnitureActive && furniture != null && furniture.action == Contract4Interactable.Action.Machine ? catalog.coffeePressAnimation :
             !furnitureActive && performance == 3 && CanMixCoffee && !walking ? catalog.coffeeMixAnimation : null;
+        // Use the same authored Waving Gesture as the profile. Blocking/walking
+        // takes priority; the selected greeting resumes when the actor reaches its mark.
+        if (!furnitureActive && performance == 1 && !walking) clip = ActorWaveClip();
         if (clip == null || !clip.isHumanMotion || !graph.IsValid())
         {
             if (coffeeActionMixer.IsValid()) { coffeeActionMixer.SetInputWeight(0,1); coffeeActionMixer.SetInputWeight(1,0); }
@@ -771,7 +786,7 @@ public sealed class ActorBot : MonoBehaviour
     {
         if (poseHandler == null) return;
         if (furnitureActive) animator.transform.localPosition = furnitureVisualPosition;
-        if (EvaluateCoffeeAnimation()) return;
+        if (EvaluateAuthoredAnimation()) return;
         if (graph.IsValid())
         {
             float length = idle.GetAnimationClip().length;
@@ -810,14 +825,7 @@ public sealed class ActorBot : MonoBehaviour
             SetMuscle("Left Arm Down-Up", -.65f);
             SetMuscle("Right Arm Down-Up", -.65f);
         }
-        if (!furnitureActive && performance == 1)
-        {
-            SetMuscle("Left Arm Down-Up", .45f + .12f * wave * expression);
-            SetMuscle("Left Arm Front-Back", .1f);
-            SetMuscle("Left Forearm Stretch", -.2f + .2f * wave * expression);
-            SetMuscle("Left Hand Down-Up", .25f * wave * expression);
-        }
-        else if (!furnitureActive && performance == 2)
+        if (!furnitureActive && performance == 2)
         {
             float offer = .5f + .5f * wave;
             SetMuscle("Left Arm Down-Up", -.4f + .15f * offer * expression);
