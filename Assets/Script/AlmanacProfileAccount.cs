@@ -86,7 +86,7 @@ public partial class AlmanacManager
             account.onClick.AddListener(() =>
             {
                 GameSaveManager.Instance?.SaveCheckpoint();
-                if (AccountProfileData.Owner == "guest") LoadingScreenController.LoadScene("Login");
+                if (!GameSaveManager.Ensure().HasCloudSession) GameSaveManager.Ensure().SignInToSync();
                 else GameSaveManager.Ensure().Logout();
             });
         }
@@ -166,7 +166,7 @@ public partial class AlmanacManager
         if (profileAccountId != null) profileAccountId.text = AccountProfileData.Owner == "guest" ? "GUEST · LOCAL PROFILE" : AccountProfileData.Owner;
         if (profileSyncStatus != null) profileSyncStatus.text = profileInputsDirty ? "Unsaved changes · click SAVE" : AccountProfileData.Status;
         var label = playerInfoPanel.transform.Find("Account sign in or logout")?.GetComponentInChildren<TMP_Text>();
-        if (label != null) label.text = AccountProfileData.Owner == "guest" ? "SIGN IN" : "LOG OUT";
+        if (label != null) label.text = GameSaveManager.Instance != null && GameSaveManager.Instance.HasCloudSession ? "LOG OUT" : "SIGN IN";
     }
     private void ApplySharedProfileTab(int tab)
     {

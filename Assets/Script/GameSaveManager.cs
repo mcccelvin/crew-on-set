@@ -17,7 +17,12 @@ public sealed partial class GameSaveManager : MonoBehaviour
     private string authenticatedId;
     private int session;
     private float nextSync = float.PositiveInfinity;
+    private float nextSessionCheck;
     private const string CloudPrefix = "CrewCareer_v1_";
+    // PlayerPrefs remembers the local save owner, not a valid PlayFab login.
+    public bool HasCloudSession => PlayFabClientAPI.IsClientLoggedIn() &&
+        !string.IsNullOrEmpty(authenticatedId) && PlayFabSettings.staticPlayer.PlayFabId == authenticatedId &&
+        Repository != null && Repository.Owner == authenticatedId;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() { Instance = null; GameSavePrefs.Activate(null); }
@@ -54,7 +59,11 @@ public sealed partial class GameSaveManager : MonoBehaviour
     }
     public void SetAccount(string playFabId)
     {
-        if (string.IsNullOrWhiteSpace(playFabId)) return;
+        // Never bind cloud writes from a remembered ID alone or another SDK account.
+        if (string.IsNullOrWhiteSpace(playFabId) || !PlayFabClientAPI.IsClientLoggedIn() ||
+            PlayFabSettings.staticPlayer.PlayFabId != playFabId) return;
+        bool sameCareerOwner = Repository != null && Repository.Owner == playFabId;
+        SaveCheckpoint();
         session++;
         productionUpload?.Dispose();
         authenticatedId = playFabId;
@@ -62,9 +71,12 @@ public sealed partial class GameSaveManager : MonoBehaviour
         PlayerPrefs.Save();
         AccountProfileData.Bind(playFabId);
         CCoinService.Ensure().BindAccount(playFabId);
-        Active = null;
-        GameSavePrefs.Activate(null);
-        Repository = null;
+        if (!sameCareerOwner)
+        {
+            Active = null;
+            GameSavePrefs.Activate(null);
+            Repository = null;
+        }
         Syncing = false;
         OpenRepository();
         BindProductionLogs(playFabId);
@@ -81,6 +93,46 @@ public sealed partial class GameSaveManager : MonoBehaviour
             return;
         }
         SyncCloud();
+        SaveLoadPanelHost.AddLogoutButton();
+    }
+    // Recover the save binding if the SDK has authenticated through another login
+    // entry point, or if the manager was recreated while the SDK session survived.
+    private void ReconcileSession()
+    {
+        string sdkOwner = PlayFabClientAPI.IsClientLoggedIn() ? PlayFabSettings.staticPlayer.PlayFabId : null;
+        if (!string.IsNullOrEmpty(sdkOwner))
+        {
+            if (!HasCloudSession) SetAccount(sdkOwner);
+        }
+        else if (!string.IsNullOrEmpty(authenticatedId))
+        {
+            session++;
+            authenticatedId = null;
+            Syncing = false;
+            productionUpload?.Dispose();
+            productionUpload = null;
+            Status = "Saved on this device · session disconnected. Sign in to sync.";
+            Changed?.Invoke();
+            SaveLoadPanelHost.AddLogoutButton();
+        }
+    }
+    public void SignInToSync()
+    {
+        SaveCheckpoint();
+        // Keep the remembered owner and its files while the login screen is open.
+        LoadingScreenController.LoadScene("Login");
+    }
+    public void RetryCloudSync()
+    {
+        ReconcileSession();
+        if (HasCloudSession) { nextProductionSync = Time.unscaledTime; SyncCloud(); }
+        else SignInToSync();
+    }
+    private void OnApplicationFocus(bool focused)
+    {
+        if (!focused) return;
+        ReconcileSession();
+        if (HasCloudSession && !Syncing) { nextProductionSync = Time.unscaledTime; SyncCloud(); }
     }
     public void OpenRepository()
     {
@@ -156,15 +208,20 @@ public sealed partial class GameSaveManager : MonoBehaviour
     }
     private void Update()
     {
+        if (Time.unscaledTime >= nextSessionCheck)
+        {
+            nextSessionCheck = Time.unscaledTime + 1f;
+            ReconcileSession();
+        }
         if (!Syncing && Time.unscaledTime >= nextSync) { nextSync = float.PositiveInfinity; SyncCloud(); }
         TickProductionLogs();
     }
     public void SyncCloud()
     {
         if (Syncing || Repository == null) return;
-        if (authenticatedId != Repository.Owner || !PlayFabClientAPI.IsClientLoggedIn())
+        if (!HasCloudSession)
         {
-            Status = "Saved on this device · log in to sync with PlayFab";
+            Status = "Saved on this device · no active cloud session. Sign in to sync.";
             Changed?.Invoke();
             return;
         }
@@ -178,7 +235,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         {
             PlayFabClientAPI.GetUserData(new GetUserDataRequest(), result =>
             {
-                if (session != requestSession || Repository != repo) return;
+                if (!IsCurrentSync(repo, requestSession)) return;
                 try
                 {
                     if (result.Data != null)
@@ -192,13 +249,13 @@ public sealed partial class GameSaveManager : MonoBehaviour
                     UploadNext(repo, requestSession);
                 }
                 catch (Exception) { SyncFailed("Some cloud saves could not be read. Local saves are still available."); }
-            }, error => { if (session == requestSession) SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); });
+            }, error => { if (IsCurrentSync(repo, requestSession)) CloudRequestFailed(error, "Cloud sync unavailable. Local saves are ready; retrying automatically."); });
         }
         catch (Exception) { SyncFailed("Cloud sync unavailable. Local saves are ready; retrying automatically."); }
     }
     private void UploadNext(GameSaveRepository repo, int requestSession)
     {
-        if (session != requestSession || Repository != repo) return;
+        if (!IsCurrentSync(repo, requestSession)) return;
         var slot = repo.Slots.Find(s => s.cloudRevision != s.revision);
         if (slot == null)
         {
@@ -215,10 +272,25 @@ public sealed partial class GameSaveManager : MonoBehaviour
             Data = new Dictionary<string, string> { { CloudPrefix + slot.id, json } }
         }, result =>
         {
-            if (session != requestSession || Repository != repo) return;
+            if (!IsCurrentSync(repo, requestSession)) return;
             try { slot.cloudRevision = revision; repo.Write(slot); UploadNext(repo, requestSession); }
             catch (Exception) { SyncFailed("Cloud sync paused. Your local checkpoint is still available."); }
-        }, error => { if (session == requestSession) SyncFailed("Cloud upload failed. Checkpoint saved locally; retrying automatically."); });
+        }, error => { if (IsCurrentSync(repo, requestSession)) CloudRequestFailed(error, "Cloud upload failed. Checkpoint saved locally; retrying automatically."); });
+    }
+    private bool IsCurrentSync(GameSaveRepository repo, int generation) =>
+        session == generation && Repository == repo && HasCloudSession;
+    private void CloudRequestFailed(PlayFabError error, string message)
+    {
+        if (HandleSessionError(error)) return;
+        SyncFailed(message + " (" + error.Error + ")");
+    }
+    private bool HandleSessionError(PlayFabError error)
+    {
+        if (error.Error != PlayFabErrorCode.InvalidSessionTicket && error.Error != PlayFabErrorCode.AuthTokenExpired &&
+            error.Error != PlayFabErrorCode.NotAuthenticated) return false;
+        PlayFabClientAPI.ForgetAllCredentials();
+        ReconcileSession();
+        return true;
     }
     private void SyncFailed(string message)
     {

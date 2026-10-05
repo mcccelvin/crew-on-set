@@ -9,7 +9,7 @@ using UnityEngine;
 public sealed partial class GameSaveManager
 {
     public const string ProductionLogsKey = "production_logs";
-    public string AuthenticatedPlayerId => authenticatedId;
+    public string AuthenticatedPlayerId => HasCloudSession ? authenticatedId : null;
     [Serializable] private sealed class LogReceipt { public string id, decision, verifiedUtc; }
     [Serializable] private sealed class LogJournal
     {
@@ -98,7 +98,7 @@ public sealed partial class GameSaveManager
     private void TickProductionLogs()
     {
         if (Syncing || productionUpload == null || productionUpload.Busy || Time.unscaledTime < nextProductionSync ||
-            productionJournal?.owner != authenticatedId || !PlayFabClientAPI.IsClientLoggedIn()) return;
+            productionJournal?.owner != authenticatedId || !HasCloudSession) return;
         nextProductionSync = float.PositiveInfinity;
         productionUpload.TrySync();
     }
@@ -109,14 +109,18 @@ public sealed partial class GameSaveManager
         private readonly int generation;
         public LogTransport(GameSaveManager manager, string owner, int generation)
         { this.manager = manager; this.owner = owner; this.generation = generation; }
-        private bool Current => manager != null && manager.session == generation && manager.authenticatedId == owner && PlayFabClientAPI.IsClientLoggedIn();
+        private bool Current => manager != null && manager.session == generation && manager.authenticatedId == owner && manager.HasCloudSession;
         public void Read(Action<string> success, Action<string> failure)
         {
             if (!Current) { failure("Sign in to the result's account to upload."); return; }
             PlayFabClientAPI.GetUserData(new GetUserDataRequest { Keys = new List<string> { ProductionLogsKey } }, result => {
                 if (!Current) return;
                 success(result.Data != null && result.Data.TryGetValue(ProductionLogsKey, out var entry) ? entry.Value : null);
-            }, error => { if (Current) failure("PlayFab could not read production logs. Results kept locally; retrying automatically."); });
+            }, error => {
+                if (!Current) return;
+                failure("PlayFab could not read production logs. Results kept locally; retrying automatically.");
+                manager.HandleSessionError(error);
+            });
         }
         public void Write(string json, Action success, Action<string> failure)
         {
@@ -124,7 +128,9 @@ public sealed partial class GameSaveManager
             PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest {
                 Permission = UserDataPermission.Private, Data = new Dictionary<string, string> { { ProductionLogsKey, json } }
             }, result => { if (Current) success(); }, error => {
-                if (Current) failure("PlayFab rejected the production-log upload (" + error.Error + "). Full results kept locally; retrying automatically.");
+                if (!Current) return;
+                failure("PlayFab rejected the production-log upload (" + error.Error + "). Full results kept locally; retrying automatically.");
+                manager.HandleSessionError(error);
             });
         }
     }
