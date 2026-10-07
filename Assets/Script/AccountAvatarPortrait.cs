@@ -15,12 +15,12 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
     public static void Attach(Transform shortcut)
     {
         if (shortcut == null || shortcut.Find("Live account avatar") != null) return;
-        var portrait = new GameObject("Live account avatar", typeof(RectTransform), typeof(RawImage));
+        var portrait = new GameObject("Live account avatar", typeof(RectTransform), typeof(RoundedAvatarImage));
         portrait.transform.SetParent(shortcut, false);
         var rect = portrait.GetComponent<RectTransform>();
         // Fractional insets respect the authored main-menu button's nonuniform scale.
-        rect.anchorMin = new Vector2(.19f, .19f);
-        rect.anchorMax = new Vector2(.81f, .81f);
+        rect.anchorMin = new Vector2(.16f, .16f);
+        rect.anchorMax = new Vector2(.84f, .84f);
         rect.offsetMin = rect.offsetMax = Vector2.zero;
         portrait.GetComponent<RawImage>().raycastTarget = false;
         portrait.AddComponent<AccountAvatarPortrait>();
@@ -108,10 +108,11 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         portraitCamera.backgroundColor = new Color32(245, 239, 218, 255);
         portraitCamera.orthographic = true;
         portraitCamera.aspect = 1f;
-        portraitCamera.orthographicSize = Mathf.Max(bounds.extents.y * .57f, bounds.extents.x * 1.1f);
+        // Frame the head and shoulders; outstretched arms should not shrink the face.
+        portraitCamera.orthographicSize = bounds.size.y * .29f;
         portraitCamera.nearClipPlane = .01f;
         portraitCamera.farClipPlane = 20f;
-        var lookAt = bounds.center + Vector3.up * (bounds.size.y * .22f);
+        var lookAt = bounds.center + Vector3.up * (bounds.size.y * .25f);
         portraitCamera.transform.position = lookAt + Vector3.forward * (bounds.extents.z + 4f);
         portraitCamera.transform.LookAt(lookAt);
 
