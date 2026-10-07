@@ -83,10 +83,27 @@ public sealed partial class GameSaveManager
         if (Repository == null || authenticatedId != Repository.Owner) return;
         if (productionJournal == null || productionJournal.owner != authenticatedId) BindProductionLogs(authenticatedId);
         foreach (var slot in Repository.Slots)
+        {
+            var repeatedLegacy = new Dictionary<string, int>();
             foreach (var attempt in PlayerAnalytics.ProfileHistory(slot))
             {
                 var record = attempt.productionLog;
-                if (!attempt.closed || record == null) continue; // Never fabricate feedback for old rank-only saves.
+                if (!attempt.closed) continue;
+                if (record == null)
+                {
+                    record = ProductionLogRecord.FromLegacyAttempt(slot, attempt, authenticatedId);
+                    if (record == null) continue; // Unlocks and personal-best keys are not submitted results.
+                    repeatedLegacy.TryGetValue(record.submissionId, out int occurrence);
+                    repeatedLegacy[record.submissionId] = occurrence + 1;
+                    // Keep distinct, identical submissions in a retained history, but
+                    // deduplicate copied careers and repeat logins using stable IDs.
+                    if (occurrence > 0)
+                    {
+                        record.submissionId += "-" + occurrence.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                        record.productionId = record.submissionId;
+                        record.id = record.submissionId + ":" + authenticatedId;
+                    }
+                }
                 if (string.IsNullOrEmpty(record.playerId))
                 {
                     record = JsonUtility.FromJson<ProductionLogRecord>(JsonUtility.ToJson(record));
@@ -94,6 +111,7 @@ public sealed partial class GameSaveManager
                 }
                 RecordProduction(record);
             }
+        }
     }
     private void TickProductionLogs()
     {

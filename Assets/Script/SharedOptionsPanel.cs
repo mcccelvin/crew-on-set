@@ -15,6 +15,7 @@ public sealed class SharedOptionsPanel
     private int section,quality,fps;
     private float sensitivity,volume,sfxVolume,musicVolume;
     private bool fullscreen;
+    private bool closing;
     public bool IsOpen=>root.activeSelf;
     public GameObject Root=>root;
 
@@ -111,6 +112,7 @@ public sealed class SharedOptionsPanel
     }
     public void Open()
     {
+        closing = false;
         PauseManager.PutOverlayOnTop(root, 30010);
         sensitivity=GameOptions.MouseSensitivityMultiplier;volume=PlayerPrefs.GetFloat("Options.MasterVolume",1);
         sfxVolume=GameOptions.SfxVolume;musicVolume=GameOptions.MusicVolume;
@@ -122,7 +124,8 @@ public sealed class SharedOptionsPanel
     }
     public void Close(bool save)
     {
-        if(!IsOpen)return;
+        if(!IsOpen || closing)return;
+        closing = true;
         if(save)
         {
             PlayerPrefs.SetFloat(GameOptions.SensitivityKey,sensitivity);PlayerPrefs.SetFloat("Options.MasterVolume",volume);
@@ -131,7 +134,12 @@ public sealed class SharedOptionsPanel
             AudioListener.volume=volume;GameOptions.ApplyFullscreen(fullscreen);QualitySettings.SetQualityLevel(GameOptions.QualityIndex(quality));QualitySettings.vSyncCount=0;Application.targetFrameRate=fps;
             PlayerPrefs.Save();
         }
-        root.SetActive(false);if(UnityEngine.EventSystems.EventSystem.current!=null)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);closed?.Invoke();
+        UITransition.Hide(root, () =>
+        {
+            closing = false;
+            if(UnityEngine.EventSystems.EventSystem.current!=null)UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
+            closed?.Invoke();
+        });
     }
     private void Refresh()
     {

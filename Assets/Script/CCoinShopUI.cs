@@ -31,8 +31,7 @@ public sealed class CCoinShopUI : MonoBehaviour
         Text(design,"Shop title","COSMETIC SHOP",new Vector2(0,424),new Vector2(1000,70),52);
         Text(design,"Shop description","C-Coins buy appearance only. Your B-Coins, equipment and grades are unchanged.",new Vector2(0,352),new Vector2(1600,60),27);
         balance = Text(design,"C-Coins balance","",new Vector2(-485,274),new Vector2(650,75),36);
-        Button(design,"Sync wallet","SYNC",new Vector2(480,274),new Vector2(170,62),() => service.Refresh());
-        Button(design,"Buy C-Coins","BUY C-COINS",new Vector2(697,274),new Vector2(230,62),() => CCoinPackShopUI.Show(transform.parent));
+        Button(design,"Buy C-Coins","TOP UP",new Vector2(697,274),new Vector2(230,62),() => service.OpenTopUpWebsite());
         cards = Rect(design,"Cosmetic cards",new Vector2(0,-10),new Vector2(1600,440));
         status = Text(design,"Wallet status","",new Vector2(0,-300),new Vector2(1550,130),27);
         status.richText = false;
@@ -40,7 +39,6 @@ public sealed class CCoinShopUI : MonoBehaviour
         next = Button(design,"Next cosmetics","NEXT",new Vector2(400,-413),new Vector2(240,64),() => { page++; Refresh(); });
         pageLabel = Text(design,"Catalog page","",new Vector2(0,-413),new Vector2(350,55),26);
         Button(design,"Close cosmetic shop","BACK TO PROFILE",new Vector2(659,-413),new Vector2(265,64),() => gameObject.SetActive(false));
-        Button(design,"Default appearance","DEFAULT LOOK",new Vector2(-680,-413),new Vector2(250,64),() => service.Equip(null));
         service.Changed += Refresh;
     }
     private void OnEnable() { if (service != null) Refresh(); }
@@ -49,7 +47,7 @@ public sealed class CCoinShopUI : MonoBehaviour
     {
         if (service == null || !gameObject.activeInHierarchy) return;
         var wallet = service.Wallet;
-        balance.text = service.Balance.ToString("N0") + " C-COINS" + (service.Verified ? "" : "  (CACHED)");
+        balance.text = service.Balance.ToString("N0") + " C-COINS";
         status.text = service.Status + "\n100 C-Coins per first successful contract completion. Pending rewards: " + service.PendingRewards;
         foreach (Transform child in cards) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
         // Legacy frame-only modal; character items live in the shared profile shop.

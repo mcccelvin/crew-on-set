@@ -18,6 +18,8 @@ public sealed partial class GameSaveManager : MonoBehaviour
     private int session;
     private float nextSync = float.PositiveInfinity;
     private float nextSessionCheck;
+    private bool hadInternet = true;
+    private bool localProgressLinkPending;
     private const string CloudPrefix = "CrewCareer_v1_";
     // PlayerPrefs remembers the local save owner, not a valid PlayFab login.
     public bool HasCloudSession => PlayFabClientAPI.IsClientLoggedIn() &&
@@ -62,8 +64,11 @@ public sealed partial class GameSaveManager : MonoBehaviour
         // Never bind cloud writes from a remembered ID alone or another SDK account.
         if (string.IsNullOrWhiteSpace(playFabId) || !PlayFabClientAPI.IsClientLoggedIn() ||
             PlayFabSettings.staticPlayer.PlayFabId != playFabId) return;
+        // Import legacy/offline progress under its remembered owner before the login
+        // changes that owner. A different account's local career must never be claimed.
+        try { OpenRepository(); SaveCheckpoint(); }
+        catch (Exception) { Debug.LogWarning("Local checkpoint could not be prepared for login. Existing files have been kept."); }
         bool sameCareerOwner = Repository != null && Repository.Owner == playFabId;
-        SaveCheckpoint();
         session++;
         productionUpload?.Dispose();
         authenticatedId = playFabId;
@@ -78,22 +83,30 @@ public sealed partial class GameSaveManager : MonoBehaviour
             Repository = null;
         }
         Syncing = false;
+        nextSync = float.PositiveInfinity; // Replace the previous account/session's scheduled retry.
         OpenRepository();
         BindProductionLogs(playFabId);
+        localProgressLinkPending = true;
+        SyncCloud();
+        RefreshAccountServices();
+        SaveLoadPanelHost.AddLogoutButton();
+    }
+    private void LinkLocalProgressForSync()
+    {
+        if (!localProgressLinkPending || !HasCloudSession) return;
         try
         {
             var guest = new GameSaveRepository(Path.Combine(Application.persistentDataPath, "CareerSaves"), "guest");
             Repository.ImportUnclaimedGuestSaves(guest);
             CCoinService.Ensure().LinkGuestRewards();
+            localProgressLinkPending = false;
         }
         catch (Exception)
         {
-            Status = "Some local saves could not be linked. Originals are kept; log in again to retry.";
-            Changed?.Invoke();
-            return;
+            // Keep syncing already-linked saves/logs even if one local import or the
+            // separate wallet service fails. Retry the linking step without another login.
+            Debug.LogWarning("Some local progress could not be linked yet. Originals are kept; linking will retry automatically.");
         }
-        SyncCloud();
-        SaveLoadPanelHost.AddLogoutButton();
     }
     // Recover the save binding if the SDK has authenticated through another login
     // entry point, or if the manager was recreated while the SDK session survived.
@@ -133,6 +146,15 @@ public sealed partial class GameSaveManager : MonoBehaviour
         if (!focused) return;
         ReconcileSession();
         if (HasCloudSession && !Syncing) { nextProductionSync = Time.unscaledTime; SyncCloud(); }
+        RefreshAccountServices();
+    }
+    private void RefreshAccountServices()
+    {
+        if (!HasCloudSession || Application.internetReachability == NetworkReachability.NotReachable) return;
+        AccountProfileData.Refresh();
+        var wallet = CCoinService.Ensure();
+        if (!wallet.DevWalletActive) AccountAppearanceData.Refresh();
+        wallet.Refresh();
     }
     public void OpenRepository()
     {
@@ -206,7 +228,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         }
         catch (Exception) { Status = "Checkpoint could not be saved. Check available disk space."; GameFeedback.Show(Status, true); }
     }
-    // Profile button: existing private checkpoint transport owns stats and B-Coins.
+    // Compatibility entry point: the existing private checkpoint transport owns stats and B-Coins.
     // C-Coins are reconciled separately by their authoritative account-wallet service.
     public void SyncAccountProgress()
     {
@@ -222,9 +244,21 @@ public sealed partial class GameSaveManager : MonoBehaviour
         {
             nextSessionCheck = Time.unscaledTime + 1f;
             ReconcileSession();
+            // Reachability is only a reconnect hint. Actual SDK results determine
+            // success, and existing bounded retries handle unavailable services.
+            bool connected = Application.internetReachability != NetworkReachability.NotReachable;
+            if (connected != hadInternet)
+            {
+                hadInternet = connected;
+                if (connected && HasCloudSession)
+                {
+                    nextSync = nextProductionSync = Time.unscaledTime;
+                    RefreshAccountServices();
+                }
+            }
         }
         if (!Syncing && Time.unscaledTime >= nextSync) { nextSync = float.PositiveInfinity; SyncCloud(); }
-        TickProductionLogs();
+        if (Application.internetReachability != NetworkReachability.NotReachable) TickProductionLogs();
     }
     public void SyncCloud()
     {
@@ -235,8 +269,17 @@ public sealed partial class GameSaveManager : MonoBehaviour
             Changed?.Invoke();
             return;
         }
+        if (Application.internetReachability == NetworkReachability.NotReachable)
+        {
+            nextSync = Time.unscaledTime + 60f;
+            Status = "Saved on this device · waiting to reconnect. Sync resumes automatically.";
+            Changed?.Invoke();
+            return;
+        }
         var repo = Repository;
+        LinkLocalProgressForSync();
         RecoverProductionLogs();
+        nextProductionSync = Time.unscaledTime;
         int requestSession = session;
         Syncing = true;
         Status = "Syncing saves with PlayFab…";
@@ -269,7 +312,12 @@ public sealed partial class GameSaveManager : MonoBehaviour
         var slot = repo.Slots.Find(s => s.cloudRevision != s.revision);
         if (slot == null)
         {
+            // Include result snapshots just downloaded/merged from another device.
+            // Rearm the log queue even if a previous empty queue had stopped its timer.
+            RecoverProductionLogs();
+            nextProductionSync = Time.unscaledTime;
             Syncing = false;
+            nextSync = Time.unscaledTime + 60f;
             Status = repo.Warning ?? "Stats and B-Coin budgets synced with PlayFab.";
             Changed?.Invoke();
             return;

@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 public class AccountManager : MonoBehaviour
 {
     const string LAST_EMAIL_KEY = "LastEmail";
+    public const string WebsiteSignupUrl = "https://crew-on-set.vercel.app/signup";
 
     [SerializeField] TMP_Text messageText;
     [SerializeField] TMP_Text username;
@@ -19,7 +20,15 @@ public class AccountManager : MonoBehaviour
 
     public void OnRegisterPressed()
     {
-        Register(registerEmail.text, registerUsername.text, registerPassword.text);
+        OnWebsiteSignUpPressed();
+    }
+
+    public void OnWebsiteSignUpPressed()
+    {
+        // Registration belongs to the website; keep the game ready for the return login.
+        if (messageText != null)
+            messageText.text = "Sign up in your browser, then return here to sign in.";
+        Application.OpenURL(WebsiteSignupUrl);
     }
 
     public void Register(string email, string username, string password)
@@ -52,6 +61,12 @@ public class AccountManager : MonoBehaviour
     [Header("Login")]
     [SerializeField] TMP_InputField loginEmail;
     [SerializeField] TMP_InputField loginPassword;
+
+    private void Awake()
+    {
+        if (gameObject.scene.name == "Login")
+            LoginScreenPresentation.Apply(loginEmail, loginPassword, recoveryEmail, messageText);
+    }
 
     private void Start()
     {

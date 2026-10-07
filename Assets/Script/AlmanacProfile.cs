@@ -9,34 +9,68 @@ public partial class AlmanacManager
     [SerializeField] private GameObject profileCanvas;
     [SerializeField] private Button profileBackButton, profileCloseButton;
     private bool isProfileOpen;
+    private bool profileClosing;
     private RawImage profileCharacterImage;
     private RenderTexture profileCharacterTexture;
     private ProfileCharacterPreview profileLivePreview;
     private static TMP_FontAsset profileLabelFont;
     private static Material profileLabelMaterial;
+    private static TMP_FontAsset profileBodyFont;
+    private static Material profileBodyMaterial;
 
     private void ApplyProfileTypography()
     {
         if (profileCanvas == null) return;
         if (profileLabelFont == null)
             profileLabelFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF") ?? TMP_Settings.defaultFontAsset;
-        if (profileLabelFont == null) return;
+        if (profileBodyFont == null)
+            profileBodyFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF") ?? TMP_Settings.defaultFontAsset;
+        if (profileLabelFont == null || profileBodyFont == null) return;
         if (profileLabelMaterial == null)
         {
-            profileLabelMaterial = new Material(profileLabelFont.material) { name = "Profile white lettering - black outline" };
+            profileLabelMaterial = new Material(profileLabelFont.material) { name = "Profile button lettering" };
             profileLabelMaterial.EnableKeyword("OUTLINE_ON");
             profileLabelMaterial.SetColor("_FaceColor", Color.white);
             profileLabelMaterial.SetColor("_OutlineColor", Color.black);
-            profileLabelMaterial.SetFloat("_OutlineWidth", .22f);
+            profileLabelMaterial.SetFloat("_OutlineWidth", .10f);
             profileLabelMaterial.SetFloat("_OutlineSoftness", 0);
         }
-        foreach (var text in profileCanvas.GetComponentsInChildren<TMP_Text>(true))
+        if (profileBodyMaterial == null)
         {
-            text.font = profileLabelFont;
-            text.fontSharedMaterial = profileLabelMaterial;
-            text.fontStyle = FontStyles.Bold;
-            text.color = Color.white;
+            profileBodyMaterial = new Material(profileBodyFont.material) { name = "Profile clean paper text" };
+            profileBodyMaterial.DisableKeyword("OUTLINE_ON");
+            profileBodyMaterial.SetColor("_FaceColor", Color.white);
+            profileBodyMaterial.SetFloat("_OutlineWidth", 0f);
+            profileBodyMaterial.SetFloat("_OutlineSoftness", 0f);
+        }
+        var stage = profileCanvas.transform.Find("Profile backdrop/Profile stage") ?? profileCanvas.transform;
+        foreach (var text in stage.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (profileShopPanel != null && text.transform.IsChildOf(profileShopPanel.transform))
+            {
+                StyleProfileShopTypography(text);
+                continue;
+            }
+            var button = text.GetComponentInParent<Button>(true);
+            bool onColoredButton = button != null && !button.name.StartsWith("Cosmetic category ", System.StringComparison.Ordinal);
+            bool onWallet = text.GetComponentInParent<CCoinProfileWidget>(true) != null;
+            bool onCrewHeader = text.transform.parent != null && text.transform.parent.name == "Crew file header";
+            bool lightLettering = onColoredButton || onWallet || onCrewHeader;
+            text.font = lightLettering ? profileLabelFont : profileBodyFont;
+            text.fontSharedMaterial = lightLettering ? profileLabelMaterial : profileBodyMaterial;
+            bool heading = text.name == "Title" || text.name == "Name" || text.name == "Value" ||
+                text.name.IndexOf("heading", System.StringComparison.OrdinalIgnoreCase) >= 0;
+            text.fontStyle = lightLettering || heading || button != null ? FontStyles.Bold : FontStyles.Normal;
+            if (lightLettering) text.color = Color.white;
+            else if (text.color != ProfileGreen && text.color != ProfileMuted) text.color = ProfileInk;
+            text.characterSpacing = 0f;
             text.UpdateMeshPadding();
+        }
+        foreach (var input in stage.GetComponentsInChildren<TMP_InputField>(true))
+        {
+            input.customCaretColor = true;
+            input.caretColor = ProfileInk;
+            input.selectionColor = new Color32(164, 122, 77, 95);
         }
     }
     private TMP_Text profileAccountId;
@@ -60,8 +94,6 @@ public partial class AlmanacManager
         if (title != null) title.gameObject.SetActive(false);
         var panelImage = playerInfoPanel.GetComponent<Image>();
         if (panelImage != null) panelImage.color = Color.clear;
-        SetRect(playerNameText.rectTransform, Vector2.one * .5f, Vector2.one * .5f, new Vector2(60, 235), new Vector2(640, 70));
-        playerNameText.fontSize = 30;
         if (profileAccountId == null)
             profileAccountId = BookText(playerInfoPanel.transform, "Account ID", new Vector2(95, 137), new Vector2(560, 45), 24);
         profileAccountId.richText = false;
@@ -346,7 +378,14 @@ public partial class AlmanacManager
 
     public void ClosePlayerProfile()
     {
-        if (!isProfileOpen) return;
+        if (!isProfileOpen || profileClosing) return;
+        profileClosing = true;
+        UITransition.Hide(profileCanvas, FinishClosePlayerProfile);
+    }
+
+    private void FinishClosePlayerProfile()
+    {
+        profileClosing = false;
         isProfileOpen = false;
         ReleaseProfilePreview();
         if (profileCanvas != null)

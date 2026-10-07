@@ -99,8 +99,8 @@ public sealed class MainMenuMotion : MonoBehaviour
             paper.localScale = new Vector3(scaleX, scaleY, 1);
         }
     }
-    private static readonly float[] EntranceFrames = { 0f, .18f, .4f, .66f, .86f, 1.06f, 1.025f, .99f, 1f };
-    private static readonly float[] TitleFrames = { 0f, 2f, 5f, 8f, 10f, 11f, 10f, 8f, 5f, 2f, 0f, -2f, -4f, -5f, -4f, -2f };
+    private static readonly float[] TitleEntranceFrames = { 0f, .18f, .4f, .66f, .86f, 1.06f, 1.025f, .99f, 1f };
+    private static readonly float[] TitleIdleFrames = { 0f, 2f, 5f, 8f, 10f, 11f, 10f, 8f, 5f, 2f, 0f, -2f, -4f, -5f, -4f, -2f };
 
     private void OnEnable()
     {
@@ -151,13 +151,20 @@ public sealed class MainMenuMotion : MonoBehaviour
             if (part.rect == null) continue;
             if (part.group == null) part.group = EnsureGroup(part.rect);
             if (part.group == null) continue;
-            int frame = Mathf.Clamp(Mathf.FloorToInt((elapsed - part.delay) * 18f), 0, EntranceFrames.Length - 1);
-            float ease = EntranceFrames[frame];
-            part.group.alpha = part.alpha * Mathf.Clamp01(ease);
-            Vector2 entrance = part.title ? new Vector2(-80f, -30f) : new Vector2(90f, 0f);
-            int idleFrame = Mathf.FloorToInt(Mathf.Max(0f, elapsed - .75f) * 8f) % TitleFrames.Length;
-            Vector2 drift = part.title ? Vector2.up * TitleFrames[idleFrame] : Vector2.zero;
-            part.rect.anchoredPosition = part.position + entrance * (1f - ease) + drift;
+            if (part.title)
+            {
+                int frame = Mathf.Clamp(Mathf.FloorToInt((elapsed - part.delay) * 18f), 0, TitleEntranceFrames.Length - 1);
+                float ease = TitleEntranceFrames[frame];
+                part.group.alpha = part.alpha * Mathf.Clamp01(ease);
+                int idleFrame = Mathf.FloorToInt(Mathf.Max(0f, elapsed - .75f) * 8f) % TitleIdleFrames.Length;
+                part.rect.anchoredPosition = part.position + new Vector2(-80f, -30f) * (1f - ease)
+                    + Vector2.up * TitleIdleFrames[idleFrame];
+                continue;
+            }
+            float progress = Mathf.Clamp01((elapsed - part.delay) / .5f);
+            float remaining = Mathf.Pow(1f - progress, 4f);
+            part.group.alpha = part.alpha * Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(progress / .7f));
+            part.rect.anchoredPosition = part.position + new Vector2(36f, 0f) * remaining;
         }
     }
 

@@ -6,8 +6,9 @@ using UnityEngine;
 [CreateAssetMenu(menuName = "Crew-On-Set/C-Coins Connection", fileName = "CCoinSettings")]
 public sealed class CCoinSettings : ScriptableObject
 {
+    public const string TopUpUrl = "https://crew-on-set.vercel.app/portal/shop";
     public string functionName = "CrewCCoins";
-    public string websiteUrl = "https://crewon-set-web.vercel.app/";
+    public string websiteUrl = TopUpUrl;
     [Tooltip("Enable only after the website's PayMongo checkout/webhook is deployed and tested.")]
     public bool websitePurchasesEnabled;
     [Tooltip("Display offers only. The website must independently resolve and validate prices before payment.")]
@@ -19,12 +20,12 @@ public sealed class CCoinSettings : ScriptableObject
         get
         {
             string value = Environment.GetEnvironmentVariable("CREW_CCOINS_WEBSITE_URL");
-            if (string.IsNullOrWhiteSpace(value)) value = Resources.Load<CCoinSettings>("CCoinSettings")?.websiteUrl;
+            if (string.IsNullOrWhiteSpace(value)) value = Resources.Load<CCoinSettings>("CCoinSettings")?.websiteUrl ?? TopUpUrl;
             return IsApprovedWebsite(value) ? value : "";
         }
     }
     public static bool IsApprovedWebsite(string value) => Uri.TryCreate(value,UriKind.Absolute,out var uri)
-        && uri.Scheme == "https" && uri.Host == "crewon-set-web.vercel.app" && uri.Port == 443
+        && uri.Scheme == "https" && uri.Host == "crew-on-set.vercel.app" && uri.Port == 443
         && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query) && string.IsNullOrEmpty(uri.Fragment);
     public static string FunctionName
     {

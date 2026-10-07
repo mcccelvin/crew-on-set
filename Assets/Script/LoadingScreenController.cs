@@ -31,6 +31,11 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
     private Texture2D barTexture;
     private CanvasGroup overlayFade;
     private bool closing;
+    private bool revealing;
+    private GameObject loadingBackdrop;
+    private BlueLoadingIris closingIris;
+    private const float CircleCloseDuration = .7f;
+    private const float SceneRevealDuration = .45f;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() { instance = null; }
@@ -77,7 +82,9 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
     private void Show(bool network)
     {
         loading = true; networkLoading = network;
-        closing = false;
+        closing = false; revealing = false;
+        if (closingIris != null) closingIris.Closure = 0f;
+        if (loadingBackdrop != null) loadingBackdrop.SetActive(true);
         if (overlayFade != null) overlayFade.alpha = 1f;
         startedAt = Time.realtimeSinceStartup;
         if (loadingLabel != null)
@@ -105,12 +112,16 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
         operation.allowSceneActivation = false;
         while (operation.progress < .9f || Time.realtimeSinceStartup - startedAt < .65f)
             yield return null;
-        operation.allowSceneActivation = true;
-        while (!operation.isDone) yield return null;
+        // Ready to activate: finish the bar and close over the loading screen
+        // before allowing the destination's Awake/Start or first visible frame.
         sceneReady = true;
         while (displayedProgress < 1f) yield return null;
         yield return new WaitForSecondsRealtime(.12f);
-        yield return CloseWithFade();
+        yield return CloseWithCircle();
+        operation.allowSceneActivation = true;
+        while (!operation.isDone) yield return null;
+        yield return RevealScene();
+        Finish();
     }
 
     private IEnumerator StartNetwork(Action start)
@@ -122,7 +133,7 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
 
     private void SceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        if (loading && networkLoading && mode == LoadSceneMode.Single) StartCoroutine(FinishNetwork());
+        if (loading && networkLoading && !closing && !revealing && mode == LoadSceneMode.Single) StartCoroutine(FinishNetwork());
     }
 
     private IEnumerator FinishNetwork()
@@ -130,19 +141,49 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
         sceneReady = true;
         while (networkLoading && displayedProgress < 1f) yield return null;
         yield return new WaitForSecondsRealtime(.12f);
-        if (networkLoading && !closing) yield return CloseWithFade();
+        // Photon owns activation for synchronized loads. Keep the arrived scene
+        // covered until the same circle-close completes; don't alter its queue.
+        if (networkLoading && !closing)
+        {
+            yield return CloseWithCircle();
+            if (networkLoading)
+            {
+                yield return RevealScene();
+                if (networkLoading) Finish();
+            }
+        }
     }
 
-    private IEnumerator CloseWithFade()
+    private IEnumerator CloseWithCircle()
     {
         if (closing) yield break;
         closing = true;
-        for (float time = 0; time < .7f && loading; time += Time.unscaledDeltaTime)
+        for (float time = 0; time < CircleCloseDuration && loading; time += Time.unscaledDeltaTime)
         {
-            overlayFade.alpha = 1f - Mathf.SmoothStep(0f, 1f, time / .7f);
+            if (closingIris != null)
+                closingIris.Closure = Mathf.SmoothStep(0f, 1f, time / CircleCloseDuration);
             yield return null;
         }
-        Finish();
+        if (loading && closingIris != null) closingIris.Closure = 1f;
+        // Present one fully blue frame before activation and the reveal fade.
+        yield return null;
+    }
+
+    private IEnumerator RevealScene()
+    {
+        if (!loading) yield break;
+        revealing = true;
+        // Let the destination initialize/render underneath the opaque blue cover.
+        yield return null;
+        // Fade only blue over the destination, without bringing the logo/tips back.
+        if (loadingBackdrop != null) loadingBackdrop.SetActive(false);
+        for (float time = 0; time < SceneRevealDuration && loading; time += Time.unscaledDeltaTime)
+        {
+            if (overlayFade != null)
+                overlayFade.alpha = 1f - Mathf.SmoothStep(0f, 1f, time / SceneRevealDuration);
+            yield return null;
+        }
+        if (loading && overlayFade != null) overlayFade.alpha = 0f;
     }
 
     public override void OnDisconnected(DisconnectCause cause) { if (networkLoading) Finish(); }
@@ -150,8 +191,10 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
 
     private void Finish()
     {
+        StopAllCoroutines();
         loading = false; networkLoading = false;
-        closing = false;
+        closing = false; revealing = false;
+        if (closingIris != null) closingIris.Closure = 0f;
         if (overlayFade != null) overlayFade.alpha = 0f;
         if (overlay != null) overlay.gameObject.SetActive(false);
     }
@@ -180,6 +223,7 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
         scaler.referenceResolution = new Vector2(1024, 576);
         scaler.matchWidthOrHeight = .5f;
         var backdrop = new GameObject("Background", typeof(RectTransform), typeof(Image));
+        loadingBackdrop = backdrop;
         backdrop.transform.SetParent(canvasObject.transform, false);
         Stretch(backdrop.GetComponent<RectTransform>());
         backdrop.GetComponent<Image>().color = new Color32(17, 17, 17, 255);
@@ -210,7 +254,13 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
         loadingLabel.raycastTarget = false;
         loadingLabel.text = "";
         BuildProgressBar(backdrop.transform);
-        // Transparent full-screen graphic continues blocking UI clicks during the reveal.
+        var irisObject = new GameObject("Blue circle close", typeof(RectTransform), typeof(BlueLoadingIris));
+        irisObject.transform.SetParent(canvasObject.transform, false);
+        Stretch(irisObject.GetComponent<RectTransform>());
+        closingIris = irisObject.GetComponent<BlueLoadingIris>();
+        closingIris.color = BlueLoadingIris.WipeBlue;
+        closingIris.raycastTarget = false;
+        // Transparent full-screen graphic continues blocking UI clicks during the close.
         var blocker = new GameObject("Transition input shield", typeof(RectTransform), typeof(Image));
         blocker.transform.SetParent(canvasObject.transform, false);
         Stretch(blocker.GetComponent<RectTransform>());
@@ -250,7 +300,7 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
         progressFill.pivot = new Vector2(0, .5f);
         progressFill.anchoredPosition = Vector2.zero;
         progressFill.sizeDelta = new Vector2(18, 18);
-        StyleBar(fill.GetComponent<Image>(), new Color32(0, 235, 235, 255));
+        StyleBar(fill.GetComponent<Image>(), BlueLoadingIris.WipeBlue);
         fill.SetActive(false);
     }
 

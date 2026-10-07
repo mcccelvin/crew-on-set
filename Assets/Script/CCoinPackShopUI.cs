@@ -15,7 +15,6 @@ public sealed class CCoinPackShopUI : MonoBehaviour
     readonly Button[] buy = new Button[4];
     readonly TMP_Text[] availability = new TMP_Text[4];
     readonly CCoinPackOffer[] offers = new CCoinPackOffer[4];
-    Button sync;
 
     public static CCoinPackShopUI Show(Transform profile)
     {
@@ -46,7 +45,7 @@ public sealed class CCoinPackShopUI : MonoBehaviour
         balance=Label(design,"Account balance","",new Vector2(408,412),new Vector2(346,40),29,Gold);
         Label(design,"Wallet caption","YOUR ACCOUNT WALLET",new Vector2(408,380),new Vector2(340,25),16,Cream);
         Action(design,"Close packs","X",new Vector2(726,421),new Vector2(75,65),"redButton",()=>gameObject.SetActive(false));
-        sync=Action(design,"Sync C-Coins","SYNC",new Vector2(685,345),new Vector2(150,53),"blueButton",()=>service.Refresh());
+        Action(design,"Top up C-Coins","TOP UP",new Vector2(685,345),new Vector2(150,53),"blueButton",()=>service.OpenTopUpWebsite());
         var configured=CCoinSettings.Packs;
         var defaults=CCoinPackOffer.Defaults();
         for(int i=0;i<4;i++)
@@ -89,8 +88,7 @@ public sealed class CCoinPackShopUI : MonoBehaviour
     void Refresh()
     {
         if(service==null || !gameObject.activeInHierarchy)return;
-        balance.text=service.Balance.ToString("N0")+" C-COINS"+(service.Verified?"":" · cached");
-        sync.interactable=!service.Busy;
+        balance.text=service.Balance.ToString("N0")+" C-COINS";
         for(int i=0;i<4;i++)
         {
             buy[i].interactable=CanOpen(i);
@@ -99,7 +97,7 @@ public sealed class CCoinPackShopUI : MonoBehaviour
         status.text=!CCoinSettings.WebsitePurchasesEnabled || string.IsNullOrEmpty(CCoinSettings.WebsiteUrl)
             ? "SHOP PREVIEW  /  PayMongo checkout is not connected yet. No payments can be taken."
             : !service.Authenticated?"Sign in to your PlayFab account to continue on the website."
-            : "Checkout opens on our website. Use the same account, then return and sync your wallet.";
+            : "Use the same account on the website. Your wallet refreshes automatically when you return.";
     }
     void OnEnable(){if(service!=null){Fit();Refresh();}}
     void OnRectTransformDimensionsChange(){Fit();}

@@ -11,7 +11,7 @@ public partial class AlmanacManager
     private float profileRefreshAt;
     private string profileProgressStamp;
     private static readonly Color ProfileInk = new Color32(47, 40, 35, 255);
-    private static readonly Color ProfileMuted = new Color32(102, 87, 69, 255);
+    private static readonly Color ProfileMuted = new Color32(74, 62, 50, 255);
     private static readonly Color ProfileGreen = new Color32(35, 99, 65, 255);
 
     private void EnsureProfileProgressUI()

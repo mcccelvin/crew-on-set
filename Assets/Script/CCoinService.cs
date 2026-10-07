@@ -74,6 +74,7 @@ public sealed class CCoinService : MonoBehaviour
     {
         if(!DevWalletActive)return;
         session++;requestGeneration++;state=realState;realState=null;Busy=Verified=false;nextRefresh=Time.unscaledTime;
+        ApplySavedAppearance();
         Publish("Real wallet restored. Test coins and test purchases discarded.");
     }
 
@@ -90,11 +91,13 @@ public sealed class CCoinService : MonoBehaviour
     {
         if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this; DontDestroyOnLoad(gameObject);
+        AccountAppearanceData.Changed += OnAppearanceChanged;
         BindAccount(UnityEngine.PlayerPrefs.GetString("PlayFabId","guest"));
     }
     private void OnDestroy()
     {
         session++; requestGeneration++; Busy = Verified = false;
+        AccountAppearanceData.Changed -= OnAppearanceChanged;
         if (Instance == this) Instance = null;
     }
     private static string CacheKey(string account) => "SaveSystem.CCoins.v1." + account;
@@ -119,17 +122,25 @@ public sealed class CCoinService : MonoBehaviour
         if (state.pendingPurchase != null && (!CCoinRules.ValidId(state.pendingPurchase.itemId) || !CCoinRules.ValidId(state.pendingPurchase.operationId))) state.pendingPurchase = null;
         if (!CCoinRules.Owns(state.wallet,state.selectedCosmetic)) state.selectedCosmetic = null;
         ValidateEquipment();
+        AccountAppearanceData.Bind(owner,state.selectedCosmetic,state.equippedParts.ToArray());
         Save();
         nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Sign in to sync C-Coins. Offline rewards stay pending." : "Cached wallet · waiting for account sync.");
     }
     private void Update()
     {
+        AccountProfileData.Tick();
+        if (!DevWalletActive) AccountAppearanceData.Tick();
         if (Busy && Time.unscaledTime > deadline)
         { requestGeneration++; Finish(false,"Wallet request timed out. Pending transactions will retry safely."); }
         if (!Busy && Time.unscaledTime >= nextRefresh) { nextRefresh = Time.unscaledTime + 60; Refresh(); }
     }
-    private void OnApplicationFocus(bool focused) { if (focused) nextRefresh = Time.unscaledTime; }
+    private void OnApplicationFocus(bool focused)
+    {
+        if (!focused) return;
+        nextRefresh = Time.unscaledTime;
+        if (!DevWalletActive) AccountAppearanceData.Refresh();
+    }
     private void Save() { if(DevWalletActive)return; UnityEngine.PlayerPrefs.SetString(CacheKey(owner),JsonUtility.ToJson(state)); UnityEngine.PlayerPrefs.Save(); }
     private void Publish(string message) { Status = message; Changed?.Invoke(); }
 
@@ -263,7 +274,21 @@ public sealed class CCoinService : MonoBehaviour
         state.wallet = wallet;
         if (!CCoinRules.Owns(wallet,state.selectedCosmetic)) state.selectedCosmetic = null;
         ValidateEquipment();
+        ApplySavedAppearance();
         Save(); return true;
+    }
+    private void OnAppearanceChanged()
+    {
+        if (DevWalletActive || AccountAppearanceData.Owner != owner) return;
+        ApplySavedAppearance(); Save(); Changed?.Invoke();
+    }
+    private void ApplySavedAppearance()
+    {
+        if (AccountAppearanceData.Owner != owner) return;
+        string frame = AccountAppearanceData.SelectedFrame;
+        state.selectedCosmetic = CCoinRules.Owns(state.wallet,frame) && CCoinRules.Find(state.wallet,frame)?.kind == "profile_frame" ? frame : null;
+        state.equippedParts = new List<string>(AccountAppearanceData.EquippedParts);
+        ValidateEquipment(); // Cloud appearance preferences never grant item ownership.
     }
     private void ValidateEquipment()
     {
@@ -367,7 +392,13 @@ public sealed class CCoinService : MonoBehaviour
             state.equippedParts.Add(id);
         }
         else { state.selectedCosmetic=id; if(string.IsNullOrEmpty(id))state.equippedParts.Clear(); }
+        if (!DevWalletActive) AccountAppearanceData.SetSelection(state.selectedCosmetic,state.equippedParts.ToArray());
         Save(); Changed?.Invoke();
+    }
+    public void OpenTopUpWebsite()
+    {
+        Publish("Website shop opened. Use the same account; your wallet refreshes automatically when you return.");
+        Application.OpenURL(CCoinSettings.TopUpUrl);
     }
     public void RequestCoinPurchase()
     {

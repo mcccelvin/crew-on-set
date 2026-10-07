@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: CCoinSettings
   m_EditorClassIdentifier:
   functionName: CrewCCoins
-  websiteUrl: https://crewon-set-web.vercel.app/
+  websiteUrl: https://crew-on-set.vercel.app/portal/shop
   websitePurchasesEnabled: 0
   coinPacks:
   - id: starter_50
