@@ -127,7 +127,7 @@ public static class CharacterCosmetics
     }
     public static string[] FreeAppearanceIds()
     {
-        var ids=new List<string>();foreach(var item in Items)if(item.price==0 && (item.kind=="face" || item.kind=="body" || item.kind=="hair" || item.kind=="shirt" || item.kind=="pants"))ids.Add(item.id);return ids.ToArray();
+        var ids=new List<string>();foreach(var item in Items)if(item.price==0 && (item.kind=="face" || item.kind=="body" || item.kind=="hair" || item.kind=="shirt" || item.kind=="pants" || item.kind=="shoe"))ids.Add(item.id);return ids.ToArray();
     }
     public static string ModelKey(string id) => Find(id)==null ? null : id.Substring("character_".Length);
     private static CCoinCosmetic[] Create()
@@ -159,7 +159,7 @@ public static class CharacterCosmetics
             new[] { 0, 0 },
             new[] { 850, 650, 0, 900, 400 },
             new[] { 700, 850, 0, 500, 900, 650 },
-            new[] { 950, 600, 450, 700, 550, 400 }
+            new[] { 950, 600, 0, 700, 550, 400 }
         };
         string[][] websiteIds = {
             new[] { "accessory-crew-backpack", "accessory-rectangular-frames", "accessory-set-gloves", "accessory-utility-belt", "accessory-call-sheet-pass", "accessory-face-mask" },
