@@ -4,7 +4,7 @@
 
 The Unity client now contains an account wallet, a profile cosmetic shop, a pending reward queue, safe purchase retries and public build configuration. The approved website is https://crewon-set-web.vercel.app/, using the same PlayFab accounts. PayMongo is the selected payment provider.
 
-The website and game use the same PlayFab account and `CC` virtual currency. The game reads balance and cosmetic ownership from PlayFab inventory, and cosmetic purchases use the website's PlayFab catalog item IDs, so website top-ups and purchases appear after the next game sync. A website running in mock/demo mode is separate sample data and cannot sync to a real game wallet. The game still needs a deployed `CrewCCoins` PlayFab CloudScript function to verify and grant gameplay rewards; without it, rewards remain pending and are not added to the real wallet. The supplied PayMongo coin-pack UI remains disabled in the game.
+The website and game use the same PlayFab account and `CC` virtual currency. The game reads balance and cosmetic ownership from PlayFab inventory, and cosmetic purchases use the website's PlayFab catalog item IDs, so website top-ups and purchases appear after the next game sync. A website running in mock/demo mode is separate sample data and cannot sync to a real game wallet. `Tools/CloudScript/CrewCCoins.js` is prepared for the Development title but must still be uploaded and deployed in Game Manager; until then, level rewards stay pending. The supplied PayMongo coin-pack UI remains disabled in the game.
 
 ## C-Coin pack storefront
 
@@ -19,9 +19,9 @@ The shop identifies cached balances, offers **SYNC**, and explicitly states when
 ## Currency and reward rules
 
 - B-Coins remain the career/crew production budget. C-Coins (`CC`) belong to a PlayFab account and only buy cosmetic appearance.
-- The first successful single-player completion of each contract in a career queues **100 C-Coins**. S/A/B/C pass; F does not. Reopening results or replaying the same contract does not create another reward. The game shows the pending reward on Client Feedback; the deployed server must grant it to PlayFab currency `CC` after verifying the claim.
-- The stable ID is `contract:<careerId>:<contractLevel>`. Career identity is preserved in checkpoint copies. New careers still require the server's eligibility policy; a locally generated career ID is not proof of eligibility.
-- Offline/guest completion is pending, not spendable. After the existing save system imports unclaimed guest careers on sign-in, pending claims link to that account. The server must validate ownership and completion before granting anything.
+- The first successful single-player completion of each contract in a career queues **100 C-Coins**. S/A/B/C pass; F does not. Reopening results or replaying the same contract does not create another reward. The game shows the pending reward on Client Feedback. The interim server handler allows one claim per level per PlayFab account (up to 500 CC), but cannot prove the local client actually passed.
+- The stable ID is `contract:<careerId>:<contractLevel>`. Career identity is preserved in checkpoint copies. The interim handler caps by PlayFab account and level rather than trusting client-generated career IDs.
+- Offline/guest completion stays pending locally until linked to an account. The interim handler derives the account from the authenticated PlayFab call, but does not prove ownership of a career or a real pass.
 - Single-player career retries, B-Coin resets and load-game rollbacks must never roll back the account wallet. Room rewards are not implemented: the Photon host's grade/room properties alone are not trusted evidence for account currency.
 - Supported cosmetics include profile frames plus 36 bundled character parts: 6 accessories, 6 hairstyles, 5 faces, 2 bodies, 5 shirts, 6 pants and 6 shoes. Matching website cosmetics use the website catalog's names, descriptions and prices; the five face expressions are free and auto-owned in the game. Bodies have no website counterpart and are not purchasable through the connected store. Frames keep their server catalog prices. Account balance and owned website cosmetics sync through PlayFab; equipped selections remain local to this device.
 
@@ -33,50 +33,43 @@ The shop identifies cached balances, offers **SYNC**, and explicitly states when
 
 The client uses the existing PlayFab SDK/title (`D4EA4`) for authenticated wallet reads and catalog purchases. It does not send session tickets to a custom HTTP endpoint, invoke client currency mint/debit APIs or ship payment/server keys.
 
-The shared profile's **SYNC ACCOUNT** button requests this wallet refresh separately from checkpoint stats/B-Coin sync. A successful stats checkpoint upload never marks the C-Coin cache as verified. Balance and website cosmetic inventory sync directly from PlayFab; gameplay rewards remain pending until `CrewCCoins` grants currency `CC` after verification.
+The shared profile's **SYNC ACCOUNT** button requests this wallet refresh separately from checkpoint stats/B-Coin sync. A successful stats checkpoint upload never marks the C-Coin cache as verified. Balance and website cosmetic inventory sync directly from PlayFab. The included Legacy CloudScript handler grants one 100-CC reward per level per account and caps the account at five rewards (500 CC).
 
 Global PlayerPrefs keys `SaveSystem.CCoins.v1.<accountId>` contain a display cache, pending reward IDs, one durable purchase intent and selected cosmetic. This cache is **not authoritative**. Spending needs an authenticated, freshly reconciled wallet. An ambiguous purchase is retried with the same operation ID before further purchases are allowed. Late callbacks after logout/account switching/timeouts are discarded; older wallet revisions cannot replace a newer snapshot. Up to 20 reward claims run per sync, rotating unverified claims so later eligible careers are not starved. Automatic sync runs periodically and when returning from the website; SYNC is also available in the shop.
 
 ## Required server function contract
 
-Function name: `CrewCCoins` (configurable public name). It is required for verified gameplay reward claims, not ordinary wallet reads or catalog purchases.
+Function name: `CrewCCoins` (configurable public name). It is required for gameplay reward claims, not ordinary wallet reads or website cosmetic purchases.
 
-Request: `{ "action": "wallet|claimContract|purchase", "data": null|object }`.
+Request: `{ "action": "claimContract", "data": { "careerId", "contractLevel", "completionId", "operationId" } }`.
 
-Result:
+Reward claim result:
 
 ```json
 {
-  "operationId": "buy:example-stable-operation-id",
-  "status": "applied",
-  "wallet": {
-    "accountId": "authenticated-playfab-id",
-    "currency": "CC",
-    "balance": 5,
-    "revision": 1,
-    "owned": [],
-    "cosmetics": [
-      {
-        "id": "frame_ocean",
-        "kind": "profile_frame",
-        "name": "Ocean frame",
-        "description": "A blue profile border. Appearance only.",
-        "color": "#2868AA",
-        "price": 5
-      }
-    ]
-  }
+  "operationId": "contract:career-id:1",
+  "status": "applied"
 }
 ```
 
-This is a wire-format example, **not a deployed catalog or a promised coin-pack price**.
+The client refreshes PlayFab after an `applied` or `already_applied` result to read the new `CC` balance. The server ignores any player ID or amount in the request and uses the authenticated `currentPlayerId` plus the fixed server amount.
 
 `Tools/CCoins.character-catalog.json` documents the game model IDs, website PlayFab item IDs and matching display metadata. The website catalog must include the corresponding product IDs and prices. Body models have no website counterpart. The game verifies the current PlayFab catalog price before purchase; PlayFab settles the debit and entitlement. Never trust a client price or ownership claim. This file is a mapping reference, not a deployed reward backend.
 
-- `wallet`: legacy action; the game now reads the account wallet directly through PlayFab `GetUserInventory`.
-- `claimContract`: data contains `careerId`, `contractLevel`, `completionId`, `operationId`. Recompute the ID and **100 C-Coins** reward server-side. Verify trusted account/career ownership and completion, then grant PlayFab currency `CC` once. Return `applied` or `already_applied` with the matching operation ID; otherwise use `awaiting_verification`. Do not trust the client rank, PlayerPrefs, client-writable PlayFab save data or submitted IDs as proof. This function is not deployed by the Unity patch.
+- `claimContract`: `Tools/CloudScript/CrewCCoins.js` validates the level and deterministic claim envelope, derives the player from PlayFab, and stores a server-only per-account/per-level claim marker before granting 100 currency `CC`. A repeated claim returns `already_applied`; only five level claims can be credited per PlayFab account. A marker left at `claiming` needs admin review before it is cleared or changed.
+- This handler does not implement `wallet` or cosmetic `purchase`; the game reads the PlayFab balance/inventory directly and buys website cosmetics through the PlayFab catalog API. Legacy profile-frame purchases still need a separate implementation if used.
+
+**Reward verification limit:** this is a bounded interim system, not proof that a level was genuinely passed. The grade and result are produced by the Unity client, and the client can write the uploaded production log. The handler caps ordinary/replayed claims, but a modified client can still request an unearned first claim for a level. Legacy currency and Internal Data writes are separate operations; rare interrupted claims can remain in `claiming` for admin review, and concurrent first claims are not protected by a transactional compare-and-swap. Full completion verification requires a server-authoritative game result or another trusted validation source. Do not describe this interim path as cheat-proof or financially abuse-proof.
+
+### Deploy the Development handler
+
+1. In PlayFab Game Manager, select the **Development** title and open **Live Ops → Cloud Script → Revisions (Legacy)**.
+2. Confirm **Currency (Legacy)** contains currency code `CC` in this Development title. Upload `Tools/CloudScript/CrewCCoins.js` as a new legacy revision. This is a standalone handler file; if the revision editor requires a full script, add this handler to the existing sample instead of replacing other project handlers.
+3. Review the submitted revision, then explicitly deploy that revision to **Live** for the Development title. Uploading alone does not activate it.
+4. Test with a development account by passing a level and checking the PlayFab `CC` balance and server-only `CCoinReward.Level1` marker. A sequential second claim for that same level/account should not add currency again.
+5. Do not deploy to the production title until the Development result and account-wide five-reward cap are confirmed. Keep the unearned-claim limitation above in mind.
 - `purchase`: data contains only `itemId`, `operationId`. Resolve current price/catalog server-side, verify funds/ownership and commit wallet debit + entitlement + permanent idempotency record in **one atomic transaction**. Duplicate requests return the previous outcome; terminal rejections return `rejected` with the matching ID and current wallet.
-- Return a nonnegative monotonic revision and the authenticated account ID/currency on every settled mutation. Do not return another account's data. Never return secrets or receipts in error messages.
+- Any future wallet/purchase handler must return a nonnegative monotonic revision and authenticated account/currency, and must not return another account's data or secrets. Those actions are not implemented in the current reward-only script.
 
 The website and this PlayFab function must use **the same authoritative wallet/transaction store**, not two balances that periodically overwrite one another. A legacy CloudScript read/update of user data plus a separate virtual-currency call is not atomic and is not a safe implementation of paid-currency purchase/grant processing. PlayFab Economy V2 or a transactional backend can be used, with a permanent duplicate-operation ledger beyond short-lived API idempotency windows. Do not enable direct client currency changes for `CC`.
 
@@ -113,7 +106,7 @@ Server-only environment variables belong in Vercel/server configuration: `PAYMON
 
 ## Verification and remaining acceptance tests
 
-Editor/Development builds have an F12 **+100 TEST C-COINS** button for offline shop testing. It activates an isolated in-memory wallet/catalog; test BUY/EQUIP never save to the real account cache or call the backend. **RESTORE REAL C-WALLET**, changing accounts or restarting discards it. Normal release builds cannot activate it. This does not deploy `CrewCCoins` or grant real currency. See `Docs/DeveloperCommands.md`.
+Editor/Development builds have an F12 **+100 TEST C-COINS** button for offline shop testing. It activates an isolated in-memory wallet/catalog; test BUY/EQUIP never save to the real account cache or call the backend. **RESTORE REAL C-WALLET**, changing accounts or restarting discards it. Normal release builds cannot activate it. Committing the CloudScript file does not upload or deploy it to PlayFab. See `Docs/DeveloperCommands.md`.
 
 Compile against the actual Unity Editor, standalone and Editor-tool reference sets. Source-backed tests exercise account isolation, stale callbacks/revisions, offline reward queues, duplicate results, pending purchase retries and rejected client PayMongo proof. These checks do not validate a deployed wallet, live payment or a complete standalone build.
 

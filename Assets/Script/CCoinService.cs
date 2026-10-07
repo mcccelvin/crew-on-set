@@ -237,8 +237,16 @@ public sealed class CCoinService : MonoBehaviour
         Request("claimContract",reward,result =>
         {
             if (result == null) { Finish(true,"Wallet synced · C-Coin reward is pending server confirmation."); return; }
-            if (CCoinRules.Completed(result,reward.operationId) && AcceptWallet(result.wallet))
-            { state.pendingRewards.RemoveAll(x => x.operationId == reward.operationId); Save(); }
+            if (CCoinRules.Completed(result,reward.operationId))
+            {
+                state.pendingRewards.RemoveAll(x => x.operationId == reward.operationId); Save();
+                ReadPlayFabWallet(loaded =>
+                {
+                    if(!loaded){Finish(false,"Reward confirmed · reconnect to refresh the shared C-Coin balance.");return;}
+                    SyncRewardBatch(batch,index+1);
+                });
+                return;
+            }
             else
             {
                 // An unverified older career must not starve later rewards when
