@@ -38,6 +38,8 @@ public sealed class CharacterCosmeticRig : ScriptableObject
         var mapped=new Transform[bones.Length];
         for(int i=0;i<bones.Length;i++)if(!transforms.TryGetValue(bones[i],out mapped[i]))return 0;
         var originals=character.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+        // The base FBX includes glasses, but an empty accessory slot means no glasses.
+        foreach(var original in originals)if(original.name=="glasses")original.enabled=false;
         var slots=new Dictionary<string,string>();
         foreach(var id in selection){var item=CharacterCosmetics.Find(id);if(item!=null&&Contains(id))slots[item.kind]=id;}
         foreach(var slot in slots)

@@ -135,58 +135,58 @@ public static class CharacterCosmetics
         var items = new List<CCoinCosmetic>();
         int[] counts = {6,6,5,2,5,6,6};
         string[][] names = {
-            new[] { "Crew Gear Backpack", "Rectangular Studio Frames", "Set Crew Gloves", "Utility Belt", "Call Sheet Pass", "On-Set Face Mask" },
-            new[] { "Chestnut Studio Bun", "Golden Curtain Cut", "Low-Tied Chestnut", "Swept Chestnut Fringe", "Center-Part Shag", "Tousled Chestnut Crop" },
+            new[] { "Crew Gear Backpack", "Rectangular Studio Frames", "Utility Belt", "Set Crew Gloves", "Call Sheet Pass", "On-Set Face Mask" },
+            new[] { "Chestnut Studio Bun", "Golden Curtain Cut", "Low-Tied Chestnut", "Center-Part Shag", "Swept Chestnut Fringe", "Tousled Chestnut Crop" },
             new[] { "Neutral Focus", "Set-Day Scowl", "Half-Lidded", "Side-Eye Smirk", "Big Surprise" },
             new[] { "Crew Member · Boy", "Crew Member · Girl" },
-            new[] { "Set Utility Vest", "Open-Collar Layer", "Fresh White Crew Tee", "Brown Field Jacket", "Charcoal V-Neck" },
-            new[] { "Slate Wide-Leg Trousers", "Tan Cargo Pants", "Teal Cuff Joggers", "Coral Track Shorts", "Slate Cargo Trousers", "Brown Tailored Trousers" },
-            new[] { "Lace-Up Platform Boots", "Buckle Strap Flats", "Everyday Slip-Ons", "Red Lace-Up Sneakers", "Green Buckle Sandals", "Charcoal Studio Slides" }
+            new[] { "Charcoal V-Neck", "Brown Field Jacket", "Set Utility Vest", "Open-Collar Layer", "Fresh White Crew Tee" },
+            new[] { "Slate Wide-Leg Trousers", "Coral Track Shorts", "Slate Cargo Trousers", "Teal Cuff Joggers", "Brown Tailored Trousers", "Tan Cargo Pants" },
+            new[] { "Everyday Slip-Ons", "Lace-Up Platform Boots", "Red Lace-Up Sneakers", "Charcoal Studio Slides", "Green Buckle Sandals", "Buckle Strap Flats" }
         };
         string[][] descriptions = {
-            new[] { "A compact charcoal backpack with reinforced pockets and straps.", "Bold rectangular frames with a simple, clean dark outline.", "A pair of practical dark gloves for handling gear between takes.", "A sturdy dark belt with segmented panels and a clean buckle.", "A crew ID badge on a lanyard, ready for your next call time.", "A dark protective face mask with comfortable ear loops." },
-            new[] { "A neat high bun with loose face-framing strands, made for a long day on set.", "Long golden locks part into soft curtain bangs with a bold silhouette.", "A practical low ponytail with a tidy center part and loose side locks.", "A layered short cut with sweeping bangs and a relaxed finish.", "A full, center-parted fringe with chunky layers for extra character.", "A textured crop with sweeping, piecey bangs and a playful edge." },
+            new[] { "A compact charcoal backpack with reinforced pockets and straps.", "Bold rectangular frames with a simple, clean dark outline.", "A sturdy dark belt with segmented panels and a clean buckle.", "A pair of practical dark gloves for handling gear between takes.", "A crew ID badge on a lanyard, ready for your next call time.", "A dark protective face mask with comfortable ear loops." },
+            new[] { "A neat high bun with loose face-framing strands, made for a long day on set.", "Long golden locks part into soft curtain bangs with a bold silhouette.", "A practical low ponytail with a tidy center part and loose side locks.", "A full, center-parted fringe with chunky layers for extra character.", "A layered short cut with sweeping bangs and a relaxed finish.", "A textured crop with sweeping, piecey bangs and a playful edge." },
             new[] { "A calm, neutral expression for keeping your focus on set.", "A fierce scowl for when the shoot is getting intense.", "A relaxed, half-lidded look for a low-key day on set.", "A knowing side-eye paired with a sly smile.", "A wide-eyed, open-mouthed look for a big reveal." },
             new string[2],
-            new[] { "A dark utility shirt layered with a brown multi-pocket crew vest.", "A clean short-sleeve overshirt worn open over a bright crew tee.", "A crisp white crew-neck T-shirt with dark contrast sleeve bands.", "A rugged brown jacket with generous pockets over a dark base layer.", "A simple charcoal V-neck tee, an easy staple between takes." },
-            new[] { "Relaxed slate trousers with a wide, flowing leg and clean waistband.", "Roomy tan cargos with oversized side pockets for a utility look.", "Easy teal joggers gathered at the ankle for comfortable studio days.", "Bright red-coral athletic shorts with crisp white side panels.", "Tapered dark cargos with bright utility pockets at each thigh.", "Straight brown trousers with a belt and subtle pressed seams." },
-            new[] { "Chunky ankle boots with contrast laces and a sturdy platform sole.", "Rounded black flats with a polished buckle strap.", "Lightweight charcoal slip-ons with a bright, flexible sole.", "Red sneakers with white laces and a cushioned studio-ready sole.", "Comfortable green double-strap sandals with secure buckles.", "Simple charcoal slides for the quick break between setups." }
+            new[] { "A simple charcoal V-neck tee, an easy staple between takes.", "A rugged brown jacket with generous pockets over a dark base layer.", "A dark utility shirt layered with a brown multi-pocket crew vest.", "A clean short-sleeve overshirt worn open over a bright crew tee.", "A crisp white crew-neck T-shirt with dark contrast sleeve bands." },
+            new[] { "Relaxed slate trousers with a wide, flowing leg and clean waistband.", "Bright red-coral athletic shorts with crisp white side panels.", "Tapered dark cargos with bright utility pockets at each thigh.", "Easy teal joggers gathered at the ankle for comfortable studio days.", "Straight brown trousers with a belt and subtle pressed seams.", "Roomy tan cargos with oversized side pockets for a utility look." },
+            new[] { "Lightweight charcoal slip-ons with a bright, flexible sole.", "Chunky ankle boots with contrast laces and a sturdy platform sole.", "Red sneakers with white laces and a cushioned studio-ready sole.", "Simple charcoal slides for the quick break between setups.", "Comfortable green double-strap sandals with secure buckles.", "Rounded black flats with a polished buckle strap." }
         };
         int[][] prices = {
-            new[] { 850, 650, 450, 600, 500, 450 },
-            new[] { 0, 700, 550, 0, 650, 650 },
+            new[] { 850, 650, 600, 450, 500, 450 },
+            new[] { 0, 700, 550, 650, 0, 650 },
             new[] { 0, 0, 0, 0, 0 },
             new[] { 0, 0 },
-            new[] { 850, 650, 0, 900, 400 },
-            new[] { 700, 850, 0, 500, 900, 650 },
-            new[] { 950, 600, 0, 700, 550, 400 }
+            new[] { 400, 900, 850, 650, 0 },
+            new[] { 700, 500, 900, 0, 650, 850 },
+            new[] { 0, 950, 700, 400, 550, 600 }
         };
         string[][] websiteIds = {
-            new[] { "accessory-crew-backpack", "accessory-rectangular-frames", "accessory-set-gloves", "accessory-utility-belt", "accessory-call-sheet-pass", "accessory-face-mask" },
-            new[] { "hair-chestnut-bun", "hair-golden-curtains", "hair-low-tie", "hair-swept-fringe", "hair-center-fringe", "hair-tousled-fringe" },
+            new[] { "accessory-crew-backpack", "accessory-rectangular-frames", "accessory-utility-belt", "accessory-set-gloves", "accessory-call-sheet-pass", "accessory-face-mask" },
+            new[] { "hair-chestnut-bun", "hair-golden-curtains", "hair-low-tie", "hair-center-fringe", "hair-swept-fringe", "hair-tousled-fringe" },
             new[] { "face-neutral-focus", "face-set-day-scowl", "face-half-lidded", "face-side-eye-smirk", "face-big-surprise" },
             new string[2],
-            new[] { "top-utility-vest", "top-open-collar", "top-white-tee", "top-field-jacket", "top-charcoal-vneck" },
-            new[] { "bottom-wide-slate", "bottom-tan-cargo", "bottom-teal-joggers", "bottom-coral-shorts", "bottom-slate-cargo", "bottom-brown-tailored" },
-            new[] { "shoe-platform-boots", "shoe-buckle-flats", "shoe-slip-ons", "shoe-red-sneakers", "shoe-green-sandals", "shoe-charcoal-slides" }
+            new[] { "top-charcoal-vneck", "top-field-jacket", "top-utility-vest", "top-open-collar", "top-white-tee" },
+            new[] { "bottom-wide-slate", "bottom-coral-shorts", "bottom-slate-cargo", "bottom-teal-joggers", "bottom-brown-tailored", "bottom-tan-cargo" },
+            new[] { "shoe-slip-ons", "shoe-platform-boots", "shoe-red-sneakers", "shoe-charcoal-slides", "shoe-green-sandals", "shoe-buckle-flats" }
         };
         string[][] websiteAssets = {
-            new[] { "accessory-3", "accessory-5", "accessory-2", "accessory-1", "accessory-4", "accessory-6" },
-            new[] { "hair-1", "hair-2", "hair-3", "hair-4", "hair-5", "hair-6" },
+            new[] { "accessory-3", "accessory-5", "accessory-1", "accessory-2", "accessory-4", "accessory-6" },
+            new[] { "hair-1", "hair-2", "hair-3", "hair-5", "hair-4", "hair-6" },
             new[] { "face-neutral-focus", "face-set-day-scowl", "face-half-lidded", "face-side-eye-smirk", "face-big-surprise" },
             new string[2],
-            new[] { "top-1", "top-2", "top-3", "top-4", "top-5" },
-            new[] { "bottom-1", "bottom-2", "bottom-3", "bottom-4", "bottom-5", "bottom-6" },
-            new[] { "shoe-1", "shoe-2", "shoe-3", "shoe-4", "shoe-5", "shoe-6" }
+            new[] { "top-5", "top-4", "top-1", "top-2", "top-3" },
+            new[] { "bottom-1", "bottom-4", "bottom-5", "bottom-3", "bottom-6", "bottom-2" },
+            new[] { "shoe-3", "shoe-1", "shoe-4", "shoe-6", "shoe-5", "shoe-2" }
         };
         string[][] rarities = {
-            new[] { "Epic", "Rare", "Common", "Rare", "Common", "Common" },
-            new[] { "Common", "Rare", "Common", "Common", "Rare", "Rare" },
+            new[] { "Epic", "Rare", "Rare", "Common", "Common", "Common" },
+            new[] { "Common", "Rare", "Common", "Rare", "Common", "Rare" },
             new[] { "Common", "Common", "Common", "Common", "Common" },
             new string[2],
-            new[] { "Epic", "Rare", "Common", "Epic", "Common" },
-            new[] { "Rare", "Epic", "Rare", "Common", "Epic", "Rare" },
-            new[] { "Epic", "Rare", "Common", "Rare", "Common", "Common" }
+            new[] { "Common", "Epic", "Epic", "Rare", "Common" },
+            new[] { "Rare", "Common", "Epic", "Rare", "Rare", "Epic" },
+            new[] { "Common", "Epic", "Rare", "Common", "Common", "Rare" }
         };
         for(int slot=0;slot<Slots.Length;slot++) for(int n=1;n<=counts[slot];n++)
         {

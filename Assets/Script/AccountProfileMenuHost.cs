@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 // Reuses the authored main-menu entry point; no second profile data/UI implementation.
 public sealed class AccountProfileMenuHost : MonoBehaviour
@@ -14,9 +15,14 @@ public sealed class AccountProfileMenuHost : MonoBehaviour
     {
         if (scene.name != "Account" && scene.name != "Main Menu") return;
         foreach (var root in scene.GetRootGameObjects())
+        {
+            if (scene.name == "Main Menu")
+                foreach (var button in root.GetComponentsInChildren<Button>(true))
+                    if (button.name == "account") AccountAvatarPortrait.Attach(button.transform);
             foreach (var canvas in root.GetComponentsInChildren<Canvas>(true))
                 if (canvas.name == "Account Profile" && canvas.GetComponent<AccountProfileMenuHost>() == null)
                     canvas.gameObject.AddComponent<AccountProfileMenuHost>();
+        }
     }
     private void OnEnable()
     {

@@ -173,20 +173,7 @@ public class CareerManager : MonoBehaviour
         }
     }
 
-    private static void AttachAvatarPortrait(Transform shortcut)
-    {
-        if (shortcut == null || shortcut.Find("Live account avatar") != null) return;
-        var portrait = new GameObject("Live account avatar", typeof(RectTransform), typeof(RawImage));
-        portrait.transform.SetParent(shortcut, false);
-        var rect = portrait.GetComponent<RectTransform>();
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = new Vector2(14, 14);
-        rect.offsetMax = new Vector2(-14, -14);
-        var image = portrait.GetComponent<RawImage>();
-        image.raycastTarget = false;
-        portrait.AddComponent<AccountAvatarPortrait>();
-    }
+    private static void AttachAvatarPortrait(Transform shortcut) => AccountAvatarPortrait.Attach(shortcut);
 
     private void BindProfileShortcut()
     {

@@ -12,6 +12,20 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
     private Camera portraitCamera;
     private Light portraitLight;
 
+    public static void Attach(Transform shortcut)
+    {
+        if (shortcut == null || shortcut.Find("Live account avatar") != null) return;
+        var portrait = new GameObject("Live account avatar", typeof(RectTransform), typeof(RawImage));
+        portrait.transform.SetParent(shortcut, false);
+        var rect = portrait.GetComponent<RectTransform>();
+        // Fractional insets respect the authored main-menu button's nonuniform scale.
+        rect.anchorMin = new Vector2(.19f, .19f);
+        rect.anchorMax = new Vector2(.81f, .81f);
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+        portrait.GetComponent<RawImage>().raycastTarget = false;
+        portrait.AddComponent<AccountAvatarPortrait>();
+    }
+
     private void Awake()
     {
         target = GetComponent<RawImage>();
@@ -41,6 +55,12 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         if (target == null) target = GetComponent<RawImage>();
         if (target == null || !isActiveAndEnabled) return;
         Bind();
+        RenderOutfit(service.EquippedParts);
+    }
+
+    private void RenderOutfit(string[] parts)
+    {
+        if (target == null) target = GetComponent<RawImage>();
         Release();
 
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
@@ -56,7 +76,8 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         modelInstance.name = "Current account avatar";
         modelInstance.transform.SetPositionAndRotation(portraitRoot.transform.position, Quaternion.identity);
         modelInstance.transform.SetParent(portraitRoot.transform, true);
-        CharacterCosmeticRig.Load()?.Apply(modelInstance, service.EquippedParts);
+        CharacterCosmeticRig.Load()?.Apply(modelInstance, parts);
+        foreach (var animator in modelInstance.GetComponentsInChildren<Animator>(true)) animator.enabled = false;
         foreach (var component in modelInstance.GetComponentsInChildren<MonoBehaviour>(true)) component.enabled = false;
         foreach (var collider in modelInstance.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
         foreach (var otherCamera in modelInstance.GetComponentsInChildren<Camera>(true)) otherCamera.enabled = false;
@@ -84,7 +105,7 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         portraitCamera.enabled = false;
         portraitCamera.cullingMask = 1 << AvatarLayer;
         portraitCamera.clearFlags = CameraClearFlags.SolidColor;
-        portraitCamera.backgroundColor = Color.clear;
+        portraitCamera.backgroundColor = new Color32(245, 239, 218, 255);
         portraitCamera.orthographic = true;
         portraitCamera.aspect = 1f;
         portraitCamera.orthographicSize = Mathf.Max(bounds.extents.y * .57f, bounds.extents.x * 1.1f);
@@ -129,15 +150,20 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
     private void Release()
     {
         if (target != null) target.texture = null;
-        if (portraitRoot != null) Destroy(portraitRoot);
+        if (portraitRoot != null) { portraitRoot.SetActive(false); Dispose(portraitRoot); }
         if (texture != null)
         {
             texture.Release();
-            Destroy(texture);
+            Dispose(texture);
         }
         portraitRoot = null;
         texture = null;
         portraitCamera = null;
         portraitLight = null;
+    }
+
+    private static void Dispose(Object value)
+    {
+        if (Application.isPlaying) Destroy(value); else DestroyImmediate(value);
     }
 }

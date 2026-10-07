@@ -18,9 +18,9 @@ MonoBehaviour:
   - key: accessory2
     model: {fileID: 919132149155446097, guid: 14be62f6b211c53418d98927024777f3, type: 3}
   - key: accessory3
-    model: {fileID: 919132149155446097, guid: 984d2789a733dc04f86098cbaec17e1f, type: 3}
-  - key: accessory4
     model: {fileID: 919132149155446097, guid: 384eace6542a20045b36deeda6abed7d, type: 3}
+  - key: accessory4
+    model: {fileID: 919132149155446097, guid: 984d2789a733dc04f86098cbaec17e1f, type: 3}
   - key: accessory5
     model: {fileID: 919132149155446097, guid: eb152c3abcd18c2479b51f53ab009a44, type: 3}
   - key: accessory6
@@ -46,42 +46,42 @@ MonoBehaviour:
   - key: hair3
     model: {fileID: 919132149155446097, guid: 7d3af24b8f25c694e9b5a55e80f6fc0d, type: 3}
   - key: hair4
-    model: {fileID: 919132149155446097, guid: 0b0376ec7ee5de14e860b3676f7a0525, type: 3}
-  - key: hair5
     model: {fileID: 919132149155446097, guid: 872b9fde3ac45ed458546e1501bf3105, type: 3}
+  - key: hair5
+    model: {fileID: 919132149155446097, guid: 0b0376ec7ee5de14e860b3676f7a0525, type: 3}
   - key: hair6
     model: {fileID: 919132149155446097, guid: 3b0d18457dda00f408c22b2e21409e6a, type: 3}
   - key: pants1
     model: {fileID: 919132149155446097, guid: e089f20beb3d0f64cba128cfee0d9493, type: 3}
   - key: pants2
-    model: {fileID: 919132149155446097, guid: d46c5c4b07664ca4baf295d7dc9da150, type: 3}
-  - key: pants3
-    model: {fileID: 919132149155446097, guid: 2fd012315b8519244ba106a4ed261401, type: 3}
-  - key: pants4
     model: {fileID: 919132149155446097, guid: 793f1995e9836594fb30244f334efcd0, type: 3}
-  - key: pants5
+  - key: pants3
     model: {fileID: 919132149155446097, guid: c33cdf93e0b63944a8f84f79dc8a1c5c, type: 3}
-  - key: pants6
+  - key: pants4
+    model: {fileID: 919132149155446097, guid: 2fd012315b8519244ba106a4ed261401, type: 3}
+  - key: pants5
     model: {fileID: 919132149155446097, guid: e22e77ad9c3677e4f90551ee8df75eb7, type: 3}
+  - key: pants6
+    model: {fileID: 919132149155446097, guid: d46c5c4b07664ca4baf295d7dc9da150, type: 3}
   - key: shirt1
-    model: {fileID: 919132149155446097, guid: 7eac138ba13629548a7e4e6b82287d5d, type: 3}
-  - key: shirt2
-    model: {fileID: 919132149155446097, guid: 2a826935ec55cdd4a8e4ea3e03e184de, type: 3}
-  - key: shirt3
-    model: {fileID: 919132149155446097, guid: 1813990fa3550d44e8ae859cdb9e8c85, type: 3}
-  - key: shirt4
-    model: {fileID: 919132149155446097, guid: d6e3efab235844948a476fbac8963b0f, type: 3}
-  - key: shirt5
     model: {fileID: 919132149155446097, guid: 63d6527a48711b640b1a3a4bb37fbe70, type: 3}
+  - key: shirt2
+    model: {fileID: 919132149155446097, guid: d6e3efab235844948a476fbac8963b0f, type: 3}
+  - key: shirt3
+    model: {fileID: 919132149155446097, guid: 7eac138ba13629548a7e4e6b82287d5d, type: 3}
+  - key: shirt4
+    model: {fileID: 919132149155446097, guid: 2a826935ec55cdd4a8e4ea3e03e184de, type: 3}
+  - key: shirt5
+    model: {fileID: 919132149155446097, guid: 1813990fa3550d44e8ae859cdb9e8c85, type: 3}
   - key: shoe1
-    model: {fileID: 919132149155446097, guid: 2256a58fcd1e2bd43b05e7d628a1ad8b, type: 3}
-  - key: shoe2
-    model: {fileID: 919132149155446097, guid: 44ae590be105c0c47b00a4b7b6e8266a, type: 3}
-  - key: shoe3
     model: {fileID: 919132149155446097, guid: 8ea3e7c6a0ee35e46afcc830f7587d03, type: 3}
-  - key: shoe4
+  - key: shoe2
+    model: {fileID: 919132149155446097, guid: 2256a58fcd1e2bd43b05e7d628a1ad8b, type: 3}
+  - key: shoe3
     model: {fileID: 919132149155446097, guid: 494d81e0b380eed4da702c3250bcc3a3, type: 3}
+  - key: shoe4
+    model: {fileID: 919132149155446097, guid: 68c9e742b73ae7b45b413e75f2df6ddd, type: 3}
   - key: shoe5
     model: {fileID: 919132149155446097, guid: d343c665fe2695445990657246b7812d, type: 3}
   - key: shoe6
-    model: {fileID: 919132149155446097, guid: 68c9e742b73ae7b45b413e75f2df6ddd, type: 3}
+    model: {fileID: 919132149155446097, guid: 44ae590be105c0c47b00a4b7b6e8266a, type: 3}
