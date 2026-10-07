@@ -135,7 +135,7 @@ public static class CharacterCosmetics
         var items = new List<CCoinCosmetic>();
         int[] counts = {6,6,5,2,5,6,6};
         string[][] names = {
-            new[] { "Crew Gear Backpack", "Rectangular Studio Frames", "Utility Belt", "Set Crew Gloves", "Call Sheet Pass", "On-Set Face Mask" },
+            new[] { "Crew Gear Backpack", "Rectangular Studio Frames", "Set Crew Gloves", "Utility Belt", "Call Sheet Pass", "On-Set Face Mask" },
             new[] { "Chestnut Studio Bun", "Golden Curtain Cut", "Low-Tied Chestnut", "Swept Chestnut Fringe", "Center-Part Shag", "Tousled Chestnut Crop" },
             new[] { "Neutral Focus", "Set-Day Scowl", "Half-Lidded", "Side-Eye Smirk", "Big Surprise" },
             new[] { "Crew Member · Boy", "Crew Member · Girl" },
@@ -144,7 +144,7 @@ public static class CharacterCosmetics
             new[] { "Lace-Up Platform Boots", "Buckle Strap Flats", "Everyday Slip-Ons", "Red Lace-Up Sneakers", "Green Buckle Sandals", "Charcoal Studio Slides" }
         };
         string[][] descriptions = {
-            new[] { "A compact charcoal backpack with reinforced pockets and straps.", "Bold rectangular frames with a simple, clean dark outline.", "A sturdy dark belt with segmented panels and a clean buckle.", "A pair of practical dark gloves for handling gear between takes.", "A crew ID badge on a lanyard, ready for your next call time.", "A dark protective face mask with comfortable ear loops." },
+            new[] { "A compact charcoal backpack with reinforced pockets and straps.", "Bold rectangular frames with a simple, clean dark outline.", "A pair of practical dark gloves for handling gear between takes.", "A sturdy dark belt with segmented panels and a clean buckle.", "A crew ID badge on a lanyard, ready for your next call time.", "A dark protective face mask with comfortable ear loops." },
             new[] { "A neat high bun with loose face-framing strands, made for a long day on set.", "Long golden locks part into soft curtain bangs with a bold silhouette.", "A practical low ponytail with a tidy center part and loose side locks.", "A layered short cut with sweeping bangs and a relaxed finish.", "A full, center-parted fringe with chunky layers for extra character.", "A textured crop with sweeping, piecey bangs and a playful edge." },
             new[] { "A calm, neutral expression for keeping your focus on set.", "A fierce scowl for when the shoot is getting intense.", "A relaxed, half-lidded look for a low-key day on set.", "A knowing side-eye paired with a sly smile.", "A wide-eyed, open-mouthed look for a big reveal." },
             new string[2],
@@ -153,7 +153,7 @@ public static class CharacterCosmetics
             new[] { "Chunky ankle boots with contrast laces and a sturdy platform sole.", "Rounded black flats with a polished buckle strap.", "Lightweight charcoal slip-ons with a bright, flexible sole.", "Red sneakers with white laces and a cushioned studio-ready sole.", "Comfortable green double-strap sandals with secure buckles.", "Simple charcoal slides for the quick break between setups." }
         };
         int[][] prices = {
-            new[] { 850, 650, 600, 450, 500, 450 },
+            new[] { 850, 650, 450, 600, 500, 450 },
             new[] { 450, 700, 550, 550, 650, 650 },
             new[] { 0, 0, 0, 0, 0 },
             new[] { 0, 0 },
@@ -162,7 +162,7 @@ public static class CharacterCosmetics
             new[] { 950, 600, 450, 700, 550, 400 }
         };
         string[][] websiteIds = {
-            new[] { "accessory-crew-backpack", "accessory-rectangular-frames", "accessory-utility-belt", "accessory-set-gloves", "accessory-call-sheet-pass", "accessory-face-mask" },
+            new[] { "accessory-crew-backpack", "accessory-rectangular-frames", "accessory-set-gloves", "accessory-utility-belt", "accessory-call-sheet-pass", "accessory-face-mask" },
             new[] { "hair-chestnut-bun", "hair-golden-curtains", "hair-low-tie", "hair-swept-fringe", "hair-center-fringe", "hair-tousled-fringe" },
             new[] { "face-neutral-focus", "face-set-day-scowl", "face-half-lidded", "face-side-eye-smirk", "face-big-surprise" },
             new string[2],
@@ -171,7 +171,7 @@ public static class CharacterCosmetics
             new[] { "shoe-platform-boots", "shoe-buckle-flats", "shoe-slip-ons", "shoe-red-sneakers", "shoe-green-sandals", "shoe-charcoal-slides" }
         };
         string[][] websiteAssets = {
-            new[] { "accessory-3", "accessory-5", "accessory-1", "accessory-2", "accessory-4", "accessory-6" },
+            new[] { "accessory-3", "accessory-5", "accessory-2", "accessory-1", "accessory-4", "accessory-6" },
             new[] { "hair-1", "hair-2", "hair-3", "hair-4", "hair-5", "hair-6" },
             new[] { "face-neutral-focus", "face-set-day-scowl", "face-half-lidded", "face-side-eye-smirk", "face-big-surprise" },
             new string[2],
@@ -180,7 +180,7 @@ public static class CharacterCosmetics
             new[] { "shoe-1", "shoe-2", "shoe-3", "shoe-4", "shoe-5", "shoe-6" }
         };
         string[][] rarities = {
-            new[] { "Epic", "Rare", "Rare", "Common", "Common", "Common" },
+            new[] { "Epic", "Rare", "Common", "Rare", "Common", "Common" },
             new[] { "Common", "Rare", "Common", "Common", "Rare", "Rare" },
             new[] { "Common", "Common", "Common", "Common", "Common" },
             new string[2],
