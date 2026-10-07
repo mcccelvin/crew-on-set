@@ -125,6 +125,10 @@ public static class CharacterCosmetics
     {
         var ids=new List<string>();foreach(var item in Items)if(item.kind=="face" && item.price==0)ids.Add(item.id);return ids.ToArray();
     }
+    public static string[] FreeAppearanceIds()
+    {
+        var ids=new List<string>();foreach(var item in Items)if(item.price==0 && (item.kind=="face" || item.kind=="body"))ids.Add(item.id);return ids.ToArray();
+    }
     public static string ModelKey(string id) => Find(id)==null ? null : id.Substring("character_".Length);
     private static CCoinCosmetic[] Create()
     {
@@ -134,7 +138,7 @@ public static class CharacterCosmetics
             new[] { "Crew Gear Backpack", "Rectangular Studio Frames", "Utility Belt", "Set Crew Gloves", "Call Sheet Pass", "On-Set Face Mask" },
             new[] { "Chestnut Studio Bun", "Golden Curtain Cut", "Low-Tied Chestnut", "Swept Chestnut Fringe", "Center-Part Shag", "Tousled Chestnut Crop" },
             new[] { "Neutral Focus", "Set-Day Scowl", "Half-Lidded", "Side-Eye Smirk", "Big Surprise" },
-            new string[2],
+            new[] { "Crew Member · Boy", "Crew Member · Girl" },
             new[] { "Set Utility Vest", "Open-Collar Layer", "Fresh White Crew Tee", "Brown Field Jacket", "Charcoal V-Neck" },
             new[] { "Slate Wide-Leg Trousers", "Tan Cargo Pants", "Teal Cuff Joggers", "Coral Track Shorts", "Slate Cargo Trousers", "Brown Tailored Trousers" },
             new[] { "Lace-Up Platform Boots", "Buckle Strap Flats", "Everyday Slip-Ons", "Red Lace-Up Sneakers", "Green Buckle Sandals", "Charcoal Studio Slides" }
@@ -152,7 +156,7 @@ public static class CharacterCosmetics
             new[] { 850, 650, 600, 450, 500, 450 },
             new[] { 450, 700, 550, 550, 650, 650 },
             new[] { 0, 0, 0, 0, 0 },
-            new[] { 10, 10 },
+            new[] { 0, 0 },
             new[] { 850, 650, 350, 900, 400 },
             new[] { 700, 850, 650, 500, 900, 650 },
             new[] { 950, 600, 450, 700, 550, 400 }

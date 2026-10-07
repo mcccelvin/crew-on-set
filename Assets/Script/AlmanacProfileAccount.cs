@@ -20,7 +20,7 @@ public partial class AlmanacManager
     private CCoinService profileWallet;
     private string profileInputOwner;
     private int profileShopCategory = 0;
-    private static readonly string[] ProfileShopKinds = { "all", "face", "hair", "shirt", "pants", "shoe", "accessory" };
+    private static readonly string[] ProfileShopKinds = { "all", "face", "hair", "body", "shirt", "pants", "shoe", "accessory" };
     private AccountProductionProfile.Snapshot profileAccountStats;
     private Button profileAccountSyncButton;
     private TMP_Text profileProgressSyncStatus;
@@ -287,17 +287,26 @@ public partial class AlmanacManager
         SetStretchRect(profileUsernameChangeOverlay.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         var card = CreatePanel("Username change paper", profileUsernameChangeOverlay.transform, new Color32(252, 245, 220, 255)).transform;
         SetRect(card.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, Vector2.zero, new Vector2(780, 490));
-        ProfileIdentityLabel(card, "Username change heading", "CHANGE USERNAME", new Vector2(0, 190), new Vector2(690, 52), 34);
-        ProfileIdentityLabel(card, "Username change explanation", "Confirm with your current password. The new name syncs to your website profile and game account.", new Vector2(0, 142), new Vector2(690, 52), 19).color = ProfileMuted;
-        ProfileIdentityLabel(card, "New username label", "NEW USERNAME", new Vector2(-260, 91), new Vector2(520, 30), 18);
+        StyleShopBox(card.GetComponent<Image>(), new Color32(252, 245, 220, 255), true);
+        var heading = ProfileIdentityLabel(card, "Username change heading", "CHANGE USERNAME", new Vector2(0, 190), new Vector2(690, 52), 34);
+        heading.font = profileLabelFont != null ? profileLabelFont : heading.font;
+        heading.fontStyle = FontStyles.Bold; heading.enableAutoSizing = true; heading.fontSizeMin = 26; heading.fontSizeMax = 34; heading.enableWordWrapping = false;
+        var explanation = ProfileIdentityLabel(card, "Username change explanation", "Confirm with your current password. The new name syncs to your website profile and game account.", new Vector2(0, 142), new Vector2(660, 52), 19);
+        explanation.color = ProfileMuted; explanation.enableAutoSizing = true; explanation.fontSizeMin = 16; explanation.fontSizeMax = 19;
+        explanation.enableWordWrapping = true; explanation.overflowMode = TextOverflowModes.Ellipsis;
+        var usernameLabel = ProfileIdentityLabel(card, "New username label", "NEW USERNAME", new Vector2(0, 91), new Vector2(600, 28), 17);
+        usernameLabel.font = profileLabelFont != null ? profileLabelFont : usernameLabel.font; usernameLabel.fontStyle = FontStyles.Bold;
         profileNewUsernameInput = DialogInput("New username", card, new Vector2(0, 48), new Vector2(600, 58), "3–20 characters");
         profileNewUsernameInput.characterLimit = 20;
-        ProfileIdentityLabel(card, "Current password label", "CURRENT PASSWORD", new Vector2(-260, -15), new Vector2(520, 30), 18);
+        var passwordLabel = ProfileIdentityLabel(card, "Current password label", "CURRENT PASSWORD", new Vector2(0, -15), new Vector2(600, 28), 17);
+        passwordLabel.font = profileLabelFont != null ? profileLabelFont : passwordLabel.font; passwordLabel.fontStyle = FontStyles.Bold;
         profileCurrentPasswordInput = DialogInput("Current password", card, new Vector2(0, -58), new Vector2(600, 58), "Enter current password");
         profileCurrentPasswordInput.contentType = TMP_InputField.ContentType.Password;
         profileCurrentPasswordInput.ForceLabelUpdate();
         profileUsernameChangeStatus = ProfileIdentityLabel(card, "Username change status", "", new Vector2(0, -115), new Vector2(690, 38), 17);
         profileUsernameChangeStatus.alignment = TextAlignmentOptions.Center;
+        profileUsernameChangeStatus.enableAutoSizing = true; profileUsernameChangeStatus.fontSizeMin = 14; profileUsernameChangeStatus.fontSizeMax = 17;
+        profileUsernameChangeStatus.enableWordWrapping = true; profileUsernameChangeStatus.overflowMode = TextOverflowModes.Ellipsis;
         var confirm = BookButton(card, "Confirm username change", "SAVE", "blueButton", new Vector2(170, -195), new Vector2(190, 66));
         confirm.onClick.AddListener(SubmitUsernameChange);
         var cancel = BookButton(card, "Cancel username change", "CANCEL", "redButton", new Vector2(-170, -195), new Vector2(190, 66));
@@ -308,12 +317,17 @@ public partial class AlmanacManager
     private TMP_InputField DialogInput(string name, Transform parent, Vector2 position, Vector2 size, string hint)
     {
         var rect = CCoinShopUI.Rect(parent, name, position, size);
-        var background = rect.gameObject.AddComponent<Image>(); background.color = new Color32(255, 251, 239, 255);
+        var background = rect.gameObject.AddComponent<Image>();
+        StyleShopBox(background, new Color32(255, 251, 239, 255));
         var edge = rect.gameObject.AddComponent<Outline>(); edge.effectColor = new Color32(160, 123, 79, 255); edge.effectDistance = new Vector2(1.5f, -1.5f);
         var viewport = CCoinShopUI.Rect(rect, "Text viewport", Vector2.zero, size - new Vector2(24, 12)); viewport.gameObject.AddComponent<RectMask2D>();
         var text = CCoinShopUI.Text(viewport, "Text", "", position, size - new Vector2(28, 16), 24);
-        text.richText = false; text.enableAutoSizing = false; text.alignment = TextAlignmentOptions.Left; text.color = ProfileInk;
+        if (profileBodyFont != null) { text.font = profileBodyFont; text.fontSharedMaterial = profileBodyMaterial; }
+        text.richText = false; text.enableAutoSizing = true; text.fontSizeMin = 16; text.fontSizeMax = 24;
+        text.overflowMode = TextOverflowModes.Ellipsis; text.enableWordWrapping = false;
+        text.alignment = TextAlignmentOptions.Left; text.color = ProfileInk;
         var placeholder = ProfileIdentityLabel(viewport, "Input placeholder", hint, Vector2.zero, Vector2.zero, 21);
+        if (profileBodyFont != null) { placeholder.font = profileBodyFont; placeholder.fontSharedMaterial = profileBodyMaterial; }
         placeholder.color = ProfileMuted; placeholder.enableAutoSizing = false; SetStretchRect(placeholder.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         var input = rect.gameObject.AddComponent<TMP_InputField>(); input.targetGraphic = background; input.textViewport = viewport;
         input.textComponent = text; input.placeholder = placeholder; input.characterLimit = 25;
@@ -419,7 +433,7 @@ public partial class AlmanacManager
         var card = stage.Find("Career card");
         profileShopPanel = CreatePanel("Shared cosmetic shop", card, ShopBackground);
         SetStretchRect(profileShopPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(103, 19), new Vector2(-29, -19));
-        string[] categories = { "ALL", "FACE", "HAIR", "TOPS", "BOTTOMS", "SHOE WEAR", "ACCESSORIES" };
+        string[] categories = { "ALL", "FACE", "HAIR", "BODY", "TOPS", "BOTTOMS", "SHOE WEAR", "ACCESSORIES" };
         for (int i = 0; i < categories.Length; i++)
         {
             int category = i; var button = CreateButton("Cosmetic category " + i, profileShopPanel.transform, categories[i]);
@@ -474,7 +488,7 @@ public partial class AlmanacManager
         var art = CharacterCosmeticCatalog.Load();
         foreach (var item in items)
         {
-            if (item == null || string.IsNullOrEmpty(item.websiteItemId)) continue;
+            if (item == null || (string.IsNullOrEmpty(item.websiteItemId) && item.kind != "body")) continue;
             string selectedKind = ProfileShopKinds[profileShopCategory];
             if (selectedKind != "all" && item.kind != selectedKind) continue;
             bool isPart=CharacterCosmetics.Find(item.id)!=null;

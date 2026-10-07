@@ -64,7 +64,7 @@ public sealed class CCoinService : MonoBehaviour
         if(!DevWalletActive)
         {
             session++;requestGeneration++;Busy=Verified=false;realState=state;
-            state=new CCoinLocalState { wallet=new CCoinWallet { accountId=owner,currency="CC",cosmetics=CharacterCosmetics.Items,owned=CharacterCosmetics.FreeFaceIds() } };
+            state=new CCoinLocalState { wallet=new CCoinWallet { accountId=owner,currency="CC",cosmetics=CharacterCosmetics.Items,owned=CharacterCosmetics.FreeAppearanceIds() } };
         }
         state.wallet.balance=(int)Math.Min(int.MaxValue,(long)state.wallet.balance+amount);
         Publish("TEST WALLET · "+state.wallet.balance+" C-Coins · session only, never synced or saved.");
@@ -109,11 +109,11 @@ public sealed class CCoinService : MonoBehaviour
         try { state = JsonUtility.FromJson<CCoinLocalState>(UnityEngine.PlayerPrefs.GetString(CacheKey(owner),"")) ?? new CCoinLocalState(); }
         catch { state = new CCoinLocalState(); }
         if (!CCoinRules.ValidWallet(state.wallet,owner)) state.wallet = null;
-        if(state.wallet==null)state.wallet=new CCoinWallet { accountId=owner,currency=CCoinRules.Currency,cosmetics=CharacterCosmetics.Items,owned=CharacterCosmetics.FreeFaceIds() };
+        if(state.wallet==null)state.wallet=new CCoinWallet { accountId=owner,currency=CCoinRules.Currency,cosmetics=CharacterCosmetics.Items,owned=CharacterCosmetics.FreeAppearanceIds() };
         else
         {
             var owned=new HashSet<string>(state.wallet.owned,StringComparer.Ordinal);
-            foreach(var id in CharacterCosmetics.FreeFaceIds())owned.Add(id);
+            foreach(var id in CharacterCosmetics.FreeAppearanceIds())owned.Add(id);
             state.wallet.owned=new List<string>(owned).ToArray();
         }
         if (state.pendingRewards == null) state.pendingRewards = new List<CCoinReward>();
@@ -331,7 +331,7 @@ public sealed class CCoinService : MonoBehaviour
                     cosmetic=cosmetic ?? CharacterCosmetics.FindWebsiteItem(instance?.ItemId) ?? CharacterCosmetics.Find(instance?.ItemId);
                     if(cosmetic!=null)owned.Add(cosmetic.id);
                 }
-                foreach(var cosmetic in CharacterCosmetics.Items)if(cosmetic.kind=="face")owned.Add(cosmetic.id);
+                foreach(var cosmetic in CharacterCosmetics.Items)if(cosmetic.kind=="face" || cosmetic.kind=="body")owned.Add(cosmetic.id);
                 var cosmetics=new List<CCoinCosmetic>();
                 foreach(var fallback in CharacterCosmetics.Items)
                     cosmetics.Add(liveCosmetics.TryGetValue(fallback.id,out var live)?live:fallback);
@@ -372,7 +372,7 @@ public sealed class CCoinService : MonoBehaviour
     {
         var item = CCoinRules.Find(state.wallet,id);
         if (!CanBuy || item == null || CCoinRules.Owns(state.wallet,id)) return;
-        if (Balance < item.price) { Publish("Not enough C-Coins. B-Coins cannot pay for cosmetics."); return; }
+        if (Balance < item.price) { Publish("Insufficient C-Coins balance."); return; }
         if(DevWalletActive)
         {
             state.wallet.balance-=item.price;
