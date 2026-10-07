@@ -10,6 +10,7 @@ using UnityEngine;
 // mint paid currency or debit it. Every mutation is settled by the existing title.
 public sealed class CCoinService : MonoBehaviour
 {
+    [Serializable] private sealed class WebsiteCatalogData { public string assetKey, rarity; }
     public static CCoinService Instance { get; private set; }
     public event Action Changed;
     public CCoinWallet Wallet => state.wallet;
@@ -29,6 +30,32 @@ public sealed class CCoinService : MonoBehaviour
     private float nextRefresh, deadline;
     public bool Authenticated => owner != "guest" && PlayFabSettings.staticPlayer.PlayFabId == owner && PlayFabClientAPI.IsClientLoggedIn();
     public bool CanBuy => DevWalletActive || Verified && !Busy && Authenticated && state.pendingPurchase == null;
+    private static CCoinCosmetic FindWebsiteCosmetic(CatalogItem item)
+    {
+        if(item==null)return null;
+        var cosmetic=CharacterCosmetics.FindWebsiteItem(item.ItemId);
+        if(cosmetic!=null)return cosmetic;
+        try { return CharacterCosmetics.FindWebsiteAsset(JsonUtility.FromJson<WebsiteCatalogData>(item.CustomData)?.assetKey); }
+        catch { return null; }
+    }
+    private static CCoinCosmetic LiveWebsiteCosmetic(CatalogItem product)
+    {
+        var mapped=FindWebsiteCosmetic(product);
+        if(mapped==null)return null;
+        int price=mapped.price;
+        if(product.VirtualCurrencyPrices!=null && product.VirtualCurrencyPrices.TryGetValue(CCoinRules.Currency,out var currentPrice))
+            price=(int)Math.Min(int.MaxValue,(long)currentPrice);
+        string rarity=mapped.rarity;
+        try
+        {
+            var data=JsonUtility.FromJson<WebsiteCatalogData>(product.CustomData);
+            if(!string.IsNullOrWhiteSpace(data?.rarity))rarity=data.rarity;
+        }
+        catch { }
+        return new CCoinCosmetic { id=mapped.id,kind=mapped.kind,name=string.IsNullOrWhiteSpace(product.DisplayName)?mapped.name:product.DisplayName,
+            description=string.IsNullOrWhiteSpace(product.Description)?mapped.description:product.Description,price=price,
+            websiteItemId=product.ItemId,websiteAssetKey=mapped.websiteAssetKey,rarity=rarity };
+    }
 
     public void DevAddCoins(int amount)
     {
@@ -37,7 +64,7 @@ public sealed class CCoinService : MonoBehaviour
         if(!DevWalletActive)
         {
             session++;requestGeneration++;Busy=Verified=false;realState=state;
-            state=new CCoinLocalState { wallet=new CCoinWallet { accountId=owner,currency="CC",cosmetics=CharacterCosmetics.Items,owned=new string[0] } };
+            state=new CCoinLocalState { wallet=new CCoinWallet { accountId=owner,currency="CC",cosmetics=CharacterCosmetics.Items,owned=CharacterCosmetics.FreeFaceIds() } };
         }
         state.wallet.balance=(int)Math.Min(int.MaxValue,(long)state.wallet.balance+amount);
         Publish("TEST WALLET · "+state.wallet.balance+" C-Coins · session only, never synced or saved.");
@@ -79,12 +106,20 @@ public sealed class CCoinService : MonoBehaviour
         try { state = JsonUtility.FromJson<CCoinLocalState>(UnityEngine.PlayerPrefs.GetString(CacheKey(owner),"")) ?? new CCoinLocalState(); }
         catch { state = new CCoinLocalState(); }
         if (!CCoinRules.ValidWallet(state.wallet,owner)) state.wallet = null;
+        if(state.wallet==null)state.wallet=new CCoinWallet { accountId=owner,currency=CCoinRules.Currency,cosmetics=CharacterCosmetics.Items,owned=CharacterCosmetics.FreeFaceIds() };
+        else
+        {
+            var owned=new HashSet<string>(state.wallet.owned,StringComparer.Ordinal);
+            foreach(var id in CharacterCosmetics.FreeFaceIds())owned.Add(id);
+            state.wallet.owned=new List<string>(owned).ToArray();
+        }
         if (state.pendingRewards == null) state.pendingRewards = new List<CCoinReward>();
         state.pendingRewards.RemoveAll(x => x == null || CCoinRules.Reward(x.careerId,x.contractLevel)?.operationId != x.operationId
             || CCoinRules.Reward(x.careerId,x.contractLevel)?.completionId != x.completionId);
         if (state.pendingPurchase != null && (!CCoinRules.ValidId(state.pendingPurchase.itemId) || !CCoinRules.ValidId(state.pendingPurchase.operationId))) state.pendingPurchase = null;
         if (!CCoinRules.Owns(state.wallet,state.selectedCosmetic)) state.selectedCosmetic = null;
         ValidateEquipment();
+        Save();
         nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Sign in to sync C-Coins. Offline rewards stay pending." : "Cached wallet · waiting for account sync.");
     }
@@ -116,7 +151,7 @@ public sealed class CCoinService : MonoBehaviour
         Save(); // Durable before marking the career; retries retain the operation ID.
         GameSavePrefs.SetInt("CCoins.RewardQueued.Level" + level,1); GameSavePrefs.Save();
         nextRefresh = Time.unscaledTime;
-        Publish("+5 C-Coins reward pending server confirmation."); return true;
+        Publish("+"+CCoinRules.ContractReward+" C-Coins reward pending server confirmation."); return true;
     }
     // Invoke only after the existing save system has linked unclaimed guest careers.
     public void LinkGuestRewards()
@@ -141,11 +176,10 @@ public sealed class CCoinService : MonoBehaviour
         if(DevWalletActive){Publish("TEST WALLET · "+Balance+" C-Coins · local testing, purchases are temporary. Use F12 to restore real wallet.");return;}
         if (Busy) return;
         if (!Authenticated) { Verified = false; Publish("Offline wallet · sign in to sync rewards and buy cosmetics."); return; }
-        if (string.IsNullOrEmpty(CCoinSettings.FunctionName)) { Verified = false; Publish("C-Coins connection is not configured. Rewards are kept pending."); return; }
         Busy = true; Publish("Syncing account C-Coins…");
-        Request("wallet",null,result =>
+        ReadPlayFabWallet(loaded =>
         {
-            if (!AcceptWallet(result?.wallet)) { Finish(false,"C-Coins server is not ready or unavailable. Rewards stay pending."); return; }
+            if (!loaded) { Finish(false,"PlayFab wallet is unavailable. Rewards stay pending."); return; }
             SyncPurchase();
         });
     }
@@ -153,14 +187,47 @@ public sealed class CCoinService : MonoBehaviour
     {
         if (state.pendingPurchase == null) { SyncRewardBatch(state.pendingRewards.ToArray(),0); return; }
         var purchase = state.pendingPurchase;
-        Request("purchase",purchase,result =>
+        var item=CCoinRules.Find(state.wallet,purchase.itemId);
+        if(item?.kind=="profile_frame")
         {
-            bool complete = CCoinRules.Completed(result,purchase.operationId);
-            bool rejected = result?.operationId == purchase.operationId && result.status == "rejected";
-            if ((!complete && !rejected) || !AcceptWallet(result.wallet))
-            { Finish(false,"Purchase confirmation pending. Reconnect to confirm it; no second purchase ID will be created."); return; }
-            state.pendingPurchase = null; Save(); SyncRewardBatch(state.pendingRewards.ToArray(),0);
-        });
+            Request("purchase",purchase,result =>
+            {
+                bool complete=CCoinRules.Completed(result,purchase.operationId);
+                bool rejected=result?.operationId==purchase.operationId && result.status=="rejected";
+                if((!complete && !rejected) || !AcceptWallet(result.wallet))
+                { Finish(false,"Purchase confirmation pending. Reconnect to confirm it.");return; }
+                state.pendingPurchase=null;Save();SyncRewardBatch(state.pendingRewards.ToArray(),0);
+            });
+            return;
+        }
+        if(item==null || string.IsNullOrWhiteSpace(item.websiteItemId))
+        {
+            Finish(false,"This cosmetic is not in the connected website catalog.");return;
+        }
+        if(CCoinRules.Owns(state.wallet,item.id))
+        { state.pendingPurchase=null;Save();SyncRewardBatch(state.pendingRewards.ToArray(),0);return; }
+        int version=session, generation=++requestGeneration;deadline=Time.unscaledTime+45;
+        PlayFabClientAPI.GetCatalogItems(new GetCatalogItemsRequest(), catalog =>
+        {
+            if(session!=version || requestGeneration!=generation)return;
+            var product=catalog.Catalog?.Find(x=>FindWebsiteCosmetic(x)?.id==item.id);
+            if(product==null || product.VirtualCurrencyPrices==null || !product.VirtualCurrencyPrices.TryGetValue(CCoinRules.Currency,out var currentPrice))
+            { state.pendingPurchase=null;Save();Finish(false,"Website catalog item or C-Coin price is unavailable.");return; }
+            PlayFabClientAPI.PurchaseItem(new PurchaseItemRequest { ItemId=product.ItemId,Price=(int)Math.Min(int.MaxValue,(long)currentPrice),VirtualCurrency=CCoinRules.Currency }, result =>
+            {
+                if(session!=version || requestGeneration!=generation)return;
+                state.pendingPurchase=null;Save();
+                ReadPlayFabWallet(loaded => { if(loaded)SyncRewardBatch(state.pendingRewards.ToArray(),0);else Finish(false,"Purchase completed; reconnect to refresh your shared wallet."); });
+            }, error =>
+            {
+                if(session!=version || requestGeneration!=generation)return;
+                ReadPlayFabWallet(loaded =>
+                {
+                    if(loaded && CCoinRules.Owns(state.wallet,item.id)){state.pendingPurchase=null;Save();SyncRewardBatch(state.pendingRewards.ToArray(),0);}
+                    else Finish(false,"Purchase was not confirmed. Reconnect to safely retry it.");
+                });
+            });
+        }, error => { if(session==version && requestGeneration==generation)Finish(false,"Website catalog is unavailable. Purchase remains pending."); });
     }
     private void SyncRewardBatch(CCoinReward[] batch,int index)
     {
@@ -169,7 +236,7 @@ public sealed class CCoinService : MonoBehaviour
         var reward = batch[index];
         Request("claimContract",reward,result =>
         {
-            if (result == null) { Finish(false,"Reward sync unavailable. Rewards are kept pending."); return; }
+            if (result == null) { Finish(true,"Wallet synced · C-Coin reward is pending server confirmation."); return; }
             if (CCoinRules.Completed(result,reward.operationId) && AcceptWallet(result.wallet))
             { state.pendingRewards.RemoveAll(x => x.operationId == reward.operationId); Save(); }
             else
@@ -198,6 +265,55 @@ public sealed class CCoinService : MonoBehaviour
             var item=CharacterCosmetics.Find(id);
             return item==null || !CCoinRules.Owns(state.wallet,id) || !slots.Add(item.kind);
         });
+    }
+    private void ReadPlayFabWallet(Action<bool> callback)
+    {
+        int version=session, generation=++requestGeneration; deadline=Time.unscaledTime+45;
+        try
+        {
+            PlayFabClientAPI.GetCatalogItems(new GetCatalogItemsRequest(), catalog =>
+            {
+                if(session!=version || requestGeneration!=generation)return;
+                if(!Authenticated){callback(false);return;}
+                var catalogMappings=new Dictionary<string,CCoinCosmetic>(StringComparer.Ordinal);
+                var liveCosmetics=new Dictionary<string,CCoinCosmetic>(StringComparer.Ordinal);
+                foreach(var product in catalog.Catalog ?? new List<CatalogItem>())
+                {
+                    var mapped=LiveWebsiteCosmetic(product);
+                    if(mapped!=null && !string.IsNullOrEmpty(product.ItemId))
+                    {
+                        catalogMappings[product.ItemId]=mapped;
+                        liveCosmetics[mapped.id]=mapped;
+                    }
+                }
+                PlayFabClientAPI.GetUserInventory(new GetUserInventoryRequest(), result =>
+                {
+                    if(session!=version || requestGeneration!=generation)return;
+                    if(!Authenticated){callback(false);return;}
+                var owned=new HashSet<string>(StringComparer.Ordinal);
+                foreach(var instance in result.Inventory ?? new List<ItemInstance>())
+                {
+                    CCoinCosmetic cosmetic=null;
+                    if(instance?.ItemId!=null)catalogMappings.TryGetValue(instance.ItemId,out cosmetic);
+                    cosmetic=cosmetic ?? CharacterCosmetics.FindWebsiteItem(instance?.ItemId) ?? CharacterCosmetics.Find(instance?.ItemId);
+                    if(cosmetic!=null)owned.Add(cosmetic.id);
+                }
+                foreach(var cosmetic in CharacterCosmetics.Items)if(cosmetic.kind=="face")owned.Add(cosmetic.id);
+                var cosmetics=new List<CCoinCosmetic>();
+                foreach(var fallback in CharacterCosmetics.Items)
+                    cosmetics.Add(liveCosmetics.TryGetValue(fallback.id,out var live)?live:fallback);
+                if(state.wallet?.cosmetics!=null)
+                    foreach(var frame in state.wallet.cosmetics)if(frame?.kind=="profile_frame")cosmetics.Add(frame);
+                if(state.wallet?.owned!=null)
+                    foreach(var id in state.wallet.owned)if(CCoinRules.Find(state.wallet,id)?.kind=="profile_frame")owned.Add(id);
+                int balance=result.VirtualCurrency!=null && result.VirtualCurrency.TryGetValue(CCoinRules.Currency,out var value) ? Math.Max(0,value) : 0;
+                var wallet=new CCoinWallet { accountId=owner,currency=CCoinRules.Currency,balance=balance,
+                    revision=(state.wallet?.revision ?? 0)+1,owned=new List<string>(owned).ToArray(),cosmetics=cosmetics.ToArray() };
+                callback(AcceptWallet(wallet));
+                }, error => { if(session==version && requestGeneration==generation)callback(false); });
+            }, error => { if(session==version && requestGeneration==generation)callback(false); });
+        }
+        catch { if(session==version && requestGeneration==generation)callback(false); }
     }
     private void Finish(bool verified,string message) { Busy = false; Verified = verified; nextRefresh = Time.unscaledTime + 60; Publish(message); }
     private void Request(string action,object data,Action<CCoinOperationResult> callback)

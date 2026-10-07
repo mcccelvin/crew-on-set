@@ -136,7 +136,8 @@ public class TutorialManager : MonoBehaviour
     {
         "We make short commercials here. You'll build the set, shoot the product, then bring the footage together in the edit.",
         "Before we touch any gear, we read the <color=red>contract</color>. That's our brief: what the client wants, and what we need to deliver.",
-        "Keep that brief close. Meeting it earns your grade and payment, and I'll walk you through this first job."
+        "Keep that brief close. Meeting it earns your grade and payment, and I'll walk you through this first job.",
+        "Two currencies keep things clear: <color=yellow>B-Coins</color> are the equipment budget for the production you're working on. <color=yellow>C-Coins</color> are Crew Coins for avatar cosmetics. Passing a contract queues a C-Coin reward for account verification; the website top-up uses the same signed-in PlayFab wallet. The five face looks are free and included."
     };
     private int currentExplanationPage = 0;
     private bool isLevel1Retry = false;

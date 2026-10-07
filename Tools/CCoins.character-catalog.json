@@ -6,119 +6,170 @@
       "kind": "accessory",
       "name": "Crew Gear Backpack",
       "description": "A compact charcoal backpack with reinforced pockets and straps.",
-      "price": 850
+      "price": 850,
+      "websiteItemId": "accessory-crew-backpack",
+      "rarity": "Epic",
+      "websiteAssetKey": "accessory-3"
     },
     {
       "id": "character_accessory2",
       "kind": "accessory",
       "name": "Rectangular Studio Frames",
       "description": "Bold rectangular frames with a simple, clean dark outline.",
-      "price": 650
+      "price": 650,
+      "websiteItemId": "accessory-rectangular-frames",
+      "rarity": "Rare",
+      "websiteAssetKey": "accessory-5"
     },
     {
       "id": "character_accessory3",
       "kind": "accessory",
-      "name": "Accessory 3",
-      "description": "Character customization · Accessory 3. Appearance only.",
-      "price": 10
+      "name": "Utility Belt",
+      "description": "A sturdy dark belt with segmented panels and a clean buckle.",
+      "price": 600,
+      "websiteItemId": "accessory-utility-belt",
+      "rarity": "Rare",
+      "websiteAssetKey": "accessory-1"
     },
     {
       "id": "character_accessory4",
       "kind": "accessory",
-      "name": "Accessory 4",
-      "description": "Character customization · Accessory 4. Appearance only.",
-      "price": 10
+      "name": "Set Crew Gloves",
+      "description": "A pair of practical dark gloves for handling gear between takes.",
+      "price": 450,
+      "websiteItemId": "accessory-set-gloves",
+      "rarity": "Common",
+      "websiteAssetKey": "accessory-2"
     },
     {
       "id": "character_accessory5",
       "kind": "accessory",
-      "name": "Accessory 5",
-      "description": "Character customization · Accessory 5. Appearance only.",
-      "price": 10
+      "name": "Call Sheet Pass",
+      "description": "A crew ID badge on a lanyard, ready for your next call time.",
+      "price": 500,
+      "websiteItemId": "accessory-call-sheet-pass",
+      "rarity": "Common",
+      "websiteAssetKey": "accessory-4"
     },
     {
       "id": "character_accessory6",
       "kind": "accessory",
-      "name": "Accessory 6",
-      "description": "Character customization · Accessory 6. Appearance only.",
-      "price": 10
+      "name": "On-Set Face Mask",
+      "description": "A dark protective face mask with comfortable ear loops.",
+      "price": 450,
+      "websiteItemId": "accessory-face-mask",
+      "rarity": "Common",
+      "websiteAssetKey": "accessory-6"
     },
     {
       "id": "character_hair1",
       "kind": "hair",
       "name": "Chestnut Studio Bun",
       "description": "A neat high bun with loose face-framing strands, made for a long day on set.",
-      "price": 450
+      "price": 450,
+      "websiteItemId": "hair-chestnut-bun",
+      "rarity": "Common",
+      "websiteAssetKey": "hair-1"
     },
     {
       "id": "character_hair2",
       "kind": "hair",
       "name": "Golden Curtain Cut",
       "description": "Long golden locks part into soft curtain bangs with a bold silhouette.",
-      "price": 700
+      "price": 700,
+      "websiteItemId": "hair-golden-curtains",
+      "rarity": "Rare",
+      "websiteAssetKey": "hair-2"
     },
     {
       "id": "character_hair3",
       "kind": "hair",
       "name": "Low-Tied Chestnut",
       "description": "A practical low ponytail with a tidy center part and loose side locks.",
-      "price": 550
+      "price": 550,
+      "websiteItemId": "hair-low-tie",
+      "rarity": "Common",
+      "websiteAssetKey": "hair-3"
     },
     {
       "id": "character_hair4",
       "kind": "hair",
       "name": "Swept Chestnut Fringe",
       "description": "A layered short cut with sweeping bangs and a relaxed finish.",
-      "price": 550
+      "price": 550,
+      "websiteItemId": "hair-swept-fringe",
+      "rarity": "Common",
+      "websiteAssetKey": "hair-4"
     },
     {
       "id": "character_hair5",
       "kind": "hair",
       "name": "Center-Part Shag",
       "description": "A full, center-parted fringe with chunky layers for extra character.",
-      "price": 650
+      "price": 650,
+      "websiteItemId": "hair-center-fringe",
+      "rarity": "Rare",
+      "websiteAssetKey": "hair-5"
     },
     {
       "id": "character_hair6",
       "kind": "hair",
       "name": "Tousled Chestnut Crop",
       "description": "A textured crop with sweeping, piecey bangs and a playful edge.",
-      "price": 650
+      "price": 650,
+      "websiteItemId": "hair-tousled-fringe",
+      "rarity": "Rare",
+      "websiteAssetKey": "hair-6"
     },
     {
       "id": "character_face1",
       "kind": "face",
       "name": "Neutral Focus",
       "description": "A calm, neutral expression for keeping your focus on set.",
-      "price": 0
+      "price": 0,
+      "websiteItemId": "face-neutral-focus",
+      "rarity": "Common",
+      "websiteAssetKey": "face-neutral-focus"
     },
     {
       "id": "character_face2",
       "kind": "face",
       "name": "Set-Day Scowl",
       "description": "A fierce scowl for when the shoot is getting intense.",
-      "price": 0
+      "price": 0,
+      "websiteItemId": "face-set-day-scowl",
+      "rarity": "Common",
+      "websiteAssetKey": "face-set-day-scowl"
     },
     {
       "id": "character_face3",
       "kind": "face",
       "name": "Half-Lidded",
       "description": "A relaxed, half-lidded look for a low-key day on set.",
-      "price": 0
+      "price": 0,
+      "websiteItemId": "face-half-lidded",
+      "rarity": "Common",
+      "websiteAssetKey": "face-half-lidded"
     },
     {
       "id": "character_face4",
       "kind": "face",
       "name": "Side-Eye Smirk",
       "description": "A knowing side-eye paired with a sly smile.",
-      "price": 0
+      "price": 0,
+      "websiteItemId": "face-side-eye-smirk",
+      "rarity": "Common",
+      "websiteAssetKey": "face-side-eye-smirk"
     },
     {
       "id": "character_face5",
       "kind": "face",
       "name": "Big Surprise",
       "description": "A wide-eyed, open-mouthed look for a big reveal.",
-      "price": 0
+      "price": 0,
+      "websiteItemId": "face-big-surprise",
+      "rarity": "Common",
+      "websiteAssetKey": "face-big-surprise"
     },
     {
       "id": "character_body_boy",
@@ -139,119 +190,170 @@
       "kind": "shirt",
       "name": "Set Utility Vest",
       "description": "A dark utility shirt layered with a brown multi-pocket crew vest.",
-      "price": 850
+      "price": 850,
+      "websiteItemId": "top-utility-vest",
+      "rarity": "Epic",
+      "websiteAssetKey": "top-1"
     },
     {
       "id": "character_shirt2",
       "kind": "shirt",
       "name": "Open-Collar Layer",
       "description": "A clean short-sleeve overshirt worn open over a bright crew tee.",
-      "price": 650
+      "price": 650,
+      "websiteItemId": "top-open-collar",
+      "rarity": "Rare",
+      "websiteAssetKey": "top-2"
     },
     {
       "id": "character_shirt3",
       "kind": "shirt",
       "name": "Fresh White Crew Tee",
       "description": "A crisp white crew-neck T-shirt with dark contrast sleeve bands.",
-      "price": 350
+      "price": 350,
+      "websiteItemId": "top-white-tee",
+      "rarity": "Common",
+      "websiteAssetKey": "top-3"
     },
     {
       "id": "character_shirt4",
       "kind": "shirt",
       "name": "Brown Field Jacket",
       "description": "A rugged brown jacket with generous pockets over a dark base layer.",
-      "price": 900
+      "price": 900,
+      "websiteItemId": "top-field-jacket",
+      "rarity": "Epic",
+      "websiteAssetKey": "top-4"
     },
     {
       "id": "character_shirt5",
       "kind": "shirt",
       "name": "Charcoal V-Neck",
       "description": "A simple charcoal V-neck tee, an easy staple between takes.",
-      "price": 400
+      "price": 400,
+      "websiteItemId": "top-charcoal-vneck",
+      "rarity": "Common",
+      "websiteAssetKey": "top-5"
     },
     {
       "id": "character_pants1",
       "kind": "pants",
       "name": "Slate Wide-Leg Trousers",
       "description": "Relaxed slate trousers with a wide, flowing leg and clean waistband.",
-      "price": 700
+      "price": 700,
+      "websiteItemId": "bottom-wide-slate",
+      "rarity": "Rare",
+      "websiteAssetKey": "bottom-1"
     },
     {
       "id": "character_pants2",
       "kind": "pants",
       "name": "Tan Cargo Pants",
       "description": "Roomy tan cargos with oversized side pockets for a utility look.",
-      "price": 850
+      "price": 850,
+      "websiteItemId": "bottom-tan-cargo",
+      "rarity": "Epic",
+      "websiteAssetKey": "bottom-2"
     },
     {
       "id": "character_pants3",
       "kind": "pants",
       "name": "Teal Cuff Joggers",
       "description": "Easy teal joggers gathered at the ankle for comfortable studio days.",
-      "price": 650
+      "price": 650,
+      "websiteItemId": "bottom-teal-joggers",
+      "rarity": "Rare",
+      "websiteAssetKey": "bottom-3"
     },
     {
       "id": "character_pants4",
       "kind": "pants",
       "name": "Coral Track Shorts",
       "description": "Bright red-coral athletic shorts with crisp white side panels.",
-      "price": 500
+      "price": 500,
+      "websiteItemId": "bottom-coral-shorts",
+      "rarity": "Common",
+      "websiteAssetKey": "bottom-4"
     },
     {
       "id": "character_pants5",
       "kind": "pants",
       "name": "Slate Cargo Trousers",
       "description": "Tapered dark cargos with bright utility pockets at each thigh.",
-      "price": 900
+      "price": 900,
+      "websiteItemId": "bottom-slate-cargo",
+      "rarity": "Epic",
+      "websiteAssetKey": "bottom-5"
     },
     {
       "id": "character_pants6",
       "kind": "pants",
       "name": "Brown Tailored Trousers",
       "description": "Straight brown trousers with a belt and subtle pressed seams.",
-      "price": 650
+      "price": 650,
+      "websiteItemId": "bottom-brown-tailored",
+      "rarity": "Rare",
+      "websiteAssetKey": "bottom-6"
     },
     {
       "id": "character_shoe1",
       "kind": "shoe",
       "name": "Lace-Up Platform Boots",
       "description": "Chunky ankle boots with contrast laces and a sturdy platform sole.",
-      "price": 950
+      "price": 950,
+      "websiteItemId": "shoe-platform-boots",
+      "rarity": "Epic",
+      "websiteAssetKey": "shoe-1"
     },
     {
       "id": "character_shoe2",
       "kind": "shoe",
       "name": "Buckle Strap Flats",
       "description": "Rounded black flats with a polished buckle strap.",
-      "price": 600
+      "price": 600,
+      "websiteItemId": "shoe-buckle-flats",
+      "rarity": "Rare",
+      "websiteAssetKey": "shoe-2"
     },
     {
       "id": "character_shoe3",
       "kind": "shoe",
       "name": "Everyday Slip-Ons",
       "description": "Lightweight charcoal slip-ons with a bright, flexible sole.",
-      "price": 450
+      "price": 450,
+      "websiteItemId": "shoe-slip-ons",
+      "rarity": "Common",
+      "websiteAssetKey": "shoe-3"
     },
     {
       "id": "character_shoe4",
       "kind": "shoe",
       "name": "Red Lace-Up Sneakers",
       "description": "Red sneakers with white laces and a cushioned studio-ready sole.",
-      "price": 700
+      "price": 700,
+      "websiteItemId": "shoe-red-sneakers",
+      "rarity": "Rare",
+      "websiteAssetKey": "shoe-4"
     },
     {
       "id": "character_shoe5",
       "kind": "shoe",
       "name": "Green Buckle Sandals",
       "description": "Comfortable green double-strap sandals with secure buckles.",
-      "price": 550
+      "price": 550,
+      "websiteItemId": "shoe-green-sandals",
+      "rarity": "Common",
+      "websiteAssetKey": "shoe-5"
     },
     {
       "id": "character_shoe6",
       "kind": "shoe",
       "name": "Charcoal Studio Slides",
       "description": "Simple charcoal slides for the quick break between setups.",
-      "price": 400
+      "price": 400,
+      "websiteItemId": "shoe-charcoal-slides",
+      "rarity": "Common",
+      "websiteAssetKey": "shoe-6"
     }
   ]
 }

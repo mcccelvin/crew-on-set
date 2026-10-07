@@ -21,7 +21,7 @@ Buttons:
 
 ## Test C-Coins are not paid currency
 
-`CCoinService.DevAddCoins` is compiled only for Editor/Development builds. Test mode replaces the displayed wallet with an in-memory 36-item cosmetic catalog; BUY and EQUIP can be tested offline. Items still cost 10 C-Coins and duplicate purchases do not debit again. It does not change the real account's coins or ownership.
+`CCoinService.DevAddCoins` is compiled only for Editor/Development builds. Test mode replaces the displayed wallet with an in-memory cosmetic catalog; BUY and EQUIP can be tested offline using website catalog prices. It does not change the real account's coins or ownership.
 
 The original state (including pending operations) is retained separately. Test mode blocks cache writes, cloud refresh, reward claims, receipt validation and paid checkout. Late cloud callbacks are invalidated when entering/exiting. Account changes discard test mode; restarting the game also discards it. Restore real C-wallet returns to the retained state and requests ordinary sync. A test balance is labelled **TEST WALLET** in the shop status and never treated as a server-verified balance. Complete test productions in a disposable career: ordinary B-Coin/progress cheats still affect that career's saved gameplay state.
 

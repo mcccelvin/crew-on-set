@@ -18,6 +18,7 @@ public partial class AlmanacManager
     private string profileInputOwner;
     private int profileShopCategory = 0;
     private static readonly string[] ProfileShopKinds = { "accessory", "hair", "face", "body", "shirt", "pants", "shoe", "profile_frame" };
+    private static readonly string[] ProfileShopLabels = { "ACCESSORIES", "HAIR", "FACE", "BODY", "TOPS", "BOTTOMS", "SHOE WEAR", "FRAMES" };
     private AccountProductionProfile.Snapshot profileAccountStats;
     private Button profileAccountSyncButton;
     private TMP_Text profileProgressSyncStatus;
@@ -261,7 +262,7 @@ public partial class AlmanacManager
         var card = stage.Find("Career card");
         profileShopPanel = CreatePanel("Shared cosmetic shop", card, new Color32(252, 245, 220, 255));
         SetStretchRect(profileShopPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(103, 19), new Vector2(-29, -19));
-        string[] categories = { "ACCESSORIES", "HAIR", "FACE", "BODY", "TOPS", "BOTTOMS", "SHOE WEAR", "FRAMES" };
+        string[] categories = ProfileShopLabels;
         for (int i = 0; i < categories.Length; i++)
         {
             int category = i; var button = CreateButton("Cosmetic category " + i, profileShopPanel.transform, categories[i]);
@@ -304,8 +305,11 @@ public partial class AlmanacManager
             var button = profileShopPanel.transform.Find("Cosmetic category " + i)?.GetComponent<Button>();
             if (button != null) button.interactable = i != profileShopCategory;
         }
-        var items = new List<CCoinCosmetic>(CharacterCosmetics.Items);
-        foreach(var remote in profileWallet.Wallet?.cosmetics ?? new CCoinCosmetic[0])
+        var items = new List<CCoinCosmetic>();
+        var walletItems=profileWallet.Wallet?.cosmetics ?? new CCoinCosmetic[0];
+        foreach(var bundled in CharacterCosmetics.Items)
+            items.Add(CCoinRules.Find(profileWallet.Wallet,bundled.id) ?? bundled);
+        foreach(var remote in walletItems)
             if(remote!=null && remote.kind=="profile_frame")items.Add(remote);
         int shown = 0;
         foreach (var item in items)
@@ -314,11 +318,13 @@ public partial class AlmanacManager
             bool isPart=CharacterCosmetics.Find(item.id)!=null;
             var art=CharacterCosmeticCatalog.Load();
             bool available=!isPart || art?.Model(CharacterCosmetics.ModelKey(item.id))!=null;
-            bool listed=CCoinRules.Find(profileWallet.Wallet,item.id)!=null;
+            bool listed=CCoinRules.Find(profileWallet.Wallet,item.id)!=null && (item.kind=="profile_frame" || !string.IsNullOrWhiteSpace(item.websiteItemId));
             shown++; var row = ProfileRow(profileShopContent, "Shared cosmetic " + item.id, 200);
             float inset=isPart ? 150 : 16;
-            ProfileText(row.transform, "Name", item.name, 26, inset, 6, 38);
-            var detail = ProfileText(row.transform, "Description", !available ? "Model unavailable in this build." : !listed ? item.price + " C-Coins · purchases await account shop connection." : item.description ?? "Profile frame", 19, inset, 48, 80);
+            string itemLabel=ProfileShopLabels[profileShopCategory]+(string.IsNullOrWhiteSpace(item.rarity)?"":" · "+item.rarity.ToUpperInvariant());
+            ProfileText(row.transform, "Website category and rarity", itemLabel, 15, inset, 0, 21).color=new Color32(255,80,60,255);
+            ProfileText(row.transform, "Name", item.name, 26, inset, 20, 34);
+            var detail = ProfileText(row.transform, "Description", !available ? "Model unavailable in this build." : !listed ? "Not available in the connected website catalog." : item.description ?? "Profile frame", 19, inset, 55, 73);
             detail.rectTransform.offsetMax = new Vector2(-170, -48);
             bool owned = CCoinRules.Owns(profileWallet.Wallet, item.id), equipped = owned && profileWallet.IsEquipped(item.id);
             if(isPart && available)
@@ -334,7 +340,7 @@ public partial class AlmanacManager
             SetRect(buy.GetComponent<RectTransform>(), new Vector2(1, .5f), new Vector2(1, .5f), new Vector2(-86, -4), new Vector2(145, 52));
             buy.onClick.AddListener(() => { if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });
             buy.interactable = available && listed && !equipped && (owned || profileWallet.CanBuy && profileWallet.Balance >= item.price);
-            ProfileText(row.transform, "Price", owned ? "OWNED" : item.price + " C-Coins", 21, inset, 154, 32).color = ProfileGreen;
+            ProfileText(row.transform, "Price", item.price + " C-Coins", 21, inset, 154, 32).color = ProfileGreen;
         }
         if (shown == 0)
         {
