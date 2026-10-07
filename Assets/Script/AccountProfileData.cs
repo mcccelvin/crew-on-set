@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using PlayFab;
 using PlayFab.ClientModels;
 using UnityEngine;
 
-// Identity is account-wide, not a career value. Never activate a save to view a profile.
+// Account identity and biography share the website's profile_metadata record.
+// Password-confirmed username changes update both that record and the title name.
 public static class AccountProfileData
 {
+    private const string MetadataKey = "profile_metadata";
     [Serializable] private sealed class Profile { public string name, bio; public bool pendingName, pendingBio; }
     private static Profile profile = new Profile();
     private static string owner = "", status = "";
@@ -19,8 +22,8 @@ public static class AccountProfileData
     public static string Bio => profile.bio ?? "";
     public static string Status => status;
     public static bool Busy => busy;
+    public static bool Authenticated => owner != "guest" && PlayFabSettings.staticPlayer.PlayFabId == owner && PlayFabClientAPI.IsClientLoggedIn();
     private static string Key => "SaveSystem.Profile.v1." + owner;
-    private static bool Authenticated => owner != "guest" && PlayFabSettings.staticPlayer.PlayFabId == owner && PlayFabClientAPI.IsClientLoggedIn();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void Reset() { generation++; owner = ""; profile = new Profile(); busy = false; Changed = null; }
@@ -35,17 +38,29 @@ public static class AccountProfileData
         generation++; busy = false; owner = string.IsNullOrWhiteSpace(account) ? "guest" : account;
         try { profile = JsonUtility.FromJson<Profile>(PlayerPrefs.GetString(Key, "")) ?? new Profile(); }
         catch (ArgumentException) { profile = new Profile(); }
-        string loginName = PlayerPrefs.GetString("PlayerName", "");
-        if (!profile.pendingName && !string.IsNullOrWhiteSpace(loginName)) profile.name = loginName.Trim();
+        // A display name never has an offline/pending write: changing it requires the password.
+        profile.pendingName = false;
         profile.bio = Limit(profile.bio, 500);
-        PlayerPrefs.SetString("PlayerName", Name);
-        Store(); Publish(owner == "guest" ? "Guest profile · saved on this device" : "Account profile · cached on this device");
+        if (owner == "guest") { profile.name = "Guest"; profile.bio = ""; profile.pendingBio = false; }
+        PlayerPrefs.SetString("PlayerName", Name); Store();
+        Publish(owner == "guest" ? "Guest profile · sign in to edit your profile" : "Account profile · syncing website profile");
         nextRefresh = Time.unscaledTime;
     }
     private static string Limit(string value, int maximum) => (value ?? "").Substring(0, Math.Min((value ?? "").Length, maximum));
     private static void Store() { PlayerPrefs.SetString(Key, JsonUtility.ToJson(profile)); PlayerPrefs.Save(); }
     private static void Publish(string message) { status = message; Changed?.Invoke(); }
     private static bool Current(int request, string account) => generation == request && owner == account && Authenticated;
+    private static Dictionary<string, object> ReadMetadata(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new Dictionary<string, object>();
+        var parsed = PlayFab.Json.PlayFabSimpleJson.DeserializeObject(json) as IDictionary<string, object>;
+        if (parsed == null) throw new FormatException("The website profile data is not valid JSON.");
+        return new Dictionary<string, object>(parsed);
+    }
+    private static string StringValue(Dictionary<string, object> values, string key)
+        => values.TryGetValue(key, out var value) ? value as string ?? "" : "";
+    private static string MetadataJson(Dictionary<string, object> values)
+        => PlayFab.Json.PlayFabSimpleJson.SerializeObject(values);
 
     public static void Tick()
     {
@@ -64,70 +79,175 @@ public static class AccountProfileData
     {
         EnsureBound();
         if (busy || !Authenticated || Application.internetReachability == NetworkReachability.NotReachable) return;
-        if (profile.pendingName || profile.pendingBio) { Upload(); return; }
-        busy = true; int request = ++generation; string account = owner;
-        deadline = Time.unscaledTime + 45f;
+        if (profile.pendingBio) { UploadBio(); return; }
+        busy = true; int request = ++generation; string account = owner; deadline = Time.unscaledTime + 45f;
         try
         {
-            PlayFabClientAPI.GetUserData(new GetUserDataRequest { Keys = new List<string> { "ProfileBio" } }, result =>
+            PlayFabClientAPI.GetUserData(new GetUserDataRequest { Keys = new List<string> { MetadataKey, "ProfileBio" } }, result =>
             {
                 if (!Current(request, account)) return;
-                profile.bio = result.Data != null && result.Data.TryGetValue("ProfileBio", out var bio) ? Limit(bio.Value, 500) : "";
-                Store();
-                deadline = Time.unscaledTime + 45f;
-                PlayFabClientAPI.GetAccountInfo(new GetAccountInfoRequest(), info =>
+                try
                 {
-                    if (!Current(request, account)) return;
-                    string name = info.AccountInfo?.TitleInfo?.DisplayName;
-                    if (!string.IsNullOrWhiteSpace(name)) { profile.name = name; PlayerPrefs.SetString("PlayerName", Name); }
-                    Store(); Finish("Account profile synced");
-                }, error => { if (Current(request, account)) Finish("Bio synced · name uses your login profile"); });
+                    string raw = result.Data != null && result.Data.TryGetValue(MetadataKey, out var record) ? record.Value : "";
+                    var metadata = ReadMetadata(raw);
+                    string websiteName = StringValue(metadata, "username");
+                    string websiteBio = StringValue(metadata, "bio");
+                    if (string.IsNullOrWhiteSpace(websiteBio) && result.Data != null && result.Data.TryGetValue("ProfileBio", out var legacyBio))
+                        websiteBio = legacyBio.Value ?? "";
+                    ReadAccountName(request, account, websiteName, websiteBio);
+                }
+                catch (Exception) { if (Current(request, account)) Finish("Website profile data could not be read; keeping the saved profile."); }
             }, error => { if (Current(request, account)) Finish("Offline · showing your saved profile; retrying automatically."); });
         }
         catch (Exception) { if (Current(request, account)) Finish("Profile sync unavailable; saved locally and retrying automatically."); }
     }
-    public static bool Save(string name, string bio)
+    private static void ReadAccountName(int request, string account, string websiteName, string websiteBio)
     {
-        EnsureBound(); name = (name ?? "").Trim();
-        if (name.Length < (owner == "guest" ? 1 : 3) || name.Length > 25 || Array.Exists(name.ToCharArray(), char.IsControl))
-        { Publish(owner == "guest" ? "Use a name from 1 to 25 characters." : "Use an account name from 3 to 25 characters."); return false; }
-        // Invalidates any read already in flight; a late read cannot overwrite the new draft.
-        generation++; busy = false;
-        profile.name = name; profile.bio = Limit(bio, 500);
-        profile.pendingName = profile.pendingBio = owner != "guest";
-        nextRefresh = Time.unscaledTime;
-        PlayerPrefs.SetString("PlayerName", Name); Store();
-        Publish(owner == "guest" ? "Profile saved on this device" : "Profile saved on this device · account sync pending");
-        if (Authenticated) Upload();
-        return true;
-    }
-    private static void Upload()
-    {
-        if (busy || !Authenticated || Application.internetReachability == NetworkReachability.NotReachable) return;
-        busy = true; int request = ++generation; string account = owner;
         deadline = Time.unscaledTime + 45f;
-        string name = profile.name, bio = profile.bio;
-        Action uploadBio = () =>
-        {
-            if (!Current(request, account)) return;
-            if (!profile.pendingBio) { Finish("Account profile saved"); return; }
-            deadline = Time.unscaledTime + 45f;
-            try
-            {
-                PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest {
-                    Data = new Dictionary<string, string> { { "ProfileBio", bio ?? "" } }, Permission = UserDataPermission.Private
-                }, result => { if (Current(request, account)) { profile.pendingBio = false; Store(); Finish("Account profile saved"); } },
-                error => { if (Current(request, account)) Finish("Saved locally · Bio will sync automatically when you reconnect."); });
-            }
-            catch (Exception) { if (Current(request, account)) Finish("Profile upload unavailable; saved locally and retrying automatically."); }
-        };
-        if (!profile.pendingName) { uploadBio(); return; }
         try
         {
-            PlayFabClientAPI.UpdateUserTitleDisplayName(new UpdateUserTitleDisplayNameRequest { DisplayName = name }, result =>
-            { if (Current(request, account)) { profile.pendingName = false; Store(); uploadBio(); } },
-            error => { if (Current(request, account)) Finish("Saved locally · account name not accepted or connection unavailable; retrying automatically."); });
+            PlayFabClientAPI.GetAccountInfo(new GetAccountInfoRequest(), info =>
+            {
+                if (!Current(request, account)) return;
+                string name = websiteName;
+                if (string.IsNullOrWhiteSpace(name)) name = info.AccountInfo?.TitleInfo?.DisplayName;
+                if (string.IsNullOrWhiteSpace(name) || name == "Guest") name = info.AccountInfo?.Username;
+                if (!string.IsNullOrWhiteSpace(name)) profile.name = name.Trim();
+                profile.bio = Limit(websiteBio, 500);
+                PlayerPrefs.SetString("PlayerName", Name); Store(); Finish("Website profile synced");
+            }, error =>
+            {
+                if (!Current(request, account)) return;
+                if (!string.IsNullOrWhiteSpace(websiteName)) profile.name = websiteName.Trim();
+                profile.bio = Limit(websiteBio, 500); PlayerPrefs.SetString("PlayerName", Name); Store();
+                Finish("Website profile synced · account name is temporarily unavailable");
+            });
         }
-        catch (Exception) { if (Current(request, account)) Finish("Profile upload unavailable; saved locally and retrying automatically."); }
+        catch (Exception) { if (Current(request, account)) Finish("Account profile unavailable; retrying automatically."); }
+    }
+
+    // Kept for the profile screen's existing caller; only the biography is editable here.
+    public static bool Save(string name, string bio) => SaveBio(bio);
+    public static bool SaveBio(string bio)
+    {
+        EnsureBound();
+        if (!Authenticated) { Publish("Sign in to edit your website profile."); return false; }
+        generation++; busy = false; profile.bio = Limit(bio, 500); profile.pendingBio = true;
+        Store(); nextRefresh = Time.unscaledTime; Publish("Biography saved on this device · website sync pending");
+        if (Application.internetReachability != NetworkReachability.NotReachable) UploadBio();
+        return true;
+    }
+    private static void UploadBio()
+    {
+        if (busy || !Authenticated || Application.internetReachability == NetworkReachability.NotReachable) return;
+        busy = true; int request = ++generation; string account = owner; deadline = Time.unscaledTime + 45f;
+        string bio = profile.bio;
+        try
+        {
+            PlayFabClientAPI.GetUserData(new GetUserDataRequest { Keys = new List<string> { MetadataKey } }, result =>
+            {
+                if (!Current(request, account)) return;
+                try
+                {
+                    string raw = result.Data != null && result.Data.TryGetValue(MetadataKey, out var record) ? record.Value : "";
+                    var metadata = ReadMetadata(raw); metadata["bio"] = bio;
+                    deadline = Time.unscaledTime + 45f;
+                    PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest {
+                        Data = new Dictionary<string, string> { { MetadataKey, MetadataJson(metadata) } },
+                        Permission = UserDataPermission.Private
+                    }, saved =>
+                    {
+                        if (!Current(request, account)) return;
+                        profile.pendingBio = false; Store(); Finish("About you synced with your website profile.");
+                    }, error => { if (Current(request, account)) Finish("Saved locally · About you will sync automatically when you reconnect."); });
+                }
+                catch (Exception) { if (Current(request, account)) Finish("Website profile data could not be updated; your biography remains saved locally."); }
+            }, error => { if (Current(request, account)) Finish("Saved locally · About you will sync automatically when you reconnect."); });
+        }
+        catch (Exception) { if (Current(request, account)) Finish("Saved locally · About you will sync automatically when you reconnect."); }
+    }
+
+    public static void ChangeUsername(string newUsername, string currentPassword, Action<bool, string> completed)
+    {
+        EnsureBound(); newUsername = (newUsername ?? "").Trim();
+        if (!Authenticated) { completed?.Invoke(false, "Sign in to change your username."); return; }
+        if (!Regex.IsMatch(newUsername, "^[A-Za-z][A-Za-z0-9_]{2,19}$"))
+        { completed?.Invoke(false, "Use 3–20 characters: start with a letter, then letters, numbers, or underscores."); return; }
+        if (newUsername.Equals(Name, StringComparison.OrdinalIgnoreCase))
+        { completed?.Invoke(false, "That is already your username."); return; }
+        if (string.IsNullOrEmpty(currentPassword)) { completed?.Invoke(false, "Enter your current password to confirm the change."); return; }
+        if (busy) { completed?.Invoke(false, "Profile sync is busy. Try again in a moment."); return; }
+
+        busy = true; int request = ++generation; string account = owner, oldName = Name;
+        deadline = Time.unscaledTime + 45f; Publish("Verifying your password…");
+        try
+        {
+            PlayFabClientAPI.GetAccountInfo(new GetAccountInfoRequest(), info =>
+            {
+                if (!Current(request, account)) return;
+                string playFabUsername = info.AccountInfo?.Username;
+                string loginEmail = PlayerPrefs.GetString("LastEmail", "").Trim();
+                if (string.IsNullOrWhiteSpace(playFabUsername) && string.IsNullOrWhiteSpace(loginEmail)) { Finish("This account has no password login available. Change the username on the website."); completed?.Invoke(false, Status); return; }
+                try
+                {
+                    Action<LoginResult> verified = login =>
+                    {
+                        if (!Current(request, account)) return;
+                        if (login.PlayFabId != account) { Finish("Current password was not accepted for this account."); completed?.Invoke(false, Status); return; }
+                        UpdateTitleAndWebsiteName(request, account, oldName, newUsername, completed);
+                    };
+                    Action<PlayFabError> rejected = error =>
+                    {
+                        if (!Current(request, account)) return;
+                        Finish("Current password was not accepted. Your profile was not changed."); completed?.Invoke(false, Status);
+                    };
+                    if (!string.IsNullOrWhiteSpace(playFabUsername))
+                        PlayFabClientAPI.LoginWithPlayFab(new LoginWithPlayFabRequest { Username = playFabUsername, Password = currentPassword }, verified, rejected);
+                    else
+                        PlayFabClientAPI.LoginWithEmailAddress(new LoginWithEmailAddressRequest { Email = loginEmail, Password = currentPassword }, verified, rejected);
+                }
+                catch (Exception) { if (Current(request, account)) { Finish("Password verification is unavailable. Your profile was not changed."); completed?.Invoke(false, Status); } }
+            }, error => { if (Current(request, account)) { Finish("Could not verify the account. Your profile was not changed."); completed?.Invoke(false, Status); } });
+        }
+        catch (Exception) { if (Current(request, account)) { Finish("Password verification is unavailable. Your profile was not changed."); completed?.Invoke(false, Status); } }
+    }
+    private static void UpdateTitleAndWebsiteName(int request, string account, string oldName, string newName, Action<bool, string> completed)
+    {
+        deadline = Time.unscaledTime + 45f;
+        PlayFabClientAPI.UpdateUserTitleDisplayName(new UpdateUserTitleDisplayNameRequest { DisplayName = newName }, renamed =>
+        {
+            if (!Current(request, account)) return;
+            deadline = Time.unscaledTime + 45f;
+            PlayFabClientAPI.GetUserData(new GetUserDataRequest { Keys = new List<string> { MetadataKey } }, result =>
+            {
+                if (!Current(request, account)) return;
+                try
+                {
+                    string raw = result.Data != null && result.Data.TryGetValue(MetadataKey, out var record) ? record.Value : "";
+                    var metadata = ReadMetadata(raw); metadata["username"] = newName;
+                    PlayFabClientAPI.UpdateUserData(new UpdateUserDataRequest {
+                        Data = new Dictionary<string, string> { { MetadataKey, MetadataJson(metadata) } }, Permission = UserDataPermission.Private
+                    }, saved =>
+                    {
+                        if (!Current(request, account)) return;
+                        profile.name = newName; profile.pendingName = false; PlayerPrefs.SetString("PlayerName", newName); Store();
+                        Finish("Username updated. It will appear on your website profile and in the game."); completed?.Invoke(true, Status);
+                    }, error => RollBackTitle(request, account, oldName, completed));
+                }
+                catch (Exception) { RollBackTitle(request, account, oldName, completed); }
+            }, error => { if (Current(request, account)) RollBackTitle(request, account, oldName, completed); });
+        }, error =>
+        {
+            if (!Current(request, account)) return;
+            Finish(error.Error == PlayFabErrorCode.NameNotAvailable ? "That username is already in use." : "PlayFab rejected the username change. Your profile was not changed.");
+            completed?.Invoke(false, Status);
+        });
+    }
+    private static void RollBackTitle(int request, string account, string oldName, Action<bool, string> completed)
+    {
+        if (generation != request || owner != account) return;
+        PlayFabClientAPI.UpdateUserTitleDisplayName(new UpdateUserTitleDisplayNameRequest { DisplayName = oldName }, result =>
+        { if (Current(request, account)) { Finish("Website profile could not be updated; the game display name was restored."); completed?.Invoke(false, Status); } },
+        error => { if (Current(request, account)) { Finish("Website profile sync failed. Reopen the website and game profile to reconcile the name."); completed?.Invoke(false, Status); } });
     }
 }

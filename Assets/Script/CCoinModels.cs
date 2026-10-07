@@ -93,6 +93,34 @@ public static class CharacterCosmetics
     public static CCoinCosmetic Find(string id) => Array.Find(Items,x=>x.id==id);
     public static CCoinCosmetic FindWebsiteItem(string websiteItemId) => Array.Find(Items,x=>x.websiteItemId==websiteItemId);
     public static CCoinCosmetic FindWebsiteAsset(string websiteAssetKey) => Array.Find(Items,x=>x.websiteAssetKey==websiteAssetKey);
+    public static string WebsiteImageResource(CCoinCosmetic item)
+    {
+        if (item == null || string.IsNullOrEmpty(item.websiteItemId)) return null;
+        string folder, file;
+        switch (item.kind)
+        {
+            case "accessory": folder = "accessories"; file = "accessory"; break;
+            case "hair": folder = "hair"; file = "hair"; break;
+            case "face":
+                folder = "faces"; file = "face";
+                int faceIndex = 0;
+                foreach (var face in Items)
+                {
+                    if (face.kind != "face" || string.IsNullOrEmpty(face.websiteItemId)) continue;
+                    faceIndex++;
+                    if (face.id == item.id) return "ShopCosmetics/shop/faces/face" + faceIndex;
+                }
+                return null;
+            case "shirt": folder = "tops"; file = "shirt"; break;
+            case "pants": folder = "bottoms"; file = "pants"; break;
+            case "shoe": folder = "shoe-wear"; file = "shoes"; break;
+            default: return null;
+        }
+        string asset = item.websiteAssetKey ?? "";
+        int separator = asset.LastIndexOf('-');
+        string index = separator >= 0 ? asset.Substring(separator + 1) : "";
+        return int.TryParse(index, out _) ? "ShopCosmetics/shop/" + folder + "/" + file + index : null;
+    }
     public static string[] FreeFaceIds()
     {
         var ids=new List<string>();foreach(var item in Items)if(item.kind=="face" && item.price==0)ids.Add(item.id);return ids.ToArray();

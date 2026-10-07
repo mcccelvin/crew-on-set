@@ -114,7 +114,9 @@ public partial class AlmanacManager
         if (isPart && available)
         {
             var thumb = CCoinShopUI.Rect(well.transform, "Item preview", Vector2.zero, new Vector2(132, 132)).gameObject.AddComponent<RawImage>();
-            thumb.texture = art.Thumbnail(item.id); thumb.raycastTarget = false;
+            var websiteImage = Resources.Load<Texture2D>(CharacterCosmetics.WebsiteImageResource(item));
+            thumb.texture = websiteImage != null ? websiteImage : art.Thumbnail(item.id);
+            thumb.raycastTarget = false;
         }
         else if (!isPart)
         {
@@ -126,7 +128,8 @@ public partial class AlmanacManager
             ExportUIArt.Apply(portrait, "profileIcon"); portrait.preserveAspect = true; portrait.raycastTarget = false;
         }
         else ShopText(well.transform, "Model unavailable", "NO PREVIEW", 20, 42, 40, ShopMuted).alignment = TextAlignmentOptions.Center;
-        string category = item.kind == "profile_frame" ? "FRAME" : item.kind == "shirt" ? "TOP" : item.kind == "pants" ? "BOTTOM" : item.kind.ToUpperInvariant();
+        string category = item.kind == "accessory" ? "ACCESSORIES" : item.kind == "shirt" ? "TOPS"
+            : item.kind == "pants" ? "BOTTOMS" : item.kind == "shoe" ? "SHOE WEAR" : item.kind.ToUpperInvariant();
         ShopText(card.transform, "Category", category, 15, 14, 22, ShopAccent);
         var title = ShopText(card.transform, "Name", item.name, 26, 196, 30, ProfileInk); title.enableWordWrapping = false;
         string detail = !available ? "Model unavailable" : isPart ? "Appearance only" : item.description ?? "Profile portrait frame";

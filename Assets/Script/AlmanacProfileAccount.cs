@@ -10,14 +10,17 @@ public partial class AlmanacManager
     private GameSaveSlot profileMenuSlot;
     private Action profileMenuClosed;
     private TMP_InputField profileNameInput, profileBioInput;
+    private TMP_InputField profileNewUsernameInput, profileCurrentPasswordInput;
     private TMP_Text profileSyncStatus, profileWalletStatus, profileShopBalance;
-    private Button profileSaveButton, profileShopButton, profileReturnStats;
+    private Button profileSaveButton, profileShopButton, profileReturnStats, profileChangeUsernameButton;
+    private GameObject profileUsernameChangeOverlay;
+    private TMP_Text profileUsernameChangeStatus;
     private GameObject profileShopPanel;
     private Transform profileShopContent;
     private CCoinService profileWallet;
     private string profileInputOwner;
     private int profileShopCategory = 0;
-    private static readonly string[] ProfileShopKinds = { "accessory", "hair", "face", "body", "shirt", "pants", "shoe", "profile_frame" };
+    private static readonly string[] ProfileShopKinds = { "all", "face", "hair", "shirt", "pants", "shoe", "accessory" };
     private AccountProductionProfile.Snapshot profileAccountStats;
     private Button profileAccountSyncButton;
     private TMP_Text profileProgressSyncStatus;
@@ -82,6 +85,8 @@ public partial class AlmanacManager
         {
             profileNameInput = ProfileInput("Shared account name", playerInfoPanel.transform, new Vector2(60, 235), new Vector2(640, 66), false);
             profileBioInput = ProfileInput("Shared account Bio", playerInfoPanel.transform, new Vector2(60, -165), new Vector2(640, 360), true);
+            profileChangeUsernameButton = BookButton(playerInfoPanel.transform, "Change website username", "CHANGE", "blueButton", new Vector2(250, 159), new Vector2(140, 58));
+            profileChangeUsernameButton.onClick.AddListener(OpenUsernameChangePrompt);
             profileSyncStatus = BookText(stage, "Account sync status", new Vector2(475, -367), new Vector2(805, 36), 20);
             FeedbackTypography.Apply(profileSyncStatus); profileSyncStatus.color = ProfileMuted; profileSyncStatus.richText = false;
             profileSyncStatus.enableAutoSizing = true; profileSyncStatus.fontSizeMin = 16; profileSyncStatus.fontSizeMax = 20;
@@ -185,8 +190,9 @@ public partial class AlmanacManager
             ProfileIdentityLabel(account, "Account heading", "PLAYFAB ACCOUNT", new Vector2(0, 45), new Vector2(612, 30), 21);
             ProfileIdentityLabel(account, "Account ID caption", "PLAYER ID", new Vector2(-64, 9), new Vector2(484, 26), 17).color = ProfileMuted;
         }
-        StyleProfileIdentityInput(profileNameInput, new Vector2(50, 159), new Vector2(664, 64), "Your display name", 29);
+        StyleProfileIdentityInput(profileNameInput, new Vector2(-65, 159), new Vector2(450, 64), "Your website username", 29);
         StyleProfileIdentityInput(profileBioInput, new Vector2(50, -18), new Vector2(664, 172), "Tell your crew a little about yourself…", 24);
+        profileNameInput.readOnly = true;
         if (profileAccountId != null)
         {
             SetRect(profileAccountId.rectTransform, Vector2.one * .5f, Vector2.one * .5f, new Vector2(-43, -267), new Vector2(426, 42));
@@ -259,8 +265,78 @@ public partial class AlmanacManager
     private void SaveAccountProfile()
     {
         profileAccountSyncRequested=false;
-        if (AccountProfileData.Save(profileNameInput.text, profileBioInput.text))
+        if (AccountProfileData.Authenticated && AccountProfileData.SaveBio(profileBioInput.text))
         { profileInputsDirty = false; RefreshAccountFields(true); }
+    }
+
+    private void OpenUsernameChangePrompt()
+    {
+        if (!AccountProfileData.Authenticated) return;
+        if (profileUsernameChangeOverlay == null) BuildUsernameChangePrompt();
+        profileNewUsernameInput.SetTextWithoutNotify(AccountProfileData.Name);
+        profileCurrentPasswordInput.SetTextWithoutNotify("");
+        profileUsernameChangeStatus.text = "Enter your new username and current password to confirm.";
+        profileUsernameChangeOverlay.SetActive(true);
+        profileUsernameChangeOverlay.transform.SetAsLastSibling();
+        profileNewUsernameInput.Select(); profileNewUsernameInput.ActivateInputField();
+    }
+
+    private void BuildUsernameChangePrompt()
+    {
+        profileUsernameChangeOverlay = CreatePanel("Username change confirmation", profileCanvas.transform, new Color32(8, 12, 20, 220));
+        SetStretchRect(profileUsernameChangeOverlay.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        var card = CreatePanel("Username change paper", profileUsernameChangeOverlay.transform, new Color32(252, 245, 220, 255)).transform;
+        SetRect(card.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, Vector2.zero, new Vector2(780, 490));
+        ProfileIdentityLabel(card, "Username change heading", "CHANGE USERNAME", new Vector2(0, 190), new Vector2(690, 52), 34);
+        ProfileIdentityLabel(card, "Username change explanation", "Confirm with your current password. The new name syncs to your website profile and game account.", new Vector2(0, 142), new Vector2(690, 52), 19).color = ProfileMuted;
+        ProfileIdentityLabel(card, "New username label", "NEW USERNAME", new Vector2(-260, 91), new Vector2(520, 30), 18);
+        profileNewUsernameInput = DialogInput("New username", card, new Vector2(0, 48), new Vector2(600, 58), "3–20 characters");
+        profileNewUsernameInput.characterLimit = 20;
+        ProfileIdentityLabel(card, "Current password label", "CURRENT PASSWORD", new Vector2(-260, -15), new Vector2(520, 30), 18);
+        profileCurrentPasswordInput = DialogInput("Current password", card, new Vector2(0, -58), new Vector2(600, 58), "Enter current password");
+        profileCurrentPasswordInput.contentType = TMP_InputField.ContentType.Password;
+        profileCurrentPasswordInput.ForceLabelUpdate();
+        profileUsernameChangeStatus = ProfileIdentityLabel(card, "Username change status", "", new Vector2(0, -115), new Vector2(690, 38), 17);
+        profileUsernameChangeStatus.alignment = TextAlignmentOptions.Center;
+        var confirm = BookButton(card, "Confirm username change", "SAVE", "blueButton", new Vector2(170, -195), new Vector2(190, 66));
+        confirm.onClick.AddListener(SubmitUsernameChange);
+        var cancel = BookButton(card, "Cancel username change", "CANCEL", "redButton", new Vector2(-170, -195), new Vector2(190, 66));
+        cancel.onClick.AddListener(() => { profileCurrentPasswordInput.SetTextWithoutNotify(""); profileUsernameChangeOverlay.SetActive(false); });
+        profileUsernameChangeOverlay.SetActive(false);
+    }
+
+    private TMP_InputField DialogInput(string name, Transform parent, Vector2 position, Vector2 size, string hint)
+    {
+        var rect = CCoinShopUI.Rect(parent, name, position, size);
+        var background = rect.gameObject.AddComponent<Image>(); background.color = new Color32(255, 251, 239, 255);
+        var edge = rect.gameObject.AddComponent<Outline>(); edge.effectColor = new Color32(160, 123, 79, 255); edge.effectDistance = new Vector2(1.5f, -1.5f);
+        var viewport = CCoinShopUI.Rect(rect, "Text viewport", Vector2.zero, size - new Vector2(24, 12)); viewport.gameObject.AddComponent<RectMask2D>();
+        var text = CCoinShopUI.Text(viewport, "Text", "", position, size - new Vector2(28, 16), 24);
+        text.richText = false; text.enableAutoSizing = false; text.alignment = TextAlignmentOptions.Left; text.color = ProfileInk;
+        var placeholder = ProfileIdentityLabel(viewport, "Input placeholder", hint, Vector2.zero, Vector2.zero, 21);
+        placeholder.color = ProfileMuted; placeholder.enableAutoSizing = false; SetStretchRect(placeholder.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        var input = rect.gameObject.AddComponent<TMP_InputField>(); input.targetGraphic = background; input.textViewport = viewport;
+        input.textComponent = text; input.placeholder = placeholder; input.characterLimit = 25;
+        input.lineType = TMP_InputField.LineType.SingleLine; input.shouldHideMobileInput = true;
+        SetStretchRect(viewport, Vector2.zero, Vector2.one, new Vector2(14, 7), new Vector2(-14, -7));
+        SetStretchRect(text.rectTransform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+        return input;
+    }
+
+    private void SubmitUsernameChange()
+    {
+        profileUsernameChangeStatus.text = "Verifying password and syncing username…";
+        string password = profileCurrentPasswordInput.text;
+        profileCurrentPasswordInput.SetTextWithoutNotify("");
+        AccountProfileData.ChangeUsername(profileNewUsernameInput.text, password, (success, message) =>
+        {
+            if (profileUsernameChangeStatus == null) return;
+            profileUsernameChangeStatus.text = message;
+            if (!success) return;
+            profileCurrentPasswordInput.SetTextWithoutNotify("");
+            profileUsernameChangeOverlay.SetActive(false);
+            profileInputsDirty = false; RefreshAccountFields(true);
+        });
     }
     private void OnAccountProfileChanged()
     {
@@ -298,6 +374,11 @@ public partial class AlmanacManager
         if (profileInputOwner != AccountProfileData.Owner) { profileInputOwner = AccountProfileData.Owner; force = true; profileInputsDirty = false; }
         if (force || !profileInputsDirty)
         { profileNameInput.SetTextWithoutNotify(AccountProfileData.Name); profileBioInput.SetTextWithoutNotify(AccountProfileData.Bio); }
+        bool canEdit = AccountProfileData.Authenticated;
+        profileNameInput.readOnly = true;
+        profileBioInput.interactable = canEdit;
+        if (profileChangeUsernameButton != null) profileChangeUsernameButton.gameObject.SetActive(canEdit);
+        if (profileSaveButton != null) profileSaveButton.interactable = canEdit && !AccountProfileData.Busy;
         if (profileAccountId != null) profileAccountId.text = AccountProfileData.Owner == "guest" ? "GUEST · LOCAL PROFILE" : AccountProfileData.Owner;
         if (profileSyncStatus != null) profileSyncStatus.text = profileInputsDirty ? "Unsaved changes · click SAVE" : AccountProfileData.Status;
         var label = playerInfoPanel.transform.Find("Account sign in or logout")?.GetComponentInChildren<TMP_Text>();
@@ -313,7 +394,7 @@ public partial class AlmanacManager
         var stage = profileCanvas.transform.Find("Profile backdrop/Profile stage");
         var title = stage.Find("Player profile label")?.GetComponent<Image>();
         ExportUIArt.Apply(title, tab == 0 ? "profileLabel" : tab == 4 ? "profileShopLabel" : "profileStatsLabel");
-        if (profileSaveButton != null) profileSaveButton.gameObject.SetActive(tab == 0);
+        if (profileSaveButton != null) profileSaveButton.gameObject.SetActive(tab == 0 && AccountProfileData.Authenticated);
         if (achievementsTabBtn != null) achievementsTabBtn.gameObject.SetActive(tab == 3);
         if (profileReturnStats != null) profileReturnStats.gameObject.SetActive(tab == 2);
         if (profileSyncStatus != null) profileSyncStatus.gameObject.SetActive(false);
@@ -338,7 +419,7 @@ public partial class AlmanacManager
         var card = stage.Find("Career card");
         profileShopPanel = CreatePanel("Shared cosmetic shop", card, ShopBackground);
         SetStretchRect(profileShopPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(103, 19), new Vector2(-29, -19));
-        string[] categories = { "ACCESSORIES", "HAIR", "FACE", "BODY", "SHIRT", "PANTS", "SHOES", "FRAMES" };
+        string[] categories = { "ALL", "FACE", "HAIR", "TOPS", "BOTTOMS", "SHOE WEAR", "ACCESSORIES" };
         for (int i = 0; i < categories.Length; i++)
         {
             int category = i; var button = CreateButton("Cosmetic category " + i, profileShopPanel.transform, categories[i]);
@@ -387,14 +468,15 @@ public partial class AlmanacManager
                 button.GetComponentInChildren<TMP_Text>().color = selected ? Color.white : ProfileInk;
             }
         }
-        var items = new List<CCoinCosmetic>(CharacterCosmetics.Items);
-        foreach(var remote in profileWallet.Wallet?.cosmetics ?? new CCoinCosmetic[0])
-            if(remote!=null && remote.kind=="profile_frame")items.Add(remote);
+        var items = new List<CCoinCosmetic>(profileWallet.Wallet?.cosmetics ?? CharacterCosmetics.Items);
+        items.Sort((left, right) => Array.IndexOf(ProfileShopKinds, left.kind).CompareTo(Array.IndexOf(ProfileShopKinds, right.kind)));
         int shown = 0;
         var art = CharacterCosmeticCatalog.Load();
         foreach (var item in items)
         {
-            if (item == null || item.kind != ProfileShopKinds[profileShopCategory]) continue;
+            if (item == null || string.IsNullOrEmpty(item.websiteItemId)) continue;
+            string selectedKind = ProfileShopKinds[profileShopCategory];
+            if (selectedKind != "all" && item.kind != selectedKind) continue;
             bool isPart=CharacterCosmetics.Find(item.id)!=null;
             bool available=!isPart || art?.Model(CharacterCosmetics.ModelKey(item.id))!=null;
             bool listed=CCoinRules.Find(profileWallet.Wallet,item.id)!=null;
@@ -405,7 +487,7 @@ public partial class AlmanacManager
         {
             var row = CreatePanel("Unavailable cosmetic category", profileShopContent, ShopCard);
             StyleShopBox(row.GetComponent<Image>(), ShopCard, true);
-            string message = "Your profile-frame catalog appears here when the account shop is connected. No coins are charged while it is unavailable.";
+            string message = "No cosmetics are available in this category.";
             ShopText(row.transform, "Availability", message, 24, 20, 290, ShopMuted);
         }
         ApplyProfileTypography();
@@ -447,8 +529,8 @@ public partial class AlmanacManager
         AccountProfileData.Changed -= OnAccountProfileChanged;
         if (profileWallet != null) profileWallet.Changed -= OnProfileWalletChanged;
         if (GameSaveManager.Instance != null) GameSaveManager.Instance.Changed -= OnProfileSavesChanged;
-        profileWallet = null; profileNameInput = profileBioInput = null; profileSyncStatus = profileWalletStatus = profileShopBalance = null;
-        profileSaveButton = profileShopButton = profileReturnStats = null; profileShopPanel = null; profileShopContent = null; profileInputOwner = null;
+        profileWallet = null; profileNameInput = profileBioInput = profileNewUsernameInput = profileCurrentPasswordInput = null; profileSyncStatus = profileWalletStatus = profileShopBalance = null;
+        profileSaveButton = profileShopButton = profileReturnStats = profileChangeUsernameButton = null; profileUsernameChangeOverlay = null; profileUsernameChangeStatus = null; profileShopPanel = null; profileShopContent = null; profileInputOwner = null;
         profileAccountStats=null;profileAccountSyncButton=null;profileProgressSyncStatus=null;profileAccountSyncRequested=false;
     }
 }
