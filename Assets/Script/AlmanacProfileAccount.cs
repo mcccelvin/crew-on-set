@@ -20,7 +20,7 @@ public partial class AlmanacManager
     private CCoinService profileWallet;
     private string profileInputOwner;
     private int profileShopCategory = 0;
-    private static readonly string[] ProfileShopKinds = { "all", "face", "hair", "body", "shirt", "pants", "shoe", "accessory" };
+    private static readonly string[] ProfileShopKinds = { "all", "body", "face", "hair", "shirt", "pants", "shoe", "accessory" };
     private AccountProductionProfile.Snapshot profileAccountStats;
     private Button profileAccountSyncButton;
     private TMP_Text profileProgressSyncStatus;
@@ -433,7 +433,7 @@ public partial class AlmanacManager
         var card = stage.Find("Career card");
         profileShopPanel = CreatePanel("Shared cosmetic shop", card, ShopBackground);
         SetStretchRect(profileShopPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(103, 19), new Vector2(-29, -19));
-        string[] categories = { "ALL", "FACE", "HAIR", "BODY", "TOPS", "BOTTOMS", "SHOE WEAR", "ACCESSORIES" };
+        string[] categories = { "ALL", "BODY", "FACE", "HAIR", "TOPS", "BOTTOMS", "SHOE WEAR", "ACCESSORIES" };
         for (int i = 0; i < categories.Length; i++)
         {
             int category = i; var button = CreateButton("Cosmetic category " + i, profileShopPanel.transform, categories[i]);
