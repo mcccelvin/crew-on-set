@@ -4,16 +4,16 @@
     {
       "id": "character_accessory1",
       "kind": "accessory",
-      "name": "Accessory 1",
-      "description": "Character customization · Accessory 1. Appearance only.",
-      "price": 10
+      "name": "Crew Gear Backpack",
+      "description": "A compact charcoal backpack with reinforced pockets and straps.",
+      "price": 850
     },
     {
       "id": "character_accessory2",
       "kind": "accessory",
-      "name": "Accessory 2",
-      "description": "Character customization · Accessory 2. Appearance only.",
-      "price": 10
+      "name": "Rectangular Studio Frames",
+      "description": "Bold rectangular frames with a simple, clean dark outline.",
+      "price": 650
     },
     {
       "id": "character_accessory3",
@@ -46,79 +46,79 @@
     {
       "id": "character_hair1",
       "kind": "hair",
-      "name": "Hair 1",
-      "description": "Character customization · Hair 1. Appearance only.",
-      "price": 10
+      "name": "Chestnut Studio Bun",
+      "description": "A neat high bun with loose face-framing strands, made for a long day on set.",
+      "price": 450
     },
     {
       "id": "character_hair2",
       "kind": "hair",
-      "name": "Hair 2",
-      "description": "Character customization · Hair 2. Appearance only.",
-      "price": 10
+      "name": "Golden Curtain Cut",
+      "description": "Long golden locks part into soft curtain bangs with a bold silhouette.",
+      "price": 700
     },
     {
       "id": "character_hair3",
       "kind": "hair",
-      "name": "Hair 3",
-      "description": "Character customization · Hair 3. Appearance only.",
-      "price": 10
+      "name": "Low-Tied Chestnut",
+      "description": "A practical low ponytail with a tidy center part and loose side locks.",
+      "price": 550
     },
     {
       "id": "character_hair4",
       "kind": "hair",
-      "name": "Hair 4",
-      "description": "Character customization · Hair 4. Appearance only.",
-      "price": 10
+      "name": "Swept Chestnut Fringe",
+      "description": "A layered short cut with sweeping bangs and a relaxed finish.",
+      "price": 550
     },
     {
       "id": "character_hair5",
       "kind": "hair",
-      "name": "Hair 5",
-      "description": "Character customization · Hair 5. Appearance only.",
-      "price": 10
+      "name": "Center-Part Shag",
+      "description": "A full, center-parted fringe with chunky layers for extra character.",
+      "price": 650
     },
     {
       "id": "character_hair6",
       "kind": "hair",
-      "name": "Hair 6",
-      "description": "Character customization · Hair 6. Appearance only.",
-      "price": 10
+      "name": "Tousled Chestnut Crop",
+      "description": "A textured crop with sweeping, piecey bangs and a playful edge.",
+      "price": 650
     },
     {
       "id": "character_face1",
       "kind": "face",
-      "name": "Face 1",
-      "description": "Character customization · Face 1. Appearance only.",
-      "price": 10
+      "name": "Neutral Focus",
+      "description": "A calm, neutral expression for keeping your focus on set.",
+      "price": 0
     },
     {
       "id": "character_face2",
       "kind": "face",
-      "name": "Face 2",
-      "description": "Character customization · Face 2. Appearance only.",
-      "price": 10
+      "name": "Set-Day Scowl",
+      "description": "A fierce scowl for when the shoot is getting intense.",
+      "price": 0
     },
     {
       "id": "character_face3",
       "kind": "face",
-      "name": "Face 3",
-      "description": "Character customization · Face 3. Appearance only.",
-      "price": 10
+      "name": "Half-Lidded",
+      "description": "A relaxed, half-lidded look for a low-key day on set.",
+      "price": 0
     },
     {
       "id": "character_face4",
       "kind": "face",
-      "name": "Face 4",
-      "description": "Character customization · Face 4. Appearance only.",
-      "price": 10
+      "name": "Side-Eye Smirk",
+      "description": "A knowing side-eye paired with a sly smile.",
+      "price": 0
     },
     {
       "id": "character_face5",
       "kind": "face",
-      "name": "Face 5",
-      "description": "Character customization · Face 5. Appearance only.",
-      "price": 10
+      "name": "Big Surprise",
+      "description": "A wide-eyed, open-mouthed look for a big reveal.",
+      "price": 0
     },
     {
       "id": "character_body_boy",
@@ -137,121 +137,121 @@
     {
       "id": "character_shirt1",
       "kind": "shirt",
-      "name": "Shirt 1",
-      "description": "Character customization · Shirt 1. Appearance only.",
-      "price": 10
+      "name": "Set Utility Vest",
+      "description": "A dark utility shirt layered with a brown multi-pocket crew vest.",
+      "price": 850
     },
     {
       "id": "character_shirt2",
       "kind": "shirt",
-      "name": "Shirt 2",
-      "description": "Character customization · Shirt 2. Appearance only.",
-      "price": 10
+      "name": "Open-Collar Layer",
+      "description": "A clean short-sleeve overshirt worn open over a bright crew tee.",
+      "price": 650
     },
     {
       "id": "character_shirt3",
       "kind": "shirt",
-      "name": "Shirt 3",
-      "description": "Character customization · Shirt 3. Appearance only.",
-      "price": 10
+      "name": "Fresh White Crew Tee",
+      "description": "A crisp white crew-neck T-shirt with dark contrast sleeve bands.",
+      "price": 350
     },
     {
       "id": "character_shirt4",
       "kind": "shirt",
-      "name": "Shirt 4",
-      "description": "Character customization · Shirt 4. Appearance only.",
-      "price": 10
+      "name": "Brown Field Jacket",
+      "description": "A rugged brown jacket with generous pockets over a dark base layer.",
+      "price": 900
     },
     {
       "id": "character_shirt5",
       "kind": "shirt",
-      "name": "Shirt 5",
-      "description": "Character customization · Shirt 5. Appearance only.",
-      "price": 10
+      "name": "Charcoal V-Neck",
+      "description": "A simple charcoal V-neck tee, an easy staple between takes.",
+      "price": 400
     },
     {
       "id": "character_pants1",
       "kind": "pants",
-      "name": "Pants 1",
-      "description": "Character customization · Pants 1. Appearance only.",
-      "price": 10
+      "name": "Slate Wide-Leg Trousers",
+      "description": "Relaxed slate trousers with a wide, flowing leg and clean waistband.",
+      "price": 700
     },
     {
       "id": "character_pants2",
       "kind": "pants",
-      "name": "Pants 2",
-      "description": "Character customization · Pants 2. Appearance only.",
-      "price": 10
+      "name": "Tan Cargo Pants",
+      "description": "Roomy tan cargos with oversized side pockets for a utility look.",
+      "price": 850
     },
     {
       "id": "character_pants3",
       "kind": "pants",
-      "name": "Pants 3",
-      "description": "Character customization · Pants 3. Appearance only.",
-      "price": 10
+      "name": "Teal Cuff Joggers",
+      "description": "Easy teal joggers gathered at the ankle for comfortable studio days.",
+      "price": 650
     },
     {
       "id": "character_pants4",
       "kind": "pants",
-      "name": "Pants 4",
-      "description": "Character customization · Pants 4. Appearance only.",
-      "price": 10
+      "name": "Coral Track Shorts",
+      "description": "Bright red-coral athletic shorts with crisp white side panels.",
+      "price": 500
     },
     {
       "id": "character_pants5",
       "kind": "pants",
-      "name": "Pants 5",
-      "description": "Character customization · Pants 5. Appearance only.",
-      "price": 10
+      "name": "Slate Cargo Trousers",
+      "description": "Tapered dark cargos with bright utility pockets at each thigh.",
+      "price": 900
     },
     {
       "id": "character_pants6",
       "kind": "pants",
-      "name": "Pants 6",
-      "description": "Character customization · Pants 6. Appearance only.",
-      "price": 10
+      "name": "Brown Tailored Trousers",
+      "description": "Straight brown trousers with a belt and subtle pressed seams.",
+      "price": 650
     },
     {
       "id": "character_shoe1",
       "kind": "shoe",
-      "name": "Shoe 1",
-      "description": "Character customization · Shoe 1. Appearance only.",
-      "price": 10
+      "name": "Lace-Up Platform Boots",
+      "description": "Chunky ankle boots with contrast laces and a sturdy platform sole.",
+      "price": 950
     },
     {
       "id": "character_shoe2",
       "kind": "shoe",
-      "name": "Shoe 2",
-      "description": "Character customization · Shoe 2. Appearance only.",
-      "price": 10
+      "name": "Buckle Strap Flats",
+      "description": "Rounded black flats with a polished buckle strap.",
+      "price": 600
     },
     {
       "id": "character_shoe3",
       "kind": "shoe",
-      "name": "Shoe 3",
-      "description": "Character customization · Shoe 3. Appearance only.",
-      "price": 10
+      "name": "Everyday Slip-Ons",
+      "description": "Lightweight charcoal slip-ons with a bright, flexible sole.",
+      "price": 450
     },
     {
       "id": "character_shoe4",
       "kind": "shoe",
-      "name": "Shoe 4",
-      "description": "Character customization · Shoe 4. Appearance only.",
-      "price": 10
+      "name": "Red Lace-Up Sneakers",
+      "description": "Red sneakers with white laces and a cushioned studio-ready sole.",
+      "price": 700
     },
     {
       "id": "character_shoe5",
       "kind": "shoe",
-      "name": "Shoe 5",
-      "description": "Character customization · Shoe 5. Appearance only.",
-      "price": 10
+      "name": "Green Buckle Sandals",
+      "description": "Comfortable green double-strap sandals with secure buckles.",
+      "price": 550
     },
     {
       "id": "character_shoe6",
       "kind": "shoe",
-      "name": "Shoe 6",
-      "description": "Character customization · Shoe 6. Appearance only.",
-      "price": 10
+      "name": "Charcoal Studio Slides",
+      "description": "Simple charcoal slides for the quick break between setups.",
+      "price": 400
     }
   ]
 }

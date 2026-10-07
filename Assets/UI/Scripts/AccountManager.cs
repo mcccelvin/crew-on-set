@@ -33,6 +33,7 @@ public class AccountManager : MonoBehaviour
 
         PlayFabClientAPI.RegisterPlayFabUser(new RegisterPlayFabUserRequest
         {
+            Username = username,
             Email = email,
             DisplayName = username,
             Password = password,
@@ -69,9 +70,11 @@ public class AccountManager : MonoBehaviour
     private string SaveLoginProfile(LoginResult result, string email)
     {
         var payload = result?.InfoResultPayload;
-        string displayName = payload?.PlayerProfile?.DisplayName;
-        if (string.IsNullOrWhiteSpace(displayName)) displayName = payload?.AccountInfo?.TitleInfo?.DisplayName;
-        if (string.IsNullOrWhiteSpace(displayName)) displayName = payload?.AccountInfo?.Username;
+        // Website usernames are mirrored to the PlayFab title display name. Prefer
+        // that account value over a possibly stale combined-profile cache.
+        string displayName = payload?.AccountInfo?.TitleInfo?.DisplayName;
+        if (string.IsNullOrWhiteSpace(displayName) || displayName == "Guest") displayName = payload?.PlayerProfile?.DisplayName;
+        if (string.IsNullOrWhiteSpace(displayName) || displayName == "Guest") displayName = payload?.AccountInfo?.Username;
         // A successful login is never a guest, even for a legacy unnamed account.
         // Do not reuse another account's saved name or expose the login email.
         displayName = string.IsNullOrWhiteSpace(displayName) ? "Player" : displayName.Trim();

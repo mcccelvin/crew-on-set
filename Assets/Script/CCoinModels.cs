@@ -66,13 +66,13 @@ public static class CCoinRules
         foreach (var id in wallet.owned) if (!ValidId(id) || !ids.Add(id)) return false;
         ids.Clear();
         foreach (var item in wallet.cosmetics)
-            if (item == null || !ValidId(item.id) || !ids.Add(item.id) || !Supported(item) || item.price < 1
+            if (item == null || !ValidId(item.id) || !ids.Add(item.id) || !Supported(item) || item.price < 0
                 || string.IsNullOrWhiteSpace(item.name) || item.name.Length > 80 || (item.description != null && item.description.Length > 300)
                 || (item.kind == "profile_frame" && !ValidColor(item.color))) return false;
         return true;
     }
     public static bool Supported(CCoinCosmetic item) => item != null && (item.kind == "profile_frame" ||
-        (CharacterCosmetics.Find(item.id) != null && CharacterCosmetics.Find(item.id).kind == item.kind && item.price == CharacterCosmetics.Price));
+        (CharacterCosmetics.Find(item.id) != null && CharacterCosmetics.Find(item.id).kind == item.kind && item.price == CharacterCosmetics.Find(item.id).price));
     public static bool ValidColor(string value)
     {
         if (value == null || value.Length != 7 || value[0] != '#') return false;
@@ -88,7 +88,6 @@ public static class CCoinRules
 // Stable server item IDs map only to bundled models, never a URL or client path.
 public static class CharacterCosmetics
 {
-    public const int Price = 10;
     public static readonly string[] Slots = { "accessory", "hair", "face", "body", "shirt", "pants", "shoe" };
     public static readonly CCoinCosmetic[] Items = Create();
     public static CCoinCosmetic Find(string id) => Array.Find(Items,x=>x.id==id);
@@ -97,12 +96,41 @@ public static class CharacterCosmetics
     {
         var items = new List<CCoinCosmetic>();
         int[] counts = {6,6,5,2,5,6,6};
+        string[][] names = {
+            new[] { "Crew Gear Backpack", "Rectangular Studio Frames", null, null, null, null },
+            new[] { "Chestnut Studio Bun", "Golden Curtain Cut", "Low-Tied Chestnut", "Swept Chestnut Fringe", "Center-Part Shag", "Tousled Chestnut Crop" },
+            new[] { "Neutral Focus", "Set-Day Scowl", "Half-Lidded", "Side-Eye Smirk", "Big Surprise" },
+            new string[2],
+            new[] { "Set Utility Vest", "Open-Collar Layer", "Fresh White Crew Tee", "Brown Field Jacket", "Charcoal V-Neck" },
+            new[] { "Slate Wide-Leg Trousers", "Tan Cargo Pants", "Teal Cuff Joggers", "Coral Track Shorts", "Slate Cargo Trousers", "Brown Tailored Trousers" },
+            new[] { "Lace-Up Platform Boots", "Buckle Strap Flats", "Everyday Slip-Ons", "Red Lace-Up Sneakers", "Green Buckle Sandals", "Charcoal Studio Slides" }
+        };
+        string[][] descriptions = {
+            new[] { "A compact charcoal backpack with reinforced pockets and straps.", "Bold rectangular frames with a simple, clean dark outline.", null, null, null, null },
+            new[] { "A neat high bun with loose face-framing strands, made for a long day on set.", "Long golden locks part into soft curtain bangs with a bold silhouette.", "A practical low ponytail with a tidy center part and loose side locks.", "A layered short cut with sweeping bangs and a relaxed finish.", "A full, center-parted fringe with chunky layers for extra character.", "A textured crop with sweeping, piecey bangs and a playful edge." },
+            new[] { "A calm, neutral expression for keeping your focus on set.", "A fierce scowl for when the shoot is getting intense.", "A relaxed, half-lidded look for a low-key day on set.", "A knowing side-eye paired with a sly smile.", "A wide-eyed, open-mouthed look for a big reveal." },
+            new string[2],
+            new[] { "A dark utility shirt layered with a brown multi-pocket crew vest.", "A clean short-sleeve overshirt worn open over a bright crew tee.", "A crisp white crew-neck T-shirt with dark contrast sleeve bands.", "A rugged brown jacket with generous pockets over a dark base layer.", "A simple charcoal V-neck tee, an easy staple between takes." },
+            new[] { "Relaxed slate trousers with a wide, flowing leg and clean waistband.", "Roomy tan cargos with oversized side pockets for a utility look.", "Easy teal joggers gathered at the ankle for comfortable studio days.", "Bright red-coral athletic shorts with crisp white side panels.", "Tapered dark cargos with bright utility pockets at each thigh.", "Straight brown trousers with a belt and subtle pressed seams." },
+            new[] { "Chunky ankle boots with contrast laces and a sturdy platform sole.", "Rounded black flats with a polished buckle strap.", "Lightweight charcoal slip-ons with a bright, flexible sole.", "Red sneakers with white laces and a cushioned studio-ready sole.", "Comfortable green double-strap sandals with secure buckles.", "Simple charcoal slides for the quick break between setups." }
+        };
+        int[][] prices = {
+            new[] { 850, 650, 10, 10, 10, 10 },
+            new[] { 450, 700, 550, 550, 650, 650 },
+            new[] { 0, 0, 0, 0, 0 },
+            new[] { 10, 10 },
+            new[] { 850, 650, 350, 900, 400 },
+            new[] { 700, 850, 650, 500, 900, 650 },
+            new[] { 950, 600, 450, 700, 550, 400 }
+        };
         for(int slot=0;slot<Slots.Length;slot++) for(int n=1;n<=counts[slot];n++)
         {
             string key=Slots[slot]=="body" ? (n==1 ? "body_boy" : "body_girl") : Slots[slot]+n;
             string title=Slots[slot]=="body" ? (n==1 ? "Boy body" : "Girl body") : char.ToUpper(Slots[slot][0])+Slots[slot].Substring(1)+" "+n;
-            items.Add(new CCoinCosmetic {id="character_"+key,kind=Slots[slot],name=title,price=Price,
-                description="Character customization · "+title+". Appearance only."});
+            int index=n-1;
+            string websiteName=names[slot][index], description=descriptions[slot][index];
+            items.Add(new CCoinCosmetic {id="character_"+key,kind=Slots[slot],name=websiteName??title,price=prices[slot][index],
+                description=description??("Character customization · "+title+". Appearance only.")});
         }
         return items.ToArray();
     }

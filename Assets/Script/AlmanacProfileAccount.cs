@@ -261,7 +261,7 @@ public partial class AlmanacManager
         var card = stage.Find("Career card");
         profileShopPanel = CreatePanel("Shared cosmetic shop", card, new Color32(252, 245, 220, 255));
         SetStretchRect(profileShopPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(103, 19), new Vector2(-29, -19));
-        string[] categories = { "ACCESSORIES", "HAIR", "FACE", "BODY", "SHIRT", "PANTS", "SHOES", "FRAMES" };
+        string[] categories = { "ACCESSORIES", "HAIR", "FACE", "BODY", "TOPS", "BOTTOMS", "SHOE WEAR", "FRAMES" };
         for (int i = 0; i < categories.Length; i++)
         {
             int category = i; var button = CreateButton("Cosmetic category " + i, profileShopPanel.transform, categories[i]);
@@ -318,7 +318,7 @@ public partial class AlmanacManager
             shown++; var row = ProfileRow(profileShopContent, "Shared cosmetic " + item.id, 200);
             float inset=isPart ? 150 : 16;
             ProfileText(row.transform, "Name", item.name, 26, inset, 6, 38);
-            var detail = ProfileText(row.transform, "Description", !available ? "Model unavailable in this build." : !listed ? "10 C-Coins · purchases await account shop connection." : item.description ?? "Profile frame", 19, inset, 48, 80);
+            var detail = ProfileText(row.transform, "Description", !available ? "Model unavailable in this build." : !listed ? item.price + " C-Coins · purchases await account shop connection." : item.description ?? "Profile frame", 19, inset, 48, 80);
             detail.rectTransform.offsetMax = new Vector2(-170, -48);
             bool owned = CCoinRules.Owns(profileWallet.Wallet, item.id), equipped = owned && profileWallet.IsEquipped(item.id);
             if(isPart && available)

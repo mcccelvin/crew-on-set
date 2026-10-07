@@ -60,6 +60,7 @@ public static class AccountProfileData
             {
                 if (!Current(request, account)) return;
                 string name = info.AccountInfo?.TitleInfo?.DisplayName;
+                if (string.IsNullOrWhiteSpace(name) || name == "Guest") name = info.AccountInfo?.Username;
                 if (!string.IsNullOrWhiteSpace(name)) { profile.name = name; PlayerPrefs.SetString("PlayerName", Name); }
                 busy = false; Store(); Publish("Account profile synced");
             }, error => { if (Current(request, account)) { busy = false; Publish("Bio synced · name uses your login profile"); } });
