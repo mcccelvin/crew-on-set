@@ -45,6 +45,9 @@ public sealed class CCoinService : MonoBehaviour
         int price=mapped.price;
         if(product.VirtualCurrencyPrices!=null && product.VirtualCurrencyPrices.TryGetValue(CCoinRules.Currency,out var currentPrice))
             price=(int)Math.Min(int.MaxValue,(long)currentPrice);
+        // These bundled appearance choices are always free, even if a legacy
+        // PlayFab catalog entry still has its previous price.
+        if(Array.IndexOf(CharacterCosmetics.FreeAppearanceIds(),mapped.id)>=0)price=0;
         string rarity=mapped.rarity;
         try
         {
@@ -331,7 +334,7 @@ public sealed class CCoinService : MonoBehaviour
                     cosmetic=cosmetic ?? CharacterCosmetics.FindWebsiteItem(instance?.ItemId) ?? CharacterCosmetics.Find(instance?.ItemId);
                     if(cosmetic!=null)owned.Add(cosmetic.id);
                 }
-                foreach(var cosmetic in CharacterCosmetics.Items)if(cosmetic.kind=="face" || cosmetic.kind=="body")owned.Add(cosmetic.id);
+                foreach(var id in CharacterCosmetics.FreeAppearanceIds())owned.Add(id);
                 var cosmetics=new List<CCoinCosmetic>();
                 foreach(var fallback in CharacterCosmetics.Items)
                     cosmetics.Add(liveCosmetics.TryGetValue(fallback.id,out var live)?live:fallback);

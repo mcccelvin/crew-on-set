@@ -127,7 +127,7 @@ public static class CharacterCosmetics
     }
     public static string[] FreeAppearanceIds()
     {
-        var ids=new List<string>();foreach(var item in Items)if(item.price==0 && (item.kind=="face" || item.kind=="body"))ids.Add(item.id);return ids.ToArray();
+        var ids=new List<string>();foreach(var item in Items)if(item.price==0 && (item.kind=="face" || item.kind=="body" || item.kind=="hair" || item.kind=="shirt" || item.kind=="pants"))ids.Add(item.id);return ids.ToArray();
     }
     public static string ModelKey(string id) => Find(id)==null ? null : id.Substring("character_".Length);
     private static CCoinCosmetic[] Create()
@@ -154,11 +154,11 @@ public static class CharacterCosmetics
         };
         int[][] prices = {
             new[] { 850, 650, 450, 600, 500, 450 },
-            new[] { 450, 700, 550, 550, 650, 650 },
+            new[] { 0, 700, 550, 0, 650, 650 },
             new[] { 0, 0, 0, 0, 0 },
             new[] { 0, 0 },
-            new[] { 850, 650, 350, 900, 400 },
-            new[] { 700, 850, 650, 500, 900, 650 },
+            new[] { 850, 650, 0, 900, 400 },
+            new[] { 700, 850, 0, 500, 900, 650 },
             new[] { 950, 600, 450, 700, 550, 400 }
         };
         string[][] websiteIds = {
