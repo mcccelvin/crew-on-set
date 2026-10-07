@@ -27,7 +27,7 @@ public sealed class UIMotionInstaller : MonoBehaviour
                 {
                     if (rect.name == "main-menu-bg" && rect.GetComponent<MainMenuMotion>() == null)
                         rect.gameObject.AddComponent<MainMenuMotion>();
-                    if (rect.GetComponent<Button>() == null && (rect.name == "Play" ||
+                    if (rect.GetComponent<Button>() == null && (rect.name == "Play" || rect.name == "Options" ||
                         rect.name == "createpanel" || (rect.parent != null && rect.parent.name == "Play" &&
                         (rect.name == "join" || rect.name == "load"))))
                         UITransition.ConfigurePanel(rect.gameObject);
@@ -41,7 +41,24 @@ public sealed class UIMotionInstaller : MonoBehaviour
                 if (scene.name == "SingleStudio" || scene.name == "MultiStudio") continue;
                 canvas.gameObject.AddComponent<UITransition>();
             }
+            if (scene.name == "Main Menu") BindMenuCloseButtons(root);
         }
+    }
+
+    private static void BindMenuCloseButtons(GameObject root)
+    {
+        foreach (var button in root.GetComponentsInChildren<Button>(true))
+            for (int i = 0; i < button.onClick.GetPersistentEventCount(); i++)
+            {
+                if (button.onClick.GetPersistentMethodName(i) != "SetActive") continue;
+                var target = button.onClick.GetPersistentTarget(i) as GameObject;
+                // Authored modal Close/Cancel events hide an ancestor. Sibling
+                // activation/tab-selection events keep their original behavior.
+                if (target == null || target.GetComponent<Button>() != null ||
+                    target.GetComponent<UITransition>() == null || !button.transform.IsChildOf(target.transform)) continue;
+                button.onClick.SetPersistentListenerState(i, UnityEngine.Events.UnityEventCallState.Off);
+                button.onClick.AddListener(() => UITransition.Hide(target));
+            }
     }
 
     public static void DecorateButtons(GameObject root)

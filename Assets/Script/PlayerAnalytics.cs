@@ -155,7 +155,16 @@ public static class PlayerAnalytics
         if (data.results.Count > 50) data.results.RemoveAt(0);
         a.nextStep = NextStep(a.pre, grades.productionScore, a.post, a.camera, a.lighting);
         a.completionFeedback = "<b>YOUR NEXT STEP</b>\n" + a.nextStep + "\n" + trend + $"\nRecorded takes: {a.takes}\n\n" + BudgetReport(a);
+        if (!GameSavePrefs.IsRoomSession)
+        {
+            // Freeze exactly the feedback GradeManager will display before the
+            // first completed checkpoint is written; do not depend on runtime state.
+            var displayedGrades = grades;
+            displayedGrades.feedback = a.completionFeedback + "\n\n" + grades.feedback;
+            a.productionLog = CompletedRecord(a, displayedGrades);
+        }
         Save(data);
+        if (a.productionLog != null) GameSaveManager.Ensure().RecordProduction(a.productionLog);
         return a.completionFeedback;
     }
     // Same coaching used by the result papers; an uploader must not generate its own advice.
@@ -171,17 +180,21 @@ public static class PlayerAnalytics
         if (a == null || !a.closed || a.level != level || string.IsNullOrEmpty(a.submissionId)) return;
         if (a.productionLog == null)
         {
-            string playerId = UnityEngine.PlayerPrefs.GetString("PlayFabId", "");
-            if (playerId == "guest") playerId = "";
-            string careerId = GameSaveManager.Instance?.Active?.id ?? "";
-            a.productionLog = ProductionLogRecord.FromResult(a.submissionId, a.submissionId, careerId, playerId,
-                "singleplayer", new[] { "Director", "Camera", "AV Technician", "Editor" }, level, a.playedUtc, grades, a.budget, a.nextStep);
+            a.productionLog = CompletedRecord(a, grades);
             // active and results are independently deserialized instances after a scene change.
             int index = data.results.FindLastIndex(r => r.submissionId == a.submissionId);
             if (index >= 0) data.results[index] = a;
             Save(data);
         }
         GameSaveManager.Ensure().RecordProduction(a.productionLog);
+    }
+    private static ProductionLogRecord CompletedRecord(Attempt attempt, ProductionGrades grades)
+    {
+        string playerId = UnityEngine.PlayerPrefs.GetString("PlayFabId", "");
+        if (playerId == "guest") playerId = "";
+        return ProductionLogRecord.FromResult(attempt.submissionId, attempt.submissionId,
+            GameSaveManager.Instance?.Active?.id ?? "", playerId, "singleplayer",
+            new[] { "Director", "Camera", "AV Technician", "Editor" }, attempt.level, attempt.playedUtc, grades, attempt.budget, attempt.nextStep);
     }
     // A fresh deserialized snapshot; callers cannot mutate the stored analytics history.
     public static List<Attempt> ProfileHistory()

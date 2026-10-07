@@ -14,7 +14,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private GameObject newGameDialog;
     private GameSaveSlot selected;
     private bool joining;
-    private Button cloudSync;
+    private bool closingMenu;
     [SerializeField] private Transform paper;
     private SaveLoadPanelHost sourceHost;
 
@@ -26,20 +26,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private void BindMainButtons()
     {
         var sync = paper.Find("Retry cloud sync");
-        if (sync == null)
-            cloudSync = Button(paper, "Retry cloud sync", new Vector2(.70f,.17f), new Vector2(.845f,.235f), () => saves.RetryCloudSync());
-        else cloudSync = sync.GetComponent<Button>();
-        var syncRect = cloudSync.GetComponent<RectTransform>();
-        syncRect.anchorMin = new Vector2(.70f,.17f); syncRect.anchorMax = new Vector2(.845f,.235f);
-        syncRect.offsetMin = syncRect.offsetMax = Vector2.zero;
-        cloudSync.gameObject.SetActive(true);
-        Bind(cloudSync.transform, () => saves.RetryCloudSync());
-        StyleDeleteButton(cloudSync, "SYNC", false);
-        var syncLabel = cloudSync.GetComponentInChildren<TMP_Text>();
-        syncLabel.rectTransform.anchorMin = new Vector2(.08f,.08f);
-        syncLabel.rectTransform.anchorMax = new Vector2(.92f,.92f);
-        syncLabel.rectTransform.offsetMin = syncLabel.rectTransform.offsetMax = Vector2.zero;
-        syncLabel.fontSizeMin = 16; syncLabel.fontSizeMax = 24;
+        if (sync != null) sync.gameObject.SetActive(false); // Retire older authored copies; sync is automatic.
         Bind(paper.Find("Close"),CloseMenu);
         Bind(paper.Find("JOIN"),()=>{
             if(sourceHost==null)return;
@@ -58,10 +45,15 @@ public sealed class GameSaveMenu : MonoBehaviour
     }
     private void CloseMenu()
     {
+        if (closingMenu) return;
+        closingMenu = true;
         CloseDialog();
         if(saves!=null)saves.Changed-=Refresh;
-        gameObject.SetActive(false);
-        if(!joining&&sourceHost!=null&&sourceHost.transform.parent!=null)sourceHost.transform.parent.gameObject.SetActive(false);
+        UITransition.Hide(gameObject, () =>
+        {
+            closingMenu = false;
+            if(!joining&&sourceHost!=null&&sourceHost.transform.parent!=null)sourceHost.transform.parent.gameObject.SetActive(false);
+        });
     }
     private void ShowDeleteDialog()
     {
@@ -191,7 +183,8 @@ public sealed class GameSaveMenu : MonoBehaviour
         var existing = FindObjectOfType<GameSaveMenu>(true);
         if (existing != null)
         {
-            if(existing.gameObject.activeSelf)return;
+            if(existing.gameObject.activeSelf && !UITransition.IsClosing(existing.gameObject))return;
+            existing.closingMenu = false;
             existing.saves=manager;existing.joining=false;
             existing.sourceHost=FindObjectOfType<SaveLoadPanelHost>(true);
             if(existing.sourceHost!=null&&existing.sourceHost.transform.parent!=null)existing.sourceHost.transform.parent.gameObject.SetActive(false);
@@ -259,11 +252,6 @@ public sealed class GameSaveMenu : MonoBehaviour
         float height=Math.Max(1,rowCount)*295f;
         rows.sizeDelta=new Vector2(0,height);
         status.text=saves.Status;
-        if (cloudSync != null)
-        {
-            cloudSync.interactable = !saves.Syncing;
-            cloudSync.GetComponentInChildren<TMP_Text>().text = saves.Syncing ? "SYNCING…" : saves.HasCloudSession ? "SYNC NOW" : "SIGN IN TO SYNC";
-        }
         if(selected==null||!slots.Contains(selected))selected=slots.FirstOrDefault();
         var deleteButton=paper.Find("Delete selected save").GetComponent<Button>();
         deleteButton.interactable=selected!=null&&!saves.Syncing;
@@ -296,7 +284,7 @@ public sealed class GameSaveMenu : MonoBehaviour
         else background.color=new Color32(255,244,210,255);
         Text(box,title,new Vector2(.17f,.66f),new Vector2(.85f,.8f),32);return box;
     }
-    private void CloseDialog(){if(newGameDialog!=null)newGameDialog.SetActive(false);newGameDialog=null;}
+    private void CloseDialog(){var dialog=newGameDialog;newGameDialog=null;if(dialog!=null)UITransition.Hide(dialog);}
     private void CreateGame()
     {
         if (saves.Syncing) return;

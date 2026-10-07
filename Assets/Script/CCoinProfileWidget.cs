@@ -46,7 +46,7 @@ public sealed class CCoinProfileWidget : MonoBehaviour
     {
         if (balance == null) return;
         balance.text = service.Balance.ToString("N0");
-        walletStatus.text = "C-COINS" + (service.Verified ? "" : " · cached")
+        walletStatus.text = "C-COINS"
             + (service.PendingRewards > 0 ? "\n+" + service.PendingRewards*CCoinRules.ContractReward + " pending" : "");
         var item = CCoinRules.Find(service.Wallet,service.SelectedCosmetic);
         bool equipped = item != null && CCoinRules.Owns(service.Wallet,item.id);
