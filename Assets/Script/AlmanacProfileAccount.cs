@@ -467,7 +467,9 @@ public partial class AlmanacManager
     {
         if (profileWallet == null || profileShopContent == null) return;
         if (profileShopBalance != null)
-            profileShopBalance.text = $"{profileWallet.Balance:N0} C-COINS";
+            profileShopBalance.text = profileWallet.IsGuest ? $"{profileWallet.PendingCoins:N0} C-COINS PENDING" : $"{profileWallet.Balance:N0} C-COINS";
+        var topUpLabel = profileShopPanel.transform.Find("Top up shared wallet")?.GetComponentInChildren<TMP_Text>();
+        if (topUpLabel != null) topUpLabel.text = profileWallet.IsGuest ? "SIGN IN" : "TOP UP";
         if (profileWalletStatus != null) profileWalletStatus.text = profileWallet.Status;
         foreach (Transform child in profileShopContent) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
         for (int i = 0; i < ProfileShopKinds.Length; i++)

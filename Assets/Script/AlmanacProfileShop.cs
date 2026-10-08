@@ -141,11 +141,12 @@ public partial class AlmanacManager
             SetStretchRect(preview.GetComponent<RectTransform>(), Vector2.zero, new Vector2(.5f, 0), new Vector2(14, 16), new Vector2(-6, 60));
             preview.onClick.AddListener(() => PreviewProfileCosmetic(item.id)); StyleShopButton(preview, false);
         }
-        bool canAct = available && listed && !equipped && (owned || profileWallet.CanBuy);
-        string action = equipped ? "EQUIPPED" : owned ? "EQUIP" : !available || !listed || !profileWallet.CanBuy ? "UNAVAILABLE" : "BUY";
+        bool guestSignIn = profileWallet.IsGuest && !owned && available && listed;
+        bool canAct = available && listed && !equipped && (owned || profileWallet.CanBuy || guestSignIn);
+        string action = equipped ? "EQUIPPED" : owned ? "EQUIP" : guestSignIn ? "SIGN IN" : !available || !listed || !profileWallet.CanBuy ? "UNAVAILABLE" : "BUY";
         var buy = CreateButton("Buy or equip cosmetic", card.transform, action);
         SetStretchRect(buy.GetComponent<RectTransform>(), new Vector2(isPart && available ? .5f : 0, 0), new Vector2(1, 0), new Vector2(isPart && available ? 6 : 14, 16), new Vector2(-14, 60));
-        buy.onClick.AddListener(() => { if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });
+        buy.onClick.AddListener(() => { if (guestSignIn) GameSaveManager.Ensure().SignInToSync(); else if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });
         buy.interactable = canAct;
         StyleShopButton(buy, true);
     }

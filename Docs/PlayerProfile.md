@@ -4,6 +4,8 @@ The main-menu Account screen and the in-game Profile HUD button (**I**) open the
 
 ## Shared account details and shop
 
+Guests use a separate device-local outfit and the current bundled catalog, refreshed on every account bind so old cached labels/artwork cannot point to another rig. Their starter is Girl body, Neutral Focus, Chestnut Studio Bun, Fresh White Crew Tee, Teal Cuff Joggers and Everyday Slip-Ons, without accessories. Free items can be equipped; paid items can be tried on, with SIGN IN replacing purchase/top-up actions. Guest completed-level rewards persist as pending claims and are shown separately from spendable currency. Existing guest-career linking moves those claims to the signed-in account for server verification and deduplication. Guest appearance never replaces cloud account appearance; logging out restores the device's guest look.
+
 `AccountAvatarPortrait` renders the equipped account outfit in both the main-menu `account` button (attached by `AccountProfileMenuHost`) and the gameplay Profile HUD (attached by `CareerManager`). It subscribes to `CCoinService.Changed`, so downloaded outfits and confirmed equipment changes update both entry points.
 
 Cosmetic model keys are literal FBX filenames: `character_shirt5` uses `fbx/shirt5.fbx` in both the Unity catalog/baked rig and the website model folder. Product names, prices and website IDs are mapped once in `CharacterCosmetics`; never apply that permutation again to `CharacterCosmetics.asset`. Rebuild the derived rig with `Crew-On-Set/Cosmetics/Rebuild profile clothing rig` after source-model changes. An empty accessory slot hides the base FBX's glasses.

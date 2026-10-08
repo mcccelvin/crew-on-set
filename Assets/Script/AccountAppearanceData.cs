@@ -47,6 +47,11 @@ public static class AccountAppearanceData
             // Read cloud first; when cloud is empty, Refresh uploads this fallback.
             cache = new Cache { appearance = selection, pending = false };
         }
+        if (owner == "guest")
+        {
+            cache.appearance = Selection(owner, null, CharacterCosmetics.GuestOutfit(cache.appearance.equipped_parts));
+            cache.pending = false;
+        }
         Store(); nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Character saved on this device." : "Character saved locally; automatic account sync pending.");
     }
@@ -55,7 +60,7 @@ public static class AccountAppearanceData
         if (string.IsNullOrEmpty(owner)) return;
         var selection = Selection(owner, frame, parts);
         if (SameSelection(cache.appearance, selection)) return;
-        generation++; busy = false; cache.appearance = selection; cache.pending = true;
+        generation++; busy = false; cache.appearance = selection; cache.pending = owner != "guest";
         Store(); nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Character saved on this device." : "Character saved locally; automatic account sync pending.");
     }

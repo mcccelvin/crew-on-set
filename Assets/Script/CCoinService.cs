@@ -18,6 +18,11 @@ public sealed class CCoinService : MonoBehaviour
     public string[] EquippedParts => state.equippedParts.ToArray();
     public bool IsEquipped(string id) => state.selectedCosmetic == id || state.equippedParts.Contains(id);
     public int PendingRewards => state.pendingRewards.Count;
+    public long PendingCoins => (long)PendingRewards * CCoinRules.ContractReward;
+    public bool IsGuest => owner == "guest" && !DevWalletActive;
+    public string GuestShopStatus => PendingRewards > 0
+        ? $"{PendingCoins:N0} C-Coins pending · sign in to verify and spend."
+        : "Guest · equip free items, try on any item. Sign in to buy.";
     public int Balance => state.wallet?.balance ?? 0;
     public bool Busy { get; private set; }
     public bool Verified { get; private set; }
@@ -123,12 +128,24 @@ public sealed class CCoinService : MonoBehaviour
         state.pendingRewards.RemoveAll(x => x == null || CCoinRules.Reward(x.careerId,x.contractLevel)?.operationId != x.operationId
             || CCoinRules.Reward(x.careerId,x.contractLevel)?.completionId != x.completionId);
         if (state.pendingPurchase != null && (!CCoinRules.ValidId(state.pendingPurchase.itemId) || !CCoinRules.ValidId(state.pendingPurchase.operationId))) state.pendingPurchase = null;
+        // A saved wallet must not freeze names/artwork from an older model mapping.
+        // Live account prices/catalog will be fetched again after this local refresh.
+        var bundled = new List<CCoinCosmetic>(CharacterCosmetics.Items);
+        foreach (var item in state.wallet.cosmetics)
+            if (item.kind == "profile_frame") bundled.Add(item);
+        state.wallet.cosmetics = bundled.ToArray();
+        if (owner == "guest")
+        {
+            state.wallet.balance = 0; // Guest rewards are claims, not spendable currency.
+            state.wallet.owned = CharacterCosmetics.FreeAppearanceIds();
+            state.pendingPurchase = null;
+        }
         if (!CCoinRules.Owns(state.wallet,state.selectedCosmetic)) state.selectedCosmetic = null;
         ValidateEquipment();
         AccountAppearanceData.Bind(owner,state.selectedCosmetic,state.equippedParts.ToArray());
         Save();
         nextRefresh = Time.unscaledTime;
-        Publish(owner == "guest" ? "Sign in to sync C-Coins. Offline rewards stay pending." : "Cached wallet · waiting for account sync.");
+        Publish(owner == "guest" ? GuestShopStatus : "Cached wallet · waiting for account sync.");
     }
     private void Update()
     {
@@ -165,7 +182,7 @@ public sealed class CCoinService : MonoBehaviour
         Save(); // Durable before marking the career; retries retain the operation ID.
         GameSavePrefs.SetInt("CCoins.RewardQueued.Level" + level,1); GameSavePrefs.Save();
         nextRefresh = Time.unscaledTime;
-        Publish("+"+CCoinRules.ContractReward+" C-Coins reward pending server confirmation."); return true;
+        Publish(IsGuest ? GuestShopStatus : "+"+CCoinRules.ContractReward+" C-Coins reward pending server confirmation."); return true;
     }
     // Invoke only after the existing save system has linked unclaimed guest careers.
     public void LinkGuestRewards()
@@ -189,7 +206,7 @@ public sealed class CCoinService : MonoBehaviour
     {
         if(DevWalletActive){Publish("TEST WALLET · "+Balance+" C-Coins · local testing, purchases are temporary. Use F12 to restore real wallet.");return;}
         if (Busy) return;
-        if (!Authenticated) { Verified = false; Publish("Offline wallet · sign in to sync rewards and buy cosmetics."); return; }
+        if (!Authenticated) { Verified = false; Publish(IsGuest ? GuestShopStatus : "Offline wallet · sign in to sync rewards and buy cosmetics."); return; }
         Busy = true; Publish("Syncing account C-Coins…");
         ReadPlayFabWallet(loaded =>
         {
@@ -400,6 +417,7 @@ public sealed class CCoinService : MonoBehaviour
     }
     public void OpenTopUpWebsite()
     {
+        if (IsGuest) { GameSaveManager.Ensure().SignInToSync(); return; }
         Publish("Website shop opened. Use the same account; your wallet refreshes automatically when you return.");
         Application.OpenURL(CCoinSettings.TopUpUrl);
     }

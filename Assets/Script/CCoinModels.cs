@@ -129,6 +129,18 @@ public static class CharacterCosmetics
     {
         var ids=new List<string>();foreach(var item in Items)if(item.price==0 && (item.kind=="face" || item.kind=="body" || item.kind=="hair" || item.kind=="shirt" || item.kind=="pants" || item.kind=="shoe"))ids.Add(item.id);return ids.ToArray();
     }
+    public static string[] GuestOutfit(string[] saved)
+    {
+        var starter = new[] { "character_body_girl", "character_face1", "character_hair1", "character_shirt5", "character_pants4", "character_shoe1" };
+        var free = new HashSet<string>(FreeAppearanceIds());
+        for (int i = 0; i < starter.Length; i++)
+        {
+            string kind = Find(starter[i]).kind;
+            string selected = saved == null ? null : Array.Find(saved, id => free.Contains(id) && Find(id)?.kind == kind);
+            if (selected != null) starter[i] = selected;
+        }
+        return starter;
+    }
     public static string ModelKey(string id) => Find(id)==null ? null : id.Substring("character_".Length);
     private static CCoinCosmetic[] Create()
     {
