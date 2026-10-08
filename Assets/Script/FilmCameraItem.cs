@@ -60,6 +60,8 @@ namespace Player.Equipment
         private bool isCameraActive = false;
         private bool isRecording = false;
         private bool isSDCardInserted = false;
+        private SDCardItem insertedSDCard;
+        private float takeCapacitySeconds;
 
         private float currentFocusDistance = 5f;
         private float targetFocusDistance = 5f;
@@ -176,7 +178,7 @@ namespace Player.Equipment
         protected override void Awake()
         {
             base.Awake();
-            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert SD | [R] Record | [Scroll] Zoom | [Q/E] Height | [CTRL + WASD] Smooth move | [CTRL + MOUSE] Fine aim";
+            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert/Eject SD | [R] Record | [Scroll] Zoom | [Q/E] Height | [CTRL + WASD] Smooth move | [CTRL + MOUSE] Fine aim";
             ResolvePixelRecorder();
             noiseOffset = Random.Range(0f, 1000f);
 
@@ -440,6 +442,7 @@ namespace Player.Equipment
         {
             settingsOpen = false;
             if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 0;
+            if (builtInSettingsVolume != null) builtInSettingsVolume.weight = 0;
             CancelViewTransition();
             RestoreCameraBody();
             RestorePlayerBody();
@@ -547,6 +550,12 @@ namespace Player.Equipment
 
             if (isRecording)
             {
+                if (Time.time - recordingStartTime >= takeCapacitySeconds || (pixelRecorder != null && pixelRecorder.RecordingLimitReached))
+                {
+                    ToggleRecording(false, true);
+                    GameFeedback.Show("SD CARD FULL\nTake saved. Eject with [C] and delete unwanted clips at the computer to free space.");
+                    return;
+                }
                 if (Time.time >= nextSampleTime)
                 {
                     SampleVideoFrame();
@@ -1002,6 +1011,7 @@ namespace Player.Equipment
                         float distToSub = Vector3.Distance(filmCamera.transform.position, targetCenter);
 
                         bool isBlocked = IsSubjectBlocked(directionToTarget, distToSub);
+                        if (dynamicHUD != null) dynamicHUD.SetTrackingState(isBlocked);
 
                         if (trackingSquareImage != null)
                         {
@@ -1812,13 +1822,24 @@ namespace Player.Equipment
 
         private void InsertSDCard()
         {
-            if (isSDCardInserted) return;
+            if (isSDCardInserted)
+            {
+                if (isRecording) { GameFeedback.Show("Stop recording before ejecting the SD card."); return; }
+                if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep >= TutorialManager.TutorialStep.InsertSDCard &&
+                    TutorialManager.Instance.currentStep <= TutorialManager.TutorialStep.RecordVideo)
+                { TutorialManager.Instance.ShowWarning("Finish your first take before ejecting this card."); return; }
+                EjectUsedSDCard();
+                CloseViewfinder();
+                return;
+            }
             if (TutorialManager.Instance != null && !TutorialManager.Instance.CanInsertSDCard(EquipmentName)) return;
 
             Player.Interactor.EquipmentInteractor hotbar = GetComponentInParent<Player.Interactor.EquipmentInteractor>();
             if (hotbar != null && hotbar.HasBlankSDCard())
             {
-                hotbar.ConsumeBlankSDCard();
+                insertedSDCard = hotbar.TakeSDCard();
+                if (insertedSDCard == null) return;
+                insertedSDCard.transform.SetParent(transform, true);
                 isSDCardInserted = true;
 
                 HotbarUIManager ui = FindObjectOfType<HotbarUIManager>();
@@ -1826,9 +1847,10 @@ namespace Player.Equipment
 
                 if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToCamera(EquipmentName);
             }
+            else GameFeedback.Show("NO CARD WITH SPACE\nUse an SD card with room available, or delete clips at the computer.");
         }
 
-        private void ToggleRecording(bool forceCancel = false)
+        private void ToggleRecording(bool forceCancel = false, bool capacityStop = false)
         {
             if (isRecording && forceCancel)
             {
@@ -1845,6 +1867,11 @@ namespace Player.Equipment
 
             if (!isRecording)
             {
+                if (insertedSDCard == null || !insertedSDCard.HasSpace)
+                { GameFeedback.Show("SD CARD FULL\nDelete unwanted clips at the computer or insert another card."); return; }
+                takeCapacitySeconds = insertedSDCard.RemainingSeconds;
+                if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo && takeCapacitySeconds < 10f)
+                { GameFeedback.Show("This lesson needs a 10-second take. Free space on this card or insert another one."); return; }
                 if (Level3Manager.Instance != null && Level3Manager.Instance.RecordingBlockedByPractice)
                 {
                     GameFeedback.Show("RECORDING LOCKED: Finish the practice lesson first. Use the viewfinder to rehearse without recording.");
@@ -1872,7 +1899,7 @@ namespace Player.Equipment
                 }
             }
 
-            if (isRecording && !forceCancel)
+            if (isRecording && !forceCancel && !capacityStop)
             {
                 if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo)
                 {
@@ -1895,7 +1922,6 @@ namespace Player.Equipment
             isRecording = !isRecording;
             string generatedFileName = "";
             float finalDuration = 0f;
-            float finalGrade = 0f;
             float finalCamGrade = 0f;
             float finalLightGrade = 0f;
 
@@ -1904,7 +1930,7 @@ namespace Player.Equipment
                 if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(true);
                 foreach (var actor in FindObjectsOfType<CubeActor>()) actor.BeginTake();
 
-                if (!pixelRecorder.StartRecording())
+                if (!pixelRecorder.StartRecording(takeCapacitySeconds))
                 {
                     isRecording = false;
                     if (TutorialManager.Instance != null) TutorialManager.Instance.SetTutorialRecordingLookLock(false);
@@ -1935,18 +1961,37 @@ namespace Player.Equipment
                 generatedFileName = pixelRecorder.StopRecording();
                 GameplayAudioManager.SetRecording(this, false);
                 GameplayAudioManager.PlayRecordingCue("Stop Recording");
-                finalDuration = Time.time - recordingStartTime;
+                finalDuration = pixelRecorder.LastRecordedDuration;
 
                 if (framesSampled > 0)
                 {
                     finalCamGrade = totalCameraScoreAccumulated / framesSampled;
                     finalLightGrade = totalLightingScoreAccumulated / framesSampled;
-                    finalGrade = finalCamGrade + finalLightGrade;
                 }
             }
 
             GameObject ejectedSDCard = null;
-            if (!isRecording) ejectedSDCard = EjectUsedSDCard(generatedFileName, finalDuration, finalGrade, finalCamGrade, finalLightGrade);
+            if (!isRecording)
+            {
+                if (string.IsNullOrEmpty(generatedFileName)) return;
+                var data = new FootageData {
+                    fileName = generatedFileName, duration = finalDuration, camScore = finalCamGrade, lightScore = finalLightGrade,
+                    campaignLevel = recordingCampaignLevel, shotType = GetRecordedShotType(),
+                    screenDirection = recordedMetadataSamples > 0 ? recordedScreenDirectionAccumulated / recordedMetadataSamples : 0f,
+                    actorPose = recordedActorPose, requiredSubjectsVisible = recordedMetadataSamples > 0 && recordedVisibleSamples == recordedMetadataSamples,
+                    usedSoftLight = recordedMetadataSamples > 0 && recordedSoftLightSamples >= Mathf.CeilToInt(recordedMetadataSamples * .5f),
+                    hasThreePointRoles = recordedMetadataSamples > 0 && recordedThreePointSamples == recordedMetadataSamples
+                };
+                if (!insertedSDCard.AddRecording(data))
+                { GameFeedback.Show("Could not add this take to the SD card. Its recording file was kept."); return; }
+                PlayerAnalytics.TakeRecorded(recordingCampaignLevel, finalDuration);
+                CampaignLevelManager.Instance?.OnCoffeeTakeRecorded(insertedSDCard);
+                // The first tutorial still demonstrates handing a recorded card
+                // to the computer. Ordinary recording keeps it mounted for more takes.
+                if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo)
+                    ejectedSDCard = EjectUsedSDCard();
+                else GameFeedback.Show($"TAKE SAVED\n{insertedSDCard.GetRecordings().Count} clips · {insertedSDCard.UsedSeconds:0.#}/60 seconds used");
+            }
 
             if (TutorialManager.Instance != null && !isRecording && !forceCancel) TutorialManager.Instance.OnRecordingFinished(ejectedSDCard);
         }
@@ -1975,36 +2020,20 @@ namespace Player.Equipment
             if (ruleOfThirdsGrid != null) Destroy(ruleOfThirdsGrid);
         }
 
-        private GameObject EjectUsedSDCard(string savedFileName, float duration, float finalScore, float camScore, float lightScore)
+        private GameObject EjectUsedSDCard()
         {
-            PlayerAnalytics.TakeRecorded(recordingCampaignLevel, duration);
+            if (insertedSDCard == null) return null;
             isSDCardInserted = false;
-            if (sdCardPrefab != null)
+            if (insertedSDCard != null)
             {
                 Transform spawnLoc = ejectPoint != null ? ejectPoint : transform;
-                GameObject ejectedCard = Instantiate(sdCardPrefab, spawnLoc.position, spawnLoc.rotation);
-                SDCardItem cardScript = ejectedCard.GetComponent<SDCardItem>();
-                if (cardScript != null)
-                {
-                    cardScript.isUsedCard = true;
-                    cardScript.recordedFileName = savedFileName;
-                    cardScript.videoDuration = duration;
-                    cardScript.videoScore = finalScore;
-                    cardScript.cameraScore = camScore;
-                    cardScript.lightScore = lightScore;
-                    cardScript.campaignLevel = recordingCampaignLevel;
-                    cardScript.shotType = GetRecordedShotType();
-                    cardScript.screenDirection = recordedMetadataSamples > 0 ? recordedScreenDirectionAccumulated / recordedMetadataSamples : 0f;
-                    cardScript.actorPose = recordedActorPose;
-                    cardScript.requiredSubjectsVisible = recordedMetadataSamples > 0 && recordedVisibleSamples == recordedMetadataSamples;
-                    cardScript.usedSoftLight = recordedMetadataSamples > 0 && recordedSoftLightSamples >= Mathf.CeilToInt(recordedMetadataSamples * 0.5f);
-                    cardScript.hasThreePointRoles = recordedMetadataSamples > 0 && recordedThreePointSamples == recordedMetadataSamples;
-                    cardScript.MarkAsUsed();
-                    if (CampaignLevelManager.Instance != null)
-                        CampaignLevelManager.Instance.OnCoffeeTakeRecorded(cardScript);
-                }
+                SDCardItem cardScript = insertedSDCard;
+                GameObject ejectedCard = cardScript.gameObject;
+                insertedSDCard = null;
+                cardScript.OnDropped(null);
+                ejectedCard.transform.SetPositionAndRotation(spawnLoc.position, spawnLoc.rotation);
                 MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
-                if (renderer != null)
+                if (renderer != null && cardScript.isUsedCard)
                 {
                     MaterialPropertyBlock cardProperties = new MaterialPropertyBlock();
                     renderer.GetPropertyBlock(cardProperties);
@@ -2033,7 +2062,7 @@ namespace Player.Equipment
                 if (rb == null) rb = ejectedCard.AddComponent<Rigidbody>();
 
                 // A tiny thrown card can tunnel through the set or land behind the camera.
-                // Rest it on a nearby surface, still requiring the player to pick it up.
+                // Release it just above a nearby surface with solid, reusable card physics.
                 var player = GetComponentInParent<Player.PlayerController.PlayerController>();
                 Vector3 origin = player != null ? player.transform.position : transform.position;
                 Vector3 forward = player != null ? player.transform.forward : transform.forward;
@@ -2062,10 +2091,7 @@ namespace Player.Equipment
                 }
                 foreach (Collider cardCollider in ejectedCard.GetComponentsInChildren<Collider>(true))
                     cardCollider.enabled = true;
-                rb.velocity = Vector3.zero;
-                rb.angularVelocity = Vector3.zero;
-                rb.useGravity = false;
-                rb.isKinematic = true;
+                cardScript.OnDropped(null);
                 var inventory = GetComponentInParent<Player.Interactor.EquipmentInteractor>();
                 if (inventory == null) inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
                 if (cardScript != null && inventory != null) inventory.StoreEjectedCard(cardScript);

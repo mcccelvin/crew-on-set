@@ -5,6 +5,7 @@ using System.Collections.Generic;
 public class FootageData
 {
     public string fileName;
+    public float duration;
     public float camScore;
     public float lightScore;
     public int campaignLevel;

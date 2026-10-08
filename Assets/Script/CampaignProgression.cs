@@ -158,6 +158,6 @@ public static class CampaignProgression
         }
 
         PlayerPrefs.Save();
-        GameSaveManager.Instance?.SaveCheckpoint();
+        GameSaveManager.Instance?.SaveBudgetCheckpoint();
     }
 }

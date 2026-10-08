@@ -53,7 +53,7 @@ public sealed class CCoinPackShopUI : MonoBehaviour
             offers[i]=configured!=null && i<configured.Length && configured[i]!=null ? configured[i] : defaults[i];
             BuildCard(i);
         }
-        Label(design,"Earn coins note","EARN AS YOU CREATE  /  5 C-Coins per first successful contract completion",new Vector2(0,-370),new Vector2(1510,40),24,Cream);
+        Label(design,"Earn coins note","EARN AS YOU CREATE  /  " + CCoinRules.ContractReward + " C-Coins per first successful contract completion",new Vector2(0,-370),new Vector2(1510,40),24,Cream);
         status=Label(design,"Payment availability","",new Vector2(0,-416),new Vector2(1480,50),20,Gold);
         Label(design,"Payment safety","Cosmetics only. B-Coins are separate. Payment provider: PayMongo.",new Vector2(0,-460),new Vector2(1490,30),18,new Color32(220,198,173,255));
         service.Changed+=Refresh;

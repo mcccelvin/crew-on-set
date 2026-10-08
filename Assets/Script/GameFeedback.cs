@@ -114,11 +114,22 @@ public sealed class GameFeedback : MonoBehaviour
         feedback.badge.text = error ? "!" : type == NoticeType.Success ? "+" : "i";
         feedback.ApplyNoticeColors(type);
         feedback.heading.ForceMeshUpdate();
-        float height = Mathf.Clamp(feedback.heading.GetPreferredValues(title, 440, 0).y +
-            feedback.message.GetPreferredValues(detail, 440, 0).y + 38, 100, 240);
+        float titleHeight = Mathf.Max(30, feedback.heading.GetPreferredValues(title, 440, 0).y);
+        float detailHeight = detail.Length == 0 ? 0 : feedback.message.GetPreferredValues(detail, 440, 0).y + 8;
+        float height = Mathf.Clamp(titleHeight + detailHeight + 36, 100, 260);
         ((RectTransform)feedback.panel.transform).sizeDelta = new Vector2(560, height);
-        feedback.heading.rectTransform.sizeDelta = new Vector2(440, detail.Length == 0 ? height - 30 : Mathf.Max(30, height * .45f - 10));
-        feedback.message.rectTransform.offsetMax = new Vector2(-20, -height * .45f - 8);
+        feedback.heading.rectTransform.anchoredPosition = new Vector2(100, -18);
+        feedback.heading.rectTransform.sizeDelta = new Vector2(440, titleHeight);
+        feedback.message.rectTransform.anchorMin = feedback.message.rectTransform.anchorMax = feedback.message.rectTransform.pivot = new Vector2(0, 1);
+        feedback.message.rectTransform.anchoredPosition = new Vector2(100, -26 - titleHeight);
+        feedback.message.rectTransform.sizeDelta = new Vector2(440, Mathf.Max(1, height - titleHeight - 44));
+        var edge = feedback.panel.transform.Find("Gold edge") as RectTransform;
+        if (edge != null)
+        {
+            edge.anchorMin = edge.anchorMax = new Vector2(0, .5f);
+            edge.pivot = new Vector2(.5f, .5f);
+            edge.anchoredPosition = new Vector2(10, 0); edge.sizeDelta = new Vector2(4, height - 28);
+        }
         feedback.panel.SetActive(true);
         feedback.hideAt = Time.unscaledTime + 4f;
         feedback.RefreshBalances();
@@ -127,20 +138,24 @@ public sealed class GameFeedback : MonoBehaviour
     private void ApplyNoticeColors(NoticeType type)
     {
         bool caution = type == NoticeType.Caution, success = type == NoticeType.Success;
-        Color background = caution ? new Color32(112,27,27,250) : success ? new Color32(25,83,46,250) : new Color32(49,32,12,250);
-        Color accent = caution ? new Color32(255,112,104,255) : success ? new Color32(111,220,142,255) : new Color32(239,184,71,255);
-        panel.GetComponent<Image>().color = background;
+        Color accent = caution ? new Color32(184,73,37,255) : success ? new Color32(104,125,49,255) : CrewPaperStyle.Gold;
+        CrewPaperStyle.Card(panel.GetComponent<Image>());
         var edge = panel.transform.Find("Gold edge");
         if (edge != null) edge.GetComponent<Image>().color = accent;
         var key = badge.transform.parent.GetComponent<Image>();
         if (key != null)
         {
-            key.color = caution ? new Color32(163,44,40,255) : success ? new Color32(39,119,65,255) : new Color32(121,78,28,255);
+            CrewPaperStyle.Round(key);
+            key.color = caution ? new Color32(247,212,172,255) : CrewPaperStyle.Gold;
             var border = key.GetComponent<Outline>();
-            if (border != null) border.effectColor = accent;
+            if (border != null) border.effectColor = CrewPaperStyle.Ink;
         }
-        heading.color = caution || success ? Color.white : new Color32(255,231,173,255);
-        message.color = caution || success ? new Color32(245,245,240,255) : new Color32(218,184,120,255);
+        badge.color = CrewPaperStyle.Ink;
+        heading.color = CrewPaperStyle.Ink;
+        heading.characterSpacing = 1;
+        message.color = CrewPaperStyle.MutedInk;
+        message.enableAutoSizing = true; message.fontSizeMin = 16; message.fontSizeMax = 18;
+        message.overflowMode = TextOverflowModes.Ellipsis;
     }
 
 #if UNITY_EDITOR

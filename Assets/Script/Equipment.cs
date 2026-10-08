@@ -27,6 +27,7 @@ namespace Player.Equipment
         private bool[] collisionStates;
         private Vector3 worldScaleBeforePickup;
         private bool hasPickupState;
+        protected bool HasPickupState => hasPickupState;
 
         protected virtual void Awake()
         {

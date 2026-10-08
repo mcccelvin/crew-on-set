@@ -214,7 +214,7 @@ public class CareerManager : MonoBehaviour
         UpdateMoneyUI();
         Debug.Log($"Accepted {jobName}. Received {upfrontPayment} B coins upfront!");
         BudgetRetryPrompt.CaptureStart(true);
-        GameSaveManager.Instance?.SaveCheckpoint();
+        GameSaveManager.Instance?.SaveBudgetCheckpoint();
     }
 
     public void CompleteActiveJob(int finalPayment)

@@ -4,6 +4,8 @@ Choose **Play → + → Single**, name the game, and create it. Select an existi
 
 Saves use commercial checkpoints. Creating a game saves its starting checkpoint. Passing a commercial automatically saves the next commercial's checkpoint. Continuing restores that checkpoint's budget and progression; it restarts the studio lesson, equipment placement, recordings and unfinished edit. Spending during the unfinished commercial does not reduce the checkpoint budget.
 
+The resume state is separate from the live production attempt. `SaveCheckpoint` retains the last checkpoint's budget, equipment/interior ownership, purchase flags and lesson/contract state while saving lifetime analytics/profile evidence, handbook knowledge, best scores and reward identity. Purchases, login and reconnect cannot advance that production checkpoint. `SaveBudgetCheckpoint` advances the complete resume state only for a starter grant/equipment advance, accepted contract, passed contract, explicit retry or career reset. The live HUD and inventory still reflect current spending/purchases until leaving. Continue rolls uncheckpointed purchases and lesson actions back with their matching budget, without another contract payment; equipment acquired before the checkpoint remains owned. Older partial saves recover a matching `BudgetRetry.Start.v1` snapshot when available; without one, existing saved values are retained rather than guessing which purchases to remove or inventing a refund. Per-career `BudgetCheckpoint.BCoins.v1` and `ProductionCheckpoint.v1` markers travel inside the existing private checkpoint payload. Account C-Coins and queued rewards are untouched.
+
 The original shared local career is imported once as **Existing local game**. Original PlayerPrefs are retained. An unfinished first-commercial import uses the existing retry lesson so it can rebuild the studio with a usable budget.
 
 ## Storage and accounts
@@ -33,6 +35,8 @@ and scheduling results recovered after a cloud download. The production-log
 queue in this session test is a scheduling spy; it does not simulate a live
 production-log upload or confirm C-Coins.
 It does not log into PlayFab or change real save files.
+
+The same source-backed suite checks checkpoint/live budget and ownership separation, rollback of unfinished purchases/interiors/lesson flags on Continue, preservation of previously checkpointed equipment, acceptance without double advance, completion-balance boundaries, login-triggered uploads, independent careers, room exclusion, retry/reset and recovery of matching legacy money-only saves. Lifetime evidence, achievements, learned skills and C-Coin career identity are retained. Native notice/task-paper renders at landscape/portrait verify cream/brown/gold styling, text fit/separation, unchanged currency wording and input transparency. These are isolated checks, not a full studio playthrough or live cloud round-trip.
 
 2026-10-08 automatic-reconnect/top-up change: actual Editor and standalone-reference compilation passed. The real-manager/fake-SDK session suite also checks offline login, immediate internet-return scheduling across account services, stable-online busy guards, periodic saves and browser-focus refresh. The separate C-Coin harness passed 228 assertions, including the exact website URL, navigation without a coin grant and unchanged payment guards. Native shop renders and profile retry checks use isolated sources with simulated transport, not a live PlayFab or PayMongo session.
 

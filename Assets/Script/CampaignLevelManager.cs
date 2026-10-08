@@ -991,10 +991,8 @@ public class CampaignLevelManager : MonoBehaviour
         foreach (var computer in FindObjectsOfType<ComputerStation>()) clips.AddRange(computer.GetInsertedFiles());
         if (!insertedOnly)
             foreach (var card in FindObjectsOfType<Player.Equipment.SDCardItem>(true))
-                if (card.isUsedCard && card.videoDuration >= 5f)
-                    clips.Add(new FootageData { fileName = card.recordedFileName, campaignLevel = card.campaignLevel,
-                        shotType = card.shotType, screenDirection = card.screenDirection, actorPose = card.actorPose,
-                        requiredSubjectsVisible = card.requiredSubjectsVisible, usedSoftLight = card.usedSoftLight });
+                foreach (var clip in card.GetRecordings())
+                    if (clip != null && clip.duration >= 5f) clips.Add(clip);
         return clips;
     }
 

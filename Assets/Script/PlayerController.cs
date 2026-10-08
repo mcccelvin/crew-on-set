@@ -67,8 +67,32 @@ namespace Player.PlayerController
         private float coyoteCounter;
         private Collider bodyCollider;
         private readonly RaycastHit[] groundHits = new RaycastHit[16];
+        private readonly PracticePointLock practicePointLock = new PracticePointLock();
         public bool StationaryAction { get; set; }
         private bool MovementAllowed => !StationaryAction && canMove && inputManager != null && inputManager.isActiveAndEnabled && inputManager.CanReadGameplayAction();
+
+        public bool TryLockToPracticePoint(Transform marker)
+        {
+            if (!practicePointLock.TryLock(transform, marker)) return false;
+            FinishPracticePointLock();
+            return true;
+        }
+
+        public void CenterAndLockPracticePoint(Transform marker)
+        {
+            if (marker == null) return;
+            practicePointLock.CenterAndLock(transform, marker);
+            FinishPracticePointLock();
+        }
+
+        private void FinishPracticePointLock()
+        {
+            canMove = false;
+            jumpBufferCounter = coyoteCounter = 0f;
+            // Manual looking stays available; only horizontal travel is anchored.
+        }
+
+        public void ReleasePracticePoint() => practicePointLock.Release();
 
         public void SyncLookToCamera()
         {
@@ -191,6 +215,7 @@ namespace Player.PlayerController
         private void FixedUpdate()
         {
             if (PauseManager.isPaused || playerRigidbody == null) return;
+            if (canMove) practicePointLock.Release();
             // A seated action owns the body and physics; LateUpdate still handles looking.
             if (StationaryAction) return;
             if (lookInitialized && canLook && playerRigidbody != null)
@@ -444,6 +469,7 @@ namespace Player.PlayerController
 
         private void OnDisable()
         {
+            practicePointLock.Release();
             RestoreHeldViewClip();
             cameraHoldingPose?.RestoreAnimation();
             jumpBufferCounter = coyoteCounter = 0f;

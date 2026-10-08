@@ -177,8 +177,13 @@ public class DirectorTerminal : MonoBehaviour
     {
         if (currentWall != null || BackdropPrefab == null || spawnPoint == null) return;
         if (GameSavePrefs.GetInt("Studio.StageCleared", 0) == 1) return;
+        int level = CampaignProgression.GetCurrentLevel();
+        // Continue restarts the first studio lesson (including retry), not its
+        // unfinished placement. Keep ownership, but let ADD WALL teach placement.
+        if (gameObject.scene.name == "SingleStudio" && level == 1 &&
+            (GameSavePrefs.GetInt("TutorialProgress", 0) < 1 || GameSavePrefs.GetInt("Level1RetryActive", 0) == 1)) return;
         int style = GameSavePrefs.GetInt(SelectedInteriorKey, 0);
-        if (CampaignProgression.GetCurrentLevel() < 4 || style != 2 || !OwnsInterior(2)) style = 0;
+        if (level < 4 || style != 2 || !OwnsInterior(2)) style = 0;
         if (!OwnsInterior(style)) return;
         currentWall = InstantiateStudioBackdrop();
         persistentWall = currentWall;

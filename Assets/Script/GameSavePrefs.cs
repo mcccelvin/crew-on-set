@@ -27,7 +27,7 @@ public static class GameSavePrefs
     public static void DeleteAll()
     {
         if (roomValues != null) { roomValues.Clear(); return; }
-        if (Values != null) { Values.Clear(); GameSaveManager.Instance?.SaveCheckpoint(); }
+        if (Values != null) { Values.Clear(); GameSaveManager.Instance?.SaveBudgetCheckpoint(); }
         else { foreach (var entry in LegacyGameSave.Read(false)) PlayerPrefs.DeleteKey(entry.key); PlayerPrefs.Save(); }
     }
 }

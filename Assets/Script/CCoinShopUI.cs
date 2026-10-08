@@ -48,7 +48,7 @@ public sealed class CCoinShopUI : MonoBehaviour
         if (service == null || !gameObject.activeInHierarchy) return;
         var wallet = service.Wallet;
         balance.text = service.Balance.ToString("N0") + " C-COINS";
-        status.text = service.Status + "\n5 C-Coins per first successful contract completion. Pending rewards: " + service.PendingRewards;
+        status.text = service.Status + "\n" + CCoinRules.ContractReward + " C-Coins per first successful contract completion. Pending rewards: " + service.PendingRewards;
         foreach (Transform child in cards) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
         // Legacy frame-only modal; character items live in the shared profile shop.
         var items = System.Array.FindAll(wallet?.cosmetics ?? new CCoinCosmetic[0],x=>x!=null && x.kind=="profile_frame");

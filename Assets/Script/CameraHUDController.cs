@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 
 // Shared authored viewfinder. The live image is separate from the UI and tape capture.
+[DefaultExecutionOrder(300)]
 public sealed class CameraHUDController : MonoBehaviour
 {
     public RectTransform viewport;
@@ -13,11 +14,22 @@ public sealed class CameraHUDController : MonoBehaviour
     private RenderTexture preview, previousTarget;
     private Rect previousRect;
     private float previousAspect;
+    private bool previousCameraEnabled;
+    private Player.Equipment.FilmCameraItem sourceEquipment;
+    private readonly Image[] trackingMarks = new Image[8];
+    private RectTransform styledTracking;
+    private RectTransform exposureStrip;
+    private Image recordChip;
+    public static readonly Color32 InstrumentPanel = new Color32(33, 40, 48, 240);
+    public static readonly Color32 InstrumentBorder = new Color32(73, 84, 96, 255);
+    public static readonly Color32 ReadoutInk = new Color32(238, 241, 244, 255);
+    public static readonly Color32 MutedReadout = new Color32(174, 185, 197, 255);
+    public static readonly Color32 CopperAccent = new Color32(213, 162, 110, 255);
 
     public struct State
     {
         public bool recording, card, manual;
-        public float seconds, focus, kelvin, iso, aperture, shutterAngle, fps;
+        public float seconds, cardSeconds, cardCapacity, focus, kelvin, iso, aperture, shutterAngle, fps;
         public int level, width, height;
         public string menu;
     }
@@ -28,17 +40,7 @@ public sealed class CameraHUDController : MonoBehaviour
         var art = Resources.Load<CameraHUDArt>("CameraHUDArt");
         var hud = prefab != null ? Instantiate(prefab).GetComponent<CameraHUDController>() : Build(art != null ? art.focusArea : null, art != null ? art.exposure : null);
         hud.gameObject.name = "Camera Viewfinder - CAM FX3";
-        if (hud.menuLabel != null)
-        {
-            var panel = hud.menuLabel.transform.parent as RectTransform;
-            panel.anchorMin = new Vector2(.66f, .15f);
-            panel.anchorMax = new Vector2(.98f, .87f);
-            panel.offsetMin = panel.offsetMax = Vector2.zero;
-            var background = panel.GetComponent<Image>();
-            if (background != null) background.color = new Color(.035f, .045f, .06f, .94f);
-            hud.menuLabel.fontSize = 22;
-            hud.menuLabel.fontStyle = FontStyles.Normal;
-        }
+        hud.ApplyGameStyle();
         hud.gameObject.SetActive(false);
         return hud;
     }
@@ -53,12 +55,17 @@ public sealed class CameraHUDController : MonoBehaviour
             previousTarget = camera.targetTexture;
             previousRect = camera.rect;
             previousAspect = camera.aspect;
+            previousCameraEnabled = camera.enabled;
+            sourceEquipment = camera.GetComponentInParent<Player.Equipment.FilmCameraItem>();
             preview = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB) { name = "CAM FX3 live preview" };
             preview.Create();
             camera.targetTexture = preview;
             camera.rect = new Rect(0, 0, 1, 1);
             camera.aspect = 16f / 9f;
             liveImage.texture = preview;
+            // FilmCameraItem owns an explicit processed render after its lens/pose update.
+            // Unowned cameras (e.g. legacy multiplayer previews) retain automatic rendering.
+            if (sourceEquipment != null) camera.enabled = false;
         }
         gameObject.SetActive(true);
     }
@@ -69,6 +76,12 @@ public sealed class CameraHUDController : MonoBehaviour
         gameObject.SetActive(false);
     }
 
+    private void LateUpdate()
+    {
+        if (source != null && sourceEquipment != null && preview != null)
+            sourceEquipment.RenderCameraFrame(preview);
+    }
+
     private void ReleaseView()
     {
         if (source != null)
@@ -76,8 +89,10 @@ public sealed class CameraHUDController : MonoBehaviour
             source.targetTexture = previousTarget;
             source.rect = previousRect;
             source.aspect = previousAspect;
+            source.enabled = previousCameraEnabled;
         }
         source = null;
+        sourceEquipment = null;
         if (liveImage != null) liveImage.texture = null;
         if (preview != null) { preview.Release(); Destroy(preview); preview = null; }
     }
@@ -86,13 +101,16 @@ public sealed class CameraHUDController : MonoBehaviour
 
     public void Refresh(State s)
     {
-        recordLabel.text = s.recording ? "● REC" : "STBY";
-        recordLabel.color = s.recording ? new Color(1f, .18f, .16f) : Color.white;
+        recordLabel.text = s.recording ? "REC" : "STBY";
+        recordLabel.color = s.recording ? new Color32(255, 111, 99, 255) : ReadoutInk;
+        if (recordChip != null) recordChip.color = s.recording ? new Color32(79, 38, 40, 255) : new Color32(49, 63, 69, 255);
         int total = Mathf.Max(0, Mathf.FloorToInt(s.seconds));
         timerLabel.text = (total / 3600).ToString("00") + ":" + (total / 60 % 60).ToString("00") + ":" + (total % 60).ToString("00");
         formatLabel.text = s.width + " × " + s.height + "   " + s.fps.ToString("0.#") + "p";
-        cardLabel.text = s.card ? "SD 1  READY" : "NO SD CARD";
-        cardLabel.color = s.card ? Color.white : new Color(1f, .65f, .2f);
+        cardLabel.text = !s.card ? "NO SD CARD" : s.cardCapacity > 0
+            ? "SD 1  " + Mathf.Min(s.cardCapacity, s.cardSeconds).ToString("0.#") + " / " + s.cardCapacity.ToString("0") + "s"
+            : "SD 1  READY";
+        cardLabel.color = s.card ? ReadoutInk : new Color32(255, 174, 102, 255);
         focusLabel.text = s.manual ? "MF" : "AF-C";
         distanceLabel.text = s.focus > 0 ? s.focus.ToString("0.0") + " m" : "";
         bool exposure = s.level >= 4;
@@ -109,18 +127,178 @@ public sealed class CameraHUDController : MonoBehaviour
         exposureLabel.transform.parent.gameObject.SetActive(exposure);
         wbLabel.gameObject.SetActive(s.level >= 3);
         menuLabel.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(s.menu));
-        menuLabel.text = s.menu ?? "";
-        helpLabel.text = s.level >= 2 ? "R  RECORD     LMB  EXIT     F2  SETTINGS" : "R  RECORD     LMB  EXIT     SCROLL  ZOOM";
+        menuLabel.text = (s.menu ?? "").Replace("#FFD866", "#D5A26E");
+        string cardControl = s.cardCapacity > 0 ? KeyBadge("C") + " EJECT SD     " : "";
+        helpLabel.text = KeyBadge("R") + " RECORD     " + cardControl + KeyBadge("LMB") + " EXIT     " +
+            (s.level >= 2 ? KeyBadge("F2") + " SETTINGS" : KeyBadge("SCROLL") + " ZOOM");
+        if (exposureStrip != null)
+        {
+            exposureStrip.gameObject.SetActive(s.level >= 3);
+            Anchors(exposureStrip, new Vector2(exposure ? .28f : .78f, .023f), new Vector2(.98f, .083f));
+            Anchors(wbLabel.rectTransform, new Vector2(.02f, .08f), new Vector2(exposure ? .25f : .98f, .92f));
+        }
     }
 
     public void PlaceTracking(RectTransform target, Vector3 center, float width, float height)
     {
+        StyleTracking(target);
         if (target.parent != viewport) target.SetParent(viewport, false);
         target.anchorMin = target.anchorMax = target.pivot = new Vector2(.5f, .5f);
         target.localScale = Vector3.one;
         target.anchoredPosition = new Vector2((center.x - .5f) * viewport.rect.width, (center.y - .5f) * viewport.rect.height);
         target.sizeDelta = new Vector2(Mathf.Clamp(width * viewport.rect.width + 20, 30, viewport.rect.width),
             Mathf.Clamp(height * viewport.rect.height + 20, 30, viewport.rect.height));
+    }
+
+    private static string KeyBadge(string key) => "<color=#D5A26E><b>[ " + key + " ]</b></color>";
+
+    public void SetTrackingState(bool blocked)
+    {
+        foreach (var mark in trackingMarks)
+            if (mark != null) mark.color = blocked ? new Color32(180, 49, 36, 255) : CrewPaperStyle.Gold;
+    }
+
+    private void StyleTracking(RectTransform target)
+    {
+        if (styledTracking == target) return;
+        styledTracking = target;
+        var oldFrame = target.GetComponent<Image>();
+        if (oldFrame != null) oldFrame.enabled = false;
+        for (int i = 0; i < trackingMarks.Length; i++)
+        {
+            var corner = new Vector2(i / 2 % 2, i / 4);
+            var mark = target.Find("Production focus corner " + i) as RectTransform;
+            if (mark == null) mark = Rect(target, "Production focus corner " + i, corner, corner);
+            mark.pivot = corner; mark.anchoredPosition = Vector2.zero;
+            mark.sizeDelta = i % 2 == 0 ? new Vector2(28, 3) : new Vector2(3, 28);
+            var image = mark.GetComponent<Image>(); if (image == null) image = mark.gameObject.AddComponent<Image>();
+            image.color = CrewPaperStyle.Gold; image.raycastTarget = false;
+            var outline = mark.GetComponent<Outline>(); if (outline == null) outline = mark.gameObject.AddComponent<Outline>();
+            outline.effectColor = CrewPaperStyle.Ink; outline.effectDistance = new Vector2(1, -1);
+            trackingMarks[i] = image;
+        }
+    }
+
+    private void ApplyGameStyle()
+    {
+        var surround = transform.Find("Black viewfinder surround");
+        if (surround != null) surround.GetComponent<Image>().color = new Color32(20, 24, 30, 255);
+        foreach (var label in GetComponentsInChildren<TMP_Text>(true))
+        {
+            label.color = ReadoutInk;
+            label.raycastTarget = false;
+            label.margin = Vector4.zero;
+        }
+        foreach (string name in new[] { "Top shade", "Bottom shade", "Time paper", "Focus paper" })
+        {
+            var bar = viewport.Find(name);
+            if (bar != null) bar.gameObject.SetActive(false);
+        }
+        var oldControls = transform.Find("Controls paper");
+        if (oldControls != null) oldControls.gameObject.SetActive(false);
+
+        // Instrument readouts sit outside the picture, not across its top edge.
+        var header = Surface(transform, "Instrument header", new Vector2(.07f, .938f), new Vector2(.93f, .988f));
+        var brand = header.Find("Camera identity") as RectTransform;
+        if (brand == null) brand = Label(header, "Camera identity", .016f, .08f, .22f, .92f, 18).rectTransform;
+        brand.GetComponent<TMP_Text>().text = "CREW / CAM FX3";
+        brand.GetComponent<TMP_Text>().color = CopperAccent;
+        PositionLabel(cardLabel, header, .235f, .08f, .455f, .92f, 20, TextAlignmentOptions.MidlineLeft);
+        PositionLabel(formatLabel, header, .47f, .08f, .715f, .92f, 19, TextAlignmentOptions.Center);
+        formatLabel.color = MutedReadout;
+        var chip = Surface(header, "Recording chip", new Vector2(.738f, .18f), new Vector2(.818f, .82f));
+        recordChip = chip.GetComponent<Image>();
+        PositionLabel(recordLabel, chip, .02f, .03f, .98f, .97f, 19, TextAlignmentOptions.Center);
+        PositionLabel(timerLabel, header, .83f, .08f, .984f, .92f, 22, TextAlignmentOptions.MidlineRight);
+        timerLabel.characterSpacing = 1.2f;
+        var rule = header.Find("Copper rule") as RectTransform;
+        if (rule == null) rule = Box(header, "Copper rule", Vector2.zero, new Vector2(1, 0), CopperAccent);
+        rule.pivot = new Vector2(.5f, 0); rule.sizeDelta = new Vector2(0, 2);
+
+        // A single low-profile focus ribbon replaces the large vertical cream card.
+        var focus = Surface(viewport, "Focus ribbon", new Vector2(.02f, .023f), new Vector2(.245f, .083f));
+        PositionLabel(focusLabel, focus, .18f, .08f, .49f, .92f, 19, TextAlignmentOptions.MidlineLeft);
+        PositionLabel(distanceLabel, focus, .53f, .08f, .95f, .92f, 18, TextAlignmentOptions.MidlineRight);
+        distanceLabel.color = MutedReadout;
+        var focusIcon = viewport.Find("PSD focus area");
+        if (focusIcon != null)
+        {
+            focusIcon.SetParent(focus, false);
+            Anchors((RectTransform)focusIcon, new Vector2(.035f, .23f), new Vector2(.13f, .77f));
+            focusIcon.GetComponent<RawImage>().color = CopperAccent;
+        }
+        exposureStrip = Surface(viewport, "Exposure telemetry", new Vector2(.28f, .023f), new Vector2(.98f, .083f));
+        PositionLabel(wbLabel, exposureStrip, .02f, .08f, .25f, .92f, 18, TextAlignmentOptions.MidlineLeft);
+        PositionLabel(shutterLabel, exposureStrip, .27f, .08f, .41f, .92f, 18, TextAlignmentOptions.Center);
+        PositionLabel(apertureLabel, exposureStrip, .43f, .08f, .55f, .92f, 18, TextAlignmentOptions.Center);
+        var exposure = (RectTransform)exposureLabel.transform.parent;
+        exposure.SetParent(exposureStrip, false);
+        Anchors(exposure, new Vector2(.57f, .08f), new Vector2(.73f, .92f));
+        Anchors(exposureLabel.rectTransform, Vector2.zero, Vector2.one);
+        exposureLabel.fontSize = exposureLabel.fontSizeMax = 18;
+        var exposureIcon = exposure.Find("PSD exposure");
+        if (exposureIcon != null) exposureIcon.gameObject.SetActive(false);
+        PositionLabel(isoLabel, exposureStrip, .75f, .08f, .98f, .92f, 18, TextAlignmentOptions.MidlineRight);
+        foreach (string name in new[] { "Crosshair horizontal", "Crosshair vertical" })
+        {
+            var crosshair = viewport.Find(name);
+            if (crosshair != null) crosshair.GetComponent<Image>().color = new Color32(238, 241, 244, 180);
+        }
+        var footer = Surface(transform, "Instrument shortcuts", new Vector2(.07f, .014f), new Vector2(.93f, .058f));
+        PositionLabel(helpLabel, footer, .02f, .05f, .98f, .95f, 18, TextAlignmentOptions.Center);
+        helpLabel.richText = true;
+        if (menuLabel != null)
+        {
+            var panel = (RectTransform)menuLabel.transform.parent;
+            panel.anchorMin = new Vector2(.66f, .15f); panel.anchorMax = new Vector2(.98f, .87f);
+            panel.offsetMin = panel.offsetMax = Vector2.zero;
+            StyleSurface(panel.GetComponent<Image>());
+            menuLabel.fontSize = 22; menuLabel.fontStyle = FontStyles.Normal;
+        }
+    }
+
+    private static void Anchors(RectTransform rect, Vector2 min, Vector2 max)
+    {
+        rect.anchorMin = min; rect.anchorMax = max;
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+        rect.localScale = Vector3.one; rect.localRotation = Quaternion.identity;
+    }
+
+    private static void PositionLabel(TMP_Text label, Transform parent, float left, float bottom, float right,
+        float top, int size, TextAlignmentOptions alignment)
+    {
+        label.transform.SetParent(parent, false);
+        Anchors(label.rectTransform, new Vector2(left, bottom), new Vector2(right, top));
+        label.fontSize = label.fontSizeMax = size; label.fontSizeMin = size * .75f;
+        label.alignment = alignment; label.color = ReadoutInk;
+        label.characterSpacing = 0; label.margin = Vector4.zero;
+    }
+
+    private static RectTransform Surface(Transform parent, string name, Vector2 min, Vector2 max)
+    {
+        var panel = parent.Find(name) as RectTransform;
+        if (panel == null) panel = Box(parent, name, min, max, InstrumentPanel);
+        Anchors(panel, min, max);
+        StyleSurface(panel.GetComponent<Image>());
+        return panel;
+    }
+
+    private static void StyleSurface(Image image)
+    {
+        CrewPaperStyle.Round(image); image.color = InstrumentPanel;
+        var outline = image.GetComponent<Outline>(); if (outline == null) outline = image.gameObject.AddComponent<Outline>();
+        outline.enabled = true; outline.effectColor = InstrumentBorder; outline.effectDistance = new Vector2(1, -1);
+        foreach (var shadow in image.GetComponents<Shadow>()) if (!(shadow is Outline)) shadow.enabled = false;
+    }
+
+    public static void StyleTutorialHint(RectTransform row, TMP_Text label, Image icon, Image underline)
+    {
+        StyleSurface(row.GetComponent<Image>());
+        bool completed = label.text.StartsWith("<s>");
+        label.color = completed ? MutedReadout : ReadoutInk;
+        label.text = label.text.Replace("#9A421E", "#D5A26E");
+        if (icon != null) icon.color = CopperAccent;
+        if (underline != null) underline.color = CopperAccent;
     }
 
     // Called by the editor authoring tool; also handles an as-yet-unbaked project.
@@ -164,6 +342,7 @@ public sealed class CameraHUDController : MonoBehaviour
         hud.menuLabel.alignment = TextAlignmentOptions.TopLeft;
         menu.gameObject.SetActive(false);
         hud.helpLabel = Label(root.transform,"Controls",.15f,.013f,.85f,.057f,21,TextAlignmentOptions.Center);
+        hud.ApplyGameStyle();
         return hud;
     }
     private static RectTransform Rect(Transform parent,string name,Vector2 min,Vector2 max)

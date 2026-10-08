@@ -181,6 +181,12 @@ public sealed partial class GameSaveManager : MonoBehaviour
         if (Syncing || slot == null || Repository == null || !Repository.Slots.Contains(slot)) return;
         Active = slot;
         GameSavePrefs.Activate(slot);
+        var checkpoint = ReadProductionCheckpoint(slot.values);
+        GameSavePrefs.Values.Clear();
+        GameSavePrefs.Values.AddRange(checkpoint);
+        // Studio objects/media restart on Continue, so restore the matching budget,
+        // not the cash remaining in an abandoned production attempt.
+        GameSavePrefs.SetInt("PlayerMoney", ReadCheckpointBudget(slot.values));
         // Transient editor/recording state must never cross between careers.
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
         CrossSceneData.finalGrades = default;
@@ -214,12 +220,91 @@ public sealed partial class GameSaveManager : MonoBehaviour
     }
     public void SaveCheckpoint()
     {
+        CommitCheckpoint(false);
+    }
+    // Only genuine production boundaries (advance, starter grant, pass or retry)
+    // replace the resume state. Analytics/login/purchase saves retain it.
+    public void SaveBudgetCheckpoint()
+    {
+        CommitCheckpoint(true);
+    }
+    private const string BudgetCheckpointKey = "BudgetCheckpoint.BCoins.v1";
+    private const string ProductionCheckpointKey = "ProductionCheckpoint.v1";
+    [Serializable] private sealed class LegacyBudgetStart
+    {
+        public int level;
+        public List<GameSaveValue> values;
+    }
+    private static int ReadCheckpointBudget(List<GameSaveValue> values)
+    {
+        var marked = values.Find(v => v.key == BudgetCheckpointKey && v.kind == 0);
+        if (marked != null) return Math.Max(0, marked.integer);
+        // Older builds persisted purchases. Recover their actual start snapshot,
+        // if present for this unfinished contract; never guess or add an advance.
+        var start = ReadMatchingLegacyStart(values);
+        if (start != null) return start.values.Find(v => v.key == "PlayerMoney" && v.kind == 0).integer;
+        return Math.Max(0, values.Find(v => v.key == "PlayerMoney" && v.kind == 0)?.integer ?? 0);
+    }
+    private static LegacyBudgetStart ReadMatchingLegacyStart(List<GameSaveValue> values)
+    {
+        int level = values.Find(v => v.key == "CurrentLevel" && v.kind == 0)?.integer ?? 1;
+        bool completed = values.Exists(v => v.key == "CampaignCompleted" && v.kind == 0 && v.integer == 1);
+        string json = values.Find(v => v.key == "BudgetRetry.Start.v1" && v.kind == 2)?.text;
+        if (!completed && !string.IsNullOrEmpty(json))
+        {
+            try
+            {
+                var start = JsonUtility.FromJson<LegacyBudgetStart>(json);
+                var money = start?.values?.Find(v => v != null && v.key == "PlayerMoney" && v.kind == 0);
+                if (start != null && start.level == level && level >= 1 && level <= 5 && money != null && money.integer >= 0 &&
+                    start.values.TrueForAll(v => v != null && !string.IsNullOrEmpty(v.key)))
+                    return start;
+            }
+            catch (ArgumentException) { }
+        }
+        return null;
+    }
+    private static bool RetainBetweenCheckpoints(string key)
+    {
+        // Lifetime evidence and reward identity are durable, not studio state.
+        // Never reset account currency or mint a new identity for queued rewards.
+        return CareerProfileProgress.RetainOnContractRetry(key) || key == "CCoins.CareerRewardId" ||
+            key == "BudgetRetry.Start.v1" || key.StartsWith("Analytics.Career.v1", StringComparison.Ordinal) ||
+            key.StartsWith("Knowledge_", StringComparison.Ordinal) || key.StartsWith("ContractBestScore_Level", StringComparison.Ordinal);
+    }
+    private static List<GameSaveValue> ReadProductionCheckpoint(List<GameSaveValue> values)
+    {
+        if (values.Exists(v => v.key == ProductionCheckpointKey && v.kind == 0 && v.integer == 1))
+            return GameSaveRepository.Clone(values);
+        // Older money-only checkpoints can recover purchases/lesson flags from
+        // their real same-contract start. Without evidence, keep the old save.
+        var start = ReadMatchingLegacyStart(values);
+        if (start == null) return GameSaveRepository.Clone(values);
+        var checkpoint = GameSaveRepository.Clone(start.values);
+        checkpoint.RemoveAll(v => RetainBetweenCheckpoints(v.key));
+        checkpoint.AddRange(GameSaveRepository.Clone(values.FindAll(v => RetainBetweenCheckpoints(v.key))));
+        return checkpoint;
+    }
+    private void CommitCheckpoint(bool updateBudget)
+    {
         if (GameSavePrefs.IsRoomSession) return;
         if (Active == null || GameSavePrefs.Values == null || Repository == null) return;
         try
         {
             var previous = Active.values;
-            Active.values = GameSaveRepository.Clone(GameSavePrefs.Values);
+            Active.values = updateBudget ? GameSaveRepository.Clone(GameSavePrefs.Values) : ReadProductionCheckpoint(previous);
+            if (!updateBudget)
+            {
+                // Saving a purchase/profile event must not turn that unfinished
+                // purchase into an owned/out-of-stock item on the next Continue.
+                Active.values.RemoveAll(v => RetainBetweenCheckpoints(v.key));
+                Active.values.AddRange(GameSaveRepository.Clone(GameSavePrefs.Values.FindAll(v => RetainBetweenCheckpoints(v.key))));
+            }
+            int budget = updateBudget ? Math.Max(0, GameSavePrefs.GetInt("PlayerMoney", 0)) : ReadCheckpointBudget(previous);
+            Active.values.RemoveAll(v => v.key == "PlayerMoney" || v.key == BudgetCheckpointKey || v.key == ProductionCheckpointKey);
+            Active.values.Add(new GameSaveValue { key = "PlayerMoney", integer = budget });
+            Active.values.Add(new GameSaveValue { key = BudgetCheckpointKey, integer = budget });
+            Active.values.Add(new GameSaveValue { key = ProductionCheckpointKey, integer = 1 });
             try { Repository.Commit(Active); }
             catch { Active.values = previous; throw; }
             Status = "Checkpoint saved on this device.";

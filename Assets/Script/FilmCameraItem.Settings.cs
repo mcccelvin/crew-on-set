@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using LegacyPost = UnityEngine.Rendering.PostProcessing;
 using PlayerPrefs = GameSavePrefs;
 
 namespace Player.Equipment
@@ -35,6 +36,14 @@ namespace Player.Equipment
         private UnityEngine.Rendering.Universal.DepthOfField cameraFocus;
         private MotionBlur cameraMotion;
         private bool playerPostProcessing;
+        private LegacyPost.PostProcessLayer builtInCameraLayer;
+        private LegacyPost.PostProcessVolume builtInSettingsVolume;
+        private LegacyPost.PostProcessProfile builtInSettingsProfile;
+        private LegacyPost.ColorGrading builtInGrading;
+        private LegacyPost.DepthOfField builtInFocus;
+        private LegacyPost.MotionBlur builtInMotion;
+        private LayerMask originalBuiltInVolumeMask;
+        private bool originalBuiltInLayerEnabled, createdBuiltInLayer;
 
         private void MatchPlayerCameraLook(Camera source)
         {
@@ -43,6 +52,7 @@ namespace Player.Equipment
             filmCamera.allowMSAA = source.allowMSAA;
             filmCamera.backgroundColor = source.backgroundColor;
             filmCamera.clearFlags = source.clearFlags;
+            if (!(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)) return;
             var sourceData = source.GetUniversalAdditionalCameraData();
             var data = filmCamera.GetUniversalAdditionalCameraData();
             playerPostProcessing = sourceData.renderPostProcessing;
@@ -59,6 +69,7 @@ namespace Player.Equipment
             ApplyCameraLook();
             HideCameraBody();
             if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 1f;
+            if (builtInSettingsVolume != null) builtInSettingsVolume.weight = 1f;
             UpdateSettingsVolumeStack();
         }
 
@@ -66,7 +77,37 @@ namespace Player.Equipment
         {
             recordingLookActive = false;
             if (cameraSettingsVolume != null) cameraSettingsVolume.weight = 0f;
+            if (builtInSettingsVolume != null) builtInSettingsVolume.weight = 0f;
             if (!isCameraActive) RestoreCameraBody();
+        }
+
+        // Both the viewfinder and recorder must prepare the look before rendering,
+        // not depend on automatic camera/volume callback ordering.
+        public void RenderCameraFrame(RenderTexture destination)
+        {
+            if (filmCamera == null || destination == null) return;
+            RenderTexture previousTarget = filmCamera.targetTexture;
+            RenderTexture previousActive = RenderTexture.active;
+            try
+            {
+                PrepareRecordingLook();
+                if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
+                {
+                    var request = new UniversalRenderPipeline.SingleCameraRequest { destination = destination };
+                    RenderPipeline.SubmitRenderRequest(filmCamera, request);
+                }
+                else
+                {
+                    filmCamera.targetTexture = destination;
+                    filmCamera.Render();
+                }
+            }
+            finally
+            {
+                FinishRecordingLook();
+                filmCamera.targetTexture = previousTarget;
+                RenderTexture.active = previousActive;
+            }
         }
         public bool ManualFocusPracticed { get; private set; }
         public float ViewfinderFieldOfView => filmCamera != null ? filmCamera.fieldOfView : 180f;
@@ -167,6 +208,11 @@ namespace Player.Equipment
             if (filmCamera == null) return;
             LoadCameraSettings();
             featureLevel = CameraFeatureUnlocks.Level;
+            if (!(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset))
+            {
+                ApplyBuiltInCameraLook();
+                return;
+            }
             if (cameraSettingsVolume == null)
             {
                 var host = new GameObject("Camera settings - local render");
@@ -220,7 +266,7 @@ namespace Player.Equipment
         }
         private void UpdateSettingsVolumeStack()
         {
-            if (filmCamera == null) return;
+            if (filmCamera == null || !(GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)) return;
             var data = filmCamera.GetUniversalAdditionalCameraData();
             var trigger = data.volumeTrigger != null ? data.volumeTrigger : filmCamera.transform;
             if (data.volumeStack != null) VolumeManager.instance.Update(data.volumeStack, trigger, data.volumeLayerMask);
@@ -233,6 +279,20 @@ namespace Player.Equipment
         }
         private void ReleaseCameraSettings()
         {
+            Camera.onPreCull -= PrepareBuiltInCameraLook;
+            Camera.onPostRender -= FinishBuiltInCameraLook;
+            if (builtInCameraLayer != null)
+            {
+                builtInCameraLayer.volumeLayer = originalBuiltInVolumeMask;
+                builtInCameraLayer.enabled = originalBuiltInLayerEnabled;
+                if (createdBuiltInLayer) Destroy(builtInCameraLayer);
+            }
+            if (builtInSettingsVolume != null) Destroy(builtInSettingsVolume.gameObject);
+            if (builtInSettingsProfile != null)
+            {
+                foreach (var setting in builtInSettingsProfile.settings) Destroy(setting);
+                Destroy(builtInSettingsProfile);
+            }
             RenderPipelineManager.beginCameraRendering-=PrepareCameraLook;
             RenderPipelineManager.endCameraRendering-=FinishCameraLook;
             if(cameraSettingsVolume!=null)Destroy(cameraSettingsVolume.gameObject);
@@ -242,6 +302,68 @@ namespace Player.Equipment
                 Destroy(cameraSettingsProfile);
             }
         }
+        private void ApplyBuiltInCameraLook()
+        {
+            if (builtInSettingsProfile == null)
+            {
+                builtInCameraLayer = filmCamera.GetComponent<LegacyPost.PostProcessLayer>();
+                createdBuiltInLayer = builtInCameraLayer == null;
+                if (createdBuiltInLayer)
+                {
+                    var resources = Resources.Load<LegacyPost.PostProcessResources>("FilmCameraPostProcessResources");
+                    if (resources == null) { Debug.LogError("Film-camera post-processing resources are missing.", this); return; }
+                    builtInCameraLayer = filmCamera.gameObject.AddComponent<LegacyPost.PostProcessLayer>();
+                    builtInCameraLayer.Init(resources);
+                }
+                originalBuiltInLayerEnabled = !createdBuiltInLayer && builtInCameraLayer.enabled;
+                originalBuiltInVolumeMask = builtInCameraLayer.volumeLayer;
+                var host = new GameObject("Camera settings - built-in render");
+                host.transform.SetParent(filmCamera.transform, false);
+                host.layer = 31;
+                builtInSettingsVolume = host.AddComponent<LegacyPost.PostProcessVolume>();
+                builtInSettingsVolume.isGlobal = true;
+                builtInSettingsVolume.priority = 10000;
+                builtInSettingsVolume.weight = 0;
+                builtInSettingsProfile = ScriptableObject.CreateInstance<LegacyPost.PostProcessProfile>();
+                builtInSettingsVolume.sharedProfile = builtInSettingsProfile;
+                builtInGrading = builtInSettingsProfile.AddSettings<LegacyPost.ColorGrading>();
+                builtInFocus = builtInSettingsProfile.AddSettings<LegacyPost.DepthOfField>();
+                builtInMotion = builtInSettingsProfile.AddSettings<LegacyPost.MotionBlur>();
+                Camera.onPreCull += PrepareBuiltInCameraLook;
+                Camera.onPostRender += FinishBuiltInCameraLook;
+            }
+            builtInCameraLayer.volumeLayer = originalBuiltInVolumeMask.value | (1 << 31);
+            builtInCameraLayer.enabled = true;
+            // postExposure is an HDR-grading parameter in the built-in stack.
+            builtInGrading.enabled.Override(true);
+            builtInGrading.gradingMode.Override(LegacyPost.GradingMode.HighDefinitionRange);
+            float exposure = featureLevel >= 4 ? Mathf.Log(iso / 800f * (16f / (iris * iris)) * (shutterAngle / 180f), 2f) : 0f;
+            builtInGrading.postExposure.Override(Mathf.Clamp(exposure, -8, 8));
+            builtInGrading.temperature.Override(featureLevel >= 3 ? Mathf.Clamp((whiteBalance - 5600f) / 43f, -100, 100) : 0);
+            builtInGrading.tint.Override(featureLevel >= 3 ? tint : 0);
+            builtInFocus.enabled.Override(true);
+            builtInFocus.focusDistance.Override(currentFocusDistance);
+            builtInFocus.aperture.Override(featureLevel >= 4 ? iris : 4f);
+            builtInFocus.focalLength.Override(7.75f / Mathf.Tan(filmCamera.fieldOfView * Mathf.Deg2Rad * .5f));
+            builtInMotion.enabled.Override(featureLevel >= 4);
+            builtInMotion.shutterAngle.Override(featureLevel >= 4 ? shutterAngle : 180f);
+            builtInSettingsVolume.weight = isCameraActive || recordingLookActive ? 1 : 0;
+        }
+
+        private void PrepareBuiltInCameraLook(Camera camera)
+        {
+            if (builtInSettingsVolume == null) return;
+            // Scope the private profile to this camera; other scene views stay unchanged.
+            builtInSettingsVolume.weight = camera == filmCamera && (isCameraActive || recordingLookActive) ? 1 : 0;
+            if (camera == filmCamera && isCameraActive) HideCameraBody();
+        }
+
+        private void FinishBuiltInCameraLook(Camera camera)
+        {
+            if (builtInSettingsVolume != null && camera == filmCamera) builtInSettingsVolume.weight = 0;
+            if (camera == filmCamera && !isCameraActive) RestoreCameraBody();
+        }
+
         private string SettingsHUDText()
         {
             if (!settingsOpen || featureLevel < 2) return "";

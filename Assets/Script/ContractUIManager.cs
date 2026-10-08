@@ -202,7 +202,7 @@ public class ContractUIManager : MonoBehaviour
         if (offerPanel != null) offerPanel.SetActive(true);
         if (qualificationsPanel != null) qualificationsPanel.SetActive(false);
         ConfigureContractOverlay();
-        UITransition.Show(contractCanvas);
+        UITransition.ShowImmediately(contractCanvas);
 
         LockPlayer();
         Cursor.lockState = CursorLockMode.None;
@@ -286,9 +286,13 @@ public class ContractUIManager : MonoBehaviour
         reachedDocumentBottom = signingCompleted = false;
         acceptanceBriefPending = true;
         briefOpenedFrame = Time.frameCount;
-        offerPanel.SetActive(false);
-        UITransition.Show(qualificationsPanel);
+        UITransition.ShowImmediately(qualificationsPanel);
         RefreshBrief();
+        var selectedFolder = folderTitles != null && folderTitles.Length > 1 && folderTitles[1] != null
+            ? folderTitles[1].transform.parent as RectTransform : null;
+        PlayFolderOpening(selectedFolder);
+        // The opening cover has already inherited the visible selector pose.
+        offerPanel.SetActive(false);
     }
 
     public void ShowFlowerContract(Action onAccepted)
@@ -352,13 +356,16 @@ public class ContractUIManager : MonoBehaviour
         isQualificationsOpen = !isQualificationsOpen;
 
         if (isQualificationsOpen) ConfigureContractOverlay();
-        UITransition.SetVisible(contractCanvas, isQualificationsOpen);
+        if (isQualificationsOpen) UITransition.ShowImmediately(contractCanvas);
+        else if (contractCanvas != null) contractCanvas.SetActive(false);
         if (offerPanel != null) offerPanel.SetActive(false);
         if (qualificationsPanel != null) qualificationsPanel.SetActive(isQualificationsOpen);
 
         if (isQualificationsOpen)
         {
             RefreshBrief();
+            UITransition.ShowImmediately(qualificationsPanel);
+            PlayFolderOpening();
             if (editorReferenceMode)
             {
                 FindObjectOfType<CommercialCompiler>()?.editorPlayer?.StopTape();
@@ -440,11 +447,11 @@ public class ContractUIManager : MonoBehaviour
             "CLIENT OBJECTIVE\nShow the orange Terrari from three distinct angles with readable paint and reflections.\n\nREQUIRED DELIVERY\n" +
             "SET - ADD WALL; choose a dark backdrop and place one orange Terrari\n" +
             "LIGHT   - Use the Better Lights for clean reflections\n" +
-            "CAMERA  - Three recordings on three SD cards: back, side, overall view\n" +
+            "CAMERA  - Three separate recordings: back, side, overall view\n" +
             "EDIT    - 2s Terrari intro + three different recordings + 2s outro; 25 seconds\n\n" +
             "UPFRONT PAYMENT: 8,500 B-COINS");
 
-        SetQualificationSummary("STAGE: Dark backdrop + orange Terrari     CAMERA: 3 takes / 3 SD cards: back, side, overall\nLIGHT: Warm Soft Light, aimed highlights     EDIT: Intro + 3 takes + outro; 25 seconds");
+        SetQualificationSummary("STAGE: Dark backdrop + orange Terrari     CAMERA: 3 takes: back, side, overall; 60s per SD card\nLIGHT: Warm Soft Light, aimed highlights     EDIT: Intro + 3 takes + outro; 25 seconds");
 
         SetQualificationText("TERRARI - SELECTED CONTRACT",
             "AUTOMOTIVE COMPOSITION",
@@ -461,7 +468,7 @@ public class ContractUIManager : MonoBehaviour
             "- Start near 75% output and -10 degrees tilt, then refine.\n" +
             "- Use at least 30% output and 50% diffusion; aim the beam at the car.\n\n" +
             "POST-PRODUCTION\n" +
-            "Use three separate Level 3 recordings with the warm Soft Light, one per SD card (450 B-Coins for three blank cards). Record the back, side and overall views for about 7 seconds each. Hold Ctrl with WASD and the mouse for smooth camera movement. Ingest all three cards. In the editor, join the supplied full 2-second TERRARI INTRO, exactly three DIFFERENT recordings, and the full 2-second TERRARI OUTRO from 0s without gaps or overlaps. Duplicating or splitting one recording does not count as three takes. Target 25 seconds; allowed range 24.5-25.5s. Put overlays inside title safe without covering the car.\n\nCOLOR QUALITY\nIn the editor, use Brightness 0.85-1.15, Contrast 1.05-1.45 and Saturation 0.95-1.30 for full color credit. These are quality targets, not camera settings to apply during recording.");
+            "Use three separate Level 3 recordings with the warm Soft Light. A reusable SD card holds multiple clips up to 60 seconds in total. Record the back, side and overall views for about 7 seconds each. Hold Ctrl with WASD and the mouse for smooth camera movement. Eject the card with C and ingest its recordings at the computer. In the editor, join the supplied full 2-second TERRARI INTRO, exactly three DIFFERENT recordings, and the full 2-second TERRARI OUTRO from 0s without gaps or overlaps. Duplicating or splitting one recording does not count as three takes. Target 25 seconds; allowed range 24.5-25.5s. Put overlays inside title safe without covering the car.\n\nCOLOR QUALITY\nIn the editor, use Brightness 0.85-1.15, Contrast 1.05-1.45 and Saturation 0.95-1.30 for full color credit. These are quality targets, not camera settings to apply during recording.");
 
         SetPreviousContractText("GOKE COLA",
             "PREVIOUS CONTRACT\n\n" +
@@ -818,6 +825,18 @@ public class ContractUIManager : MonoBehaviour
         RefreshBrief();qualificationsPanel.SetActive(false);
     }
 
+    private void PlayFolderOpening(RectTransform selectedFolder = null)
+    {
+        var book = qualificationsPanel != null ? qualificationsPanel.transform.Find("Qualifications Book") : null;
+        if (book == null) return;
+        var motion = book.GetComponent<ContractFolderMotion>();
+        if (motion == null) motion = book.gameObject.AddComponent<ContractFolderMotion>();
+        var selectedArt = selectedFolder != null ? selectedFolder.GetComponent<Image>() : null;
+        var closedCover = selectedArt != null && selectedArt.sprite != null ? selectedArt.sprite :
+            ExportUIArt.Get(ContractFolderArt[Mathf.Clamp(activeContractLevel, 1, 5) - 1]);
+        motion.Play(closedCover, selectedFolder);
+    }
+
     private void RefreshBrief()
     {
         if(briefBody==null)return;
@@ -856,7 +875,7 @@ public class ContractUIManager : MonoBehaviour
         string readingHint = acceptanceBriefPending ? "READ TO THE BOTTOM, THEN ACCEPT." : "SCROLL FOR DETAILS | [TAB] CLOSE / REOPEN";
         briefBody.text="<align=center><b><size=30>"+liveTitle+"</size>\nPRODUCTION AGREEMENT</b>\n<size=18>"+readingHint+"</size></align>\n\n"+
             "<align=center><color=#B00020><b>"+QuickDeliverySummary()+"</b></color></align>\n\n"+
-            BuildDepartmentBrief() + "\n\n" + BuildBudgetTerms() +
+            ContractCompletionRewardTitle() + BuildDepartmentBrief() + "\n\n" + BuildBudgetTerms() +
             "\n\n<color=#B00020><b>DELIVERY AND APPROVAL</b></color>\nThe producer agrees to deliver the required commercial. A missing mandatory requirement can fail the contract even at 99/100; creative quality is scored separately.\n\n"+
             "For a passing C rank, also reach Overall 60/100, Pre-Production 60/100, Post-Production 50/100, Camera 30/70 and Lighting 8/30. Review the complete cut before submission. Client feedback explains any missing requirement; correct it and resubmit.";
         var photo=qualificationsPanel.transform.Find("Qualifications Book/Product photo").GetComponent<Image>();
@@ -873,6 +892,13 @@ public class ContractUIManager : MonoBehaviour
     private string BuildDepartmentBrief()
     {
         return DepartmentBrief(activeContractLevel);
+    }
+
+    private static string ContractCompletionRewardTitle()
+    {
+        // Room grades do not yet authorize account-currency rewards.
+        return GameSavePrefs.IsRoomSession ? "" :
+            "<align=center><color=#80500A><size=22><b>COMPLETION REWARD: " + CCoinRules.ContractReward + " C-COINS</b></size></color></align>\n\n";
     }
 
     // Both modes display exactly the same specifications.
@@ -892,8 +918,8 @@ public class ContractUIManager : MonoBehaviour
                 post = "Deliver 12 seconds from 0s without gaps: the full supplied 2-second intro at 0-2s, your Goke footage at 2-10s, and the full supplied 2-second outro at 10-12s.\n\nUse exactly TWO overlays: logo and tagline. Choose their duration and timing; they may appear together or separately. Keep them readable, title-safe and off the product. Music, effects and color changes are optional.";
                 break;
             case 3:
-                preparation = "CLIENT: TERRARI\nShow the orange car from three distinct angles with readable paint and reflections. Use ADD WALL for a dark backdrop and place exactly one orange Terrari. Plan three separate recordings: back, side and overall. Reserve three blank SD cards (" + (ProductionEconomy.SDCard * 3).ToString("N0") + " B-Coins total).";
-                production = "Record three DIFFERENT Level 3 takes, one per SD card. Include back, side and overall views; keep the whole car uncropped in the overall view. Centered or Rule of Thirds framing works. Avoid obstructions and use Ctrl with WASD/mouse for smooth movement.\n\nUse a powered warm Better Light aimed at the body in every take. Set at least 30% output and 50% diffusion. About 75% output and -10 degrees tilt are starting tips, not fixed values. Record about seven usable seconds per view, then ingest all three cards.";
+                preparation = "CLIENT: TERRARI\nShow the orange car from three distinct angles with readable paint and reflections. Use ADD WALL for a dark backdrop and place exactly one orange Terrari. Plan three separate recordings: back, side and overall. Reserve at least 21 seconds of free SD-card space. Each reusable 60-second card costs " + ProductionEconomy.SDCard.ToString("N0") + " B-Coins.";
+                production = "Record three DIFFERENT Level 3 takes. Include back, side and overall views; keep the whole car uncropped in the overall view. Centered or Rule of Thirds framing works. Avoid obstructions and use Ctrl with WASD/mouse for smooth movement.\n\nUse a powered warm Better Light aimed at the body in every take. Set at least 30% output and 50% diffusion. About 75% output and -10 degrees tilt are starting tips, not fixed values. Record about seven usable seconds per view, then eject the card with C and ingest its recordings.";
                 post = "Join the full supplied 2-second TERRARI INTRO, exactly THREE different recordings, then the full 2-second TERRARI OUTRO from 0s without gaps or overlaps. Splitting or duplicating a take does not count as different recordings. Target 25 seconds; allowed range 24.5-25.5s. Keep graphics title-safe and off the car.\n\nCOLOR QUALITY\nFor full color credit in the editor: Brightness 0.85-1.15, Contrast 1.05-1.45, Saturation 0.95-1.30. These are editing targets, not recording settings.";
                 break;
             case 4:
@@ -921,11 +947,15 @@ public class ContractUIManager : MonoBehaviour
         int advance = ProductionEconomy.Advance(activeContractLevel);
         int bonus = ProductionEconomy.CompletionBonus(activeContractLevel);
         string funding = activeContractLevel == 1 ? "STARTING PRODUCTION BUDGET" : "TOTAL CONTRACT ADVANCE";
+        string accountReward = GameSavePrefs.IsRoomSession ? "" :
+            "C-COIN COMPLETION REWARD\n" + CCoinRules.ContractReward + " C-Coins for successfully completing this contract with an S, A, B or C rank. " +
+            "Awarded once per contract in this career, in addition to the B-Coin bonus. Reopening results or repeating a completed contract does not award it again. " +
+            "Rewards are added to your account after confirmation; offline rewards are saved until your account syncs.\n\n";
         return DepartmentSection("BUDGET AND PAYMENT", funding + ": " + advance.ToString("N0") + " B-Coins.\n" +
             "This is working money for production, NOT the completion reward. Any advance already provided for this job is part of this amount, not an extra payment. Reopening the brief does not pay it again.\n\n" +
             "EXPENSES\nReuse owned equipment. Prioritize the required set, subjects, lights and recording cards; buy optional decoration only with money left over. Each blank SD card costs " + ProductionEconomy.SDCard.ToString("N0") + " B-Coins. Check tablet/shop prices before confirming purchases. Buying or rebuilding props and sets costs money; deleting them gives NO refund.\n\n" +
             "COMPLETION PAYMENT\nMaximum bonus: " + bonus.ToString("N0") + " B-Coins. A successful S rank pays 100%, A 80%, B 60%, and C 30% of this bonus. A failed delivery pays no completion bonus. Higher quality improves payment but never replaces mandatory requirements.\n\n" +
-            "IF THE BUDGET RUNS OUT\nThe Boss offers Retry Contract when you cannot afford required production purchases. Retry restores that contract's starting budget and purchases. New Game creates a separate save; Keep Working leaves this career in place.");
+            accountReward + "IF THE BUDGET RUNS OUT\nThe Boss offers Retry Contract when you cannot afford required production purchases. Retry restores that contract's starting budget and purchases. New Game creates a separate save; Keep Working leaves this career in place.");
     }
 
     private void EnsureSignatureFooter()
@@ -1104,14 +1134,20 @@ public class ContractUIManager : MonoBehaviour
         float width = briefScroll.viewport.rect.width;
         if (width <= 0) return;
         documentWidth = width;
-        float bodyHeight = Mathf.Ceil(briefBody.GetPreferredValues(briefBody.text, width, Mathf.Infinity).y);
-        briefBody.rectTransform.sizeDelta = new Vector2(0, bodyHeight);
+        var bodyRect = briefBody.rectTransform;
+        bodyRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, width);
+        // TMP's explicit-width measurement expects the usable text width, not the
+        // outer rect. Ignoring these margins misses wrapped lines above the signature.
+        float textWidth = Mathf.Max(1, bodyRect.rect.width - briefBody.margin.x - briefBody.margin.z);
+        float bodyHeight = Mathf.Ceil(briefBody.GetPreferredValues(briefBody.text, textWidth, Mathf.Infinity).y);
+        bodyRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, bodyHeight);
+        const float sectionGap = 28;
         signatureFooter.anchorMin = new Vector2(0, 1);
         signatureFooter.anchorMax = Vector2.one;
         signatureFooter.pivot = new Vector2(.5f, 1);
         signatureFooter.sizeDelta = new Vector2(0, 478);
-        signatureFooter.anchoredPosition = new Vector2(0, -bodyHeight - 20);
-        documentContent.sizeDelta = new Vector2(0, bodyHeight + 498);
+        signatureFooter.anchoredPosition = new Vector2(0, -bodyHeight - sectionGap);
+        documentContent.sizeDelta = new Vector2(0, bodyHeight + sectionGap + signatureFooter.rect.height);
         LayoutRebuilder.ForceRebuildLayoutImmediate(documentContent);
     }
 
@@ -1288,7 +1324,7 @@ public class ContractUIManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(text)) return "";
         return System.Text.RegularExpressions.Regex.Replace(text,
-            @"(?m)^(CLIENT OBJECTIVE|CLIENT QUALIFICATIONS|REQUIRED DELIVERY|MANDATORY TO PASS|MANDATORY SET|COLOR QUALITY|EXPENSES|COMPLETION PAYMENT|IF THE BUDGET RUNS OUT|OVERVIEW TAKE|COFFEE-USE TAKE|START THE ACTION BEFORE RECORDING|FINAL CUT|EXAMPLE, NOT A FIXED TEMPLATE|EDITOR CONTROLS|CREATIVE CHOICES - NOT PASS REQUIREMENTS)(?=\r?$)",
+            @"(?m)^(CLIENT OBJECTIVE|CLIENT QUALIFICATIONS|REQUIRED DELIVERY|MANDATORY TO PASS|MANDATORY SET|COLOR QUALITY|EXPENSES|COMPLETION PAYMENT|C-COIN COMPLETION REWARD|IF THE BUDGET RUNS OUT|OVERVIEW TAKE|COFFEE-USE TAKE|START THE ACTION BEFORE RECORDING|FINAL CUT|EXAMPLE, NOT A FIXED TEMPLATE|EDITOR CONTROLS|CREATIVE CHOICES - NOT PASS REQUIREMENTS)(?=\r?$)",
             "<color=#B00020><b>$1</b></color>");
     }
 

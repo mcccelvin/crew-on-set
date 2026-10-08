@@ -5,7 +5,7 @@ using TMPro;
 using Player.Equipment;
 using UnityEngine.UI;
 
-public class ComputerUIManager : MonoBehaviour
+public partial class ComputerUIManager : MonoBehaviour
 {
     [Header("UI Panels")]
     public GameObject recordingsGridPanel;
@@ -28,6 +28,8 @@ public class ComputerUIManager : MonoBehaviour
     // --- THE FIX: Make sure the panels are turned OFF when you boot up the computer! ---
     private void OnEnable()
     {
+        CloseEjectMenu();
+        CloseFileDialog();
         if (recordingsGridPanel != null) recordingsGridPanel.SetActive(false);
         if (videoPlayerPanel != null) videoPlayerPanel.SetActive(false);
         if (pixelPlayer != null) pixelPlayer.StopTape();
@@ -36,29 +38,39 @@ public class ComputerUIManager : MonoBehaviour
     public void OpenGridView()
     {
         videoPlayerPanel.SetActive(false);
-        UITransition.Show(recordingsGridPanel);
+        ComputerWindowMotion.Show(recordingsGridPanel, GetTutorialHighlightTarget("Folder"));
         if (pixelPlayer != null) pixelPlayer.StopTape();
         RefreshGrid();
     }
 
     public void OpenPlayerView(string filePath)
     {
+        CloseEjectMenu();
         recordingsGridPanel.SetActive(false);
-        UITransition.Show(videoPlayerPanel);
+        ComputerWindowMotion.Show(videoPlayerPanel);
         replayStartedByPlayer = false;
         currentlyPlayingFile = Path.GetFileName(filePath);
-        if (playerTitleText != null) playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
+        if (playerTitleText != null)
+        {
+            playerTitleText.text = Path.GetFileNameWithoutExtension(filePath);
+            playerTitleText.richText = false;
+            playerTitleText.enableWordWrapping = false;
+            playerTitleText.overflowMode = TextOverflowModes.Ellipsis;
+            playerTitleText.enableAutoSizing = true;
+            playerTitleText.fontSizeMin = 16;
+            playerTitleText.fontSizeMax = 30;
+        }
         if (pixelPlayer != null) pixelPlayer.PreviewTape(filePath);
     }
 
     public void DeleteClip(string filePath)
     {
-        if (File.Exists(filePath))
+        if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep < TutorialManager.TutorialStep.OfferLevel1)
         {
-            File.Delete(filePath);
-            if (physicalComputer != null) physicalComputer.RemoveDeletedFile(Path.GetFileName(filePath));
-            RefreshGrid();
+            GameFeedback.Show("Keep your first take until the editing lesson is complete.");
+            return;
         }
+        OpenFileDialog(filePath, false);
     }
 
     private void RefreshGrid()
@@ -77,7 +89,7 @@ public class ComputerUIManager : MonoBehaviour
         // Negative authored spacing makes the card bodies share a click area.
         var grid = gridContentContainer.GetComponent<GridLayoutGroup>();
         if (grid != null)
-            grid.spacing = new Vector2(Mathf.Max(0, grid.spacing.x), Mathf.Max(0, grid.spacing.y));
+            grid.spacing = new Vector2(Mathf.Max(12, grid.spacing.x), Mathf.Max(12, grid.spacing.y));
 
         if (physicalComputer != null)
         {
@@ -85,7 +97,7 @@ public class ComputerUIManager : MonoBehaviour
             foreach (FootageData data in insertedTapes)
             {
                 if (data == null || string.IsNullOrEmpty(data.fileName) || !seenFiles.Add(data.fileName)) continue;
-                string fullPath = Path.Combine(Application.persistentDataPath, data.fileName);
+                if (!SDCardStorage.TryPath(data.fileName, out string fullPath)) continue;
                 if (File.Exists(fullPath))
                 {
                     GameObject newCard;
@@ -103,7 +115,11 @@ public class ComputerUIManager : MonoBehaviour
                     }
 
                     ClipUIItem clipScript = newCard.GetComponent<ClipUIItem>();
-                    if (clipScript != null) clipScript.Setup(fullPath, this);
+                    if (clipScript != null)
+                    {
+                        clipScript.Setup(fullPath, this);
+                        clipScript.SetSourceCard(physicalComputer.GetSourceCardNumber(data.fileName));
+                    }
                     cardIndex++;
                 }
             }
@@ -116,13 +132,16 @@ public class ComputerUIManager : MonoBehaviour
         Canvas.ForceUpdateCanvases();
         if (gridContentContainer is RectTransform content)
             LayoutRebuilder.ForceRebuildLayoutImmediate(content);
+        RefreshStorageHeader(cardIndex);
     }
 
     public void CloseComputerUI()
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("ComputerStation")) return;
+        CloseEjectMenu();
 
         if (pixelPlayer != null) pixelPlayer.StopTape();
+        CloseFileDialog();
 
         if (physicalComputer == null) physicalComputer = FindObjectOfType<ComputerStation>();
         if (physicalComputer != null)
@@ -176,7 +195,9 @@ public class ComputerUIManager : MonoBehaviour
     {
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("BackButton")) return;
 
-        // --- THE FIX: Hide the panels to return to the Desktop view! ---
+        CloseEjectMenu();
+        CloseFileDialog();
+        // Hide the panels to return to the desktop view.
         if (recordingsGridPanel != null) recordingsGridPanel.SetActive(false);
         if (videoPlayerPanel != null) videoPlayerPanel.SetActive(false);
         if (pixelPlayer != null) pixelPlayer.StopTape();

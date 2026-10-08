@@ -43,7 +43,7 @@ using System.Collections.Generic;
 }
 public static class CCoinRules
 {
-    public const int ContractReward = 5;
+    public const int ContractReward = 100;
     public const string Currency = "CC";
     public static bool Passed(string rank) => rank == "S" || rank == "A" || rank == "B" || rank == "C";
     public static bool ValidId(string id)

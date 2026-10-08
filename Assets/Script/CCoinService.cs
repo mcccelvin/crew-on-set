@@ -127,7 +127,7 @@ public sealed class CCoinService : MonoBehaviour
         Save(); // Durable before marking the career; retries retain the operation ID.
         GameSavePrefs.SetInt("CCoins.RewardQueued.Level" + level,1); GameSavePrefs.Save();
         nextRefresh = Time.unscaledTime;
-        Publish("+5 C-Coins reward pending server confirmation."); return true;
+        Publish("+" + CCoinRules.ContractReward + " C-Coins reward pending server confirmation."); return true;
     }
     // Invoke only after the existing save system has linked unclaimed guest careers.
     public void LinkGuestRewards()

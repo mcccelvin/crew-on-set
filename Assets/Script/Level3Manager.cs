@@ -66,7 +66,7 @@ public class Level3Manager : MonoBehaviour
         practiceLesson=new GuidedPracticeLesson(tutorialManager,new List<GuidedPracticeLesson.Step>
         {
             new GuidedPracticeLesson.Step("Your Soft Light is placed at 3200K for a warm look. Now pick up your camera with <color=yellow>[E]</color> and select its hotbar slot. If it is already in your inventory, just equip it. We'll practice smooth movement before recording.","Pick up and equip your camera",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem),
-            new GuidedPracticeLesson.Step("Next, pick up a blank SD card with <color=yellow>[E]</color>. It stores one recording. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect a blank SD card",()=>inventory != null && inventory.HasBlankSDCard()),
+            new GuidedPracticeLesson.Step("Next, pick up an SD card with <color=yellow>[E]</color>. It stores multiple takes, up to 60 seconds in total. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect an SD card with free space",()=>inventory != null && inventory.HasBlankSDCard()),
             new GuidedPracticeLesson.Step("Select your camera and click <color=yellow>Left Mouse Button</color> to open the viewfinder. Look through it to frame the lit subject before practicing movement.","Equip camera and click LMB to open the viewfinder",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive()),
             new GuidedPracticeLesson.Step("White balance changes how the camera renders color; it does not change the lamps. Let's compare two settings on this practice subject. Press F2 to open camera settings.", "[F2] Open camera settings", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.SettingsOpen),
             new GuidedPracticeLesson.Step("Select WHITE BALANCE with Up/Down. Use Left/Right to set 3200K. Look at the subject and remember its color at this setting.", "Set WHITE BALANCE to 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
@@ -1081,7 +1081,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted! <color=yellow>Terrari</color> wants a 25-second reveal. Place the orange car on a dark set. Record back, side and overall views on three SD cards, about 7 seconds each. Use Better Lights at 75%, -10°, 3200K and 75% diffusion. Hold Ctrl for smooth camera movement. In editing, add the 2-second Terrari intro and 2-second outro. Press <color=red>[TAB]</color> to review the brief.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted! <color=yellow>Terrari</color> wants a 25-second reveal. Place the orange car on a dark set. Record separate back, side and overall takes, about 7 seconds each. One SD card holds up to 60 seconds; eject it with <color=red>[C]</color> when ready to import. Use Better Lights at 75%, -10°, 3200K and 75% diffusion. Hold Ctrl for smooth camera movement. In editing, add the 2-second Terrari intro and 2-second outro. Press <color=red>[TAB]</color> to review the brief.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -1406,9 +1406,7 @@ internal sealed class GuidedPracticeLesson
         if (guideLine != null && stationPlayer != null && station != null)
         {
             guideLine.enabled = !stationLocked && !IsExplaining;
-            float height = tutorial != null ? tutorial.lineHeightOffset : .5f;
-            guideLine.SetPosition(0, GuideEndpoint(stationPlayer.transform, true));
-            guideLine.SetPosition(1, GuideEndpoint(station, true));
+            if (guideLine.enabled) ProductionGuideLine.Draw(guideLine, stationPlayer.transform, station, stationPlayer.GameplayCamera);
         }
         if (IsExplaining || index >= steps.Count || PauseManager.isPaused) return;
         if (steps[index].guide != null) steps[index].guide();
@@ -1419,14 +1417,9 @@ internal sealed class GuidedPracticeLesson
         if (!DevTutorialBypass.PracticeDelayComplete(Time.time - stableSince, 0.5f)) return;
         if (index == 0 && station != null && stationPlayer != null)
         {
+            if (lockMovementAtStation && !stationPlayer.TryLockToPracticePoint(station))
+            { stableSince = -1f; return; }
             stationLocked = lockMovementAtStation;
-            if (stationLocked) stationPlayer.canMove = false;
-            CharacterController controller = stationPlayer.GetComponent<CharacterController>();
-            bool wasEnabled = controller != null && controller.enabled;
-            if (stationLocked && wasEnabled) controller.enabled = false;
-            Vector3 position = stationPlayer.transform.position;
-            if (stationLocked) stationPlayer.transform.position = new Vector3(station.position.x, position.y, station.position.z);
-            if (stationLocked && wasEnabled) controller.enabled = true;
             if (guideLine != null) guideLine.enabled = false;
             foreach (Renderer visual in station.GetComponentsInChildren<Renderer>())
                 if (!(visual is LineRenderer)) visual.enabled = false;
@@ -1441,7 +1434,11 @@ internal sealed class GuidedPracticeLesson
         if (released) return;
         released = true;
         if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HideHighlight();
-        if (stationLocked && stationPlayer != null) stationPlayer.canMove = true;
+        if (stationLocked && stationPlayer != null)
+        {
+            stationPlayer.ReleasePracticePoint();
+            stationPlayer.canMove = true;
+        }
         stationLocked = false;
         if (guideLine != null) Object.Destroy(guideLine.gameObject);
     }
@@ -1477,9 +1474,7 @@ internal sealed class GuidedPracticeLesson
     private static bool IsPlayerAtMarker(Transform marker)
     {
         var player = Object.FindObjectOfType<Player.PlayerController.PlayerController>();
-        if (marker == null || player == null) return false;
-        Vector3 offset = player.transform.position - marker.position;
-        return new Vector2(offset.x, offset.z).magnitude <= 1.25f;
+        return player != null && PracticePointLock.IsAtCenter(player.transform, marker);
     }
 
     public static GameObject CreateGreenMarker(Transform parent)
@@ -1529,8 +1524,8 @@ internal sealed class GuidedPracticeLesson
     {
         var steps = new List<Step>
         {
-            new Step("Bring your light to the green " + role + " circle. We'll work through the controls once you're standing there.",
-                "Equip the light and walk onto the green " + role + " circle",
+            new Step("Bring your light to the center of the green " + role + " circle. We'll work through the controls once you're standing there.",
+                "Equip the light and walk to the center of the green " + role + " circle",
                 () => heldLight() != null && AtMarker(marker)),
             new Step("Good spot. Press <color=red>[Left Click]</color> to switch the light on. Watch where the light falls.",
                 "[Left Click] Turn the light ON",
@@ -1659,7 +1654,7 @@ internal static class CampaignGuidance
                 {
                     if (item.GetComponentInParent<Player.PlayerController.PlayerController>() != null) continue;
                     bool matches = step == "PickUpCamera" ? item is Player.Equipment.FilmCameraItem :
-                        step == "PickUpSDCard" ? item is Player.Equipment.SDCardItem card && !card.isUsedCard :
+                        step == "PickUpSDCard" ? item is Player.Equipment.SDCardItem card && card.HasSpace :
                         item is Player.Equipment.FilmLightItem;
                     if (!matches) continue;
                     if (level == 3 && (!(item is Player.Equipment.FilmLightItem softLight) || !softLight.HasAdvancedFeatures())) continue;

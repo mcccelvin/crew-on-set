@@ -67,7 +67,7 @@ namespace Player.Interactor
             if (activeComputer != null)
             {
                 if (hotbarUI != null) hotbarUI.UpdateGuideText("");
-                if (inputManager.Interact) { activeComputer.CloseComputerUI(); }
+                if (inputManager.Interact) { activeComputer.CloseFromShortcut(); }
                 return;
             }
 
@@ -154,7 +154,8 @@ namespace Player.Interactor
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
-                    targetText = $"[E] Pick Up {ShopTerminal.DisplayEquipmentName(item.EquipmentName)}";
+                    string displayName = item is Equipment.SDCardItem sd ? sd.DisplayName : ShopTerminal.DisplayEquipmentName(item.EquipmentName);
+                    targetText = $"[E] Pick Up {displayName}";
                 }
                 else if (hit.collider.GetComponentInParent<ComputerStation>() != null)
                 {
@@ -420,7 +421,7 @@ namespace Player.Interactor
             card.gameObject.SetActive(slot == currentSlotIndex);
             if (slot == currentSlotIndex) currentEquipment = card;
             if (hotbarUI != null) hotbarUI.UpdateSlot(slot, card.EquipmentName, card.EquipmentIcon);
-            GameFeedback.Show("SD CARD STORED\nRecording added to slot " + (slot + 1));
+            GameFeedback.Show("SD CARD STORED\nCard added to slot " + (slot + 1));
             return true;
         }
 
@@ -431,7 +432,7 @@ namespace Player.Interactor
                 if (hotbar[i] != null)
                 {
                     Equipment.SDCardItem card = hotbar[i].GetComponent<Equipment.SDCardItem>();
-                    if (card != null && !card.isUsedCard) return true;
+                    if (card != null && card.HasSpace) return true;
                 }
             }
             return false;
@@ -459,6 +460,24 @@ namespace Player.Interactor
                     }
                 }
             }
+        }
+
+        // Transfer the actual card with its clip list, instead of destroying it.
+        public Equipment.SDCardItem TakeSDCard(bool heldOnly = false)
+        {
+            for (int i = 0; i < hotbar.Length; i++)
+            {
+                if (heldOnly && i != currentSlotIndex) continue;
+                var card = hotbar[i] as Equipment.SDCardItem;
+                if (card == null || (!heldOnly && !card.HasSpace)) continue;
+                hotbar[i] = null;
+                if (currentEquipment == card) currentEquipment = null;
+                if (hotbarUI != null) hotbarUI.UpdateSlot(i, "", null);
+                card.OnDropped(null); // Release the pickup snapshot before another device owns it.
+                card.gameObject.SetActive(false);
+                return card;
+            }
+            return null;
         }
 
         public void DropAllEquipment()

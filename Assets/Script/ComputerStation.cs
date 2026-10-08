@@ -19,6 +19,7 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     // FIX 1: We now store the full FootageData (which includes scores) instead of just the name!
     private List<FootageData> insertedFiles = new List<FootageData>();
+    private readonly List<SDCardItem> insertedCards = new List<SDCardItem>();
 
     private int selectedClipIndex = 0;
     private EquipmentInteractor currentInteractor;
@@ -45,29 +46,21 @@ public class ComputerStation : MonoBehaviour, IInteractable
         if (heldItem != null)
         {
             SDCardItem card = heldItem.GetComponent<SDCardItem>();
-            if (card != null && card.isUsedCard && !string.IsNullOrEmpty(card.recordedFileName) && card.recordedFileName.EndsWith(".tape"))
+            if (card != null)
             {
-                // FIX 1: Capture the REAL scores from the physical SD Card!
-                FootageData newData = new FootageData();
-                newData.fileName = card.recordedFileName;
-                newData.camScore = card.cameraScore;
-                newData.lightScore = card.lightScore;
-                newData.campaignLevel = card.campaignLevel;
-                newData.shotType = card.shotType;
-                newData.screenDirection = card.screenDirection;
-                newData.actorPose = card.actorPose;
-                newData.requiredSubjectsVisible = card.requiredSubjectsVisible;
-                newData.usedSoftLight = card.usedSoftLight;
-                newData.hasThreePointRoles = card.hasThreePointRoles;
-                insertedFiles.Add(newData);
-
-                hotbar.DestroyHeldItem();
+                bool hasRecordings = card.GetRecordings().Count > 0;
+                card = hotbar.TakeSDCard(true);
+                if (card == null) return;
+                currentInteractor = hotbar;
+                card.transform.SetParent(transform, true);
+                insertedCards.Add(card);
+                RebuildInsertedFiles();
                 UpdateUI();
-                if (TutorialManager.Instance != null) TutorialManager.Instance.OnCardInsertedToComputer();
+                if (TutorialManager.Instance != null && hasRecordings) TutorialManager.Instance.OnCardInsertedToComputer();
 
-                Debug.Log($"Inserted {card.recordedFileName}. Real Scores - Cam: {card.cameraScore:F1}, Light: {card.lightScore:F1}");
+                Debug.Log($"Inserted SD card: {card.GetRecordings().Count} clips, {card.UsedSeconds:0.#}/60s used.");
             }
-            else Debug.LogWarning("This SD card is either empty or not a valid tape!");
+            else Debug.LogWarning("Hold an SD card to insert it.");
         }
         else OpenComputerUI(hotbar);
     }
@@ -92,11 +85,18 @@ public class ComputerStation : MonoBehaviour, IInteractable
             hasPlayerStateSnapshot = true;
         }
 
-        UITransition.Show(computerUICanvas);
+        UITransition.ShowImmediately(computerUICanvas);
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
         UpdateUI();
 
+    }
+
+    public void CloseFromShortcut()
+    {
+        var ui = computerUICanvas != null ? computerUICanvas.GetComponentInChildren<ComputerUIManager>(true) : null;
+        if (ui != null && ui.BlocksCloseShortcut) return;
+        CloseComputerUI();
     }
 
     public void CloseComputerUI()
@@ -177,6 +177,9 @@ public class ComputerStation : MonoBehaviour, IInteractable
                 else frames.RemoveRange(frames.Count - framesToRemove, framesToRemove);
 
                 WriteTapeFile(path, frames);
+                insertedFiles[selectedClipIndex].duration = frames.Count / TapeSettings.framesPerSecond;
+                SDCardStorage.SaveMetadata(insertedFiles[selectedClipIndex]);
+                foreach (var card in insertedCards) if (card != null) card.RefreshLatestRecording();
                 PlaySelectedClip();
             }
         }
@@ -184,44 +187,41 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     public void EjectAllCards()
     {
-        foreach (FootageData data in insertedFiles) EjectCard(data);
+        foreach (SDCardItem card in insertedCards) EjectCard(card);
+        insertedCards.Clear();
         insertedFiles.Clear();
         selectedClipIndex = 0;
         UpdateUI();
     }
 
-    private void EjectCard(FootageData data)
+    public bool TryEjectCard(SDCardItem card)
     {
-        if (sdCardPrefab == null) return;
+        if (card == null || !insertedCards.Contains(card)) return false;
+        insertedCards.Remove(card);
+        EjectCard(card);
+        RebuildInsertedFiles();
+        UpdateUI();
+        return true;
+    }
+
+    public List<SDCardItem> GetInsertedCards()
+    {
+        var cards = new List<SDCardItem>();
+        foreach (var card in insertedCards)
+            if (card != null) { CardDisplayNumber(card); cards.Add(card); }
+        cards.Sort((a, b) => a.CardNumber.CompareTo(b.CardNumber));
+        return cards;
+    }
+
+    private void EjectCard(SDCardItem card)
+    {
+        if (card == null) return;
+        card.RefreshLatestRecording();
+        if (currentInteractor != null && currentInteractor.StoreEjectedCard(card)) return;
         Transform spawnLoc = ejectPoint != null ? ejectPoint : transform;
-        GameObject ejectedCard = Instantiate(sdCardPrefab, spawnLoc.position, spawnLoc.rotation);
-
-        SDCardItem cardScript = ejectedCard.GetComponent<SDCardItem>();
-        if (cardScript != null)
-        {
-            cardScript.isUsedCard = true;
-            cardScript.recordedFileName = data.fileName;
-            cardScript.cameraScore = data.camScore;
-            cardScript.lightScore = data.lightScore;
-            cardScript.campaignLevel = data.campaignLevel;
-            cardScript.shotType = data.shotType;
-            cardScript.screenDirection = data.screenDirection;
-            cardScript.actorPose = data.actorPose;
-            cardScript.requiredSubjectsVisible = data.requiredSubjectsVisible;
-            cardScript.usedSoftLight = data.usedSoftLight;
-            cardScript.hasThreePointRoles = data.hasThreePointRoles;
-        }
-
-        MeshRenderer renderer = ejectedCard.GetComponentInChildren<MeshRenderer>();
-        if (renderer != null) renderer.material.color = Color.red;
-
-        Collider col = ejectedCard.GetComponent<Collider>();
-        if (col == null) col = ejectedCard.AddComponent<BoxCollider>();
-        Rigidbody rb = ejectedCard.GetComponent<Rigidbody>();
-        if (rb == null) rb = ejectedCard.AddComponent<Rigidbody>();
-
-        rb.isKinematic = false; rb.useGravity = true;
-        rb.AddForce(transform.up * 2f + transform.forward * 1.5f, ForceMode.Impulse);
+        card.OnDropped(null);
+        card.gameObject.SetActive(true);
+        card.transform.SetPositionAndRotation(spawnLoc.position, spawnLoc.rotation);
     }
 
     private List<byte[]> ReadTapeFile(string path)
@@ -246,10 +246,83 @@ public class ComputerStation : MonoBehaviour, IInteractable
 
     public void OnDrop() { }
 
+    private void RebuildInsertedFiles()
+    {
+        insertedFiles.Clear();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var card in insertedCards)
+            if (card != null)
+            {
+                CardDisplayNumber(card);
+                foreach (var clip in card.GetRecordings())
+                    if (clip != null && !string.IsNullOrEmpty(clip.fileName) && seen.Add(clip.fileName)) insertedFiles.Add(clip);
+            }
+        selectedClipIndex = Mathf.Clamp(selectedClipIndex, 0, Mathf.Max(0, insertedFiles.Count - 1));
+    }
+
     public List<FootageData> GetInsertedFiles() { return insertedFiles; }
+    public bool HasInsertedCards => insertedCards.Exists(x => x != null);
+
+    private int CardDisplayNumber(SDCardItem card)
+    {
+        return card.CardNumber;
+    }
+
+    public int GetSourceCardNumber(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return 0;
+        string name = Path.GetFileName(fileName);
+        foreach (var card in insertedCards)
+        {
+            if (card == null) continue;
+            int number = CardDisplayNumber(card);
+            foreach (var clip in card.GetRecordings())
+                if (clip != null && string.Equals(clip.fileName, name, StringComparison.OrdinalIgnoreCase)) return number;
+        }
+        return 0; // Never invent a source for an unregistered/ejected recording.
+    }
+
+    public string StorageSummary()
+    {
+        float used = 0; int count = 0;
+        foreach (var card in insertedCards) if (card != null) { used += card.UsedSeconds; count++; }
+        return count == 0 ? "Insert an SD card to view its recordings" :
+            $"{insertedFiles.Count} clips · {used:0.#} / {count * 60} seconds used · {count} SD card{(count == 1 ? "" : "s")}";
+    }
+
+    public bool TryRenameClip(string name, string newName, out string error)
+    {
+        var data = insertedFiles.Find(x => string.Equals(x.fileName, name, StringComparison.OrdinalIgnoreCase));
+        if (data == null) { error = "Reinsert the SD card for this recording."; return false; }
+        string previous = data.fileName;
+        if (!SDCardStorage.TryRename(data, newName, out error)) return false;
+        foreach (var card in insertedCards)
+            if (card != null)
+            {
+                foreach (var clip in card.GetRecordings()) if (string.Equals(clip.fileName, previous, StringComparison.OrdinalIgnoreCase)) clip.fileName = data.fileName;
+                card.RefreshLatestRecording();
+            }
+        if (ProjectDataManager.Instance != null && ProjectDataManager.Instance.compiledFootage != null)
+            foreach (var clip in ProjectDataManager.Instance.compiledFootage)
+                if (clip != null && string.Equals(clip.fileName, previous, StringComparison.OrdinalIgnoreCase)) clip.fileName = data.fileName;
+        RebuildInsertedFiles(); UpdateUI();
+        return true;
+    }
+
+    public bool TryDeleteClip(string name, out string error)
+    {
+        if (!insertedFiles.Exists(x => string.Equals(x.fileName, name, StringComparison.OrdinalIgnoreCase)))
+        { error = "Reinsert the SD card for this recording."; return false; }
+        if (!SDCardStorage.TryDelete(name, out error)) return false;
+        RemoveDeletedFile(name);
+        if (ProjectDataManager.Instance != null && ProjectDataManager.Instance.compiledFootage != null)
+            ProjectDataManager.Instance.compiledFootage.RemoveAll(x => x != null && string.Equals(x.fileName, name, StringComparison.OrdinalIgnoreCase));
+        return true;
+    }
 
     public void RemoveDeletedFile(string fileName)
     {
-        insertedFiles.RemoveAll(x => x.fileName == fileName);
+        foreach (var card in insertedCards) if (card != null) card.RemoveRecording(fileName);
+        RebuildInsertedFiles(); UpdateUI();
     }
 }

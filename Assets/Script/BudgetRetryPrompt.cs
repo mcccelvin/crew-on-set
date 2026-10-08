@@ -156,7 +156,7 @@ public sealed class BudgetRetryPrompt : MonoBehaviour
         }
         CampaignProgression.SetRetryLevel(snapshot.level);
         PlayerAnalytics.Begin(snapshot.level, true);
-        GameSaveManager.Instance?.SaveCheckpoint();
+        GameSaveManager.Instance?.SaveBudgetCheckpoint();
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
         CrossSceneData.finalGrades = default;
         CrossSceneData.submittedLevel = 0;

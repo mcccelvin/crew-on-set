@@ -149,7 +149,77 @@ static class GameSaveSessionChecks
 
         m = Setup("A", false); Login(m, "A");
         Check(CCoinService.Refreshes == 1 && AccountProfileData.Refreshes == 1 && AccountAppearanceData.Refreshes == 1, "every authenticated login refreshes all account services");
+        BudgetChecks();
         Console.WriteLine("All session checks passed.");
+    }
+    static void Set(string key, int value)
+    {
+        GameSavePrefs.SetInt(key,value);
+    }
+    static int Money(GameSaveSlot slot) => slot.values.Find(v=>v.key=="PlayerMoney" && v.kind==0)?.integer ?? 0;
+    static void TextValue(string key,string text) { GameSavePrefs.Values.RemoveAll(v=>v.key==key); GameSavePrefs.Values.Add(new GameSaveValue{key=key,kind=2,text=text}); }
+    static void BudgetChecks()
+    {
+        var m=Setup("A",false);var slot=m.CreateGame("Checkpoint budget");m.StartGame(slot,false);
+        Set("CurrentLevel",1);Set("PlayerMoney",9000);Set("Level1StartingBudgetGranted",1);m.SaveBudgetCheckpoint();
+        Check(Money(slot)==9000,"starter grant establishes a 9000 B-Coin checkpoint");
+        Set("PlayerMoney",700);Set("OwnedEquipment.NONY FX",1);Set("OwnedEquipment.160 LED PANEL",1);
+        Set("Level2CameraPurchased",1);Set("OwnedInterior.2",1);Set("TutorialProgress",1);
+        TextValue("Analytics.Career.v1","spent during this attempt");TextValue("Profile.Career.v1","lifetime evidence");
+        TextValue("CCoins.CareerRewardId","stable-reward-career");Set("Knowledge_director_tablet",1);Set("AchivDone_director_tablet",1);
+        m.SaveCheckpoint();m.SaveCheckpoint();
+        Check(Money(slot)==9000 && GameSavePrefs.GetInt("PlayerMoney")==700,"purchase/analytics saves retain checkpoint without refunding live cash");
+        Check(GameSavePrefs.GetInt("OwnedEquipment.NONY FX")==1 && !slot.values.Exists(v=>v.key=="OwnedEquipment.NONY FX"),"live purchase stays usable but is not added to resume ownership");
+        m.StartGame(slot,false);Check(GameSavePrefs.GetInt("PlayerMoney")==9000,"Continue restores checkpoint money after abandoned attempt");
+        Check(GameSavePrefs.GetInt("OwnedEquipment.NONY FX")==0 && GameSavePrefs.GetInt("OwnedEquipment.160 LED PANEL")==0 && GameSavePrefs.GetInt("Level2CameraPurchased")==0,"Continue rolls back unfinished equipment purchases and shop flags");
+        Check(GameSavePrefs.GetInt("OwnedInterior.2")==0 && GameSavePrefs.GetInt("TutorialProgress")==0,"Continue rolls back unfinished interior and lesson state");
+        Check(GameSavePrefs.GetInt("Level1StartingBudgetGranted")==1,"Continue keeps checkpoint advance flags without granting twice");
+        Check(GameSavePrefs.Values.Exists(v=>v.key=="Analytics.Career.v1" && v.text=="spent during this attempt") && GameSavePrefs.Values.Exists(v=>v.key=="Profile.Career.v1" && v.text=="lifetime evidence"),"completed/lifetime evidence is retained outside production rollback");
+        Check(GameSavePrefs.Values.Exists(v=>v.key=="CCoins.CareerRewardId" && v.text=="stable-reward-career") && GameSavePrefs.GetInt("Knowledge_director_tablet")==1 && GameSavePrefs.GetInt("AchivDone_director_tablet")==1,"reward identity, learned skills and earned achievements survive Continue");
+        Set("PlayerMoney",1000);Login(m,"A");
+        Check(Money(slot)==9000 && GameSavePrefs.GetInt("PlayerMoney")==1000,"same-account login cannot checkpoint mid-contract spending");
+        PlayFabClientAPI.ReadSuccess(new GetUserDataResult());
+        var uploaded=UnityEngine.JsonUtility.FromJson<GameSaveSlot>(PlayFabClientAPI.LastWrite.Data["CrewCareer_v1_"+slot.id]);
+        Check(Money(uploaded)==9000,"automatic cloud upload carries resume budget, not temporary spending");
+        PlayFabClientAPI.WriteSuccess(new UpdateUserDataResult());
+        Set("CurrentLevel",2);Set("PlayerMoney",2700);Set("OwnedEquipment.NONY FX",1);Set("OwnedEquipment.160 LED PANEL",1);m.SaveBudgetCheckpoint();
+        Set("PlayerMoney",100);m.SaveCheckpoint();m.StartGame(slot,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==2700,"passed contract checkpoints the actual remaining budget plus reward");
+        Check(GameSavePrefs.GetInt("OwnedEquipment.NONY FX")==1 && GameSavePrefs.GetInt("OwnedEquipment.160 LED PANEL")==1,"equipment acquired before a completed checkpoint is kept");
+        Set("GokeContractAccepted",1);Set("PlayerMoney",13200);m.SaveBudgetCheckpoint();
+        Set("PlayerMoney",500);m.SaveCheckpoint();m.StartGame(slot,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==13200 && GameSavePrefs.GetInt("GokeContractAccepted")==1,"acceptance checkpoint retains advance flag without paying it twice");
+        var other=m.CreateGame("Independent budget");m.StartGame(other,false);Set("PlayerMoney",4000);m.SaveBudgetCheckpoint();
+        Set("PlayerMoney",0);m.SaveCheckpoint();m.StartGame(slot,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==13200 && Money(other)==4000,"careers keep independent checkpoint budgets");
+        GameSavePrefs.IsRoomSession=true;Set("PlayerMoney",10);m.SaveBudgetCheckpoint();m.SaveCheckpoint();GameSavePrefs.IsRoomSession=false;
+        Check(Money(slot)==13200,"room preference writes cannot replace solo budget");
+        Set("PlayerMoney",12000);m.SaveBudgetCheckpoint();Set("PlayerMoney",0);m.SaveCheckpoint();m.StartGame(slot,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==12000,"explicit retry can establish the restored budget");
+        Set("PlayerMoney",0);m.SaveBudgetCheckpoint();m.StartGame(slot,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==0,"explicit career reset can clear budget instead of resurrecting checkpoint funds");
+
+        var type=typeof(GameSaveManager).GetNestedType("LegacyBudgetStart",BindingFlags.NonPublic);
+        var start=Activator.CreateInstance(type,true);type.GetField("level").SetValue(start,1);
+        type.GetField("values").SetValue(start,new List<GameSaveValue>{new GameSaveValue{key="PlayerMoney",integer=9000}});
+        var legacy=m.Repository.Create("Legacy spent balance",new List<GameSaveValue>{new GameSaveValue{key="PlayerMoney",integer=700},new GameSaveValue{key="BudgetRetry.Start.v1",kind=2,text=UnityEngine.JsonUtility.ToJson(start)}});
+        m.StartGame(legacy,false);Check(GameSavePrefs.GetInt("PlayerMoney")==9000 && Money(legacy)==700,"legacy Continue recovers known same-contract start without mutating original until save");
+        var partial=m.Repository.Create("Old money-only checkpoint with purchased camera",new List<GameSaveValue>{new GameSaveValue{key="PlayerMoney",integer=9000},new GameSaveValue{key="BudgetCheckpoint.BCoins.v1",integer=9000},new GameSaveValue{key="OwnedEquipment.NONY FX",integer=1},new GameSaveValue{key="TutorialProgress",integer=1},new GameSaveValue{key="BudgetRetry.Start.v1",kind=2,text=UnityEngine.JsonUtility.ToJson(start)},new GameSaveValue{key="CCoins.CareerRewardId",kind=2,text="keep-identity"}});
+        m.StartGame(partial,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==9000 && GameSavePrefs.GetInt("OwnedEquipment.NONY FX")==0 && GameSavePrefs.GetInt("TutorialProgress")==0,"existing money-only save recovers matching start purchases and lesson state too");
+        Check(GameSavePrefs.Values.Exists(v=>v.key=="CCoins.CareerRewardId" && v.text=="keep-identity") && partial.values.Exists(v=>v.key=="OwnedEquipment.NONY FX"),"legacy normalization retains reward identity and does not rewrite source on load");
+        m.SaveCheckpoint();m.StartGame(partial,false);Check(GameSavePrefs.GetInt("OwnedEquipment.NONY FX")==0,"recovered production checkpoint persists through the existing transport");
+        m.StartGame(legacy,false);
+        m.SaveCheckpoint();Check(Money(legacy)==9000,"recovered legacy budget persists through existing checkpoint transport");
+        Set("PlayerMoney",1234);m.SaveBudgetCheckpoint();m.StartGame(legacy,false);
+        Check(GameSavePrefs.GetInt("PlayerMoney")==1234,"explicit budget checkpoint supersedes an older retry snapshot");
+        var mismatch=m.Repository.Create("Old snapshot different contract",new List<GameSaveValue>{new GameSaveValue{key="CurrentLevel",integer=2},new GameSaveValue{key="PlayerMoney",integer=700},new GameSaveValue{key="BudgetRetry.Start.v1",kind=2,text=UnityEngine.JsonUtility.ToJson(start)}});
+        m.StartGame(mismatch,false);Check(GameSavePrefs.GetInt("PlayerMoney")==700,"different-contract legacy snapshot cannot grant a refund");
+        var noSnapshot=m.Repository.Create("No known start",new List<GameSaveValue>{new GameSaveValue{key="PlayerMoney",integer=700}});
+        m.StartGame(noSnapshot,false);Check(GameSavePrefs.GetInt("PlayerMoney")==700,"legacy balance without recovery snapshot is preserved, not guessed");
+        type.GetField("level").SetValue(start,5);
+        var complete=m.Repository.Create("Finished campaign",new List<GameSaveValue>{new GameSaveValue{key="CurrentLevel",integer=5},new GameSaveValue{key="CampaignCompleted",integer=1},new GameSaveValue{key="PlayerMoney",integer=700},new GameSaveValue{key="BudgetRetry.Start.v1",kind=2,text=UnityEngine.JsonUtility.ToJson(start)}});
+        m.StartGame(complete,false);Check(GameSavePrefs.GetInt("PlayerMoney")==700,"finished campaign does not roll back to last-contract start");
     }
 }
 
@@ -196,7 +266,7 @@ namespace PlayFab.ClientModels {
     public class UpdateUserDataResult {} public enum UserDataPermission { Private }
 }
 public class GameSaveSlot { public string id=Guid.NewGuid().ToString("N"),name,owner,linkedAccount,revision="local",cloudRevision,updatedUtc; public List<GameSaveValue> values=new List<GameSaveValue>(); }
-public class GameSaveValue {}
+public class GameSaveValue { public string key,text; public int kind,integer; public float number; }
 public class GameSaveRepository {
     static Dictionary<string,List<GameSaveSlot>> storage = new Dictionary<string,List<GameSaveSlot>>(); public static int ImportFailures;
     public static void Reset(){storage.Clear();ImportFailures=0;}
@@ -205,10 +275,16 @@ public class GameSaveRepository {
     public GameSaveSlot Create(string name,List<GameSaveValue> values=null){var s=new GameSaveSlot{name=name,owner=Owner,values=values??new List<GameSaveValue>()};Slots.Add(s);return s;}
     public void ImportUnclaimedGuestSaves(GameSaveRepository r){if(ImportFailures>0){ImportFailures--;throw new Exception("simulated local import failure");}foreach(var source in r.Slots){if(source.linkedAccount!=null)continue;if(!Slots.Exists(s=>s.id==source.id)){var copy=Create(source.name,Clone(source.values));copy.id=source.id;}source.linkedAccount=Owner;}} public void Commit(GameSaveSlot s){Commits++;s.revision="changed";}
     public void Write(GameSaveSlot s){} public void MergeCloud(GameSaveSlot s,string id){s.cloudRevision=s.revision;Slots.Add(s);}
-    public static List<GameSaveValue> Clone(List<GameSaveValue> v)=>new List<GameSaveValue>(v);
+    public static List<GameSaveValue> Clone(List<GameSaveValue> v)=>v.ConvertAll(x=>new GameSaveValue{key=x.key,kind=x.kind,integer=x.integer,number=x.number,text=x.text});
 }
-public static class GameSavePrefs { public static List<GameSaveValue> Values; public static bool IsRoomSession; public static void Activate(GameSaveSlot s){Values=s?.values;} }
+public static class GameSavePrefs {
+    public static List<GameSaveValue> Values; public static bool IsRoomSession;
+    public static void Activate(GameSaveSlot s){Values=s==null?null:GameSaveRepository.Clone(s.values);}
+    public static int GetInt(string key,int fallback=0)=>Values?.Find(v=>v.key==key && v.kind==0)?.integer ?? fallback;
+    public static void SetInt(string key,int value){Values.RemoveAll(v=>v.key==key);Values.Add(new GameSaveValue{key=key,integer=value});}
+}
 public static class AccountProfileData { public static int Refreshes; public static void Bind(string id){} public static void EnsureBound(){} public static void Refresh(){Refreshes++;} }
+public static class CareerProfileProgress { public static bool RetainOnContractRetry(string key)=>key=="Profile.Career.v1" || key=="Profile.CareerOrigin.v1" || key.StartsWith("AchivDone_",StringComparison.Ordinal) || key.StartsWith("AchivProg_",StringComparison.Ordinal); }
 public static class AccountAppearanceData { public static int Refreshes; public static void Refresh(){Refreshes++;} }
 public class CCoinService { public static int LinkAttempts,LinkFailures,Refreshes; public bool DevWalletActive=>false; public static CCoinService Ensure()=>new CCoinService(); public void BindAccount(string id){} public void LinkGuestRewards(){LinkAttempts++;if(LinkFailures>0){LinkFailures--;throw new Exception("simulated wallet-link failure");}} public void Refresh(){Refreshes++;} }
 public class SaveLoadPanelHost { public static void AddLogoutButton(){} }

@@ -861,6 +861,7 @@ public class GokeLevelManager : MonoBehaviour
             PlayerPrefs.SetInt("PlayerMoney", PlayerPrefs.GetInt("PlayerMoney", 0) + amount);
         }
         PlayerPrefs.Save();
+        if (amount > 0) GameSaveManager.Instance?.SaveBudgetCheckpoint();
         if (amount > 0) GameFeedback.Show("BOSS EQUIPMENT LOAN\n+" + amount.ToString("N0") + " B-Coins | Deducted when you accept Goke");
     }
 
