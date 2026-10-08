@@ -120,7 +120,7 @@ public sealed class GameFeedback : MonoBehaviour
         feedback.heading.rectTransform.sizeDelta = new Vector2(440, detail.Length == 0 ? height - 30 : Mathf.Max(30, height * .45f - 10));
         feedback.message.rectTransform.offsetMax = new Vector2(-20, -height * .45f - 8);
         feedback.panel.SetActive(true);
-        feedback.hideAt = Time.unscaledTime + 4f;
+        feedback.hideAt = Time.unscaledTime + (error ? 6f : 4f);
         feedback.RefreshBalances();
     }
 

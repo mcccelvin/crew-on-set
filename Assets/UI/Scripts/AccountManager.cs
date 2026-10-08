@@ -26,8 +26,7 @@ public class AccountManager : MonoBehaviour
     public void OnWebsiteSignUpPressed()
     {
         // Registration belongs to the website; keep the game ready for the return login.
-        if (messageText != null)
-            messageText.text = "Sign up in your browser, then return here to sign in.";
+        ShowMessage("Sign up in your browser, then return here to sign in.", GameFeedback.NoticeType.Instruction);
         Application.OpenURL(WebsiteSignupUrl);
     }
 
@@ -36,7 +35,7 @@ public class AccountManager : MonoBehaviour
 
         if (string.IsNullOrEmpty(password) || password.Length < 6)
         {
-            messageText.text = "Password must be at least 6 characters";
+            ShowMessage("Password must be at least 6 characters.", GameFeedback.NoticeType.Caution);
             return;
         }
 
@@ -51,7 +50,7 @@ public class AccountManager : MonoBehaviour
         successfullResult => 
         {
             Login(email, password);
-            if (messageText != null) messageText.text = "Register successful! Welcome " + username;
+            ShowMessage("Registration complete. Welcome " + username + "!", GameFeedback.NoticeType.Success);
         },
         PlayfabFailure);
     }
@@ -122,7 +121,7 @@ public class AccountManager : MonoBehaviour
         {
             string displayName = SaveLoginProfile(successfulResult, email);
             GameSaveManager.Ensure().SetAccount(successfulResult.PlayFabId);
-            if (messageText != null) messageText.text = "Login successful! Welcome " + displayName;
+            ShowMessage("Welcome back, " + displayName + "!", GameFeedback.NoticeType.Success);
             LoadingScreenController.LoadScene("Account");
         },
         PlayfabFailure);
@@ -148,7 +147,7 @@ public class AccountManager : MonoBehaviour
         },
         successfullResult => 
         {
-            if (messageText != null) messageText.text = "Recovery email sent!";
+            ShowMessage("Password reset instructions have been sent to your email.", GameFeedback.NoticeType.Success);
         },
         PlayfabFailure);
     }
@@ -156,8 +155,25 @@ public class AccountManager : MonoBehaviour
 
     private void PlayfabFailure(PlayFabError error)
     {
-        if (messageText != null) messageText.text = error.ErrorMessage;
+        bool credentialsRejected = error != null &&
+            (error.Error == PlayFabErrorCode.InvalidEmailOrPassword ||
+             error.Error == PlayFabErrorCode.InvalidUsernameOrPassword ||
+             error.Error == PlayFabErrorCode.InvalidPassword);
+        string message = credentialsRejected
+            ? "Email or password doesn't match. Check your details and try again."
+            : string.IsNullOrWhiteSpace(error?.ErrorMessage)
+                ? "Sign in could not be completed. Check your details and try again."
+                : error.ErrorMessage;
+        ShowMessage(message, GameFeedback.NoticeType.Caution);
         Debug.Log(error.Error + " : " + error.GenerateErrorReport());
+    }
+
+    private void ShowMessage(string text, GameFeedback.NoticeType type)
+    {
+        // The legacy label sits over the login heading. All account feedback now uses
+        // the shared, high contrast notice card at the top of the screen.
+        if (messageText != null) messageText.text = "";
+        GameFeedback.Show(text, type);
     }
 
 }

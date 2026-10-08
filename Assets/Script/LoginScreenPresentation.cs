@@ -38,7 +38,13 @@ public static class LoginScreenPresentation
             Field(recoveryEmail, "Enter email");
             KeyboardBinding(recovery, recoveryEmail, recovery.Find("resetpass")?.GetComponent<Button>());
         }
-        if (message != null) Style(message, 24, Ink, false);
+        // AccountManager routes feedback through GameFeedback's readable notice card.
+        // Hide the old inline label, which was positioned across the form heading.
+        if (message != null)
+        {
+            message.text = "";
+            message.gameObject.SetActive(false);
+        }
     }
 
     private static void TextIn(Transform parent)

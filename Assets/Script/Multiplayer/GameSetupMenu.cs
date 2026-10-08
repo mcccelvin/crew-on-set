@@ -140,8 +140,8 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     {
         ResetGameMode();
         if (!PhotonNetwork.InRoom) loadingRoom = null;
-        // Clear the error text when the menu opens
-        if (errorText != null) errorText.text = "";
+        // Feedback is shown in the shared notice card instead of a small inline label.
+        ClearSetupMessage();
 
         PhotonNetwork.AutomaticallySyncScene = true;
 
@@ -155,7 +155,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     // --- Wire this to your START / CREATE button ---
     public void OnCreateButtonPressed()
     {
-        if (errorText != null) errorText.text = "";
+        ClearSetupMessage();
 
         EnsureGameModeDropdown();
         bool multiplayer = gameModeDropdown != null ? gameModeDropdown.value == 1 :
@@ -166,7 +166,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
             Debug.Log("Starting Singleplayer...");
             if (PhotonNetwork.IsConnected) PhotonNetwork.Disconnect();
             var saves=GameSaveManager.Ensure();
-            if(saves.Syncing){if(errorText!=null)errorText.text="Please wait for save sync to finish.";return;}
+            if(saves.Syncing){ShowSetupMessage("Please wait for save sync to finish.", GameFeedback.NoticeType.Caution);return;}
             saves.StartGame(saves.CreateGame(gameNameInput.text),true);
         }
         else
@@ -174,7 +174,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
             // 2. MULTIPLAYER HOST LOGIC
             if (!PhotonNetwork.IsConnectedAndReady)
             {
-                if (errorText != null) errorText.text = "Still connecting to servers...";
+                ShowSetupMessage("Still connecting to the crew servers…", GameFeedback.NoticeType.Instruction);
                 return;
             }
 
@@ -191,27 +191,27 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     // --- Wire this to your new JOIN button ---
     public void OnJoinButtonPressed()
     {
-        if (errorText != null) errorText.text = "";
+        ClearSetupMessage();
 
         // Get the code the player typed and force it to uppercase
         string codeToJoin = joinCodeInput.text.Trim().ToUpperInvariant();
 
         if (string.IsNullOrEmpty(codeToJoin))
         {
-            if (errorText != null) errorText.text = "Please enter a code!";
+            ShowSetupMessage("Enter a room code to join.", GameFeedback.NoticeType.Caution);
             return;
         }
 
         if (!PhotonNetwork.IsConnectedAndReady)
         {
-            if (errorText != null) errorText.text = "Connecting to servers...";
+            ShowSetupMessage("Connecting to the crew servers…", GameFeedback.NoticeType.Instruction);
             return;
         }
 
         Debug.Log("Attempting to join room: " + codeToJoin);
-        if (errorText != null) errorText.text = "Joining room " + codeToJoin + "...";
-        if (!PhotonNetwork.JoinRoom(codeToJoin) && errorText != null)
-            errorText.text = "Could not start joining. Wait for the connection, then try again.";
+        ShowSetupMessage("Joining room " + codeToJoin + "…", GameFeedback.NoticeType.Instruction);
+        if (!PhotonNetwork.JoinRoom(codeToJoin))
+            ShowSetupMessage("Could not start joining. Wait for the connection, then try again.", GameFeedback.NoticeType.Caution);
     }
 
     // --- PUN 2 CALLBACKS ---
@@ -219,7 +219,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         Debug.Log("Successfully connected to room!");
-        if (errorText != null) errorText.text = "Joined. Opening the crew lobby...";
+        ShowSetupMessage("Joined. Opening the crew lobby…", GameFeedback.NoticeType.Success);
         Application.runInBackground = true;
         LoadingScreenController.ShowNetworkLoading();
         // There are two menu components; only dispatch the host's scene load once.
@@ -234,19 +234,30 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public override void OnJoinRoomFailed(short returnCode, string message)
     {
         Debug.Log("Failed to join: " + message);
-        if (errorText != null) errorText.text = "Could not join: " + message;
+        ShowSetupMessage("Could not join: " + message, GameFeedback.NoticeType.Caution);
     }
 
     public override void OnCreateRoomFailed(short returnCode, string message)
     {
-        if (errorText != null) errorText.text = "Failed to create room. Try again.";
+        ShowSetupMessage("Could not create the room. Try again.", GameFeedback.NoticeType.Caution);
     }
 
     public override void OnLeftRoom() { loadingRoom = null; }
     public override void OnDisconnected(DisconnectCause cause)
     {
         loadingRoom = null;
-        if (errorText != null) errorText.text = "Disconnected: " + cause + ". Reconnect and try again.";
+        ShowSetupMessage("Disconnected from the room (" + cause + "). Reconnect and try again.", GameFeedback.NoticeType.Caution);
+    }
+
+    private void ClearSetupMessage()
+    {
+        if (errorText != null) errorText.text = "";
+    }
+
+    private void ShowSetupMessage(string text, GameFeedback.NoticeType type)
+    {
+        ClearSetupMessage();
+        GameFeedback.Show(text, type);
     }
 
     // --- RANDOM CODE GENERATOR ---
