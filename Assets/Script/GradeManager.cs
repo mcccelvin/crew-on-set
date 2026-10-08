@@ -82,7 +82,7 @@ public class GradeManager : MonoBehaviour
                 if (CareerManager.Instance != null) CareerManager.Instance.CompleteActiveJob(grades.earnedBCoins);
 
                 if (CCoinService.Ensure().QueueContractReward(submittedLevel,grades.letterGrade))
-                    grades.feedback += "\nC-COINS: +" + CCoinRules.ContractReward + " cosmetic coins pending account verification. This reward is separate from your B-Coins production budget.\n";
+                    grades.feedback += "\nC-COINS: +" + CCoinRules.ContractReward + " Crew Coins pending account verification. This reward is separate from your B-Coins production budget.\n";
                 CampaignProgression.CompleteLevel(submittedLevel);
             }
 

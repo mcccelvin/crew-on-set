@@ -12,6 +12,7 @@ public static class AccountAppearanceData
     [Serializable] public sealed class Appearance
     {
         public int version = 1;
+        public long updated_at;
         public string player_id, base_character = BaseCharacter, selected_frame, change_id;
         public string[] equipped_parts = new string[0];
     }
@@ -42,8 +43,14 @@ public static class AccountAppearanceData
         if (cache == null || !Valid(cache.appearance, owner))
         {
             var selection = Selection(owner, frame, parts);
-            cache = new Cache { appearance = selection,
-                pending = !string.IsNullOrEmpty(selection.selected_frame) || selection.equipped_parts.Length > 0 };
+            // Existing local equipment may predate the shared website outfit.
+            // Read cloud first; when cloud is empty, Refresh uploads this fallback.
+            cache = new Cache { appearance = selection, pending = false };
+        }
+        if (owner == "guest")
+        {
+            cache.appearance = Selection(owner, null, CharacterCosmetics.GuestOutfit(cache.appearance.equipped_parts));
+            cache.pending = false;
         }
         Store(); nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Character saved on this device." : "Character saved locally; automatic account sync pending.");
@@ -53,7 +60,7 @@ public static class AccountAppearanceData
         if (string.IsNullOrEmpty(owner)) return;
         var selection = Selection(owner, frame, parts);
         if (SameSelection(cache.appearance, selection)) return;
-        generation++; busy = false; cache.appearance = selection; cache.pending = true;
+        generation++; busy = false; cache.appearance = selection; cache.pending = owner != "guest";
         Store(); nextRefresh = Time.unscaledTime;
         Publish(owner == "guest" ? "Character saved on this device." : "Character saved locally; automatic account sync pending.");
     }
@@ -65,7 +72,7 @@ public static class AccountAppearanceData
             string id = parts == null ? null : Array.Find(parts, x => CharacterCosmetics.Find(x)?.kind == kind);
             if (id != null) selected.Add(id);
         }
-        return new Appearance { player_id = account, selected_frame = CCoinRules.ValidId(frame) ? frame : null,
+        return new Appearance { player_id = account, updated_at = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), selected_frame = CCoinRules.ValidId(frame) ? frame : null,
             equipped_parts = selected.ToArray(), change_id = Guid.NewGuid().ToString("N") };
     }
     private static bool Valid(Appearance value, string account)
@@ -111,6 +118,10 @@ public static class AccountAppearanceData
             Appearance remote = json == null ? null : Parse(json, account);
             if (json != null && remote == null)
             { Fail("Existing cloud character could not be read. It was not overwritten; local outfit kept."); return; }
+            if (cache.pending && remote != null && remote.updated_at > cache.appearance.updated_at)
+            {
+                cache.appearance = remote; cache.pending = false; Store(); Finish(); return;
+            }
             if (cache.pending || remote == null)
             {
                 cache.pending = true; Store(); Upload(request, account); return;
@@ -150,6 +161,6 @@ public static class AccountAppearanceData
         }
         catch (Exception) { if (Current(request, account)) Fail("Character upload unavailable; saved locally and retrying automatically."); }
     }
-    private static void Finish() { busy = false; nextRefresh = Time.unscaledTime + 60f; Publish("Character appearance verified in PlayFab."); }
-    private static void Fail(string message) { busy = false; nextRefresh = Time.unscaledTime + 60f; Publish(message); }
+    private static void Finish() { busy = false; nextRefresh = Time.unscaledTime + 15f; Publish("Character appearance verified in PlayFab."); }
+    private static void Fail(string message) { busy = false; nextRefresh = Time.unscaledTime + 15f; Publish(message); }
 }

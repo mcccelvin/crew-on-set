@@ -131,7 +131,7 @@ public sealed class GameFeedback : MonoBehaviour
             edge.anchoredPosition = new Vector2(10, 0); edge.sizeDelta = new Vector2(4, height - 28);
         }
         feedback.panel.SetActive(true);
-        feedback.hideAt = Time.unscaledTime + 4f;
+        feedback.hideAt = Time.unscaledTime + (error ? 6f : 4f);
         feedback.RefreshBalances();
     }
 

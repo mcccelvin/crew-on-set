@@ -34,6 +34,8 @@ public static class CharacterCosmeticRigBaker
             {
                 var source=catalog.Model(CharacterCosmetics.ModelKey(item.id));
                 if(source==null)throw new InvalidOperationException("Missing model "+item.id);
+                if(source.name!=CharacterCosmetics.ModelKey(item.id))
+                    throw new InvalidOperationException("Cosmetic key "+item.id+" points to "+source.name+". Model keys must match their FBX filenames; product names are mapped in CharacterCosmetics.");
                 var model=UnityEngine.Object.Instantiate(source);
                 try
                 {

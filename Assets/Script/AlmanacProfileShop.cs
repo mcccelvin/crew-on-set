@@ -114,7 +114,9 @@ public partial class AlmanacManager
         if (isPart && available)
         {
             var thumb = CCoinShopUI.Rect(well.transform, "Item preview", Vector2.zero, new Vector2(132, 132)).gameObject.AddComponent<RawImage>();
-            thumb.texture = art.Thumbnail(item.id); thumb.raycastTarget = false;
+            var websiteImage = Resources.Load<Texture2D>(CharacterCosmetics.WebsiteImageResource(item));
+            thumb.texture = websiteImage != null ? websiteImage : art.Thumbnail(item.id);
+            thumb.raycastTarget = false;
         }
         else if (!isPart)
         {
@@ -126,7 +128,8 @@ public partial class AlmanacManager
             ExportUIArt.Apply(portrait, "profileIcon"); portrait.preserveAspect = true; portrait.raycastTarget = false;
         }
         else ShopText(well.transform, "Model unavailable", "NO PREVIEW", 20, 42, 40, ShopMuted).alignment = TextAlignmentOptions.Center;
-        string category = item.kind == "profile_frame" ? "FRAME" : item.kind == "shirt" ? "TOP" : item.kind == "pants" ? "BOTTOM" : item.kind.ToUpperInvariant();
+        string category = item.kind == "accessory" ? "ACCESSORIES" : item.kind == "shirt" ? "TOPS"
+            : item.kind == "pants" ? "BOTTOMS" : item.kind == "shoe" ? "SHOE WEAR" : item.kind.ToUpperInvariant();
         ShopText(card.transform, "Category", category, 15, 14, 22, ShopAccent);
         var title = ShopText(card.transform, "Name", item.name, 26, 196, 30, ProfileInk); title.enableWordWrapping = false;
         string detail = !available ? "Model unavailable" : isPart ? "Appearance only" : item.description ?? "Profile portrait frame";
@@ -138,11 +141,12 @@ public partial class AlmanacManager
             SetStretchRect(preview.GetComponent<RectTransform>(), Vector2.zero, new Vector2(.5f, 0), new Vector2(14, 16), new Vector2(-6, 60));
             preview.onClick.AddListener(() => PreviewProfileCosmetic(item.id)); StyleShopButton(preview, false);
         }
-        bool canAct = available && listed && !equipped && (owned || profileWallet.CanBuy && profileWallet.Balance >= item.price);
-        string action = equipped ? "EQUIPPED" : owned ? "EQUIP" : !available || !listed || !profileWallet.CanBuy ? "UNAVAILABLE" : profileWallet.Balance < item.price ? "NEED COINS" : "BUY";
+        bool guestSignIn = profileWallet.IsGuest && !owned && available && listed;
+        bool canAct = available && listed && !equipped && (owned || profileWallet.CanBuy || guestSignIn);
+        string action = equipped ? "EQUIPPED" : owned ? "EQUIP" : guestSignIn ? "SIGN IN" : !available || !listed || !profileWallet.CanBuy ? "UNAVAILABLE" : "BUY";
         var buy = CreateButton("Buy or equip cosmetic", card.transform, action);
         SetStretchRect(buy.GetComponent<RectTransform>(), new Vector2(isPart && available ? .5f : 0, 0), new Vector2(1, 0), new Vector2(isPart && available ? 6 : 14, 16), new Vector2(-14, 60));
-        buy.onClick.AddListener(() => { if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });
+        buy.onClick.AddListener(() => { if (guestSignIn) GameSaveManager.Ensure().SignInToSync(); else if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });
         buy.interactable = canAct;
         StyleShopButton(buy, true);
     }

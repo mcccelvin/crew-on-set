@@ -8,12 +8,14 @@ public sealed class CCoinProfileWidget : MonoBehaviour
     private TMP_Text balance;
     private TMP_Text walletStatus;
     private readonly Image[] border = new Image[4];
+    private RawImage avatarPortrait;
     public static void Attach(Transform stage,RawImage portrait,Transform profile)
     {
         var existing = stage.Find("Account cosmetic wallet");
         if (existing != null) return;
         var widget = CCoinShopUI.Rect(stage,"Account cosmetic wallet",Vector2.zero,new Vector2(1920,1080)).gameObject.AddComponent<CCoinProfileWidget>();
         widget.service = CCoinService.Ensure();
+        widget.avatarPortrait = portrait;
         var counter = CCoinShopUI.Rect(widget.transform,"C-Coin counter",new Vector2(-725,260),new Vector2(300,80));
         var bar = CCoinShopUI.Rect(counter,"Balance bar",new Vector2(25,0),new Vector2(250,66)).gameObject.AddComponent<Image>();
         bar.color = new Color32(180,180,180,180); bar.raycastTarget = false;
@@ -51,6 +53,7 @@ public sealed class CCoinProfileWidget : MonoBehaviour
         var item = CCoinRules.Find(service.Wallet,service.SelectedCosmetic);
         bool equipped = item != null && CCoinRules.Owns(service.Wallet,item.id);
         Color color = Color.white; if (equipped) ColorUtility.TryParseHtmlString(item.color,out color);
-        foreach (var edge in border) if (edge != null) { edge.gameObject.SetActive(equipped); edge.color = color; }
+        bool showFrame = equipped && avatarPortrait != null && avatarPortrait.enabled;
+        foreach (var edge in border) if (edge != null) { edge.gameObject.SetActive(showFrame); edge.color = color; }
     }
 }

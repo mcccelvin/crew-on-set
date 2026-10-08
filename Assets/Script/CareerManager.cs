@@ -139,6 +139,7 @@ public class CareerManager : MonoBehaviour
         if (existing != null)
         {
             profileHudButton = existing.GetComponent<Button>();
+            AttachAvatarPortrait(existing);
             BindProfileShortcut();
             return;
         }
@@ -151,6 +152,7 @@ public class CareerManager : MonoBehaviour
         rect.sizeDelta = new Vector2(94, 94);
         ExportUIArt.Apply(root.GetComponent<Image>(), "profileIcon");
         root.GetComponent<Image>().preserveAspect = true;
+        AttachAvatarPortrait(root.transform);
         var button = root.GetComponent<Button>();
         profileHudButton = button;
         BindProfileShortcut();
@@ -170,6 +172,8 @@ public class CareerManager : MonoBehaviour
             caption.rectTransform.sizeDelta = new Vector2(124, 22);
         }
     }
+
+    private static void AttachAvatarPortrait(Transform shortcut) => AccountAvatarPortrait.Attach(shortcut);
 
     private void BindProfileShortcut()
     {

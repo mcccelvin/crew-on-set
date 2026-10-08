@@ -113,8 +113,10 @@ public partial class AlmanacManager
             preview.transform.SetParent(stage, false);
             profileCharacterImage = preview.GetComponent<RawImage>();
             profileCharacterImage.raycastTarget = false;
+            profileCharacterImage.enabled = false;
             SetRect(preview.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(-455, -90), new Vector2(560, 700));
         }
+        else profileCharacterImage.enabled = false;
         CCoinProfileWidget.Attach(stage,profileCharacterImage,profileCanvas.transform);
         var wallet = stage.Find("Account cosmetic wallet/Open cosmetic shop");
         if (wallet != null) wallet.gameObject.SetActive(false); // Shop is now the shared third sidebar tab.
@@ -124,7 +126,11 @@ public partial class AlmanacManager
     private void ReleaseProfilePreview()
     {
         if (profileLivePreview != null) profileLivePreview.Release();
-        if (profileCharacterImage != null) profileCharacterImage.texture = null;
+        if (profileCharacterImage != null)
+        {
+            profileCharacterImage.texture = null;
+            profileCharacterImage.enabled = false;
+        }
         if (profileCharacterTexture == null) return;
         profileCharacterTexture.Release();
         Destroy(profileCharacterTexture);
@@ -140,6 +146,7 @@ public partial class AlmanacManager
     private void RenderDressedProfileCharacter(string[] parts)
     {
         ReleaseProfilePreview();
+        if (parts == null || !System.Array.Exists(parts, id => CharacterCosmetics.Find(id)?.kind == "body")) return;
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         GameObject portraitModel = null;
         if (catalog != null && catalog.coffeeActorModels != null)
@@ -244,6 +251,7 @@ public partial class AlmanacManager
             camera.Render();
             camera.targetTexture = null;
             profileCharacterImage.texture = profileCharacterTexture;
+            profileCharacterImage.enabled = true;
             profileLivePreview = profileCharacterImage.GetComponent<ProfileCharacterPreview>();
             if (profileLivePreview == null) profileLivePreview = profileCharacterImage.gameObject.AddComponent<ProfileCharacterPreview>();
             profileLivePreview.Initialize(root, portrait, camera, light, profileCharacterTexture);
