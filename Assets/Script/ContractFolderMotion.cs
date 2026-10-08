@@ -19,6 +19,8 @@ public sealed class ContractFolderMotion : MonoBehaviour
     private bool imageEnabled, panelInteractable, panelRaycasts, prepared, approaching;
     private float panelAlpha;
     private Coroutine opening;
+    public bool IsPlaying => opening != null;
+    private bool closing;
     private readonly List<ContentState> content = new List<ContentState>();
 
     private struct ContentState { public CanvasGroup group; public float alpha; }
@@ -29,6 +31,16 @@ public sealed class ContractFolderMotion : MonoBehaviour
         if (!Prepare(closedCover)) return;
         BeginSelection(selectedFolder);
         opening = StartCoroutine(Open());
+    }
+
+    public void Close(Sprite closedCover, RectTransform destination = null)
+    {
+        StopAndRestore();
+        if (!Prepare(closedCover)) return;
+        closing = true;
+        BeginSelection(destination);
+        Sample(1);
+        opening = StartCoroutine(CloseCover());
     }
 
     private bool Prepare(Sprite closedCover)
@@ -172,6 +184,27 @@ public sealed class ContractFolderMotion : MonoBehaviour
         Restore();
     }
 
+    private IEnumerator CloseCover()
+    {
+        float elapsed = 0;
+        float foldDuration = Mathf.Max(.01f, duration);
+        float returnDuration = approaching ? Mathf.Max(.01f, approachDuration) : 0;
+        float totalDuration = foldDuration + returnDuration;
+        while (elapsed < totalDuration)
+        {
+            Sample(1f - elapsed / totalDuration);
+            if (approaching && panelGroup != null)
+                panelGroup.alpha = panelAlpha * (1f - Mathf.SmoothStep(0, 1, Mathf.Clamp01((elapsed - foldDuration) / returnDuration)));
+            yield return null;
+            elapsed += Time.unscaledDeltaTime;
+        }
+        Sample(0);
+        if (approaching && panelGroup != null) panelGroup.alpha = 0;
+        opening = null;
+        // Hold the closed pose. The caller either hides the canvas or starts
+        // another opening, which restores/captures the original pose atomically.
+    }
+
     private void Sample(float progress)
     {
         if (!prepared) return;
@@ -200,7 +233,7 @@ public sealed class ContractFolderMotion : MonoBehaviour
         inside.color = new Color(1 - .16f * fold, 1 - .16f * fold, 1 - .16f * fold, 1);
         shadow.color = new Color(.12f, .08f, .03f, .2f * Mathf.Max(0, fold));
         // Arrive before the hinge turns; no second scale animation or size snap.
-        pages.color = new Color(1, 1, 1, approaching ? Mathf.SmoothStep(0, 1, Mathf.Clamp01(openProgress / .18f)) : 1);
+        pages.color = new Color(1, 1, 1, approaching || closing ? Mathf.SmoothStep(0, 1, Mathf.Clamp01(openProgress / .18f)) : 1);
         panelGroup.alpha = approaching ? panelAlpha : panelAlpha * Mathf.SmoothStep(0, 1, Mathf.Clamp01(t / .18f));
         float reveal = Mathf.SmoothStep(0, 1, Mathf.Clamp01((openProgress - .48f) / .42f));
         foreach (var state in content) if (state.group != null) state.group.alpha = state.alpha * reveal;
@@ -218,6 +251,7 @@ public sealed class ContractFolderMotion : MonoBehaviour
         content.Clear();
         prepared = false;
         approaching = false;
+        closing = false;
     }
 
     private void StopAndRestore()

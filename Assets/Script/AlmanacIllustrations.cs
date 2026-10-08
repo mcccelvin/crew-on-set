@@ -110,6 +110,23 @@ public partial class AlmanacManager
         return Regex.Replace(body.Trim(), @"\[([^\]\r\n]+)\]", "<b><color=#765329>[$1]</color></b>");
     }
 
+    private static Sprite ShopEquipmentPicture(KnowledgeEntry entry)
+    {
+        if (entry.category != "Equipment") return null;
+        switch (entry.id)
+        {
+            case "director_tablet": return EquipmentIconArt.Get("DIRECTOR TABLET");
+            case "nony_fx_camera": return EquipmentIconArt.Get("NONY FX");
+            case "level_2_camera": return EquipmentIconArt.Get("LEVEL 2 CAMERA");
+            case "led_panel": return EquipmentIconArt.Get("160 LED PANEL");
+            case "level_3_soft_light": return EquipmentIconArt.Get("LEVEL 3 SOFT LIGHT");
+            case "light_strip": return EquipmentIconArt.Get("LIGHT STRIP");
+            case "sd_card": return EquipmentIconArt.Get("SD CARD");
+            case "actor_megaphone": return EquipmentIconArt.Get("DIRECTOR MEGAPHONE");
+            default: return EquipmentIconArt.Get(entry.title);
+        }
+    }
+
     private void ApplyIllustratedArticle(KnowledgeEntry entry, string body)
     {
         EnsureIllustrationNote();
@@ -130,19 +147,11 @@ public partial class AlmanacManager
         bookEntryTitle.color = new Color32(42, 48, 50, 255);
         var title = Regex.Replace(entry.title, @"^(TECHNIQUE|EQUIPMENT|CAMERA UNLOCK|LEVEL \d+)\s*[-:]\s*", "");
         bookEntryTitle.text = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(title.ToLowerInvariant());
-        // Leave the Director Tablet's illustration space empty until replacement art is ready.
-        if (entry.id == "director_tablet")
-        {
-            illustrationNote.gameObject.SetActive(false);
-            illustrationDrawing.texture = null;
-            bookLeftText.gameObject.SetActive(false);
-            bookRightText.text = FormatBookArticle(body);
-            restoreIllustration = false;
-            return;
-        }
         string file;
+        Sprite shopPicture = ShopEquipmentPicture(entry);
         Texture2D texture = null;
-        if (IllustrationFiles.TryGetValue(entry.id, out file))
+        if (shopPicture != null) texture = shopPicture.texture;
+        else if (IllustrationFiles.TryGetValue(entry.id, out file))
         {
             if (!illustrationCache.TryGetValue(file, out texture))
             {
@@ -155,10 +164,12 @@ public partial class AlmanacManager
         if (texture != null)
         {
             illustrationDrawing.texture = texture;
-            float ratio = (float)texture.width / texture.height;
+            Rect pictureRect = shopPicture != null ? shopPicture.rect : new Rect(0, 0, texture.width, texture.height);
+            illustrationDrawing.uvRect = new Rect(pictureRect.x / texture.width, pictureRect.y / texture.height, pictureRect.width / texture.width, pictureRect.height / texture.height);
+            float ratio = pictureRect.width / pictureRect.height;
             illustrationDrawing.rectTransform.sizeDelta = ratio >= 536f / 402f
                 ? new Vector2(536, 536 / ratio) : new Vector2(402 * ratio, 402);
-            illustrationCaption.text = "FIELD NOTES";
+            illustrationCaption.text = shopPicture != null ? "SHOP EQUIPMENT" : "FIELD NOTES";
             bookRightText.text = FormatBookArticle(body);
         }
         else

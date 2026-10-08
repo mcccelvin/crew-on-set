@@ -20,6 +20,7 @@ public sealed class CameraHUDController : MonoBehaviour
     private RectTransform styledTracking;
     private RectTransform exposureStrip;
     private Image recordChip;
+    private SettingsCard settingsCard;
     public static readonly Color32 InstrumentPanel = new Color32(33, 40, 48, 240);
     public static readonly Color32 InstrumentBorder = new Color32(73, 84, 96, 255);
     public static readonly Color32 ReadoutInk = new Color32(238, 241, 244, 255);
@@ -28,9 +29,9 @@ public sealed class CameraHUDController : MonoBehaviour
 
     public struct State
     {
-        public bool recording, card, manual;
-        public float seconds, cardSeconds, cardCapacity, focus, kelvin, iso, aperture, shutterAngle, fps;
-        public int level, width, height;
+        public bool recording, card, manual, settingsOpen, gridEnabled;
+        public float seconds, cardSeconds, cardCapacity, focus, kelvin, iso, aperture, shutterAngle, fps, tint;
+        public int level, width, height, selectedSetting;
         public string menu;
     }
 
@@ -104,8 +105,11 @@ public sealed class CameraHUDController : MonoBehaviour
         recordLabel.text = s.recording ? "REC" : "STBY";
         recordLabel.color = s.recording ? new Color32(255, 111, 99, 255) : ReadoutInk;
         if (recordChip != null) recordChip.color = s.recording ? new Color32(79, 38, 40, 255) : new Color32(49, 63, 69, 255);
-        int total = Mathf.Max(0, Mathf.FloorToInt(s.seconds));
-        timerLabel.text = (total / 3600).ToString("00") + ":" + (total / 60 % 60).ToString("00") + ":" + (total % 60).ToString("00");
+        int elapsedMilliseconds = Mathf.Max(0, Mathf.FloorToInt(s.seconds * 1000f));
+        int total = elapsedMilliseconds / 1000;
+        timerLabel.text = "<mspace=0.6em>" + (total / 3600).ToString("00") + ":" +
+            (total / 60 % 60).ToString("00") + ":" + (total % 60).ToString("00") +
+            "<size=75%><color=#D5A26E>." + (elapsedMilliseconds % 1000).ToString("000") + "</color></size></mspace>";
         formatLabel.text = s.width + " × " + s.height + "   " + s.fps.ToString("0.#") + "p";
         cardLabel.text = !s.card ? "NO SD CARD" : s.cardCapacity > 0
             ? "SD 1  " + Mathf.Min(s.cardCapacity, s.cardSeconds).ToString("0.#") + " / " + s.cardCapacity.ToString("0") + "s"
@@ -126,8 +130,7 @@ public sealed class CameraHUDController : MonoBehaviour
         isoLabel.gameObject.SetActive(exposure);
         exposureLabel.transform.parent.gameObject.SetActive(exposure);
         wbLabel.gameObject.SetActive(s.level >= 3);
-        menuLabel.transform.parent.gameObject.SetActive(!string.IsNullOrEmpty(s.menu));
-        menuLabel.text = (s.menu ?? "").Replace("#FFD866", "#D5A26E");
+        RefreshSettingsCard(s);
         string cardControl = s.cardCapacity > 0 ? KeyBadge("C") + " EJECT SD     " : "";
         helpLabel.text = KeyBadge("R") + " RECORD     " + cardControl + KeyBadge("LMB") + " EXIT     " +
             (s.level >= 2 ? KeyBadge("F2") + " SETTINGS" : KeyBadge("SCROLL") + " ZOOM");
@@ -201,16 +204,24 @@ public sealed class CameraHUDController : MonoBehaviour
         var header = Surface(transform, "Instrument header", new Vector2(.07f, .938f), new Vector2(.93f, .988f));
         var brand = header.Find("Camera identity") as RectTransform;
         if (brand == null) brand = Label(header, "Camera identity", .016f, .08f, .22f, .92f, 18).rectTransform;
+        PositionLabel(brand.GetComponent<TMP_Text>(), header, .016f, .08f, .175f, .92f, 16, TextAlignmentOptions.MidlineLeft);
         brand.GetComponent<TMP_Text>().text = "CREW / CAM FX3";
         brand.GetComponent<TMP_Text>().color = CopperAccent;
-        PositionLabel(cardLabel, header, .235f, .08f, .455f, .92f, 20, TextAlignmentOptions.MidlineLeft);
-        PositionLabel(formatLabel, header, .47f, .08f, .715f, .92f, 19, TextAlignmentOptions.Center);
+        PositionLabel(cardLabel, header, .19f, .08f, .355f, .92f, 20, TextAlignmentOptions.MidlineLeft);
+        var clock = Surface(header, "Elapsed time chip", new Vector2(.37f, .07f), new Vector2(.63f, .93f));
+        clock.GetComponent<Image>().color = new Color32(17, 22, 29, 255);
+        clock.GetComponent<Outline>().effectColor = CopperAccent;
+        PositionLabel(timerLabel, clock, .025f, .04f, .975f, .96f, 36, TextAlignmentOptions.Center);
+        timerLabel.fontStyle = FontStyles.Bold;
+        timerLabel.fontSizeMin = 32;
+        timerLabel.richText = true;
+        timerLabel.enableAutoSizing = true;
+        timerLabel.enableWordWrapping = false;
+        PositionLabel(formatLabel, header, .66f, .08f, .878f, .92f, 17, TextAlignmentOptions.Center);
         formatLabel.color = MutedReadout;
-        var chip = Surface(header, "Recording chip", new Vector2(.738f, .18f), new Vector2(.818f, .82f));
+        var chip = Surface(header, "Recording chip", new Vector2(.90f, .16f), new Vector2(.984f, .84f));
         recordChip = chip.GetComponent<Image>();
         PositionLabel(recordLabel, chip, .02f, .03f, .98f, .97f, 19, TextAlignmentOptions.Center);
-        PositionLabel(timerLabel, header, .83f, .08f, .984f, .92f, 22, TextAlignmentOptions.MidlineRight);
-        timerLabel.characterSpacing = 1.2f;
         var rule = header.Find("Copper rule") as RectTransform;
         if (rule == null) rule = Box(header, "Copper rule", Vector2.zero, new Vector2(1, 0), CopperAccent);
         rule.pivot = new Vector2(.5f, 0); rule.sizeDelta = new Vector2(0, 2);
@@ -299,6 +310,199 @@ public sealed class CameraHUDController : MonoBehaviour
         label.text = label.text.Replace("#9A421E", "#D5A26E");
         if (icon != null) icon.color = CopperAccent;
         if (underline != null) underline.color = CopperAccent;
+    }
+
+    private void RefreshSettingsCard(State state)
+    {
+        if (menuLabel == null) return;
+        var panel = (RectTransform)menuLabel.transform.parent;
+        bool detailed = state.settingsOpen && state.level >= 2;
+        panel.gameObject.SetActive(detailed || !string.IsNullOrEmpty(state.menu));
+        menuLabel.gameObject.SetActive(!detailed);
+        if (detailed)
+        {
+            if (settingsCard == null) settingsCard = new SettingsCard(panel);
+            settingsCard.Refresh(state, viewport);
+        }
+        else
+        {
+            if (settingsCard != null) settingsCard.Hide();
+            // Retain the old text entry point for external/legacy HUD callers.
+            menuLabel.text = (state.menu ?? "").Replace("#FFD866", "#D5A26E");
+        }
+    }
+
+    // Runtime decoration works with the existing authored menu reference; no
+    // prefab rebuild or new input ownership is required.
+    private sealed class SettingsCard
+    {
+        private const float Width = 420f;
+        private static readonly string[] Names = { "THIRDS GRID", "WHITE BALANCE", "TINT", "ISO", "APERTURE", "SHUTTER" };
+        private static readonly string[] Descriptions = {
+            "Use the thirds grid to balance your shot.",
+            "Cool or warm the image to suit your lighting.",
+            "Shift the image between green and magenta.",
+            "Change sensitivity to brighten or darken the shot.",
+            "Change brightness and depth of field.",
+            "Adjust exposure time and motion blur."
+        };
+        private readonly RectTransform panel, content, description, controls, holdHint;
+        private readonly CanvasGroup fade;
+        private readonly RectTransform[] sections = new RectTransform[3];
+        private readonly RectTransform[] rows = new RectTransform[6];
+        private readonly Image[] rowImages = new Image[6], valueImages = new Image[6], selectionBars = new Image[6];
+        private readonly TMP_Text[] titles = new TMP_Text[6], values = new TMP_Text[6], leftArrows = new TMP_Text[6], rightArrows = new TMP_Text[6];
+        private readonly TMP_Text descriptionText, countText;
+        private bool showing;
+
+        public SettingsCard(RectTransform parent)
+        {
+            panel = parent;
+            StyleSurface(panel.GetComponent<Image>());
+            panel.GetComponent<Image>().color = new Color32(27, 33, 42, 252);
+            var outline = panel.GetComponent<Outline>();
+            outline.effectColor = new Color32(132, 107, 81, 255);
+            outline.effectDistance = new Vector2(2, -2);
+            fade = panel.GetComponent<CanvasGroup>();
+            if (fade == null) fade = panel.gameObject.AddComponent<CanvasGroup>();
+            fade.interactable = false; fade.blocksRaycasts = false;
+            content = Pixels(panel, "Settings instrument card", 0, 0, Width, 300);
+            PixelBox(content, "Copper top rule", 14, 0, Width - 28, 3, CopperAccent);
+            var dial = PixelBox(content, "Adjustment icon", 18, 22, 36, 36, new Color32(53, 62, 73, 255), true);
+            for (int i = 0; i < 3; i++)
+            {
+                PixelBox(dial, "Dial track " + i, 7, 9 + i * 9, 22, 2, MutedReadout);
+                PixelBox(dial, "Dial stop " + i, i == 1 ? 19 : 10, 6 + i * 9, 4, 8, CopperAccent);
+            }
+            var heading = PixelText(content, "Settings title", "CAMERA SETTINGS", 68, 20, 272, 25, 21, CopperAccent);
+            heading.characterSpacing = 1;
+            countText = PixelText(content, "Available controls", "", 68, 49, 265, 18, 12, MutedReadout);
+            var close = PixelBox(content, "F2 key badge", 348, 22, 54, 28, new Color32(48, 57, 68, 255), true, true);
+            PixelText(close, "Close key", "F2", 0, 0, 54, 28, 15, CopperAccent, TextAlignmentOptions.Center);
+            var live = PixelBox(content, "Live preview badge", 348, 55, 54, 18, new Color32(42, 69, 62, 255), true);
+            PixelText(live, "Live preview", "LIVE", 0, 0, 54, 18, 10, new Color32(165, 215, 185, 255), TextAlignmentOptions.Center);
+            PixelBox(content, "Header divider", 18, 78, Width - 36, 1, InstrumentBorder);
+            string[] groups = { "COMPOSITION", "COLOUR", "EXPOSURE" };
+            for (int i = 0; i < groups.Length; i++)
+                sections[i] = PixelText(content, groups[i], groups[i], 18, 0, Width - 36, 18, 12, MutedReadout).rectTransform;
+            for (int i = 0; i < rows.Length; i++)
+            {
+                rows[i] = PixelBox(content, Names[i] + " row", 16, 0, Width - 32, 52, new Color32(39, 47, 59, 255), true);
+                rowImages[i] = rows[i].GetComponent<Image>();
+                selectionBars[i] = PixelBox(rows[i], "Selected copper edge", 0, 9, 3, 34, CopperAccent, true).GetComponent<Image>();
+                PixelText(rows[i], "Control number", (i + 1).ToString("00"), 12, 0, 26, 52, 12, MutedReadout, TextAlignmentOptions.Center);
+                titles[i] = PixelText(rows[i], "Control name", Names[i], 47, 0, 172, 52, 16, ReadoutInk);
+                var value = PixelBox(rows[i], "Value badge", 234, 10, 142, 32, new Color32(29, 36, 46, 255), true, true);
+                valueImages[i] = value.GetComponent<Image>();
+                values[i] = PixelText(value, "Current value", "", 20, 0, 102, 32, 17, ReadoutInk, TextAlignmentOptions.Center);
+                leftArrows[i] = PixelText(value, "Decrease hint", "<", 3, 0, 18, 32, 17, CopperAccent, TextAlignmentOptions.Center);
+                rightArrows[i] = PixelText(value, "Increase hint", ">", 121, 0, 18, 32, 17, CopperAccent, TextAlignmentOptions.Center);
+            }
+            descriptionText = PixelText(content, "Selected control explanation", "", 18, 0, Width - 36, 36, 15, MutedReadout);
+            descriptionText.fontStyle = FontStyles.Normal;
+            descriptionText.enableWordWrapping = true;
+            description = descriptionText.rectTransform;
+            controls = Pixels(content, "Keyboard controls", 18, 0, Width - 36, 30);
+            Key(controls, "Select keys", "UP / DOWN", 0, 98);
+            PixelText(controls, "Select caption", "SELECT", 108, 0, 72, 30, 12, MutedReadout);
+            Key(controls, "Adjust keys", "LEFT / RIGHT", 190, 116);
+            PixelText(controls, "Adjust caption", "ADJUST", 316, 0, 68, 30, 12, MutedReadout);
+            holdHint = PixelText(content, "Hold to adjust hint", "Hold LEFT / RIGHT for faster changes  |  F2 closes", 18, 0, Width - 36, 22, 12, MutedReadout).rectTransform;
+        }
+
+        public void Refresh(State state, RectTransform viewport)
+        {
+            content.gameObject.SetActive(true);
+            if (!showing) { fade.alpha = 0; showing = true; }
+            fade.alpha = Mathf.MoveTowards(fade.alpha, 1f, Time.unscaledDeltaTime * 10f);
+            int count = state.level >= 4 ? 6 : state.level >= 3 ? 3 : 1;
+            int selected = Mathf.Clamp(state.selectedSetting, 0, count - 1);
+            countText.text = "CAM FX3  /  " + count + (count == 1 ? " CONTROL" : " CONTROLS") + " AVAILABLE";
+            sections[1].gameObject.SetActive(count >= 3);
+            sections[2].gameObject.SetActive(count == 6);
+            float cursor = 92;
+            for (int i = 0; i < rows.Length; i++)
+            {
+                rows[i].gameObject.SetActive(i < count);
+                if (i >= count) continue;
+                if (i == 0 || i == 1 || i == 3)
+                {
+                    Top(sections[i == 0 ? 0 : i == 1 ? 1 : 2], cursor);
+                    cursor += 24;
+                }
+                Top(rows[i], cursor); cursor += 60;
+                bool active = i == selected;
+                rowImages[i].color = active ? new Color32(60, 52, 45, 255) : new Color32(39, 47, 59, 255);
+                selectionBars[i].gameObject.SetActive(active);
+                titles[i].color = active ? CopperAccent : ReadoutInk;
+                valueImages[i].color = active ? CopperAccent : new Color32(29, 36, 46, 255);
+                values[i].color = active ? new Color32(34, 28, 24, 255) : ReadoutInk;
+                leftArrows[i].gameObject.SetActive(active); rightArrows[i].gameObject.SetActive(active);
+                leftArrows[i].color = rightArrows[i].color = values[i].color;
+                switch (i)
+                {
+                    case 0: values[i].text = state.gridEnabled ? "ON" : "OFF"; break;
+                    case 1: values[i].text = state.kelvin.ToString("0") + " K"; break;
+                    case 2: values[i].text = state.tint.ToString("+0;-0;0"); break;
+                    case 3: values[i].text = state.iso.ToString("0"); break;
+                    case 4: values[i].text = "F" + state.aperture.ToString("0.0"); break;
+                    case 5: values[i].text = state.shutterAngle.ToString("0") + " deg"; break;
+                }
+            }
+            Top(description, cursor + 6); descriptionText.text = Descriptions[selected]; cursor += 50;
+            Top(controls, cursor); cursor += 36;
+            Top(holdHint, cursor); cursor += 38;
+            float scale = 1f;
+            if (viewport != null && viewport.rect.width > 0 && viewport.rect.height > 0)
+                scale = Mathf.Min(1f, viewport.rect.width * .34f / Width, viewport.rect.height * .78f / cursor);
+            panel.anchorMin = panel.anchorMax = new Vector2(.98f, .89f);
+            panel.pivot = Vector2.one; panel.anchoredPosition = Vector2.zero;
+            panel.sizeDelta = new Vector2(Width, cursor) * scale;
+            content.sizeDelta = new Vector2(Width, cursor); content.localScale = Vector3.one * scale;
+        }
+
+        public void Hide()
+        {
+            showing = false; fade.alpha = 1f;
+            content.gameObject.SetActive(false);
+        }
+
+        private static void Top(RectTransform rect, float top) => rect.anchoredPosition = new Vector2(rect.anchoredPosition.x, -top);
+        private static RectTransform Pixels(Transform parent, string name, float x, float top, float width, float height)
+        {
+            var rect = Rect(parent, name, new Vector2(0, 1), new Vector2(0, 1));
+            rect.pivot = new Vector2(0, 1); rect.anchoredPosition = new Vector2(x, -top); rect.sizeDelta = new Vector2(width, height);
+            return rect;
+        }
+        private static RectTransform PixelBox(Transform parent, string name, float x, float top, float width, float height, Color color, bool rounded = false, bool outlined = false)
+        {
+            var rect = Pixels(parent, name, x, top, width, height);
+            var image = rect.gameObject.AddComponent<Image>();
+            if (rounded) CrewPaperStyle.Round(image);
+            image.color = color; image.raycastTarget = false;
+            if (outlined)
+            {
+                var outline = rect.gameObject.AddComponent<Outline>();
+                outline.effectColor = InstrumentBorder; outline.effectDistance = new Vector2(1, -1);
+            }
+            return rect;
+        }
+        private static TMP_Text PixelText(Transform parent, string name, string text, float x, float top, float width, float height, int size, Color color, TextAlignmentOptions alignment = TextAlignmentOptions.MidlineLeft)
+        {
+            var rect = Pixels(parent, name, x, top, width, height);
+            var label = rect.gameObject.AddComponent<TextMeshProUGUI>();
+            label.font = TMP_Settings.defaultFontAsset; label.text = text; label.color = color;
+            label.fontSize = label.fontSizeMax = size; label.fontSizeMin = size * .85f;
+            label.fontStyle = FontStyles.Bold; label.alignment = alignment;
+            label.enableAutoSizing = true; label.enableWordWrapping = false; label.raycastTarget = false;
+            label.margin = Vector4.zero;
+            return label;
+        }
+        private static void Key(Transform parent, string name, string text, float x, float width)
+        {
+            var badge = PixelBox(parent, name, x, 0, width, 28, new Color32(46, 55, 67, 255), true, true);
+            PixelText(badge, "Key label", text, 0, 0, width, 28, 12, CopperAccent, TextAlignmentOptions.Center);
+        }
     }
 
     // Called by the editor authoring tool; also handles an as-yet-unbaked project.

@@ -8,6 +8,8 @@ The resume state is separate from the live production attempt. `SaveCheckpoint` 
 
 The original shared local career is imported once as **Existing local game**. Original PlayerPrefs are retained. An unfinished first-commercial import uses the existing retry lesson so it can rebuild the studio with a usable budget.
 
+Contract retry snapshots above 8,000 characters are stored as `BudgetRetry.Start.v1.<index>` pieces with a `.Count` entry, inside the existing career-value payload. The old single-value snapshot remains readable. Capture, Continue, explicit retry, legacy import and everyday checkpoint retention handle both forms; existing live oversized snapshots are split before saving without changing their contents. This avoids rejecting longer careers at the repository's 10,000-character per-value limit. Failed writes restore the previous in-memory checkpoint and revision. Save UI listeners run after a successful commit and are isolated individually, so a refresh error cannot produce a false "checkpoint could not be saved" notice. Actual save failures report their category and log the full exception in Unity's Console; duplicate/oversized values identify the offending key. No existing save files are deleted or reset by this repair.
+
 ## Storage and accounts
 
 - Local files: `Application.persistentDataPath/CareerSaves/<account hash>/<save GUID>.json`, with `.bak` backups.

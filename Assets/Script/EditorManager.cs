@@ -700,7 +700,7 @@ public class EditorManager : MonoBehaviour
         root.transform.SetParent(reviewVideoPanel.transform, false);
         reviewBackButton = root.GetComponent<Button>(); reviewBackButton.targetGraphic = root.GetComponent<Image>();
         reviewBackButton.onClick.AddListener(BackToEditor);
-        StyleReviewButton(reviewBackButton, "BACK", "blueButton", false);
+        StyleReviewButton(reviewBackButton, "BACK", false);
 
         // The old backdrop contains a gray picture placeholder. Do not let its
         // edges peek around the real video at fractional Canvas scales.
@@ -708,7 +708,7 @@ public class EditorManager : MonoBehaviour
         if (background != null) { background.sprite = null; background.color = new Color(.075f,.08f,.095f,1); }
         var submit = reviewVideoPanel.transform.Find("Submit");
         if (submit != null && submit.TryGetComponent<Button>(out var submitButton))
-            StyleReviewButton(submitButton, "SUBMIT", "greenButton", true);
+            StyleReviewButton(submitButton, "SUBMIT", true);
 
         var title = ReviewLabel(reviewVideoPanel.transform, "Preview heading", "FINAL PREVIEW", 24);
         title.color = new Color(.76f,.8f,.86f,1); title.characterSpacing = 4;
@@ -733,17 +733,30 @@ public class EditorManager : MonoBehaviour
             fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent; fit.aspectRatio = 16f/9f;
         }
     }
-    private static void StyleReviewButton(Button button, string caption, string artwork, bool right)
+    private static void StyleReviewButton(Button button, string caption, bool right)
     {
         var rect = button.GetComponent<RectTransform>();
         rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(right ? 1 : 0,1);
         rect.anchoredPosition = new Vector2(right ? -32 : 32,-24); rect.sizeDelta = new Vector2(176,54);
         var image = button.GetComponent<Image>();
-        if (image != null) { ExportUIArt.Apply(image,artwork); button.targetGraphic = image; }
-        var colors = button.colors; colors.normalColor = Color.white; colors.highlightedColor = new Color(1,.95f,.82f);
-        colors.pressedColor = new Color(.7f,.75f,.8f); colors.selectedColor = Color.white; colors.fadeDuration = .12f;
+        if (image != null)
+        {
+            CrewPaperStyle.Round(image);
+            image.color = right ? new Color32(48,97,124,255) : new Color32(35,44,53,255);
+            image.raycastTarget = true; button.targetGraphic = image;
+            foreach (var effect in image.GetComponents<Shadow>()) effect.enabled = false;
+            var outline = image.GetComponent<Outline>() ?? image.gameObject.AddComponent<Outline>();
+            outline.enabled = true;
+            outline.effectColor = right ? new Color32(106,180,209,255) : new Color32(90,111,126,255);
+            outline.effectDistance = new Vector2(1,-1);
+        }
+        foreach (var oldLabel in button.GetComponentsInChildren<TMP_Text>(true)) oldLabel.gameObject.SetActive(false);
+        foreach (var oldLabel in button.GetComponentsInChildren<Text>(true)) oldLabel.gameObject.SetActive(false);
+        var colors = button.colors; colors.normalColor = Color.white; colors.highlightedColor = new Color(1.18f,1.18f,1.18f);
+        colors.pressedColor = new Color(.75f,.82f,.88f); colors.selectedColor = colors.highlightedColor; colors.fadeDuration = .12f;
         button.colors = colors; button.transition = Selectable.Transition.ColorTint;
         var text = ReviewLabel(button.transform,"Review button label",caption,25);
+        text.color = new Color32(230,240,246,255); text.fontStyle = FontStyles.Bold;
         text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one;
         text.rectTransform.offsetMin = new Vector2(12,6); text.rectTransform.offsetMax = new Vector2(-12,-6);
     }

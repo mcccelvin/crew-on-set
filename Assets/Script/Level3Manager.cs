@@ -65,14 +65,14 @@ public class Level3Manager : MonoBehaviour
         float practiceSeconds = 0f;
         practiceLesson=new GuidedPracticeLesson(tutorialManager,new List<GuidedPracticeLesson.Step>
         {
-            new GuidedPracticeLesson.Step("Your Soft Light is placed at 3200K for a warm look. Now pick up your camera with <color=yellow>[E]</color> and select its hotbar slot. If it is already in your inventory, just equip it. We'll practice smooth movement before recording.","Pick up and equip your camera",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem),
+            new GuidedPracticeLesson.Step("The practice lamp is 3200K: that describes the LIGHT, not the best camera setting. Pick up your camera with <color=yellow>[E]</color> and equip its hotbar slot. We'll compare camera white balance on the grey reference strips before practising movement.","Pick up and equip your camera",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem),
             new GuidedPracticeLesson.Step("Next, pick up an SD card with <color=yellow>[E]</color>. It stores multiple takes, up to 60 seconds in total. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect an SD card with free space",()=>inventory != null && inventory.HasBlankSDCard()),
             new GuidedPracticeLesson.Step("Select your camera and click <color=yellow>Left Mouse Button</color> to open the viewfinder. Look through it to frame the lit subject before practicing movement.","Equip camera and click LMB to open the viewfinder",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive()),
-            new GuidedPracticeLesson.Step("White balance changes how the camera renders color; it does not change the lamps. Let's compare two settings on this practice subject. Press F2 to open camera settings.", "[F2] Open camera settings", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.SettingsOpen),
-            new GuidedPracticeLesson.Step("Select WHITE BALANCE with Up/Down. Use Left/Right to set 3200K. Look at the subject and remember its color at this setting.", "Set WHITE BALANCE to 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
-            new GuidedPracticeLesson.Step("Now raise white balance to 6500K with Right Arrow. Watch the image become warmer even though the lamps have not changed.", "Raise WHITE BALANCE to 6500K and compare", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 6500f) < 50f),
-            new GuidedPracticeLesson.Step("Return to 3200K with Left Arrow. Notice the cooler result compared with 6500K. Judge the subject's colors, not just the number: white balance is a camera adjustment, not lamp brightness.", "Return WHITE BALANCE to 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
-            new GuidedPracticeLesson.Step("Press F2 to close settings. Keep the viewfinder open so we can practice steady movement next.", "[F2] Close camera settings", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && !camera.SettingsOpen),
+            new GuidedPracticeLesson.Step("White balance corrects the camera image, not the lamp. Grey reference strips help you see a colour cast; the red reflective surface alone cannot tell you whether whites are neutral. Press F2 to open camera settings.", "[F2] Open camera settings; frame the grey reference", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.SettingsOpen),
+            new GuidedPracticeLesson.Step("Use Up/Down to select a control and Left/Right to adjust it. Set WHITE BALANCE to 5600K and TINT to 0 for this game's no-correction baseline. The warm lamp may still make the grey strips look warm; 5600K is a starting point, not a promise of perfect balance.", "Start at WHITE BALANCE 5600K and TINT 0", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 5600f) < 50f && Mathf.Abs(camera.WhiteBalanceTint) < 2.5f),
+            new GuidedPracticeLesson.Step("Now try WHITE BALANCE 3200K. The camera image becomes cooler while the lamp stays unchanged. Compare the grey strips with your 5600K baseline. This is a demonstration, not a best-setting requirement.", "Compare the cooler camera look at 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
+            new GuidedPracticeLesson.Step("Raise WHITE BALANCE to 6500K. The image becomes warmer. Watch the grey reference and the reflective subject: an orange cast on a neutral strip is not the same as an orange product. Neither demonstration value is automatically best.", "Compare the warmer camera look at 6500K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 6500f) < 50f),
+            new GuidedPracticeLesson.Step("Choose your final balance by the live image: aim for grey strips without a strong blue/orange cast, then add only the warmth you intend. Adjust Tint if there is a green/magenta cast. No exact Kelvin is required. Keep this choice across your three car takes. Press F2 to confirm and close settings.", "Choose your balance on the grey reference; [F2] confirm", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.WhiteBalancePracticed && !camera.SettingsOpen),
             new GuidedPracticeLesson.Step("Keep the viewfinder open. Hold <color=yellow>Ctrl</color> while moving with WASD, and turn gently with the mouse. Ctrl slows walking and looking for a steady shot. Practice for five seconds while keeping the lit subject framed; then I'll come back. We are rehearsing, so do not record yet.","Keep viewfinder open; practice Ctrl + WASD for 5 seconds",()=>
             {
                 var keys = UnityEngine.InputSystem.Keyboard.current;
@@ -148,6 +148,7 @@ public class Level3Manager : MonoBehaviour
     private float PracticeDiffusion => threePointRole == 0 ? 75f : threePointRole == 1 ? 100f : 25f;
     private GuidedPracticeLesson practiceLesson;
     private GameObject lightingPracticeRoot;
+    private Material whiteBalanceReferenceMaterial;
     private GameObject lightingPracticeWall;
     private DirectorTerminal lightingPracticeDirector;
     private Transform lightingPracticeTarget;
@@ -1081,7 +1082,7 @@ public class Level3Manager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted! <color=yellow>Terrari</color> wants a 25-second reveal. Place the orange car on a dark set. Record separate back, side and overall takes, about 7 seconds each. One SD card holds up to 60 seconds; eject it with <color=red>[C]</color> when ready to import. Use Better Lights at 75%, -10°, 3200K and 75% diffusion. Hold Ctrl for smooth camera movement. In editing, add the 2-second Terrari intro and 2-second outro. Press <color=red>[TAB]</color> to review the brief.", TutorialUIManager.Instance.poseHappy, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Contract accepted! <color=yellow>Terrari</color> wants a 25-second reveal. Place the orange car on a dark set. Record back, side and overall takes, about 7 seconds each. For a warm starting light, try 75%, -10°, 3200K and 75% diffusion; those examples are not a required CAMERA white balance. Choose camera balance by the neutral reference and keep it consistent across takes. Hold Ctrl for smooth movement. One 60-second SD card holds these takes; eject with <color=red>[C]</color> to import. Add the full 2-second Terrari intro and outro. <color=red>[TAB]</color> reopens the brief.", TutorialUIManager.Instance.poseHappy, true, false);
         }
     }
 
@@ -1239,7 +1240,33 @@ public class Level3Manager : MonoBehaviour
             if (targetRenderer.material.HasProperty("_Smoothness")) targetRenderer.material.SetFloat("_Smoothness", 0.8f);
         }
 
-        CreatePracticeLabel(targetRoot.transform, new Vector3(0f, 1.8f, 0f), "REFLECTIVE\nPRACTICE SURFACE", Color.white);
+        if (targetRenderer != null)
+        {
+            whiteBalanceReferenceMaterial = new Material(targetRenderer.material) { name = "Level 3 neutral WB reference" };
+            whiteBalanceReferenceMaterial.color = new Color(.5f, .5f, .5f, 1f);
+            if (whiteBalanceReferenceMaterial.HasProperty("_Metallic")) whiteBalanceReferenceMaterial.SetFloat("_Metallic", 0);
+            if (whiteBalanceReferenceMaterial.HasProperty("_Smoothness")) whiteBalanceReferenceMaterial.SetFloat("_Smoothness", .05f);
+            if (whiteBalanceReferenceMaterial.HasProperty("_Glossiness")) whiteBalanceReferenceMaterial.SetFloat("_Glossiness", .05f);
+            whiteBalanceReferenceMaterial.DisableKeyword("_EMISSION");
+            if (whiteBalanceReferenceMaterial.HasProperty("_EmissionColor")) whiteBalanceReferenceMaterial.SetColor("_EmissionColor", Color.black);
+            // Neutral, lit matte strips on all four faces remain visible from
+            // different practice positions without replacing the reflective subject.
+            for (int i = 0; i < 4; i++)
+            {
+                bool side = i >= 2;
+                var reference = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                reference.name = "Neutral grey WB reference " + i;
+                reference.transform.SetParent(targetRoot.transform, false);
+                reference.transform.localPosition = side ? new Vector3(i == 2 ? -.915f : .915f, .8f, 0) : new Vector3(0, .8f, i == 0 ? -.39f : .39f);
+                reference.transform.localRotation = Quaternion.Euler(0, side ? 90 : 0, 0);
+                reference.transform.localScale = new Vector3(side ? .5f : .8f, .32f, .025f);
+                Destroy(reference.GetComponent<Collider>());
+                var renderer = reference.GetComponent<Renderer>();
+                renderer.sharedMaterial = whiteBalanceReferenceMaterial;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            }
+        }
+        CreatePracticeLabel(targetRoot.transform, new Vector3(0f, 1.8f, 0f), "REFLECTIVE SURFACE\nGREY STRIPS: WB REFERENCE", Color.white);
         return targetRoot.transform;
     }
 
@@ -1291,6 +1318,8 @@ public class Level3Manager : MonoBehaviour
         foreach (var loan in loanLights) if (loan != null) Destroy(loan);
         loanLights.Clear();
         if (lightingPracticeRoot != null) Destroy(lightingPracticeRoot);
+        if (whiteBalanceReferenceMaterial != null) Destroy(whiteBalanceReferenceMaterial);
+        whiteBalanceReferenceMaterial = null;
         if (lightingPracticeDirector != null && lightingPracticeWall != null) lightingPracticeDirector.RemovePracticeWall(lightingPracticeWall);
 
         lightingPracticeRoot = null;

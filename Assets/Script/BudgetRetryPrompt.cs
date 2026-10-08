@@ -1,12 +1,17 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
 // Runtime UI and career-local recovery data also work in standalone builds.
 public sealed class BudgetRetryPrompt : MonoBehaviour
 {
-    private const string SnapshotKey = "BudgetRetry.Start.v1";
+    internal const string SnapshotKey = "BudgetRetry.Start.v1";
+    private const string SnapshotCountKey = SnapshotKey + ".Count";
+    private const int SnapshotChunkSize = 8000;
+    private const int MaxSnapshotChunks = 1500;
     [Serializable] private sealed class Snapshot
     {
         public int level;
@@ -25,7 +30,7 @@ public sealed class BudgetRetryPrompt : MonoBehaviour
         Snapshot existing = Read();
         if (!fresh && existing != null && existing.level == level) return;
         var values = GameSaveRepository.Clone(GameSavePrefs.Values ?? LegacyGameSave.Read(false));
-        values.RemoveAll(v => v.key == SnapshotKey || GameSavePrefs.IsGlobal(v.key));
+        values.RemoveAll(v => IsSnapshotKey(v.key) || GameSavePrefs.IsGlobal(v.key));
         // Old careers have no acceptance snapshot: give their first recovery a usable budget.
         if (!fresh)
         {
@@ -33,14 +38,70 @@ public sealed class BudgetRetryPrompt : MonoBehaviour
             if (money == null) values.Add(new GameSaveValue { key = "PlayerMoney", integer = ProductionEconomy.Advance(level) });
             else money.integer = Mathf.Max(money.integer, ProductionEconomy.Advance(level));
         }
-        GameSavePrefs.SetString(SnapshotKey, JsonUtility.ToJson(new Snapshot { level = level, values = values }));
+        var storage = new List<GameSaveValue>
+        {
+            new GameSaveValue { key = SnapshotKey, kind = 2, text = JsonUtility.ToJson(new Snapshot { level = level, values = values }) }
+        };
+        NormalizeSnapshotValues(storage);
+        int oldCount = Mathf.Clamp(GameSavePrefs.GetInt(SnapshotCountKey, 0), 0, MaxSnapshotChunks);
+        for (int i = 0; i < oldCount; i++) GameSavePrefs.DeleteKey(SnapshotKey + "." + i);
+        GameSavePrefs.DeleteKey(SnapshotKey);
+        GameSavePrefs.DeleteKey(SnapshotCountKey);
+        foreach (var value in storage)
+        {
+            if (value.kind == 0) GameSavePrefs.SetInt(value.key, value.integer);
+            else GameSavePrefs.SetString(value.key, value.text);
+        }
         GameSavePrefs.Save();
+    }
+
+    internal static bool IsSnapshotKey(string key) => key == SnapshotKey ||
+        key.StartsWith(SnapshotKey + ".", StringComparison.Ordinal);
+
+    // Keep the old single-value form for small snapshots; large ones use the same
+    // career-value envelope in pieces below the repository's 10,000-character cap.
+    internal static void NormalizeSnapshotValues(List<GameSaveValue> values)
+    {
+        var legacy = values.Find(v => v.key == SnapshotKey && v.kind == 2);
+        if (legacy == null || string.IsNullOrEmpty(legacy.text) || legacy.text.Length <= SnapshotChunkSize) return;
+        string json = legacy.text;
+        int count = (json.Length - 1) / SnapshotChunkSize + 1;
+        if (count > MaxSnapshotChunks) throw new InvalidDataException("Contract retry snapshot is too large.");
+        var chunks = new List<GameSaveValue>();
+        for (int i = 0; i < count; i++)
+            chunks.Add(new GameSaveValue { key = SnapshotKey + "." + i, kind = 2,
+                text = json.Substring(i * SnapshotChunkSize, Math.Min(SnapshotChunkSize, json.Length - i * SnapshotChunkSize)) });
+        chunks.Add(new GameSaveValue { key = SnapshotCountKey, integer = count });
+        values.RemoveAll(v => IsSnapshotKey(v.key));
+        values.AddRange(chunks);
+    }
+
+    internal static string ReadSnapshotJson(List<GameSaveValue> values)
+    {
+        int count = values.Find(v => v.key == SnapshotCountKey && v.kind == 0)?.integer ?? 0;
+        return ReadSnapshotJson(count, key => values.Find(v => v.key == key && v.kind == 2)?.text);
+    }
+
+    private static string ReadSnapshotJson(int count, Func<string, string> read)
+    {
+        if (count < 0 || count > MaxSnapshotChunks) throw new InvalidDataException("Invalid contract retry snapshot chunk count.");
+        if (count == 0) return read(SnapshotKey);
+        var json = new StringBuilder();
+        for (int i = 0; i < count; i++)
+        {
+            string chunk = read(SnapshotKey + "." + i);
+            if (string.IsNullOrEmpty(chunk) || chunk.Length > 10000)
+                throw new InvalidDataException("Contract retry snapshot has a missing or invalid chunk.");
+            json.Append(chunk);
+        }
+        return json.ToString();
     }
 
     private static Snapshot Read()
     {
-        try { return JsonUtility.FromJson<Snapshot>(GameSavePrefs.GetString(SnapshotKey, "")); }
+        try { return JsonUtility.FromJson<Snapshot>(ReadSnapshotJson(GameSavePrefs.GetInt(SnapshotCountKey, 0), key => GameSavePrefs.GetString(key, ""))); }
         catch (ArgumentException) { return null; }
+        catch (InvalidDataException) { return null; }
     }
 
     public static void Show(int cost, int balance)
@@ -146,10 +207,10 @@ public sealed class BudgetRetryPrompt : MonoBehaviour
         if (snapshot == null || snapshot.values == null) return;
         var current = GameSavePrefs.Values ?? LegacyGameSave.Read(false);
         foreach (var value in new List<GameSaveValue>(current))
-            if (!GameSavePrefs.IsGlobal(value.key) && value.key != SnapshotKey && !CareerProfileProgress.RetainOnContractRetry(value.key)) GameSavePrefs.DeleteKey(value.key);
+            if (!GameSavePrefs.IsGlobal(value.key) && !IsSnapshotKey(value.key) && !CareerProfileProgress.RetainOnContractRetry(value.key)) GameSavePrefs.DeleteKey(value.key);
         foreach (var value in snapshot.values)
         {
-            if (GameSavePrefs.IsGlobal(value.key) || value.key == SnapshotKey || CareerProfileProgress.RetainOnContractRetry(value.key)) continue;
+            if (GameSavePrefs.IsGlobal(value.key) || IsSnapshotKey(value.key) || CareerProfileProgress.RetainOnContractRetry(value.key)) continue;
             if (value.kind == 0) GameSavePrefs.SetInt(value.key, value.integer);
             else if (value.kind == 1) GameSavePrefs.SetFloat(value.key, value.number);
             else GameSavePrefs.SetString(value.key, value.text);

@@ -1,9 +1,10 @@
 using UnityEngine;
 
-// Precision standing marks use the player's feet/body, never the camera position.
+// Enter the standing circle with the player's body, then align to its center.
 public sealed class PracticePointLock
 {
-    public const float CenterRadius = .22f;
+    // Match the 1.4 m practice circle instead of requiring precise foot placement.
+    public const float CenterRadius = .7f;
     const RigidbodyConstraints HorizontalLock = RigidbodyConstraints.FreezePositionX | RigidbodyConstraints.FreezePositionZ;
     Rigidbody body;
     RigidbodyConstraints addedConstraints;

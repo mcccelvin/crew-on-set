@@ -35,7 +35,9 @@ namespace Player.Equipment
                 level=featureLevel, kelvin=whiteBalance, iso=iso, aperture=iris, shutterAngle=shutterAngle,
                 fps=pixelRecorder!=null ? pixelRecorder.framesPerSecond : TapeSettings.framesPerSecond,
                 width=pixelRecorder!=null ? pixelRecorder.captureWidth : 640,
-                height=pixelRecorder!=null ? pixelRecorder.captureHeight : 360, menu=SettingsHUDText()
+                height=pixelRecorder!=null ? pixelRecorder.captureHeight : 360,
+                settingsOpen=settingsOpen && featureLevel>=2, gridEnabled=GridEnabled,
+                selectedSetting=settingRow, tint=tint
             });
         }
     }

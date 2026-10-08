@@ -72,9 +72,18 @@ public sealed class GameSaveRepository
     public void Commit(GameSaveSlot slot)
     {
         PreserveProfileOrigin(slot.values,slot.id);
+        string previousRevision = slot.revision;
+        string previousUpdatedUtc = slot.updatedUtc;
         slot.revision = Guid.NewGuid().ToString("N");
         slot.updatedUtc = DateTime.UtcNow.ToString("o");
-        Write(slot);
+        try { Write(slot); }
+        catch
+        {
+            // Do not advertise an uncommitted checkpoint as a new cloud revision.
+            slot.revision = previousRevision;
+            slot.updatedUtc = previousUpdatedUtc;
+            throw;
+        }
     }
 
     // Copy once, keeping the guest file intact. Stable IDs make interrupted imports retry-safe.
@@ -126,9 +135,14 @@ public sealed class GameSaveRepository
             throw new InvalidDataException("Invalid or unsupported game save.");
         var keys = new HashSet<string>();
         foreach (var value in slot.values)
+        {
             if (value == null || string.IsNullOrEmpty(value.key) || value.key.Length > 200 || value.kind < 0 || value.kind > 2 ||
-                GameSavePrefs.IsGlobal(value.key) || !keys.Add(value.key) || (value.text != null && value.text.Length > 10000))
+                GameSavePrefs.IsGlobal(value.key))
                 throw new InvalidDataException("Invalid save value.");
+            if (!keys.Add(value.key)) throw new InvalidDataException("Duplicate save key: " + value.key);
+            if (value.text != null && value.text.Length > 10000)
+                throw new InvalidDataException("Save value '" + value.key + "' exceeds the 10,000-character limit (" + value.text.Length + ").");
+        }
     }
 
     // Keep both versions if two devices changed the same checkpoint while offline.

@@ -54,7 +54,7 @@ public partial class AlmanacManager
 
     private void UpdateTechniqueReviewHighlight()
     {
-        bool show = techniqueReviewRequested && isAlmanacOpen && navigationStep < 0 && knowledgeCategoryFilter != 2;
+        bool show = techniqueReviewRequested && isAlmanacOpen && !AlmanacTransitionBusy() && navigationStep < 0 && knowledgeCategoryFilter != 2;
         if (!show)
         {
             if (techniqueHighlightOwned)
@@ -67,7 +67,7 @@ public partial class AlmanacManager
                 }
                 techniqueHighlightOwned = false;
             }
-            if (isAlmanacOpen && navigationStep < 0 && knowledgeCategoryFilter == 2) techniqueReviewRequested = false;
+            if (isAlmanacOpen && !AlmanacTransitionBusy() && navigationStep < 0 && knowledgeCategoryFilter == 2) techniqueReviewRequested = false;
             return;
         }
         if (techniquesKnowledgeButton == null || TutorialHighlighter.Instance == null) return;
@@ -123,6 +123,7 @@ public partial class AlmanacManager
     private void SetNavigationFocus(Button target, bool allowTargetClick = true)
     {
         ClearNavigationFocus();
+        if (AlmanacTransitionBusy()) return;
         if (UnityEngine.EventSystems.EventSystem.current != null)
             UnityEngine.EventSystems.EventSystem.current.SetSelectedGameObject(null);
         foreach (var button in Application.isPlaying ? almanacCanvas.GetComponentsInChildren<Button>(true) : new Button[0])
@@ -175,6 +176,7 @@ public partial class AlmanacManager
 
     private void UpdateNavigationLesson()
     {
+        if (AlmanacTransitionBusy()) return;
         if (navigationStep >= 0 && DevTutorialBypass.Disabled) { EndNavigationLesson(); return; }
         if (!isAlmanacOpen || !navigationAwaitingSpace || navigationUI == null ||
             PauseManager.isPaused || !Application.isFocused ||
@@ -242,6 +244,7 @@ public partial class AlmanacManager
 
     private void BeginNavigationLesson()
     {
+        if (AlmanacTransitionBusy()) { navigationAfterCover = true; return; }
         var ui = TutorialUIManager.Instance;
         if (DevTutorialBypass.Disabled || ui == null || ui.bossHUDCanvas == null ||
             (!navigationLessonRequested && GameSavePrefs.GetInt(NavigationLessonKey, 0) >= NavigationLessonVersion)) return;
@@ -290,6 +293,7 @@ public partial class AlmanacManager
     private void ShowNavigationLesson()
     {
         if (navigationUI == null || navigationStep < 0) return;
+        if (AlmanacTransitionBusy()) { navigationPresentationPending = true; return; }
         string[] instructions = {
             "Welcome to your Almanac! Click EQUIPMENTS above the book. These pages explain what each tool does and its controls.",
             "The ribbons on the right filter the book by subject. Let's try Lighting. After our chat, click the highlighted light ribbon.",
@@ -304,6 +308,7 @@ public partial class AlmanacManager
 
     private void EndNavigationLesson()
     {
+        navigationAfterCover = navigationPresentationPending = false;
         if (navigationStep < 0) return;
         if (navigationStep >= 4)
         {
@@ -439,17 +444,47 @@ public partial class AlmanacManager
 
     private System.Collections.IEnumerator AnimateBookClose()
     {
-        yield return FlipBookStack(1, () => { }, false, 1, .45f);
+        bookSelectionAnimating = true;
+        try
+        {
+            EndNavigationLesson();
+            ClearNavigationFocus();
+            UpdateTechniqueReviewHighlight();
+            var motion = PlayAlmanacCoverClosing(true);
+            while (isAlmanacOpen && motion != null && motion.IsPlaying) yield return null;
+        }
+        finally { bookSelectionAnimating = false; }
+        if (!isAlmanacOpen) yield break;
         finishingBookClose = true;
-        ToggleAlmanac();
-        finishingBookClose = false;
+        try { ToggleAlmanac(); }
+        finally { finishingBookClose = false; }
     }
 
     private void AnimateBookSelection(Button button, bool newBook, System.Action select)
     {
-        if (bookSelectionAnimating || !isAlmanacOpen) return;
+        if (AlmanacTransitionBusy() || !isAlmanacOpen) return;
         CancelPageTurn();
-        StartCoroutine(FlipBookStack(1, select, false, 1, .45f));
+        if (newBook) StartCoroutine(SwitchAlmanacSection(select));
+        else StartCoroutine(FlipBookStack(1, select, false, 1, .45f));
+    }
+
+    private System.Collections.IEnumerator SwitchAlmanacSection(System.Action select)
+    {
+        bookSelectionAnimating = true;
+        try
+        {
+            ClearNavigationFocus();
+            UpdateTechniqueReviewHighlight();
+            PaperMenuAudio.Play(false);
+            var motion = PlayAlmanacCoverClosing(false);
+            while (isAlmanacOpen && motion != null && motion.IsPlaying) yield return null;
+            if (!isAlmanacOpen) yield break;
+            select?.Invoke();
+            PlayAlmanacCoverOpening(false);
+            while (isAlmanacOpen && AlmanacCoverOpening()) yield return null;
+        }
+        finally { bookSelectionAnimating = false; }
+        UpdateAlmanacPresentation();
     }
 
     private GameObject turningPaper;
@@ -462,12 +497,14 @@ public partial class AlmanacManager
             if (entry.Key != null) entry.Key.enabled = entry.Value;
         turningTextVisibility.Clear();
         RestoreIllustrationAfterTurn();
+        RestoreFieldNotesAfterTurn();
     }
 
     private void CopyWholePage(Transform paper, bool leftPage)
     {
         RestoreTurningText();
         CopyIllustrationForTurn(paper, leftPage);
+        CopyFieldNotesForTurn(paper, leftPage);
         foreach (var text in leftPage ? new[] { bookHeading, bookEntryTitle, bookLeftText } : new[] { bookRightText, bookPageNumber })
         {
             if (text == null) continue;
@@ -639,6 +676,7 @@ public partial class AlmanacManager
     private void RefreshBookPage()
     {
         if (!applyingPageTurn) CancelPageTurn();
+        HideFieldNotes();
         bookBodies.Clear();bookEntries.Clear();var entries=new List<KnowledgeEntry>();
         foreach(var entry in database)
         {
@@ -650,8 +688,18 @@ public partial class AlmanacManager
         entries.Sort(CompareKnowledgeEntries);
         foreach(var entry in entries)
         {
-            string remaining=entry.description??"";
-            do{int count=System.Math.Min(remaining.Length,900);if(count<remaining.Length){int split=remaining.LastIndexOf(' ',count-1,count);if(split>0)count=split;}bookBodies.Add(remaining.Substring(0,count));bookEntries.Add(entry);remaining=remaining.Substring(count).TrimStart();}while(remaining.Length>0);
+            var notes = BuildFieldNoteBlocks(entry);
+            for (int i = 0; i < notes.Count; i += 3)
+            {
+                bookBodies.Add(string.Join("\n\n", notes.GetRange(i, Mathf.Min(3, notes.Count - i))));
+                bookEntries.Add(entry);
+            }
+        }
+        if (!string.IsNullOrEmpty(fieldNotesAnchorId))
+        {
+            int anchored = bookEntries.FindIndex(entry => entry.id == fieldNotesAnchorId);
+            if (anchored >= 0) bookPage = anchored;
+            fieldNotesAnchorId = null;
         }
         bookPage=Mathf.Clamp(bookPage,0,Mathf.Max(0,bookBodies.Count-1));bookHeading.text=knowledgeCategoryFilter==2?"TECHNIQUES":"EQUIPMENTS";
         bookPrevious.interactable=bookPage>0;bookNext.interactable=bookPage+1<bookBodies.Count;
@@ -663,6 +711,7 @@ public partial class AlmanacManager
         else if(cut<body.Length){int paragraph=body.LastIndexOf('\n',cut-1,cut);if(paragraph>120)cut=paragraph;else {int space=body.LastIndexOf(' ',cut-1,cut);if(space>0)cut=space;}}
         bookLeftText.text=body.Substring(0,cut);bookRightText.text=body.Substring(cut).TrimStart();bookPageNumber.text=(bookPage+1)+" / "+bookBodies.Count;
         ApplyIllustratedArticle(bookEntries[bookPage], body);
+        ShowFieldNotes(bookEntries[bookPage], body);
         UpdateKnowledgeFilterButtons();
     }
 }

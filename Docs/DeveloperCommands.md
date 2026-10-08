@@ -1,8 +1,10 @@
 # Developer commands
 
-Press **F12** in the Unity Editor or a **Development Build** to open/close the command panel. Escape and CLOSE also dismiss it. Normal release builds do not install the menu or allow these command methods. Commands are disabled in multiplayer rooms.
+Press **F12** in any scene in the Unity Editor, Development Builds or normal release builds to open/close the command panel. No Development Build checkbox is required. The panel installs before the first scene and persists across scene changes. Escape and CLOSE also dismiss it. Commands are disabled in multiplayer rooms; scene-specific commands explain which scene they need. Build availability changes were not tested at the user's request.
 
 The old F4, F5, F6, F8, F9, F10, F11 and Caps Lock + 1–4 cheat bindings are retired. F12 no longer resets a career. F2 remains the camera's ordinary settings control, not a cheat.
+
+The panel uses the game's rounded cream paper, brown ink/outline, gold key/action accents and soft shadows instead of shiny blue buttons. A brown Studio Tools header carries the F12 badge and CLOSE. Controls are grouped into Tutorials, Budget & Media, Test C-Wallet, Contracts and a red Career Reset caution area; a separate feedback paper retains command results and confirmation warnings. Fast dialogue's ON state is highlighted gold. Command indices/callbacks, local-wallet isolation, multiplayer/release restrictions, pause/cursor restoration and the eight-second two-click reset are unchanged. No tests were run for this visual redesign, as requested.
 
 Buttons:
 

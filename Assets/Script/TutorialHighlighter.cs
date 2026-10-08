@@ -116,6 +116,9 @@ public class TutorialHighlighter : MonoBehaviour
             {
                 currentDimmerAlpha = Mathf.MoveTowards(currentDimmerAlpha, 1f, Time.unscaledDeltaTime * 5f);
                 dimmerGroup.alpha = currentDimmerAlpha;
+                // Keep the delivered picture visible at its actual brightness during review.
+                if (EditorManager.Instance != null && EditorManager.Instance.ReviewIsOpen)
+                    dimmerGroup.alpha = 0f;
                 var lesson = EditorTutorialManager.Instance;
                 if (lesson != null && (lesson.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness ||
                     lesson.currentStep == EditorTutorialManager.EditorStep.AdjustContrast ||

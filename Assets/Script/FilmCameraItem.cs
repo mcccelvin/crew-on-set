@@ -741,7 +741,11 @@ namespace Player.Equipment
         {
             if (filmCamera == null || ApplyManualFocus()) return;
 
-            if (Physics.Raycast(filmCamera.transform.position, filmCamera.transform.forward, out RaycastHit hit, 100f))
+            if (TryVisibleProductFocus())
+            {
+                targetFocusDistance = Vector3.Dot(visibleFocusBounds.center - filmCamera.transform.position, filmCamera.transform.forward);
+            }
+            else if (Physics.Raycast(filmCamera.transform.position, filmCamera.transform.forward, out RaycastHit hit, 100f))
             {
                 targetFocusDistance = hit.distance;
             }
@@ -833,6 +837,13 @@ namespace Player.Equipment
             foreach (var entry in hiddenPlayerBody)
                 if (entry.Key != null) entry.Key.shadowCastingMode = entry.Value;
             hiddenPlayerBody.Clear();
+        }
+
+        public void RefreshPlayerAppearanceVisibility()
+        {
+            if (!isCameraActive) return;
+            RestorePlayerBody();
+            HidePlayerBody(viewfinderAimCamera);
         }
 
         private void HideCameraBody()
@@ -955,16 +966,71 @@ namespace Player.Equipment
             }
         }
 
+        private CampaignProduct[] focusProducts;
+        private float nextFocusProductsScan;
+        private int focusSelectionFrame = -1;
+        private Transform visibleFocusTarget;
+        private Renderer[] visibleFocusRenderers;
+        private Bounds visibleFocusBounds;
+
+        private bool TryVisibleProductFocus()
+        {
+            if (filmCamera == null) return false;
+            if (focusSelectionFrame == Time.frameCount) return visibleFocusTarget != null;
+            focusSelectionFrame = Time.frameCount;
+            Transform previous = visibleFocusTarget;
+            visibleFocusTarget = null;
+            if (focusProducts == null || Time.unscaledTime >= nextFocusProductsScan)
+            {
+                focusProducts = FindObjectsOfType<CampaignProduct>();
+                nextFocusProductsScan = Time.unscaledTime + .5f;
+            }
+            float best = float.MaxValue;
+            foreach (var candidate in focusProducts)
+            {
+                if (candidate == null || !candidate.gameObject.activeInHierarchy ||
+                    candidate.campaignLevel != CampaignProgression.GetCurrentLevel()) continue;
+                var renderers = candidate.GetComponentsInChildren<Renderer>();
+                if (!TryVisibleFocusBounds(candidate.transform, renderers, out Bounds bounds)) continue;
+                Vector3 point = filmCamera.WorldToViewportPoint(bounds.center);
+                float score = new Vector2(point.x - .5f, point.y - .5f).sqrMagnitude;
+                if (candidate.transform == previous) score -= .08f;
+                if (score >= best) continue;
+                best = score; visibleFocusTarget = candidate.transform;
+                visibleFocusRenderers = renderers; visibleFocusBounds = bounds;
+            }
+            // First-contract flowers and practice subjects use RecordableSubject.
+            if (visibleFocusTarget == null)
+            {
+                if (targetSubject == null) CacheTargetSubject();
+                if (targetSubject != null && TryVisibleFocusBounds(targetSubject.transform, targetRenderers, out Bounds bounds))
+                {
+                    visibleFocusTarget = targetSubject.transform;
+                    visibleFocusRenderers = targetRenderers; visibleFocusBounds = bounds;
+                }
+            }
+            return visibleFocusTarget != null;
+        }
+
+        private bool TryVisibleFocusBounds(Transform root, Renderer[] renderers, out Bounds bounds)
+        {
+            if (!TryGetWorldBounds(renderers, out bounds)) return false;
+            Vector3 point = filmCamera.WorldToViewportPoint(bounds.center);
+            if (point.z <= filmCamera.nearClipPlane || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return false;
+            return !IsCampaignTargetBlocked(bounds.center, root);
+        }
+
         private void UpdateTrackingSquare()
         {
             if (targetSubject == null) CacheTargetSubject();
+            bool productFocused = TryVisibleProductFocus();
 
-            if (targetSubject != null && trackingSquare != null && filmCamera != null)
+            if ((productFocused || targetSubject != null) && trackingSquare != null && filmCamera != null)
             {
-                Renderer[] rends = targetRenderers;
+                Renderer[] rends = productFocused ? visibleFocusRenderers : targetRenderers;
                 if (rends.Length > 0)
                 {
-                    Vector3 targetCenter = GetSubjectCenter(targetSubject);
+                    Vector3 targetCenter = productFocused ? visibleFocusBounds.center : GetSubjectCenter(targetSubject);
                     Vector3 viewPos = filmCamera.WorldToViewportPoint(targetCenter);
                     Vector3 screenPos = filmCamera.WorldToScreenPoint(targetCenter);
 
@@ -1010,7 +1076,7 @@ namespace Player.Equipment
                         Vector3 directionToTarget = targetCenter - filmCamera.transform.position;
                         float distToSub = Vector3.Distance(filmCamera.transform.position, targetCenter);
 
-                        bool isBlocked = IsSubjectBlocked(directionToTarget, distToSub);
+                        bool isBlocked = productFocused ? false : IsSubjectBlocked(directionToTarget, distToSub);
                         if (dynamicHUD != null) dynamicHUD.SetTrackingState(isBlocked);
 
                         if (trackingSquareImage != null)
@@ -1022,7 +1088,8 @@ namespace Player.Equipment
                             else
                             {
                                 trackingSquareImage.color = Color.green;
-                                if (TutorialManager.Instance != null) TutorialManager.Instance.OnSubjectFramed();
+                                if (TutorialManager.Instance != null && targetSubject != null &&
+                                    (!productFocused || visibleFocusTarget == targetSubject.transform)) TutorialManager.Instance.OnSubjectFramed();
                             }
                         }
                     }
@@ -1776,6 +1843,7 @@ namespace Player.Equipment
                 if (hit.collider == null || hit.collider.isTrigger) continue;
                 if (hit.collider.transform.root == transform.root) continue;
                 if (hit.collider.transform.root == targetRoot) continue;
+                if (hit.collider.transform == targetRoot || hit.collider.transform.IsChildOf(targetRoot)) continue;
                 if (hit.distance < distanceToTarget - 0.15f) return true;
             }
 

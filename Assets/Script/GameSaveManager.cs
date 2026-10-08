@@ -249,7 +249,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
     {
         int level = values.Find(v => v.key == "CurrentLevel" && v.kind == 0)?.integer ?? 1;
         bool completed = values.Exists(v => v.key == "CampaignCompleted" && v.kind == 0 && v.integer == 1);
-        string json = values.Find(v => v.key == "BudgetRetry.Start.v1" && v.kind == 2)?.text;
+        string json = BudgetRetryPrompt.ReadSnapshotJson(values);
         if (!completed && !string.IsNullOrEmpty(json))
         {
             try
@@ -269,7 +269,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         // Lifetime evidence and reward identity are durable, not studio state.
         // Never reset account currency or mint a new identity for queued rewards.
         return CareerProfileProgress.RetainOnContractRetry(key) || key == "CCoins.CareerRewardId" ||
-            key == "BudgetRetry.Start.v1" || key.StartsWith("Analytics.Career.v1", StringComparison.Ordinal) ||
+            BudgetRetryPrompt.IsSnapshotKey(key) || key.StartsWith("Analytics.Career.v1", StringComparison.Ordinal) ||
             key.StartsWith("Knowledge_", StringComparison.Ordinal) || key.StartsWith("ContractBestScore_Level", StringComparison.Ordinal);
     }
     private static List<GameSaveValue> ReadProductionCheckpoint(List<GameSaveValue> values)
@@ -289,9 +289,12 @@ public sealed partial class GameSaveManager : MonoBehaviour
     {
         if (GameSavePrefs.IsRoomSession) return;
         if (Active == null || GameSavePrefs.Values == null || Repository == null) return;
+        var previous = Active.values;
         try
         {
-            var previous = Active.values;
+            // Repair oversized snapshots already captured by older code, without
+            // changing their budget or production state.
+            BudgetRetryPrompt.NormalizeSnapshotValues(GameSavePrefs.Values);
             Active.values = updateBudget ? GameSaveRepository.Clone(GameSavePrefs.Values) : ReadProductionCheckpoint(previous);
             if (!updateBudget)
             {
@@ -305,13 +308,35 @@ public sealed partial class GameSaveManager : MonoBehaviour
             Active.values.Add(new GameSaveValue { key = "PlayerMoney", integer = budget });
             Active.values.Add(new GameSaveValue { key = BudgetCheckpointKey, integer = budget });
             Active.values.Add(new GameSaveValue { key = ProductionCheckpointKey, integer = 1 });
-            try { Repository.Commit(Active); }
-            catch { Active.values = previous; throw; }
-            Status = "Checkpoint saved on this device.";
-            nextSync = Time.unscaledTime + 2f;
-            Changed?.Invoke();
+            Repository.Commit(Active);
         }
-        catch (Exception) { Status = "Checkpoint could not be saved. Check available disk space."; GameFeedback.Show(Status, true); }
+        catch (Exception error)
+        {
+            Active.values = previous;
+            string reason = error is InvalidDataException ? "Invalid save data." :
+                error is UnauthorizedAccessException ? "Save folder access was denied." :
+                error is IOException ? "The save file could not be written." : error.GetType().Name + ".";
+            Status = "Checkpoint could not be saved. " + reason + " See Console for details.";
+            Debug.LogError("Checkpoint save failed: " + error.Message, this);
+            Debug.LogException(error, this);
+            GameFeedback.Show(Status, true);
+            return;
+        }
+        Status = "Checkpoint saved on this device.";
+        nextSync = Time.unscaledTime + 2f;
+        // A broken/stale UI listener must not label a successful file write as a
+        // failed checkpoint or prevent other save views from refreshing.
+        var listeners = Changed;
+        if (listeners == null) return;
+        foreach (Action listener in listeners.GetInvocationList())
+        {
+            try { listener(); }
+            catch (Exception error)
+            {
+                Debug.LogWarning("Checkpoint saved, but a save UI refresh failed: " + error.Message, this);
+                Debug.LogException(error, this);
+            }
+        }
     }
     // Compatibility entry point: the existing private checkpoint transport owns stats and B-Coins.
     // C-Coins are reconciled separately by their authoritative account-wallet service.

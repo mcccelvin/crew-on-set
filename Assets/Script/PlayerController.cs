@@ -31,6 +31,13 @@ namespace Player.PlayerController
             heldViewCamera = null;
         }
         private bool appearanceInitialized;
+        private CCoinService appearanceService;
+        private SkinnedMeshRenderer[] defaultCharacterSkins;
+        private bool[] defaultCharacterSkinStates;
+        private readonly List<GameObject> equippedCharacterParts = new List<GameObject>();
+        private string appliedOutfit;
+        private UnityEngine.Rendering.ShadowCastingMode characterShadowMode;
+        private int characterRenderLayer;
         public Transform ProfileVisual => transform.Find("Player Character Visual");
         [SerializeField] private float UpperLimit = -40f;
         [SerializeField] private float LowerLimit = 70f;
@@ -123,6 +130,7 @@ namespace Player.PlayerController
             bodyCollider = GetComponent<Collider>();
             equipmentInteractor = GetComponent<Player.Interactor.EquipmentInteractor>();
             InitializeAppearance();
+            BindAccountAppearance();
             precisionWasActive = false;
 
             if (playerRigidbody != null)
@@ -143,6 +151,71 @@ namespace Player.PlayerController
             jumpHash = Animator.StringToHash("Jump");
             fallingHash = Animator.StringToHash("Falling");
             groundHash = Animator.StringToHash("Grounded");
+        }
+
+        private void BindAccountAppearance()
+        {
+            if (appearanceService != null) appearanceService.Changed -= RefreshPlayerOutfit;
+            var networkView = GetComponentInParent<Photon.Pun.PhotonView>();
+            if (Photon.Pun.PhotonNetwork.InRoom && networkView != null && !networkView.IsMine) return;
+            if (ProfileVisual == null || !appearanceInitialized) return;
+            if (defaultCharacterSkins == null)
+            {
+                defaultCharacterSkins = ProfileVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                defaultCharacterSkinStates = new bool[defaultCharacterSkins.Length];
+                for (int i = 0; i < defaultCharacterSkins.Length; i++) defaultCharacterSkinStates[i] = defaultCharacterSkins[i].enabled;
+                characterRenderLayer = defaultCharacterSkins.Length > 0 ? defaultCharacterSkins[0].gameObject.layer : gameObject.layer;
+                characterShadowMode = defaultCharacterSkins.Length > 0 ? defaultCharacterSkins[0].shadowCastingMode : UnityEngine.Rendering.ShadowCastingMode.On;
+            }
+            appearanceService = CCoinService.Ensure();
+            appearanceService.Changed += RefreshPlayerOutfit;
+            RefreshPlayerOutfit();
+        }
+
+        private void RefreshPlayerOutfit()
+        {
+            if (appearanceService == null || ProfileVisual == null || defaultCharacterSkins == null) return;
+            // Use the same ownership-validated selection as the profile/website
+            // avatar. Wallet-only changes and TRY ON must not rebuild gameplay skins.
+            var selection = appearanceService.EquippedParts;
+            System.Array.Sort(selection, System.StringComparer.Ordinal);
+            string key = string.Join("|", selection);
+            if (appliedOutfit == key) return;
+            var cosmeticRig = CharacterCosmeticRig.Load();
+            if (cosmeticRig == null) return;
+            foreach (var part in equippedCharacterParts)
+                if (part != null) { part.SetActive(false); Destroy(part); }
+            equippedCharacterParts.Clear();
+            for (int i = 0; i < defaultCharacterSkins.Length; i++)
+                if (defaultCharacterSkins[i] != null) defaultCharacterSkins[i].enabled = defaultCharacterSkinStates[i];
+            bool hasBody = System.Array.Exists(selection, id => CharacterCosmetics.Find(id)?.kind == "body" && cosmeticRig.Contains(id));
+            if (hasBody)
+            {
+                int applied = cosmeticRig.Apply(ProfileVisual.gameObject, selection);
+                if (applied == 0)
+                {
+                    // Keep a visible, animated fallback if a derived rig is missing bones.
+                    for (int i = 0; i < defaultCharacterSkins.Length; i++)
+                        if (defaultCharacterSkins[i] != null) defaultCharacterSkins[i].enabled = defaultCharacterSkinStates[i];
+                    Debug.LogWarning("Equipped character parts could not bind to the player skeleton. Default character retained.", this);
+                }
+                else
+                {
+                    foreach (var skin in ProfileVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+                    {
+                        if (System.Array.IndexOf(defaultCharacterSkins, skin) >= 0 || !skin.gameObject.activeSelf) continue;
+                        skin.gameObject.layer = characterRenderLayer;
+                        skin.shadowCastingMode = characterShadowMode;
+                        skin.updateWhenOffscreen = true;
+                        equippedCharacterParts.Add(skin.gameObject);
+                    }
+                }
+            }
+            appliedOutfit = key;
+            // New clothing must follow the same viewfinder body-hiding state as
+            // the original mesh and restore its normal shadows on camera exit.
+            if (equipmentInteractor != null && equipmentInteractor.GetHeldItem() is Equipment.FilmCameraItem cameraItem)
+                cameraItem.RefreshPlayerAppearanceVisibility();
         }
 
         private void InitializeAppearance()
@@ -469,6 +542,7 @@ namespace Player.PlayerController
 
         private void OnDisable()
         {
+            if (appearanceService != null) appearanceService.Changed -= RefreshPlayerOutfit;
             practicePointLock.Release();
             RestoreHeldViewClip();
             cameraHoldingPose?.RestoreAnimation();

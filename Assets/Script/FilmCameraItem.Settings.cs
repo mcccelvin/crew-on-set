@@ -113,6 +113,7 @@ namespace Player.Equipment
         public float ViewfinderFieldOfView => filmCamera != null ? filmCamera.fieldOfView : 180f;
         public bool WhiteBalancePracticed { get; private set; }
         public float WhiteBalanceKelvin => whiteBalance;
+        public float WhiteBalanceTint => tint;
         public bool ExposurePracticed { get; private set; }
         private static readonly float[] IsoStops = {100,200,400,800,1250,1600,2500,3200,6400,12800,25600,32000};
         private static readonly float[] IrisStops = {1.4f,2f,2.8f,4f,5.6f,8f,11f,16f,22f};

@@ -1920,13 +1920,14 @@ public class GokeLevelManager : MonoBehaviour
     {
         GameObject markerRoot = new GameObject(markerName);
         markerRoot.transform.SetParent(lightingPracticeRoot.transform);
-        markerRoot.transform.position = markerPosition;
+        markerRoot.transform.position = ResolvePracticeMarkerFloor(markerPosition);
 
         GameObject markerDisc = GuidedPracticeLesson.CreateGreenMarker(markerRoot.transform);
         markerDisc.name = "Placement Point";
         markerDisc.transform.SetParent(markerRoot.transform);
-        markerDisc.transform.localPosition = Vector3.zero;
-        // Marker size and floor clearance match the first tutorial.
+        markerDisc.transform.localPosition = Vector3.up * .12f;
+        // Match the first tutorial's green disc clearance, not the hidden stage
+        // surface underneath the practice backdrop's raised floor.
 
         Collider markerCollider = markerDisc.GetComponent<Collider>();
         if (markerCollider != null) Destroy(markerCollider);
@@ -1941,6 +1942,31 @@ public class GokeLevelManager : MonoBehaviour
 
         CreatePracticeLabel(markerRoot.transform, new Vector3(0f, 0.35f, 0f), markerText, markerColor);
         return markerRoot.transform;
+    }
+
+    private Vector3 ResolvePracticeMarkerFloor(Vector3 position)
+    {
+        if (lightingPracticeWall == null) return position;
+        // Query the practice backdrop itself so a nearby table, held camera or
+        // light cannot become the walk-to floor. Keep the existing target X/Z.
+        Physics.SyncTransforms();
+        bool found = false;
+        float floorHeight = float.NegativeInfinity;
+        foreach (var surface in lightingPracticeWall.GetComponentsInChildren<Collider>())
+        {
+            if (!surface.enabled || surface.isTrigger || !surface.gameObject.activeInHierarchy) continue;
+            float originY = Mathf.Max(position.y + 4f, surface.bounds.max.y + 1f);
+            var ray = new Ray(new Vector3(position.x, originY, position.z), Vector3.down);
+            if (!surface.Raycast(ray, out RaycastHit hit, originY - position.y + 2f) || hit.normal.y < .7f) continue;
+            // Ignore the tops of backdrop stands/rails; the screen floor lies
+            // close to the stage height from which the lesson points are built.
+            if (hit.point.y < position.y - .5f || hit.point.y > position.y + .75f) continue;
+            if (found && hit.point.y <= floorHeight) continue;
+            floorHeight = hit.point.y;
+            found = true;
+        }
+        if (found) position.y = floorHeight + .03f;
+        return position;
     }
 
     private void CreatePracticeLabel(Transform labelParent, Vector3 localPosition, string labelText, Color labelColor)
