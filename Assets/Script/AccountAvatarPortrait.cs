@@ -62,6 +62,8 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
     {
         if (target == null) target = GetComponent<RawImage>();
         Release();
+        target.enabled = parts != null && System.Array.Exists(parts, id => CharacterCosmetics.Find(id)?.kind == "body");
+        if (!target.enabled) return;
 
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         GameObject source = null;

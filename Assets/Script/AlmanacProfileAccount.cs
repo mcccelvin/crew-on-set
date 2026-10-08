@@ -512,6 +512,8 @@ public partial class AlmanacManager
     {
         var rig=CharacterCosmeticRig.Load();var item=CharacterCosmetics.Find(id);
         if(item==null || profileCharacterImage==null)return;
+        if(item.kind!="body" && !System.Array.Exists(profileWallet.EquippedParts, x=>CharacterCosmetics.Find(x)?.kind=="body"))
+        { profileWalletStatus.text="Equip Boy or Girl in BODY first."; return; }
         if(rig==null || !rig.Contains(id)){profileWalletStatus.text="This item's character fitting is not available in this build.";return;}
         if(profileTryOnParts.Count==0)profileTryOnParts.AddRange(profileWallet.EquippedParts);
         profileTryOnParts.RemoveAll(x=>CharacterCosmetics.Find(x)?.kind==item.kind);profileTryOnParts.Add(id);

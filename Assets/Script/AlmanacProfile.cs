@@ -140,6 +140,7 @@ public partial class AlmanacManager
     private void RenderDressedProfileCharacter(string[] parts)
     {
         ReleaseProfilePreview();
+        if (parts == null || !System.Array.Exists(parts, id => CharacterCosmetics.Find(id)?.kind == "body")) return;
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         GameObject portraitModel = null;
         if (catalog != null && catalog.coffeeActorModels != null)

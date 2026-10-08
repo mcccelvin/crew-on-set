@@ -131,15 +131,8 @@ public static class CharacterCosmetics
     }
     public static string[] GuestOutfit(string[] saved)
     {
-        var starter = new[] { "character_body_girl", "character_face1", "character_hair1", "character_shirt5", "character_pants4", "character_shoe1" };
         var free = new HashSet<string>(FreeAppearanceIds());
-        for (int i = 0; i < starter.Length; i++)
-        {
-            string kind = Find(starter[i]).kind;
-            string selected = saved == null ? null : Array.Find(saved, id => free.Contains(id) && Find(id)?.kind == kind);
-            if (selected != null) starter[i] = selected;
-        }
-        return starter;
+        return saved == null ? new string[0] : Array.FindAll(saved, id => free.Contains(id));
     }
     public static string ModelKey(string id) => Find(id)==null ? null : id.Substring("character_".Length);
     private static CCoinCosmetic[] Create()

@@ -406,6 +406,8 @@ public sealed class CCoinService : MonoBehaviour
     {
         if (!string.IsNullOrEmpty(id) && (!CCoinRules.Owns(state.wallet,id) || CCoinRules.Find(state.wallet,id) == null)) return;
         var part=CharacterCosmetics.Find(id);
+        if (part != null && part.kind != "body" && !state.equippedParts.Exists(x => CharacterCosmetics.Find(x)?.kind == "body"))
+        { Publish("Equip Boy or Girl in BODY first."); return; }
         if(part!=null)
         {
             state.equippedParts.RemoveAll(x=>CharacterCosmetics.Find(x)?.kind==part.kind);
