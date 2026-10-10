@@ -163,6 +163,40 @@ public sealed class ActorBot : MonoBehaviour
     private AnimationClipPlayable coffeeActionPlayable;
     private AnimationClip activeCoffeeClip;
     private static AnimationClip actorWaveClip;
+    private Transform mixingSpoon;
+
+    private void ApplyCoffeeProps()
+    {
+        bool mixing = CanMixCoffee && performance == 3 && !walking && !furnitureActive;
+        if (mixing && mixingSpoon == null)
+        {
+            mixingSpoon = new GameObject("Coffee mixing spoon").transform;
+            mixingSpoon.SetParent(transform, false);
+            Shader shader = Shader.Find(UnityEngine.Rendering.GraphicsSettings.currentRenderPipeline != null
+                ? "Universal Render Pipeline/Lit" : "Standard");
+            if (shader == null) shader = Shader.Find("Standard");
+            var metal = new Material(shader) { color = new Color(.72f, .76f, .8f) };
+            materials.Add(metal);
+            for (int i = 0; i < 2; i++)
+            {
+                var part = GameObject.CreatePrimitive(i == 0 ? PrimitiveType.Cylinder : PrimitiveType.Sphere);
+                part.name = i == 0 ? "Spoon handle" : "Spoon bowl";
+                part.transform.SetParent(mixingSpoon, false);
+                part.transform.localPosition = i == 0 ? new Vector3(0, -.025f, 0) : new Vector3(0, -.105f, 0);
+                part.transform.localScale = i == 0 ? new Vector3(.008f, .085f, .008f) : new Vector3(.024f, .009f, .037f);
+                var collider = part.GetComponent<Collider>();
+                collider.enabled = false;
+                Destroy(collider);
+                part.GetComponent<Renderer>().sharedMaterial = metal;
+            }
+        }
+        if (mixingSpoon != null) mixingSpoon.gameObject.SetActive(mixing);
+        if (!CanMixCoffee) return;
+        // A greeting uses the right hand, so support the cup with the left.
+        coffeeMotion.ApplyCup(animator, transform, heldProduct.transform, Time.deltaTime,
+            !furnitureActive && performance == 1 && !walking);
+        if (mixing) coffeeMotion.ApplyMix(animator, transform, heldProduct.transform, mixingSpoon, elapsed);
+    }
 
     private static AnimationClip ActorWaveClip()
     {
@@ -204,8 +238,15 @@ public sealed class ActorBot : MonoBehaviour
             graph.Connect(coffeeActionPlayable,0,coffeeActionMixer,1);
             activeCoffeeClip = clip;
         }
-        coffeeActionMixer.SetInputWeight(0,0); coffeeActionMixer.SetInputWeight(1,1);
-        coffeeActionPlayable.SetTime(Mathf.Repeat(elapsed,Mathf.Max(.001f,clip.length)));
+        bool greeting = clip == actorWaveClip && performance == 1;
+        float clipTime = Mathf.Repeat(elapsed, Mathf.Max(.001f, clip.length) + (greeting ? 5f : 0f));
+        float blend = Mathf.Min(.2f, clip.length * .2f);
+        float weight = greeting ? (clipTime >= clip.length ? 0f :
+            Mathf.SmoothStep(0, 1, clipTime / blend) * Mathf.SmoothStep(0, 1, (clip.length - clipTime) / blend)) : 1f;
+        if (idle.IsValid()) idle.SetTime(Mathf.Repeat(elapsed, Mathf.Max(.001f, idle.GetAnimationClip().length)));
+        if (locomotion.IsValid()) { locomotion.SetInputWeight(0, 1); locomotion.SetInputWeight(1, 0); }
+        coffeeActionMixer.SetInputWeight(0,1f - weight); coffeeActionMixer.SetInputWeight(1,weight);
+        coffeeActionPlayable.SetTime(Mathf.Min(clipTime, clip.length));
         graph.Evaluate(0);
         poseHandler.GetHumanPose(ref pose);
         pose.bodyPosition = restingPose.bodyPosition; pose.bodyRotation = restingPose.bodyRotation;
@@ -260,6 +301,7 @@ public sealed class ActorBot : MonoBehaviour
 
     public void ReleaseProduct()
     {
+        if (mixingSpoon != null) mixingSpoon.gameObject.SetActive(false);
         coffeeMotion.Reset();
         if (heldProduct != null)
         {
@@ -786,7 +828,7 @@ public sealed class ActorBot : MonoBehaviour
     {
         if (poseHandler == null) return;
         if (furnitureActive) animator.transform.localPosition = furnitureVisualPosition;
-        if (EvaluateAuthoredAnimation()) return;
+        if (EvaluateAuthoredAnimation()) { ApplyCoffeeProps(); return; }
         if (graph.IsValid())
         {
             float length = idle.GetAnimationClip().length;
@@ -902,8 +944,7 @@ public sealed class ActorBot : MonoBehaviour
             animator.transform.position += (furniture.SeatPosition + Vector3.up * clearance - hips.position) * blend;
             CoffeeCharacterMotion.SeatFeet(animator, transform, furniture.SeatPosition, blend);
         }
-        if (heldProduct != null && heldProduct.IsCoffeeCup)
-            coffeeMotion.ApplyCup(animator, transform, heldProduct.transform, Time.deltaTime);
+        ApplyCoffeeProps();
     }
 
     private void SetMuscle(string name, float value)

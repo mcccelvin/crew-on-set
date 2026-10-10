@@ -72,6 +72,30 @@ public sealed class UITransition : MonoBehaviour
         UIMotionInstaller.DecorateButtons(target);
     }
 
+    // Panels with their own authored motion (such as a hinged contract folder)
+    // must not also receive the generic gameplay bounce/fade.
+    public static void ShowImmediately(GameObject target)
+    {
+        if (target == null) return;
+        StopMotion(target);
+        target.SetActive(true);
+        if (Application.isPlaying) UIMotionInstaller.DecorateButtons(target);
+    }
+
+    public static void StopMotion(GameObject target)
+    {
+        if (target == null) return;
+        var transition = target.GetComponent<UITransition>();
+        if (transition != null)
+        {
+            if (transition.routine != null) transition.StopCoroutine(transition.routine);
+            transition.routine = null;
+            transition.CancelClose();
+            transition.Restore();
+            transition.enabled = false;
+        }
+    }
+
     public static bool IsClosing(GameObject target)
     {
         if (target == null) return false;

@@ -78,14 +78,11 @@ public class HotbarUIManager : MonoBehaviour
         directorPromptVisibility = Mathf.MoveTowards(directorPromptVisibility, target, Time.unscaledDeltaTime * 7f);
         float eased = 1f - Mathf.Pow(1f - directorPromptVisibility, 3f);
         directorPromptGroup.alpha = eased;
-        directorPromptRect.localScale = Vector3.one * Mathf.Lerp(0.92f, 1f, eased);
+        directorPromptRect.localScale = Vector3.one;
 
         if (directorPromptAccent != null && isInteractionPrompt)
         {
-            float pulse = (Mathf.Sin(Time.unscaledTime * 4.5f) + 1f) * 0.5f;
-            directorPromptAccent.color = Color.Lerp(
-                new Color(0.55f, 0.35f, 0.13f, 1f),
-                new Color(0.92f, 0.68f, 0.28f, 1f), pulse);
+            directorPromptAccent.color = CrewPaperStyle.Gold;
         }
     }
 
@@ -142,6 +139,7 @@ public class HotbarUIManager : MonoBehaviour
             if (directorPromptKeyText != null) directorPromptKeyText.text = key;
             if (directorPromptTitleText != null) directorPromptTitleText.text = title;
             if (directorPromptActionText != null) directorPromptActionText.text = action;
+            FitInteractionPrompt();
         }
 
         if (equipmentGuideText != null)
@@ -177,6 +175,22 @@ public class HotbarUIManager : MonoBehaviour
             if (controls.Contains("ADVANCED")) source += " | [Z / X] Temperature | [V / B] Diffusion";
         }
         var matches = ControlPattern.Matches(source);
+        var panel = equipmentControlsRoot.GetComponent<Image>();
+        if (panel == null) panel = equipmentControlsRoot.gameObject.AddComponent<Image>();
+        CrewPaperStyle.Card(panel);
+        var headingRect = equipmentControlsRoot.Find("Controls Heading") as RectTransform;
+        if (headingRect == null)
+        {
+            var heading = CreatePromptText("Controls Heading", equipmentControlsRoot,
+                "EQUIPMENT CONTROLS", 16, TextAlignmentOptions.MidlineLeft);
+            headingRect = heading.rectTransform;
+            heading.fontStyle = FontStyles.Bold;
+        }
+        SetRect(headingRect, new Vector2(16, -12), new Vector2(328, 24), new Vector2(0, 1));
+        var headingText = headingRect.GetComponent<TMP_Text>();
+        headingText.text = controls.IndexOf("Viewfinder", System.StringComparison.OrdinalIgnoreCase) >= 0
+            ? "CAMERA CONTROLS" : "EQUIPMENT CONTROLS";
+        headingText.color = CrewPaperStyle.MutedInk;
         for (int i = 0; i < matches.Count; i++)
         {
             if (i == controlLabels.Count) CreateControlRow(i);
@@ -185,12 +199,23 @@ public class HotbarUIManager : MonoBehaviour
             label.transform.parent.gameObject.SetActive(true);
             label.text = matches[i].Groups[2].Value.Trim(' ', '|', '\n', '\r').ToUpperInvariant();
             key.text = matches[i].Groups[1].Value.Trim().ToUpperInvariant();
-            float width = Mathf.Clamp(key.GetPreferredValues(key.text).x + 20, 32, 132);
-            ((RectTransform)key.transform.parent).sizeDelta = new Vector2(width, 28);
+            var row = (RectTransform)label.transform.parent;
+            row.anchorMin = row.anchorMax = row.pivot = new Vector2(0, 1);
+            row.anchoredPosition = new Vector2(16, -44 - i * 38);
+            row.sizeDelta = new Vector2(328, 28);
+            label.color = CrewPaperStyle.Ink; label.alignment = TextAlignmentOptions.MidlineLeft;
+            label.margin = Vector4.zero;
+            var shadow = label.GetComponent<Shadow>(); if (shadow != null) shadow.enabled = false;
+            key.color = CrewPaperStyle.Ink; key.margin = Vector4.zero;
+            var badge = (RectTransform)key.transform.parent;
+            CrewPaperStyle.Card(badge.GetComponent<Image>());
+            badge.GetComponent<Image>().color = CrewPaperStyle.Gold;
+            float width = Mathf.Clamp(key.GetPreferredValues(key.text).x + 20, 40, 144);
+            badge.sizeDelta = new Vector2(width, 28);
             label.rectTransform.offsetMax = new Vector2(-width - 12, 0);
         }
         for (int i = matches.Count; i < controlLabels.Count; i++) controlLabels[i].transform.parent.gameObject.SetActive(false);
-        equipmentControlsRoot.sizeDelta = new Vector2(310, Mathf.Max(0, matches.Count * 40 - 12));
+        equipmentControlsRoot.sizeDelta = new Vector2(360, 44 + Mathf.Max(0, matches.Count * 38 - 10) + 16);
         equipmentControlsRoot.gameObject.SetActive(matches.Count > 0);
     }
 
@@ -277,7 +302,7 @@ public class HotbarUIManager : MonoBehaviour
 
     private void CreateDirectorTabletPrompt()
     {
-        if (directorPromptRoot != null) return;
+        if (directorPromptRoot != null) { StyleInteractionPrompt(); return; }
         if (equipmentGuideText == null) return;
 
         Transform parent = equipmentGuideText.transform.parent;
@@ -355,6 +380,67 @@ public class HotbarUIManager : MonoBehaviour
         SetRect(directorPromptActionText.rectTransform, new Vector2(100f, -49f), new Vector2(320f, 20f), new Vector2(0f, 1f));
 
         directorPromptRoot.transform.SetAsLastSibling();
+        StyleInteractionPrompt();
+    }
+
+    private void StyleInteractionPrompt()
+    {
+        if (directorPromptRoot == null) return;
+        if (directorPromptRect == null) directorPromptRect = directorPromptRoot.GetComponent<RectTransform>();
+        CrewPaperStyle.Card(directorPromptRoot.GetComponent<Image>());
+        if (directorPromptKeyText != null)
+        {
+            var badge = directorPromptKeyText.GetComponentInParent<Image>();
+            CrewPaperStyle.Card(badge);
+            if (badge != null) badge.color = CrewPaperStyle.Gold;
+            directorPromptKeyText.color = CrewPaperStyle.Ink;
+            directorPromptKeyText.fontSize = 28;
+            directorPromptKeyText.margin = Vector4.zero;
+        }
+        if (directorPromptTitleText != null)
+        {
+            directorPromptTitleText.color = CrewPaperStyle.Ink;
+            directorPromptTitleText.alignment = TextAlignmentOptions.MidlineLeft;
+            directorPromptTitleText.characterSpacing = .5f;
+            directorPromptTitleText.fontSize = 22;
+            directorPromptTitleText.fontSizeMin = 16; directorPromptTitleText.fontSizeMax = 22;
+            directorPromptTitleText.margin = Vector4.zero;
+            directorPromptTitleText.overflowMode = TextOverflowModes.Ellipsis;
+        }
+        if (directorPromptActionText != null)
+        {
+            directorPromptActionText.color = CrewPaperStyle.MutedInk;
+            directorPromptActionText.alignment = TextAlignmentOptions.MidlineLeft;
+            directorPromptActionText.enableAutoSizing = false;
+            directorPromptActionText.fontSize = 14;
+            directorPromptActionText.enableWordWrapping = true;
+            directorPromptActionText.margin = Vector4.zero;
+        }
+        if (directorPromptAccent != null)
+        {
+            var rule = directorPromptAccent.rectTransform;
+            rule.anchorMin = Vector2.zero; rule.anchorMax = new Vector2(1, 0);
+            rule.pivot = new Vector2(.5f, 0);
+            rule.offsetMin = new Vector2(16, 6); rule.offsetMax = new Vector2(-16, 9);
+            directorPromptAccent.color = CrewPaperStyle.Gold;
+        }
+        FitInteractionPrompt();
+    }
+
+    private void FitInteractionPrompt()
+    {
+        if (directorPromptRect == null) return;
+        const float textWidth = 320;
+        float actionHeight = directorPromptActionText == null ? 24 : Mathf.Max(24,
+            Mathf.Ceil(directorPromptActionText.GetPreferredValues(directorPromptActionText.text, textWidth, Mathf.Infinity).y));
+        float height = Mathf.Max(92, 52 + actionHeight + 16);
+        directorPromptRect.sizeDelta = new Vector2(440, height);
+        if (directorPromptKeyText != null && directorPromptKeyText.transform.parent is RectTransform badge)
+            SetRect(badge, new Vector2(16, -(height - 60) * .5f), new Vector2(60, 60), new Vector2(0, 1));
+        if (directorPromptTitleText != null)
+            SetRect(directorPromptTitleText.rectTransform, new Vector2(96, -14), new Vector2(textWidth, 30), new Vector2(0, 1));
+        if (directorPromptActionText != null)
+            SetRect(directorPromptActionText.rectTransform, new Vector2(96, -52), new Vector2(textWidth, actionHeight), new Vector2(0, 1));
     }
 
     private GameObject CreateImage(string objectName, Transform parent, Color color)

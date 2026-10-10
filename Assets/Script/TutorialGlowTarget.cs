@@ -15,24 +15,41 @@ public class TutorialGlowTarget : MonoBehaviour
     private List<Material> objectMaterials = new List<Material>();
     private List<Color> originalEmissions = new List<Color>();
     private bool isGlowing = false;
+    private readonly List<MeshRenderer> visualRenderers = new List<MeshRenderer>();
+
+    private void CollectVisualRenderers()
+    {
+        if (visualRenderers.Count > 0) return;
+        visualRenderers.AddRange(GetComponentsInChildren<MeshRenderer>());
+        if (extraPartsToGlow == null) return;
+        foreach (var part in extraPartsToGlow)
+        {
+            if (part == null) continue;
+            foreach (var renderer in part.GetComponentsInChildren<MeshRenderer>())
+                if (!visualRenderers.Contains(renderer)) visualRenderers.Add(renderer);
+        }
+    }
+
+    public bool TryGetVisualBounds(out Bounds bounds)
+    {
+        CollectVisualRenderers();
+        bounds = new Bounds();
+        bool found = false;
+        foreach (var renderer in visualRenderers)
+        {
+            if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
+            if (!found) { bounds = renderer.bounds; found = true; }
+            else bounds.Encapsulate(renderer.bounds);
+        }
+        return found;
+    }
 
     private void Start()
     {
-        // 1. Gather all renderers on this object (and any children it MIGHT have)
-        List<MeshRenderer> allRenderers = new List<MeshRenderer>();
-        allRenderers.AddRange(GetComponentsInChildren<MeshRenderer>());
-
-        // 2. Gather all renderers from the extra parts you dragged into the Inspector
-        foreach (GameObject part in extraPartsToGlow)
-        {
-            if (part != null)
-            {
-                allRenderers.AddRange(part.GetComponentsInChildren<MeshRenderer>());
-            }
-        }
+        CollectVisualRenderers();
 
         // 3. Set up the emission for everything we found
-        foreach (MeshRenderer renderer in allRenderers)
+        foreach (MeshRenderer renderer in visualRenderers)
         {
             if (renderer != null && renderer.material != null)
             {

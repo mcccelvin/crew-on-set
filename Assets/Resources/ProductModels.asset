@@ -43,6 +43,37 @@ MonoBehaviour:
     model: {fileID: 919132149155446097, guid: 0fffd572e5733254e87d90815606ba23, type: 3}
     size: 0.15
     rotation: {x: 0, y: 0, z: 0}
+  decorators:
+  - model: {fileID: 919132149155446097, guid: 9eb1ea45c2419524a8d71cfa3b48bc4c, type: 3}
+    height: 0.9
+    floorPosition: {x: 0.08, y: 0.88}
+    rotation: {x: 0, y: 0, z: 0}
+    floorClearance: 0
+  - model: {fileID: 919132149155446097, guid: 2d27403b9aea30542a0ccfa0475c5580, type: 3}
+    height: 0.75
+    floorPosition: {x: 0.08, y: 0.67}
+    rotation: {x: 0, y: 0, z: 0}
+    floorClearance: 0
+  - model: {fileID: 919132149155446097, guid: 4f5da2249fc294943a9f0b57af500ddf, type: 3}
+    height: 1.5
+    floorPosition: {x: 0.08, y: 0.43}
+    rotation: {x: 0, y: 0, z: 0}
+    floorClearance: 0
+  - model: {fileID: 919132149155446097, guid: 0e1a4f5c01196e34ea47d284a69141a7, type: 3}
+    height: 0.4
+    floorPosition: {x: 0.28, y: 0.96}
+    rotation: {x: 0, y: 0, z: 0}
+    floorClearance: 2.25
+  - model: {fileID: 919132149155446097, guid: a07ce75de785de640a819eb8fdfe1d22, type: 3}
+    height: 1.35
+    floorPosition: {x: 0.92, y: 0.85}
+    rotation: {x: 0, y: 0, z: 0}
+    floorClearance: 0
+  - model: {fileID: 919132149155446097, guid: 6aa8b10826908aa49a3bdc048372a290, type: 3}
+    height: 0.5
+    floorPosition: {x: 0.92, y: 0.65}
+    rotation: {x: 0, y: 0, z: 0}
+    floorClearance: 0
   greenScreens:
   - name: Green Screen Backdrop
     coffeeInteriorEntry: 0

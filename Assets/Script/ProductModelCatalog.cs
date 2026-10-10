@@ -22,6 +22,22 @@ public sealed class ProductModelCatalog : ScriptableObject
     public Product[] products;
 
     [Serializable]
+    public sealed class Decorator
+    {
+        public GameObject model;
+        [Tooltip("Visible height in metres. Existing scene placements keep their authored size.")]
+        [Min(.05f)] public float height = 1f;
+        [Tooltip("Position across the studio floor (0 = left/front wall, 1 = right/back wall).")]
+        public Vector2 floorPosition;
+        public Vector3 rotation;
+        [Tooltip("Height above the floor for wall-mounted props, such as the air conditioner.")]
+        [Min(0f)] public float floorClearance;
+    }
+
+    [Header("Shared Studio Decorations — All Levels")]
+    public Decorator[] decorators;
+
+    [Serializable]
     public sealed class GreenScreen
     {
         public string name = "Green Screen";

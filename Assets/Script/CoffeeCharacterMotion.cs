@@ -68,11 +68,11 @@ public sealed class CoffeeCharacterMotion
         }
     }
 
-    public void ApplyCup(Animator rig, Transform character, Transform cup, float deltaTime)
+    public void ApplyCup(Animator rig, Transform character, Transform cup, float deltaTime, bool leftHand = false)
     {
-        var upper = rig.GetBoneTransform(HumanBodyBones.RightUpperArm);
-        var lower = rig.GetBoneTransform(HumanBodyBones.RightLowerArm);
-        var hand = rig.GetBoneTransform(HumanBodyBones.RightHand);
+        var upper = rig.GetBoneTransform(leftHand ? HumanBodyBones.LeftUpperArm : HumanBodyBones.RightUpperArm);
+        var lower = rig.GetBoneTransform(leftHand ? HumanBodyBones.LeftLowerArm : HumanBodyBones.RightLowerArm);
+        var hand = rig.GetBoneTransform(leftHand ? HumanBodyBones.LeftHand : HumanBodyBones.RightHand);
         var head = rig.GetBoneTransform(HumanBodyBones.Head);
         var chest = rig.GetBoneTransform(HumanBodyBones.Chest) ?? rig.GetBoneTransform(HumanBodyBones.Spine);
         if (upper == null || lower == null || hand == null || head == null || chest == null) return;
@@ -86,7 +86,8 @@ public sealed class CoffeeCharacterMotion
             drinkTime < 2.2f ? 1f : 1f - Mathf.SmoothStep(0, 1, (drinkTime - 2.2f) / 1.1f);
         if (!loopDrink && drinkTime >= 3.3f) drinkTime = -1f;
         float size = Mathf.Max(.1f, Vector3.Distance(upper.position, lower.position) + Vector3.Distance(lower.position, hand.position));
-        Vector3 rest = chest.position + character.forward * size * .5f + character.right * size * .25f - Vector3.up * size * .22f;
+        if (cup.parent != hand) cup.SetParent(hand, true);
+        Vector3 rest = chest.position + character.forward * size * .5f + character.right * size * (leftHand ? -.25f : .25f) - Vector3.up * size * .22f;
         Vector3 mouth = head.position + character.forward * size * .18f - Vector3.up * size * .05f;
         Quaternion rotation = character.rotation * Quaternion.AngleAxis(-18f * sip, Vector3.right) * cupFacing;
         cup.rotation = rotation;
@@ -95,10 +96,32 @@ public sealed class CoffeeCharacterMotion
         Vector3 position = Vector3.Lerp(rest - gripOffset, mouth - rimOffset, sip);
         Vector3 handTarget = position + gripOffset;
         Quaternion wrist = hand.rotation;
-        Solve(upper, lower, hand, handTarget, character.right * .5f - character.up);
+        Solve(upper, lower, hand, handTarget, character.right * (leftHand ? -.5f : .5f) - character.up);
         hand.rotation = wrist;
         // Reapply after the hand moves: the cup is parented to that hand.
         cup.SetPositionAndRotation(position, rotation);
+    }
+
+    public void ApplyMix(Animator rig, Transform character, Transform cup, Transform spoon, float seconds)
+    {
+        var upper = rig.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+        var lower = rig.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+        var hand = rig.GetBoneTransform(HumanBodyBones.LeftHand);
+        if (upper == null || lower == null || hand == null || spoon == null) return;
+        Vector3 top = cup.TransformPoint(rim);
+        // Only the spoon circles inside the cup. The right hand keeps the mug upright.
+        float radius = Mathf.Clamp(cup.TransformVector(rim - grip).magnitude * .15f, .006f, .022f);
+        float phase = seconds * Mathf.PI * 2f * .85f;
+        Vector3 target = top + character.right * (Mathf.Cos(phase) * radius)
+            + character.forward * (Mathf.Sin(phase) * radius) + Vector3.up * .08f;
+        Solve(upper, lower, hand, target, -character.right - character.up * .4f);
+        // Aim the grip down into the cup rather than swinging the product itself.
+        var middle = rig.GetBoneTransform(HumanBodyBones.LeftMiddleProximal);
+        if (middle != null)
+            hand.rotation = Quaternion.FromToRotation(middle.position - hand.position, -character.up) * hand.rotation;
+        spoon.SetPositionAndRotation(hand.position, character.rotation);
+        spoon.localScale = new Vector3(1f / Mathf.Max(.001f, character.lossyScale.x),
+            1f / Mathf.Max(.001f, character.lossyScale.y), 1f / Mathf.Max(.001f, character.lossyScale.z));
     }
 
     private static void Solve(Transform upper, Transform lower, Transform end, Vector3 target, Vector3 bend)

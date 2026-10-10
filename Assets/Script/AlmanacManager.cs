@@ -217,6 +217,7 @@ public partial class AlmanacManager : MonoBehaviour
     {
         if (DevCommandsPanel.BlocksInputThisFrame) return;
         PollProfileProgress();
+        UpdateAlmanacPresentation();
         UpdateNavigationLesson();
         UpdateTechniqueReviewHighlight();
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
@@ -262,7 +263,7 @@ public partial class AlmanacManager : MonoBehaviour
     public void ToggleAlmanac()
     {
         if (isProfileOpen) { ClosePlayerProfile(); return; }
-        if (bookSelectionAnimating) return;
+        if (bookSelectionAnimating || AlmanacCoverOpening()) return;
         if (isAlmanacOpen && !finishingBookClose && equipmentKnowledgeButton != null && closeButton != null)
         {
             CancelPageTurn();
@@ -295,7 +296,8 @@ public partial class AlmanacManager : MonoBehaviour
         if (isAlmanacOpen) EndNavigationLesson();
         isAlmanacOpen = !isAlmanacOpen;
         PaperMenuAudio.Play(!isAlmanacOpen);
-        UITransition.SetVisible(almanacCanvas, isAlmanacOpen);
+        if (isAlmanacOpen) UITransition.ShowImmediately(almanacCanvas);
+        else { UITransition.StopMotion(almanacCanvas); almanacCanvas.SetActive(false); }
 
         if (isAlmanacOpen)
         {
@@ -307,6 +309,7 @@ public partial class AlmanacManager : MonoBehaviour
             Cursor.visible = true;
             RefreshAllUI();
             OpenTab(1);
+            PlayAlmanacCoverOpening();
 
 
             if (GokeLevelManager.Instance != null) GokeLevelManager.Instance.OnAlmanacOpened();
@@ -649,7 +652,7 @@ public partial class AlmanacManager : MonoBehaviour
         AddKnowledgeEntry("actor_megaphone", "EQUIPMENT - DIRECTOR MEGAPHONE", "LEVEL 4 EQUIPMENT - 900 B-COINS\n\nA handheld cue tool for directing a hired Actor from the studio floor.\n\nHOW TO USE\n- Buy it from the Equipment Shop and pick it up with [E].\n- Aim at an Actor and press [LMB] to select them.\n- Press [Z] to cycle Neutral, Wave, Action, then Neutral. Action drinks coffee when the actor holds a cup.\n- Arrow keys nudge the actor; [R] turns them.\n- [B/N] save walk marks, [K] rehearses, [J] returns to START, and [H] clears the route.\n- With an actor selected, aim at a stool or coffee machine and click [LMB] to cue that action. [O] stops it.\n- Use the tablet for initial placement and repositioning; the megaphone cues the performance.", "Equipment", 4, 5);
         AddKnowledgeEntry("director_tablet", "EQUIPMENT - DIRECTOR TABLET", "LEVEL 1 PRODUCTION STATION\n\nFEATURES\n- Builds and colors backdrop walls with RGB controls.\n- Displays the props approved for the active contract.\n- Selects, moves, and clears objects placed on the stage.\n\nHOW TO USE\n- Press [E] at the Director Terminal to open it.\n- From Level 4 use CHOOSE SET for a plain backdrop, Cafe Corner or Coffee Interior. Earlier levels use ADD WALL. Select the wall, then adjust the RGB sliders, type 0-255 in the number fields, or enter a HEX color such as #FF6600. Press Enter to apply.\n- Click an approved prop, vehicle, or actor card to attach it to the cursor.\n- Move the cursor over the stage and click again to place it.\n- Select an object and press [T] to reposition it.\n- Close the tablet and use the Director Megaphone for actor performances.\n- Use CLEAR STAGE when you need to rebuild the set.", "Equipment", 1, 0);
         AddKnowledgeEntry("led_panel", "EQUIPMENT - 160 LED PANEL", "LEVEL 1 EQUIPMENT - 1,200 B-COINS\n\nFEATURES\n- Portable light with a maximum output of 20 lux.\n- Intensity range: 0-100% in 5% steps.\n- Tilt range: -45 to +45 degrees in 5-degree steps.\n\nHOW TO USE\n- Press [LMB] to turn it on or off while holding it.\n- While powered, use [Scroll] to change intensity.\n- Use [Up/Down Arrows] to change tilt.\n- Hold [PgUp/PgDn] while carrying it to raise/lower the existing stand.\n- The always-on guide shows visible-beam haze; setup view only, never in the recording.\n- Aim it at the subject, then press [G] to drop it in position.", "Equipment", 1, 10);
-        AddKnowledgeEntry("camera_white_balance", "CAMERA UNLOCK - WHITE BALANCE", "Level 3: F2, select White balance with Up/Down, then Left/Right changes Kelvin. Lower camera Kelvin makes the image cooler; higher makes it warmer. Tint adjusts green/magenta. Camera white balance changes the recorded image; light Kelvin changes the light itself. Try matching a 3200K source, then choose a deliberate warm look.", "Technique", 3, 25);
+        AddKnowledgeEntry("camera_white_balance", "CAMERA UNLOCK - WHITE BALANCE", "HOW TO ADJUST\n[F2] settings; [Up/Down] selects White Balance or Tint; [Left/Right] adjusts it.\n\nSTART CLEAN\n5600K with Tint 0 is this game's no-correction baseline, not a universal neutral setting. The scene's lights still affect the image.\n\nCOMPARE, THEN CHOOSE\nTry 3200K for a cooler camera image and 6500K for a warmer image. Judge a lit white/grey reference, not the orange car alone. Choose near-neutral whites first, then intentional warmth. Adjust Tint only to correct a green/magenta cast.\n\nLIGHT VS CAMERA\nLower lamp Kelvin makes the source warmer; lower camera Kelvin makes the image cooler. A 3200K practice lamp does not force camera WB to 3200K. Keep your chosen camera balance consistent across takes; there is no exact camera-WB pass value.", "Technique", 3, 25);
         AddKnowledgeEntry("camera_exposure", "CAMERA UNLOCK - EXPOSURE", "Level 4: F2 reveals ISO, Aperture and Shutter angle. Up/Down selects; Left/Right adjusts. Higher ISO brightens the image. A lower F-number brightens it and reduces depth of field. A wider shutter angle increases exposure and the simulated motion blur. Starting point: ISO 800, F4, 180 degrees at 24fps (about 1/48 second). These controls are a teaching simulation, not Sony sensor emulation. Settings affect the viewfinder and recorded footage.", "Technique", 4, 5);
         AddKnowledgeEntry("nony_fx_camera", "EQUIPMENT - NONY FX CAMERA", "One camera stays with you throughout the career. Level 1: autofocus, framing and recording. Level 2: thirds grid. Level 3: camera white balance. Level 4: ISO, aperture and shutter angle.\n\nC inserts a card; LMB opens the viewfinder; R records; Scroll zooms; Q/E adjusts height; Ctrl smooths movement. From Level 2, F2 opens settings: Up/Down selects a row, Left/Right adjusts it. The camera uses continuous autofocus (AF-C). Advanced settings are hidden until their level.", "Equipment", 1, 20);
         AddKnowledgeEntry("sd_card", "EQUIPMENT - SD CARD", "LEVEL 1 EQUIPMENT - 150 B-COINS\n\nFEATURES\n- Blank cards provide recording storage for every camera.\n- Used cards store the footage filename, duration, camera score, lighting score, and total score.\n\nHOW TO USE\n- Keep a blank card in the hotbar and press [C] while holding a camera.\n- Stop the recording to eject the used card.\n- Pick it up with [E].\n- Hold it at the computer tower and press [F] to ingest the footage.\n- Open the monitor with [E] to review the recording.", "Equipment", 1, 30);
@@ -719,7 +722,7 @@ public partial class AlmanacManager : MonoBehaviour
                 case "three_point_lighting": lesson = "Judge each light by its job. Compare key alone, key plus fill, then all three. The key establishes shape; fill reveals shadows without erasing them; back light defines an edge. If adding fill makes the image flat, reduce it. Percentages depend on distance and aim."; break;
                 case "soft_light_technique": lesson = "Watch the transition from bright to dark on the subject. Change diffusion and compare the transition, then adjust intensity separately. On reflective surfaces, move the light until the highlight describes the shape instead of hiding it."; break;
                 case "basic_product_lighting": lesson = "A well-lit image still needs shadows to show form. Compare front lighting with lighting from one side. Check detail in both the brightest and darkest areas before recording."; break;
-                case "camera_white_balance": lesson = "White balance compensates for the light's color; it does not reposition or brighten the light. Look at a neutral surface while changing the setting. Compare the warm and cool casts, then choose a neutral starting point or an intentional mood."; break;
+                case "camera_white_balance": lesson = "White balance compensates for the light's colour; it does not move or brighten the lamp. Use the neutral grey practice strips. 3200K and 6500K are comparison points, not best-setting requirements. 5600K/Tint 0 is the game's uncorrected baseline. Choose by the reference and keep the result consistent across all three car takes."; break;
                 case "camera_exposure": lesson = "Exposure controls how light or dark the recorded image is. Change one setting at a time and watch detail in highlights and shadows. A bright image is not automatically a better image: keep the product's texture and shape readable."; break;
                 case "recording_technique": lesson = "Begin only after framing and lighting are ready. Avoid an accidental wobble at the start or finish. Review the take before editing; an unusable recording is better replaced than hidden with effects."; break;
                 case "vehicle_rim_lighting": lesson = "Camera movement should reveal something about the subject. Start slowly, keep a stable distance, and settle before stopping. Compare a stationary shot with a controlled moving shot; avoid movement that crops the subject."; break;

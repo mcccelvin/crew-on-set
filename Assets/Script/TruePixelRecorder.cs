@@ -22,12 +22,25 @@ public class TruePixelRecorder : MonoBehaviour
     private FileStream tapeStream;
     private BinaryWriter tapeWriter;
     private string currentFileName = "";
+    private bool ownsCurrentFile;
     private int recordedFrameCount = 0;
     private float recordingStartTime = 0f;
     private byte[] lastFrameData;
+    private int maximumFrames = int.MaxValue;
+    public float LastRecordedDuration { get; private set; }
+    public bool RecordingLimitReached => isRecording && recordedFrameCount >= maximumFrames;
 
     public bool StartRecording()
     {
+        return StartRecording(float.PositiveInfinity);
+    }
+
+    public bool StartRecording(float availableSeconds)
+    {
+        if (float.IsNaN(availableSeconds) || availableSeconds < 1f / Mathf.Max(1f, framesPerSecond)) return false;
+        maximumFrames = float.IsPositiveInfinity(availableSeconds) ? int.MaxValue :
+            Mathf.Max(1, Mathf.FloorToInt((availableSeconds + .00001f) * Mathf.Max(1f, framesPerSecond)));
+        LastRecordedDuration = 0;
         if (filmCamera == null) filmCamera = GetComponent<Camera>();
         if (filmCamera == null)
         {
@@ -48,7 +61,13 @@ public class TruePixelRecorder : MonoBehaviour
 
         try
         {
-            tapeStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+            if (File.Exists(path))
+            {
+                currentFileName = "Film_" + System.Guid.NewGuid().ToString("N") + ".tape";
+                path = Path.Combine(Application.persistentDataPath, currentFileName);
+            }
+            tapeStream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            ownsCurrentFile = true;
             tapeWriter = new BinaryWriter(tapeStream);
             tapeWriter.Write(0); // Frame count is filled in when recording stops.
 
@@ -103,13 +122,14 @@ public class TruePixelRecorder : MonoBehaviour
         CloseTapeWriter();
         CleanUpCaptureResources();
 
-        if (!string.IsNullOrEmpty(currentFileName))
+        if (ownsCurrentFile && !string.IsNullOrEmpty(currentFileName))
         {
             string path = Path.Combine(Application.persistentDataPath, currentFileName);
             if (File.Exists(path)) File.Delete(path);
         }
 
         currentFileName = "";
+        ownsCurrentFile = false;
         recordedFrameCount = 0;
         recordingStartTime = 0f;
         lastFrameData = null;
@@ -124,6 +144,7 @@ public class TruePixelRecorder : MonoBehaviour
         {
             yield return new WaitForEndOfFrame();
             if (!isRecording) break;
+            if (recordedFrameCount >= maximumFrames) continue;
             if (Time.timeScale <= 0f) continue;
             if (Time.time < nextCaptureTime) continue;
 
@@ -149,7 +170,7 @@ public class TruePixelRecorder : MonoBehaviour
             byte[] frameData = screenShot.EncodeToJPG(Mathf.Clamp(jpgQuality, 10, 100));
             if (tapeWriter != null && frameData != null && frameData.Length > 0)
             {
-                int expectedFrameCount = Mathf.Max(recordedFrameCount + 1, Mathf.RoundToInt((Time.time - recordingStartTime) * Mathf.Max(1f, framesPerSecond)));
+                int expectedFrameCount = Mathf.Min(maximumFrames, Mathf.Max(recordedFrameCount + 1, Mathf.RoundToInt((Time.time - recordingStartTime) * Mathf.Max(1f, framesPerSecond))));
 
                 if (lastFrameData != null)
                 {
@@ -167,26 +188,23 @@ public class TruePixelRecorder : MonoBehaviour
 
     private void RenderRecordingFrame()
     {
-        // Use the same URP camera settings, lights and post-processing as the viewfinder.
+        // Use the same renderer-aware camera settings and post-processing as the viewfinder.
         // The sRGB target stores display-ready bytes for JPEG and UI playback.
         var cameraItem = filmCamera.GetComponentInParent<Player.Equipment.FilmCameraItem>();
-        if (cameraItem != null) cameraItem.PrepareRecordingLook();
-        try
+        if (cameraItem != null)
         {
-            if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
-            {
-                var request = new UniversalRenderPipeline.SingleCameraRequest { destination = captureTexture };
-                RenderPipeline.SubmitRenderRequest(filmCamera, request);
-            }
-            else
-            {
-                filmCamera.targetTexture = captureTexture;
-                filmCamera.Render();
-            }
+            cameraItem.RenderCameraFrame(captureTexture);
+            return;
         }
-        finally
+        if (GraphicsSettings.currentRenderPipeline is UniversalRenderPipelineAsset)
         {
-            if (cameraItem != null) cameraItem.FinishRecordingLook();
+            var request = new UniversalRenderPipeline.SingleCameraRequest { destination = captureTexture };
+            RenderPipeline.SubmitRenderRequest(filmCamera, request);
+        }
+        else
+        {
+            filmCamera.targetTexture = captureTexture;
+            filmCamera.Render();
         }
     }
 
@@ -194,7 +212,7 @@ public class TruePixelRecorder : MonoBehaviour
     {
         if (tapeWriter == null || lastFrameData == null) return;
 
-        int expectedFrameCount = Mathf.Max(1, Mathf.RoundToInt(recordedDuration * Mathf.Max(1f, framesPerSecond)));
+        int expectedFrameCount = Mathf.Min(maximumFrames, Mathf.Max(1, Mathf.RoundToInt(recordedDuration * Mathf.Max(1f, framesPerSecond))));
         while (recordedFrameCount < expectedFrameCount)
         {
             WriteFrame(lastFrameData);
@@ -203,6 +221,7 @@ public class TruePixelRecorder : MonoBehaviour
 
     private void WriteFrame(byte[] frameData)
     {
+        if (recordedFrameCount >= maximumFrames) return;
         tapeWriter.Write(frameData.Length);
         tapeWriter.Write(frameData);
         recordedFrameCount++;
@@ -213,6 +232,7 @@ public class TruePixelRecorder : MonoBehaviour
         if (tapeWriter == null || string.IsNullOrEmpty(currentFileName)) return "";
 
         string savedFileName = currentFileName;
+        LastRecordedDuration = recordedFrameCount / Mathf.Max(1f, framesPerSecond);
 
         if (recordedFrameCount > 0)
         {
@@ -236,6 +256,7 @@ public class TruePixelRecorder : MonoBehaviour
         }
 
         currentFileName = "";
+        ownsCurrentFile = false;
         recordedFrameCount = 0;
         recordingStartTime = 0f;
         lastFrameData = null;

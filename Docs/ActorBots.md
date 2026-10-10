@@ -1,5 +1,7 @@
 # Actor bots
 
+Coffee mixing keeps the cup upright in the right hand and uses a separate silver spoon in the left. The spoon and hand circle together inside the rim, after the authored body animation is evaluated. Switching actions or releasing the cup hides the spoon. Wave uses the ProfileWave greeting with eased blending and a five-second idle interval; a held cup moves to the supporting left hand. These changes were not tested at the user's request.
+
 Level 4 and 5 Actor cards now hire the existing rigged Character/Models/Armature model. Its idle animation supplies breathing; humanoid muscle animation adds repeating Wave (greeting) and Action (product presentation) performances. Neutral, Wave and Action retain their existing grading identifiers.
 
 Default tiers use ProductionEconomy.ActorBase (750) multiplied by 1, 3 and 6:

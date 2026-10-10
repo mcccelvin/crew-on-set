@@ -29,11 +29,15 @@ namespace Player.Equipment
             }
             dynamicHUD.Refresh(new CameraHUDController.State {
                 recording=isRecording, seconds=isRecording ? Time.time-recordingStartTime : 0,
-                card=isSDCardInserted, manual=featureLevel>=2 && manualFocus, focus=currentFocusDistance,
+                card=isSDCardInserted, cardCapacity=SDCardStorage.CapacitySeconds,
+                cardSeconds=insertedSDCard!=null ? insertedSDCard.UsedSeconds+(isRecording ? Mathf.Min(takeCapacitySeconds,Time.time-recordingStartTime) : 0) : 0,
+                manual=featureLevel>=2 && manualFocus, focus=currentFocusDistance,
                 level=featureLevel, kelvin=whiteBalance, iso=iso, aperture=iris, shutterAngle=shutterAngle,
                 fps=pixelRecorder!=null ? pixelRecorder.framesPerSecond : TapeSettings.framesPerSecond,
                 width=pixelRecorder!=null ? pixelRecorder.captureWidth : 640,
-                height=pixelRecorder!=null ? pixelRecorder.captureHeight : 360, menu=SettingsHUDText()
+                height=pixelRecorder!=null ? pixelRecorder.captureHeight : 360,
+                settingsOpen=settingsOpen && featureLevel>=2, gridEnabled=GridEnabled,
+                selectedSetting=settingRow, tint=tint
             });
         }
     }

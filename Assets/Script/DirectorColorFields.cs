@@ -18,6 +18,7 @@ public sealed class DirectorColorFields : MonoBehaviour
         terminal = owner;
         if (hex != null)
         {
+            foreach (var field in rgb) ConfigureChannelInput(field);
             if (!listenersBound)
             {
                 listenersBound = true;
@@ -38,8 +39,7 @@ public sealed class DirectorColorFields : MonoBehaviour
             rgb[i] = CreateField("RGB " + "RGB"[i], labels[i], original.parent, original.anchoredPosition, original.sizeDelta);
             RectTransform rect = (RectTransform)rgb[i].transform;
             rect.anchorMin = original.anchorMin; rect.anchorMax = original.anchorMax; rect.pivot = original.pivot;
-            rgb[i].contentType = TMP_InputField.ContentType.IntegerNumber;
-            rgb[i].characterLimit = 4;
+            ConfigureChannelInput(rgb[i]);
             rgb[i].onEndEdit.AddListener(value => CommitChannel(channel, value));
             labels[i].gameObject.SetActive(false);
         }
@@ -119,6 +119,22 @@ public sealed class DirectorColorFields : MonoBehaviour
         if (digits.Length == 3) digits = string.Concat(digits[0], digits[0], digits[1], digits[1], digits[2], digits[2]);
         color = Color.white;
         return digits.Length == 6 && ColorUtility.TryParseHtmlString("#" + digits, out color);
+    }
+
+    private static void ConfigureChannelInput(TMP_InputField field)
+    {
+        if (field == null) return;
+        field.contentType = TMP_InputField.ContentType.IntegerNumber;
+        field.characterLimit = 3;
+        field.onValidateInput = ValidateChannelCharacter;
+    }
+
+    private static char ValidateChannelCharacter(string text, int index, char character)
+    {
+        if (character < '0' || character > '9') return '\0';
+        string candidate = text.Insert(index, character.ToString());
+        return int.TryParse(candidate, NumberStyles.None, CultureInfo.InvariantCulture, out int number)
+            && number <= 255 ? character : '\0';
     }
 
     private void CommitChannel(int channel, string value)

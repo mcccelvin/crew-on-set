@@ -30,6 +30,18 @@ public static class LegacyGameSave
                 values.Add(new GameSaveValue { key = key, kind = 2, text = PlayerPrefs.GetString(key, "") });
             }
         }
+        if (PlayerPrefs.HasKey(BudgetRetryPrompt.SnapshotKey))
+            values.Add(new GameSaveValue { key = BudgetRetryPrompt.SnapshotKey, kind = 2, text = PlayerPrefs.GetString(BudgetRetryPrompt.SnapshotKey) });
+        int retryChunks = PlayerPrefs.GetInt(BudgetRetryPrompt.SnapshotKey + ".Count", 0);
+        if (retryChunks > 0)
+        {
+            values.Add(new GameSaveValue { key = BudgetRetryPrompt.SnapshotKey + ".Count", integer = retryChunks });
+            for (int i = 0; i < Mathf.Clamp(retryChunks, 0, 1500); i++)
+            {
+                string key = BudgetRetryPrompt.SnapshotKey + "." + i;
+                values.Add(new GameSaveValue { key = key, kind = 2, text = PlayerPrefs.GetString(key, "") });
+            }
+        }
         foreach (string key in new[] { "OwnedInterior.0", "OwnedInterior.1", "OwnedInterior.2", "GokeEquipmentAdvancePaid", "GokeEquipmentLoanIssued", "OwnedEquipment.NON Y FX", "OwnedEquipment.NONY FX", "OwnedEquipment.160 LED PANEL", "OwnedEquipment.LEVEL 2 CAMERA", "OwnedEquipment.LEVEL 3 SOFT LIGHT" })
             if (PlayerPrefs.HasKey(key)) values.Add(new GameSaveValue { key = key, kind = 0, integer = PlayerPrefs.GetInt(key) });
         if (PlayerPrefs.HasKey("AchivDone_advertising_post_production")) values.Add(new GameSaveValue { key = "AchivDone_advertising_post_production", kind = 0, integer = PlayerPrefs.GetInt("AchivDone_advertising_post_production") });
@@ -155,6 +167,7 @@ public static class LegacyGameSave
             values.RemoveAll(v => v.key == "Level1RetryActive" || v.key == "TutorialProgress");
             values.Add(new GameSaveValue { key = "Level1RetryActive", integer = 1 });
         }
+        BudgetRetryPrompt.NormalizeSnapshotValues(values);
         return values;
     }
 }

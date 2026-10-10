@@ -108,12 +108,12 @@ public class TutorialUIManager : MonoBehaviour
     private Sprite bossDialoguePose;
     private bool bossDialogueShowOk;
     private bool bossDialogueShowSkip;
-    private readonly Dictionary<GameObject, Vector2> taskRowBasePositions = new Dictionary<GameObject, Vector2>();
-    private readonly Dictionary<GameObject, Vector3> taskRowBaseScales = new Dictionary<GameObject, Vector3>();
 
     private void Awake()
     {
         Instance = this;
+        activeTextColor = CrewPaperStyle.Ink;
+        completedTextColor = CrewPaperStyle.MutedInk;
         RecoverTaskPanel();
         if (taskPanel != null)
         {
@@ -356,7 +356,8 @@ public class TutorialUIManager : MonoBehaviour
             if (i < taskRows.Length && taskRows[i] != null && taskRows[i].rowContainer != null)
             {
                 // Clean up the text (remove the dash if it exists so it looks cleaner next to the icon)
-                string cleanText = tasks[i].StartsWith("- ") ? tasks[i].Substring(2) : tasks[i];
+                string cleanText = (tasks[i].StartsWith("- ") ? tasks[i].Substring(2) : tasks[i])
+                    .Replace("<color=red>", "<color=#9A421E>");
 
                 if (taskRows[i].taskText != null)
                 {
@@ -377,6 +378,8 @@ public class TutorialUIManager : MonoBehaviour
                 taskRows[i].rowContainer.SetActive(true);
                 if (EditorManager.Instance == null)
                 {
+                    PrepareTaskLabel(taskRows[i].taskText);
+                    FitStudioTaskRows();
                     yield return AnimateTaskRowIn(taskRows[i]);
                     yield return new WaitForSecondsRealtime(0.08f);
                 }
@@ -439,36 +442,51 @@ public class TutorialUIManager : MonoBehaviour
 
     private readonly Vector3[] editorTimelineCorners = new Vector3[4];
     private TMP_FontAsset editorChecklistFont;
-    private readonly Dictionary<RectTransform, Vector2> originalTaskPositions = new Dictionary<RectTransform, Vector2>();
-    private readonly Dictionary<RectTransform, float> originalTaskHeights = new Dictionary<RectTransform, float>();
+    private readonly CrewPaperStyle.HintStack studioTaskStack = new CrewPaperStyle.HintStack();
 
     private void FitStudioTaskRows()
     {
         if (EditorManager.Instance != null || taskRows == null) return;
-        float extraHeight = 0f;
+        bool dockForEditorApp = TutorialManager.Instance != null &&
+            TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.ClickEditorApp;
+        bool started = false;
         foreach (var row in taskRows)
         {
             if (row == null || row.rowContainer == null || row.taskText == null) continue;
             var rect = row.rowContainer.transform as RectTransform;
             if (rect == null) continue;
-            if (!originalTaskPositions.ContainsKey(rect))
+            if (!started)
             {
-                originalTaskPositions.Add(rect, rect.anchoredPosition);
-                originalTaskHeights.Add(rect, rect.rect.height);
+                studioTaskStack.Begin(rect, dockForEditorApp);
+                started = true;
             }
-            var label = row.taskText;
-            label.enableWordWrapping = true;
-            label.overflowMode = TextOverflowModes.Overflow;
-            label.alignment = TextAlignmentOptions.MidlineLeft;
-            label.rectTransform.anchorMin = Vector2.zero;
-            label.rectTransform.anchorMax = Vector2.one;
-            label.rectTransform.offsetMin = new Vector2(4f, 6f);
-            label.rectTransform.offsetMax = new Vector2(-4f, -6f);
-            float height = Mathf.Max(originalTaskHeights[rect], label.GetPreferredValues(label.text, Mathf.Max(1f, rect.rect.width - 8f), Mathf.Infinity).y + 12f);
-            rect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
-            rect.anchoredPosition = originalTaskPositions[rect] + Vector2.down * (extraHeight + (height - originalTaskHeights[rect]) * (1f - rect.pivot.y));
-            if (row.rowContainer.activeSelf) extraHeight += height - originalTaskHeights[rect];
+            studioTaskStack.Add(rect, row.taskText, row.taskIcon, row.underline);
+            if (row.rowContainer.activeSelf)
+            {
+                if (taskViewfinderOpen) CameraHUDController.StyleTutorialHint(rect, row.taskText, row.taskIcon, row.underline);
+                else
+                {
+                    row.taskText.text = row.taskText.text.Replace("#D5A26E", "#9A421E");
+                    row.taskText.color = row.taskText.text.StartsWith("<s>") ? completedTextColor : activeTextColor;
+                }
+            }
         }
+    }
+
+    private void PrepareTaskLabel(TMP_Text label)
+    {
+        if (label == null) return;
+        if (editorChecklistFont == null)
+            editorChecklistFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
+        if (editorChecklistFont != null) label.font = editorChecklistFont;
+        label.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
+        label.characterSpacing = 0f;
+        label.wordSpacing = 0f;
+        label.lineSpacing = 0f;
+        label.paragraphSpacing = 0f;
+        label.margin = Vector4.zero;
+        label.enableAutoSizing = false;
+        label.fontSize = 20f;
     }
     private readonly Dictionary<Canvas, (bool sorting, int order)> almanacTaskSorting =
         new Dictionary<Canvas, (bool sorting, int order)>();
@@ -511,17 +529,10 @@ public class TutorialUIManager : MonoBehaviour
     private void LateUpdate()
     {
         UpdateAlmanacTaskSorting();
-        if (editorChecklistFont == null)
-            editorChecklistFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/LiberationSans SDF");
         if (taskRows != null)
             foreach (var row in taskRows)
             {
-                if (row == null || row.taskText == null) continue;
-                if (editorChecklistFont != null) row.taskText.font = editorChecklistFont;
-                row.taskText.fontStyle = FontStyles.Bold | FontStyles.UpperCase;
-                row.taskText.characterSpacing = 0;
-                row.taskText.enableAutoSizing = false;
-                row.taskText.fontSize = 20f;
+                if (row != null) PrepareTaskLabel(row.taskText);
             }
         FitStudioTaskRows();
         var lesson = EditorTutorialManager.Instance;
@@ -535,6 +546,7 @@ public class TutorialUIManager : MonoBehaviour
         var sourceCamera = sourceCanvas != null && sourceCanvas.renderMode != RenderMode.ScreenSpaceOverlay ? sourceCanvas.worldCamera : null;
         Vector2 screen = RectTransformUtility.WorldToScreenPoint(sourceCamera, editorTimelineCorners[1]);
         float totalHeight = 0f;
+        int visibleRows = 0;
         foreach (var row in taskRows)
             if (row != null && row.rowContainer != null && row.rowContainer.activeInHierarchy)
             {
@@ -546,7 +558,8 @@ public class TutorialUIManager : MonoBehaviour
                     row.taskText.enableWordWrapping = true;
                     row.taskText.overflowMode = TextOverflowModes.Overflow;
                 }
-                totalHeight += EditorTaskHeight(row) + 4f;
+                if (visibleRows++ > 0) totalHeight += CrewPaperStyle.HintGap;
+                totalHeight += EditorTaskHeight(row);
             }
         float rowOffset = 0f;
         foreach (var row in taskRows)
@@ -565,10 +578,8 @@ public class TutorialUIManager : MonoBehaviour
                 sideScreen.x = RectTransformUtility.WorldToScreenPoint(camera, editorTimelineCorners[0]).x;
             }
             RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, sideScreen, camera, out var corner);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.localScale = Vector3.one;
-            float rowHeight = EditorTaskHeight(row);
-            rect.sizeDelta = new Vector2(430f, rowHeight);
+            float rowHeight = CrewPaperStyle.PlaceHint(rect, row.taskText, row.taskIcon, row.underline,
+                Vector2.zero, 430f);
             // Stack above the ruler, leaving the timeline tracks clear.
             rect.position = parent.TransformPoint(corner + new Vector2(0f, 48f + totalHeight - rowOffset));
             if (lesson.currentStep == EditorTutorialManager.EditorStep.ClickExport && canvas != null)
@@ -582,7 +593,7 @@ public class TutorialUIManager : MonoBehaviour
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, safeScreen, camera, out var safeLocal);
                 rect.position = parent.TransformPoint(safeLocal + Vector2.down * rowOffset);
             }
-            rowOffset += rowHeight + 4f;
+            rowOffset += rowHeight + CrewPaperStyle.HintGap;
             var background = row.rowContainer.GetComponent<Image>();
             if (background != null) background.color = new Color(.10f, .42f, .23f, .31f);
             foreach (var graphic in row.rowContainer.GetComponentsInChildren<Graphic>(true)) graphic.raycastTarget = false;
@@ -605,14 +616,15 @@ public class TutorialUIManager : MonoBehaviour
                 row.taskText.fontSizeMin = 16f;
                 row.taskText.fontSizeMax = 20f;
                 row.taskText.alignment = TextAlignmentOptions.MidlineLeft;
-                row.taskText.color = Color.white;
+                row.taskText.color = row.taskText.text.StartsWith("<s>") ? completedTextColor : activeTextColor;
             }
+            CrewPaperStyle.Hint(rect, row.taskText, row.taskIcon, row.underline);
         }
     }
 
     private static float EditorTaskHeight(TaskUIRow row)
     {
-        return row.taskText == null ? 36f : Mathf.Max(36f, row.taskText.GetPreferredValues(row.taskText.text, 422f, Mathf.Infinity).y + 12f);
+        return CrewPaperStyle.HintHeight(row.taskText, 430, row.taskIcon);
     }
 
     private void RecoverTaskPanel()
@@ -654,7 +666,7 @@ public class TutorialUIManager : MonoBehaviour
         if (taskRows[index].rowContainer != null && taskRows[index].rowContainer.activeSelf)
         {
             ApplyTaskState(index);
-            StartCoroutine(AnimateTaskCompleted(taskRows[index]));
+            // Completion changes ink/checkmark only; never expand into neighboring cards.
         }
     }
 
@@ -870,17 +882,10 @@ public class TutorialUIManager : MonoBehaviour
     {
         if (row == null || row.rowContainer == null) yield break;
 
-        RectTransform rect = row.rowContainer.GetComponent<RectTransform>();
         CanvasGroup group = row.rowContainer.GetComponent<CanvasGroup>();
         if (group == null) group = row.rowContainer.AddComponent<CanvasGroup>();
-
-        CacheTaskRowTransform(row.rowContainer, rect);
-        Vector2 basePosition = rect != null ? taskRowBasePositions[row.rowContainer] : Vector2.zero;
-        Vector3 baseScale = taskRowBaseScales[row.rowContainer];
-
+        group.blocksRaycasts = false;
         group.alpha = 0f;
-        if (rect != null) rect.anchoredPosition = basePosition + new Vector2(-22f, 0f);
-        row.rowContainer.transform.localScale = baseScale * 0.98f;
 
         float elapsed = 0f;
         const float duration = 0.22f;
@@ -889,37 +894,10 @@ public class TutorialUIManager : MonoBehaviour
             elapsed += Time.unscaledDeltaTime;
             float t = EaseOutCubic(Mathf.Clamp01(elapsed / duration));
             group.alpha = t;
-            if (rect != null) rect.anchoredPosition = Vector2.LerpUnclamped(basePosition + new Vector2(-22f, 0f), basePosition, t);
-            row.rowContainer.transform.localScale = Vector3.LerpUnclamped(baseScale * 0.98f, baseScale, t);
             yield return null;
         }
 
         group.alpha = 1f;
-        if (rect != null) rect.anchoredPosition = basePosition;
-        row.rowContainer.transform.localScale = baseScale;
-    }
-
-    private IEnumerator AnimateTaskCompleted(TaskUIRow row)
-    {
-        if (row == null || row.rowContainer == null) yield break;
-
-        CacheTaskRowTransform(row.rowContainer, row.rowContainer.GetComponent<RectTransform>());
-        Vector3 baseScale = taskRowBaseScales[row.rowContainer];
-        float elapsed = 0f;
-        const float duration = 0.3f;
-
-        while (elapsed < duration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            float normalized = Mathf.Clamp01(elapsed / duration);
-            float pulse = normalized < 0.45f
-                ? Mathf.Lerp(1f, 1.075f, EaseOutCubic(normalized / 0.45f))
-                : Mathf.Lerp(1.075f, 1f, EaseOutCubic((normalized - 0.45f) / 0.55f));
-            row.rowContainer.transform.localScale = baseScale * pulse;
-            yield return null;
-        }
-
-        row.rowContainer.transform.localScale = baseScale;
     }
 
     private IEnumerator AnimateQuickReveal(GameObject target)
@@ -940,12 +918,6 @@ public class TutorialUIManager : MonoBehaviour
         }
 
         group.alpha = 1f;
-    }
-
-    private void CacheTaskRowTransform(GameObject rowObject, RectTransform rect)
-    {
-        if (!taskRowBasePositions.ContainsKey(rowObject) && rect != null) taskRowBasePositions[rowObject] = rect.anchoredPosition;
-        if (!taskRowBaseScales.ContainsKey(rowObject)) taskRowBaseScales[rowObject] = rowObject.transform.localScale;
     }
 
     private float EaseOutCubic(float t)
