@@ -70,6 +70,10 @@ public sealed class FeedbackPaperUI : MonoBehaviour
             papers[i].localScale = Vector3.one; contents[i].SetActive(false);
             var heading = contents[i].transform.Find("Department title").GetComponent<TMP_Text>(); heading.text = FeedbackTypography.Heading(FeedbackReport.Titles[i]);
             contents[i].transform.Find("Department score").GetComponent<TMP_Text>().text = report.scores[i];
+            if (i == 4 && report.bodies[4].IndexOf("C-COIN REWARD:", StringComparison.OrdinalIgnoreCase) >= 0)
+                indexLabels[i].text = "<size=19>05  CLIENT DECISION  <color=#22652D>+100 C-COINS</color></size>";
+            else
+                indexLabels[i].text = (i + 1).ToString("00") + "   " + FeedbackTypography.Heading(FeedbackReport.Titles[i]);
             var body = scrolls[i].content.GetComponent<TMP_Text>(); body.text = report.bodies[i];
             float height = Mathf.Max(i == 4 ? 300 : 460, body.GetPreferredValues(body.text,1040,0).y + 24);
             scrolls[i].content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,height);

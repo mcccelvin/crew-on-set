@@ -177,12 +177,25 @@ public sealed class CCoinService : MonoBehaviour
             GameSavePrefs.SetString("CCoins.CareerRewardId",careerId);
         }
         var reward = CCoinRules.Reward(careerId,level);
-        if (reward == null || GameSavePrefs.GetInt("CCoins.RewardQueued.Level" + level,0) == 1) return false;
-        if (!state.pendingRewards.Exists(x => x.operationId == reward.operationId)) state.pendingRewards.Add(reward);
+        if (reward == null) return false;
+        // Keep the result screen truthful when the same durable claim is still
+        // awaiting server verification after a retry or an offline result.
+        if (state.pendingRewards.Exists(x => x.operationId == reward.operationId)) return true;
+        if (GameSavePrefs.GetInt("CCoins.RewardQueued.Level" + level,0) == 1) return false;
+        state.pendingRewards.Add(reward);
         Save(); // Durable before marking the career; retries retain the operation ID.
         GameSavePrefs.SetInt("CCoins.RewardQueued.Level" + level,1); GameSavePrefs.Save();
         nextRefresh = Time.unscaledTime;
         Publish(IsGuest ? GuestShopStatus : "+"+CCoinRules.ContractReward+" C-Coins reward pending server confirmation."); return true;
+    }
+    public bool HasContractRewardRecord(int level) => level >= 1 && level <= 5
+        && GameSavePrefs.GetInt("CCoins.RewardQueued.Level" + level,0) == 1;
+    public bool IsContractRewardPending(int level)
+    {
+        string careerId = GameSavePrefs.GetString("CCoins.CareerRewardId","");
+        var reward = CCoinRules.Reward(careerId,level);
+        return reward != null && state.pendingRewards != null
+            && state.pendingRewards.Exists(x => x != null && x.operationId == reward.operationId);
     }
     // Invoke only after the existing save system has linked unclaimed guest careers.
     public void LinkGuestRewards()

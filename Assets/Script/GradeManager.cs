@@ -81,8 +81,16 @@ public class GradeManager : MonoBehaviour
 
                 if (CareerManager.Instance != null) CareerManager.Instance.CompleteActiveJob(grades.earnedBCoins);
 
-                if (CCoinService.Ensure().QueueContractReward(submittedLevel,grades.letterGrade))
-                    grades.feedback += "\nC-COINS: +" + CCoinRules.ContractReward + " Crew Coins pending account verification. This reward is separate from your B-Coins production budget.\n";
+                var cCoins = CCoinService.Ensure();
+                bool queuedNow = cCoins.QueueContractReward(submittedLevel,grades.letterGrade);
+                if (!GameSavePrefs.IsRoomSession && (queuedNow || cCoins.HasContractRewardRecord(submittedLevel)))
+                {
+                    string rewardStatus = cCoins.IsContractRewardPending(submittedLevel)
+                        ? "pending account verification."
+                        : "already processed for this contract; check your wallet for the confirmed balance.";
+                    grades.feedback += "\nC-COIN REWARD: <color=green>+" + CCoinRules.ContractReward + " C-COINS</color> "
+                        + rewardStatus + " This reward is separate from your B-Coins production budget.\n";
+                }
                 CampaignProgression.CompleteLevel(submittedLevel);
             }
 

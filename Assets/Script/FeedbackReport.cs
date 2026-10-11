@@ -24,10 +24,12 @@ public sealed class FeedbackReport
         scores[3] = grades.earnedBCoins > 0 ? "THIS SUBMISSION: +" + grades.earnedBCoins.ToString("N0") + " B-COINS" : "THIS SUBMISSION: NO NEW PAYMENT";
         scores[4] = "RANK " + rank + "   |   OVERALL " + overall.ToString("F1") + " / 100";
         var sections = new[] { new StringBuilder(), new StringBuilder(), new StringBuilder(), new StringBuilder(), new StringBuilder() };
+        var rewardNotes = new StringBuilder();
         int section = 4;
         foreach (string line in (grades.feedback ?? "").Replace("\r", "").Split('\n'))
         {
             string plain = Tags.Replace(line, "").Trim().ToUpperInvariant();
+            if (plain.StartsWith("C-COIN REWARD:")) { rewardNotes.AppendLine(line); continue; }
             if (Heading(plain, "PRE-PRODUCTION")) { section = 0; continue; }
             if (Heading(plain, "POST-PRODUCTION")) { section = 2; continue; }
             if (Heading(plain, "PRODUCTION")) { section = 1; continue; }
@@ -35,6 +37,9 @@ public sealed class FeedbackReport
             if (plain.StartsWith("CONTRACT GATE:") || plain.StartsWith("QUALITY GATE:") || plain == "YOUR PROGRESS" || plain == "YOUR NEXT STEP") section = 4;
             sections[section].AppendLine(line);
         }
+        // Put the C-Coin result first on Client Decision, regardless of which
+        // department heading was active when the grader appended it.
+        if (rewardNotes.Length > 0) sections[4].Insert(0,rewardNotes.ToString() + Environment.NewLine);
         for (int i = 0; i < bodies.Length; i++) bodies[i] = PaperInk(sections[i].ToString().Trim());
         for (int i = 0; i < 3; i++)
             if (string.IsNullOrWhiteSpace(bodies[i])) bodies[i] = "No additional department notes were saved for this submission. The score above is the submitted result.";
