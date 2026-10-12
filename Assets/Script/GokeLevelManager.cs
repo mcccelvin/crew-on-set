@@ -1757,7 +1757,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (TutorialUIManager.Instance != null)
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Use your existing light to keep the subject readable. This job focuses on composition: leave space beside the subject and place your branding there. We'll learn three-point lighting with Better Lights in Level 3.", TutorialUIManager.Instance.poseOpenHand, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("Use your existing light to keep the can readable. Choose an angle that shows its shape and label, and leave space beside it for your branding.", TutorialUIManager.Instance.poseOpenHand, true, false);
         }
     }
 

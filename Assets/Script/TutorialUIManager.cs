@@ -755,7 +755,8 @@ public class TutorialUIManager : MonoBehaviour
             if (bossText != null) bossText.maxVisibleCharacters = Mathf.CeilToInt(currentDialogueVisibleCharacters * textT);
             if (portraitRect != null)
             {
-                float portraitT = EaseOutBack(Mathf.Clamp01(elapsed / panelAnimationDuration));
+                bool finalPreview = EditorManager.Instance != null && EditorManager.Instance.ReviewIsOpen;
+                float portraitT = finalPreview ? panelT : EaseOutBack(Mathf.Clamp01(elapsed / panelAnimationDuration));
                 portraitRect.localScale = Vector3.LerpUnclamped(bossPortraitBaseScale * 0.93f, bossPortraitBaseScale, portraitT);
             }
 

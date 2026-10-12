@@ -1,7 +1,7 @@
 ﻿using UnityEngine;
 using UnityEngine.EventSystems;
 
-public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
+public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler, IPointerDownHandler
 {
     public DraggableOverlay linkedOverlay;
 
@@ -102,8 +102,15 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
         UpdateFrameMath();
     }
 
+    public void OnPointerDown(PointerEventData eventData)
+    {
+        if (eventData.button == PointerEventData.InputButton.Left && !PauseManager.isPaused)
+            EditorTutorialManager.Instance?.OnSecondOverlayInteraction(this);
+    }
+
     public void OnBeginDrag(PointerEventData eventData)
     {
+        OnPointerDown(eventData);
         if (parentCanvas == null) parentCanvas = GetComponentInParent<Canvas>();
         if (parentCanvas == null)
         {

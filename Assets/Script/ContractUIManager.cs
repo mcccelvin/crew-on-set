@@ -417,7 +417,7 @@ public class ContractUIManager : MonoBehaviour
             "STAGE\nRed backdrop. Place Goke wherever you choose; no minimum wall distance. Choose its position and camera angle.\n\n" +
             "RULE OF THIRDS\nPlace the full can near any of the four grid intersections. Left or right, upper or lower: your choice. Keep it visible and leave room for graphics.",
             "LIGHTING & EDIT",
-            "Use your existing light to illuminate the subject. Leave open space beside it for your branding. Three-point lighting is taught in Level 3.\n\n" +
+            "Use your existing light to illuminate the can. Choose its position and angle to show the product clearly, and leave open space beside it for your branding.\n\n" +
             "EDIT\n12s: supplied intro 2s + footage 8s + supplied outro 2s, joined without gaps.\n\n" +
             "Use two overlays: logo + tagline. Any timing or duration during the ad; together or separately. Choose placement and animation. Effects, music and color changes are optional.");
 
@@ -972,7 +972,7 @@ public class ContractUIManager : MonoBehaviour
                 pitch = "MAKE THE CAN THE STAR.";
                 delivery = "12s FINAL CUT  |  2 OVERLAYS";
                 setup = "- <b>Red backdrop</b> + Goke can.\n- Place it freely; reuse your existing light.";
-                shoot = "- Full can at <b>any thirds intersection</b>.\n- Aim <b>at least one powered light</b> at it.\n<size=20>No three-point lighting rig needed.</size>";
+                shoot = "- Full can at <b>any thirds intersection</b>.\n- Aim <b>at least one powered light</b> at it.\n- Choose an angle that makes the label clear.";
                 edit = "<size=22><b>0-2s</b> INTRO  >  <b>2-10s</b> YOUR SHOT\n<b>10-12s</b> OUTRO</size>\nExactly <b>2 overlays: logo + tagline</b>.\nKeep them title-safe and off the can.";
                 break;
             case 3:
@@ -1046,7 +1046,7 @@ public class ContractUIManager : MonoBehaviour
                 break;
             case 2:
                 preparation = "CLIENT: GOKE COLA\nIntroduce the drink with clear product framing and two branding messages. Build a red backdrop and place Goke wherever you choose. There is no minimum wall distance. Reuse your existing light.";
-                production = "Keep the full can visible near any of the four Rule of Thirds grid intersections. Choose the camera angle and leave open space for branding. Power and aim at least one light to make the product readable. Key, Fill and Back Lights are NOT a requirement for this contract.";
+                production = "Keep the full can visible near any of the four Rule of Thirds grid intersections. Choose the camera angle and leave open space for branding. Power and aim at least one light to make the product readable.";
                 post = "Deliver 12 seconds from 0s without gaps: the full supplied 2-second intro at 0-2s, your Goke footage at 2-10s, and the full supplied 2-second outro at 10-12s.\n\nUse exactly TWO overlays: logo and tagline. Choose their duration and timing; they may appear together or separately. Keep them readable, title-safe and off the product. Music, effects and color changes are optional.";
                 break;
             case 3:

@@ -8,6 +8,7 @@ using TMPro;
 [System.Serializable]
 public class ClipSegment
 {
+    public DraggableClip sourceClip;
     public string path;
     public int startFrame;
     public int endFrame;
@@ -21,6 +22,24 @@ public class ClipSegment
 
 public class TruePixelPlayer : MonoBehaviour
 {
+    public DraggableClip CurrentEditedClip
+    {
+        get
+        {
+            if (currentSequence != null)
+                foreach (var segment in currentSequence)
+                    if (currentFrameIndex >= segment.globalStartFrame && currentFrameIndex < segment.globalEndFrame) return segment.sourceClip;
+            return null;
+        }
+    }
+    private int ClipLocalFrame(out int length)
+    {
+        if (currentSequence != null)
+            foreach (var segment in currentSequence)
+                if (currentFrameIndex >= segment.globalStartFrame && currentFrameIndex < segment.globalEndFrame)
+                { length = segment.globalEndFrame - segment.globalStartFrame; return currentFrameIndex - segment.globalStartFrame; }
+        length = preloadedFrames.Count; return currentFrameIndex;
+    }
     public RawImage computerScreen;
     public float framesPerSecond = TapeSettings.framesPerSecond;
 
@@ -52,6 +71,9 @@ public class TruePixelPlayer : MonoBehaviour
     private bool showingTimelineGap;
     public bool IsLoading => isLoading;
     public bool CanStartPlayback => !isLoading && preloadedFrames.Count > 0;
+    public bool IsPlayingVideo => CanStartPlayback && !isPaused && !isFinished;
+    public bool CanResumeTimeline => CanStartPlayback && compositeSequence && !isFinished;
+    public bool HideSeparateTransport { get; set; }
     public bool isFinished = false;
     public bool HasPlaybackReachedEnd { get; private set; }
 
@@ -72,7 +94,7 @@ public class TruePixelPlayer : MonoBehaviour
         {
             var a=currentSequence[i]; var b=sequence[i];
             same = a.path==b.path && a.startFrame==b.startFrame && a.endFrame==b.endFrame && a.uiStartX==b.uiStartX && a.uiWidth==b.uiWidth
-                && a.brightness==b.brightness && a.contrast==b.contrast && a.saturation==b.saturation && a.useClipGrade==b.useClipGrade;
+                && a.sourceClip==b.sourceClip && a.brightness==b.brightness && a.contrast==b.contrast && a.saturation==b.saturation && a.useClipGrade==b.useClipGrade;
         }
         if (same && isLoading) { pendingTimelineSeek=seconds; return true; }
         if (!same || preloadedFrames.Count == 0)
@@ -335,6 +357,8 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void TogglePlayPause()
     {
+        if (EditorManager.Instance != null && EditorManager.Instance.exportPlayer == this
+            && EditorManager.Instance.ReviewPlaybackBlocked) return;
         if (!CanStartPlayback) return;
         showingTimelineGap=false;
 
@@ -375,6 +399,12 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void UpdatePlayPauseUI()
     {
+        if (HideSeparateTransport)
+        {
+            if (playButtonUI != null) playButtonUI.SetActive(false);
+            if (pauseButtonUI != null) pauseButtonUI.SetActive(false);
+            return;
+        }
         if (playButtonUI != null) playButtonUI.SetActive(isPaused || isFinished);
         if (pauseButtonUI != null) pauseButtonUI.SetActive(!isPaused && !isFinished);
     }
@@ -408,9 +438,12 @@ public class TruePixelPlayer : MonoBehaviour
             {
                 if (activeClip.useClipGrade && computerScreen.material != null)
                 {
-                    computerScreen.material.SetFloat("_Brightness", activeClip.brightness);
-                    computerScreen.material.SetFloat("_Contrast", activeClip.contrast);
-                    computerScreen.material.SetFloat("_Saturation", activeClip.saturation);
+                    var editor = EditorManager.Instance;
+                    bool original = editor != null && editor.exportPlayer != this && editor.gradingManager != null
+                        && editor.gradingManager.ViewingOriginal;
+                    computerScreen.material.SetFloat("_Brightness", original ? 1f : activeClip.sourceClip != null ? activeClip.sourceClip.gradeBrightness : activeClip.brightness);
+                    computerScreen.material.SetFloat("_Contrast", original ? 1f : activeClip.sourceClip != null ? activeClip.sourceClip.gradeContrast : activeClip.contrast);
+                    computerScreen.material.SetFloat("_Saturation", original ? 1f : activeClip.sourceClip != null ? activeClip.sourceClip.gradeSaturation : activeClip.saturation);
                 }
                 int framesInClip = activeClip.globalEndFrame - activeClip.globalStartFrame;
 
@@ -468,6 +501,8 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void OnScrub(float value)
     {
+        if (EditorManager.Instance != null && EditorManager.Instance.exportPlayer == this
+            && EditorManager.Instance.ReviewPlaybackBlocked) return;
         if (configuringScrubBar || isLoading || preloadedFrames.Count == 0) return;
         showingTimelineGap=false; playbackTimer=0;
 
@@ -510,7 +545,7 @@ public class TruePixelPlayer : MonoBehaviour
         {
             if (overlay != null && overlay.isOnTimeline)
             {
-                overlay.EvaluateVisibility(currentTimelineFrame, !isPaused);
+                overlay.EvaluateVisibility(currentTimelineFrame, !isPaused, CurrentEditedClip != null ? CurrentEditedClip.graphicAnimation : PlayerEditTools.GraphicAnimationMode.Cut);
             }
         }
     }
@@ -558,7 +593,7 @@ public class TruePixelPlayer : MonoBehaviour
         EnsureEditorialCanvasGroup();
 
         PlayerEditTools tools = PlayerEditTools.Instance;
-        PlayerEditTools.MusicMode musicMode = tools != null ? tools.selectedMusic : PlayerEditTools.MusicMode.None;
+        PlayerEditTools.MusicMode musicMode = CurrentEditedClip != null ? CurrentEditedClip.music : PlayerEditTools.MusicMode.None;
 
         if (musicMode != preparedMusicMode || editorialAudioClip == null || preparedMusicFrameCount != preloadedFrames.Count)
         {
@@ -578,7 +613,7 @@ public class TruePixelPlayer : MonoBehaviour
         }
 
         PlayerEditTools tools = PlayerEditTools.Instance;
-        PlayerEditTools.CameraMotionMode motionMode = tools != null ? tools.selectedCameraMotion : PlayerEditTools.CameraMotionMode.None;
+        PlayerEditTools.CameraMotionMode motionMode = CurrentEditedClip != null ? CurrentEditedClip.cameraMotion : PlayerEditTools.CameraMotionMode.None;
 
         if (motionMode == PlayerEditTools.CameraMotionMode.None || preloadedFrames.Count <= 1)
         {
@@ -586,7 +621,8 @@ public class TruePixelPlayer : MonoBehaviour
             return;
         }
 
-        float progress = Mathf.Clamp01((float)currentFrameIndex / (preloadedFrames.Count - 1));
+        int localFrame = ClipLocalFrame(out int clipLength);
+        float progress = Mathf.Clamp01((float)localFrame / Mathf.Max(1, clipLength - 1));
         float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
         float crop = CampaignProgression.GetCurrentLevel() == 3 && motionMode == PlayerEditTools.CameraMotionMode.SlowPullOut ? 0.22f : 0.075f;
         float pan = 0f;
@@ -614,17 +650,21 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void ApplyPlayerCreatedTransition()
     {
+        if (crossfadePicture != null) crossfadePicture.gameObject.SetActive(false);
         EnsureEditorialCanvasGroup();
         if (editorialCanvasGroup == null) return;
 
-        if (currentSequence == null || currentSequence.Count == 0 || isPaused || isFinished)
+        if (currentSequence == null || currentSequence.Count == 0)
         {
             editorialCanvasGroup.alpha = 1f;
             return;
         }
 
         PlayerEditTools tools = PlayerEditTools.Instance;
-        PlayerEditTools.TransitionMode transitionMode = tools != null ? tools.selectedTransition : PlayerEditTools.TransitionMode.Cut;
+        PlayerEditTools.TransitionMode transitionMode = CurrentEditedClip != null ? CurrentEditedClip.transition : PlayerEditTools.TransitionMode.Cut;
+        if (ApplyClipCrossfade()) { editorialCanvasGroup.alpha = 1f; return; }
+        if (transitionMode == PlayerEditTools.TransitionMode.Crossfade)
+        { editorialCanvasGroup.alpha = 1f; return; }
 
         if (transitionMode == PlayerEditTools.TransitionMode.Cut)
         {
@@ -642,8 +682,9 @@ public class TruePixelPlayer : MonoBehaviour
 
         float edgeSeconds = transitionMode == PlayerEditTools.TransitionMode.DipToBlack ? 0.28f : 0.5f;
         int edgeFrames = Mathf.Max(2, Mathf.RoundToInt(framesPerSecond * edgeSeconds));
-        int framesFromEnd = preloadedFrames.Count - 1 - currentFrameIndex;
-        float transitionAlpha = Mathf.Min(Mathf.Clamp01((float)currentFrameIndex / edgeFrames),
+        int localFrame = ClipLocalFrame(out int clipLength);
+        int framesFromEnd = clipLength - 1 - localFrame;
+        float transitionAlpha = Mathf.Min(Mathf.Clamp01((float)localFrame / edgeFrames),
                                           Mathf.Clamp01((float)framesFromEnd / edgeFrames));
 
         if (transitionMode == PlayerEditTools.TransitionMode.DipToBlack && currentSequence.Count > 1)
@@ -663,6 +704,51 @@ public class TruePixelPlayer : MonoBehaviour
     }
 
     private float musicAuditionUntil;
+    private RawImage crossfadePicture;
+    private Texture2D crossfadeTexture;
+    private Material crossfadeMaterial;
+
+    private bool ApplyClipCrossfade()
+    {
+        for (int i = 1; i < currentSequence.Count; i++)
+        {
+            var incoming = currentSequence[i]; var outgoing = currentSequence[i - 1];
+            if (currentFrameIndex < incoming.globalStartFrame || currentFrameIndex >= incoming.globalEndFrame) continue;
+            bool blend = incoming.sourceClip != null && incoming.sourceClip.transition == PlayerEditTools.TransitionMode.Crossfade ||
+                outgoing.sourceClip != null && outgoing.sourceClip.transition == PlayerEditTools.TransitionMode.Crossfade;
+            float pps = TimelineManager.Instance != null ? TimelineManager.Instance.pixelsPerSecond : 40f;
+            if (!blend || Mathf.Abs(incoming.uiStartX - outgoing.uiStartX - outgoing.uiWidth) > pps / Mathf.Max(1,framesPerSecond) + .01f) return false;
+            int duration = Mathf.Min(Mathf.Max(2, Mathf.RoundToInt(framesPerSecond * .4f)), incoming.globalEndFrame - incoming.globalStartFrame);
+            int elapsed = currentFrameIndex - incoming.globalStartFrame;
+            if (elapsed >= duration || outgoing.globalEndFrame <= 0) return false;
+            if (crossfadePicture == null)
+            {
+                var go = new GameObject("Clip transition picture", typeof(RectTransform), typeof(RawImage));
+                go.transform.SetParent(computerScreen.transform, false);
+                crossfadePicture = go.GetComponent<RawImage>(); crossfadePicture.raycastTarget = false;
+                var rect = crossfadePicture.rectTransform;
+                rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
+                crossfadeTexture = new Texture2D(2,2,TextureFormat.RGB24,false,false);
+                if (computerScreen.material != null) crossfadeMaterial = new Material(computerScreen.material);
+                crossfadePicture.material = crossfadeMaterial;
+            }
+            // Hold the outgoing end frame while the incoming video keeps moving.
+            // The dissolve occupies existing frames, preserving contract durations.
+            crossfadeTexture.LoadImage(preloadedFrames[outgoing.globalEndFrame - 1]);
+            crossfadePicture.texture = crossfadeTexture;
+            crossfadePicture.uvRect = originalScreenUVRect;
+            if (crossfadeMaterial != null)
+            {
+                crossfadeMaterial.SetFloat("_Brightness", outgoing.sourceClip != null ? outgoing.sourceClip.gradeBrightness : outgoing.brightness);
+                crossfadeMaterial.SetFloat("_Contrast", outgoing.sourceClip != null ? outgoing.sourceClip.gradeContrast : outgoing.contrast);
+                crossfadeMaterial.SetFloat("_Saturation", outgoing.sourceClip != null ? outgoing.sourceClip.gradeSaturation : outgoing.saturation);
+            }
+            crossfadePicture.color = new Color(1,1,1,1f - Mathf.SmoothStep(0,1,(float)elapsed / Mathf.Max(1,duration - 1)));
+            crossfadePicture.gameObject.SetActive(true);
+            return true;
+        }
+        return false;
+    }
 
     public void AuditionSelectedMusic()
     {
@@ -675,6 +761,8 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void SyncPlayerCreatedAudio()
     {
+        var mode = CurrentEditedClip != null ? CurrentEditedClip.music : PlayerEditTools.MusicMode.None;
+        if (Time.unscaledTime >= musicAuditionUntil && mode != preparedMusicMode) BuildPlayerSelectedMusic(mode);
         if (editorialAudioSource == null || editorialAudioSource.clip == null) return;
         if (Time.unscaledTime < musicAuditionUntil && (isPaused || isFinished)) return;
 
@@ -863,6 +951,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     private void StopPlayerCreatedEffects()
     {
+        if (crossfadePicture != null) crossfadePicture.gameObject.SetActive(false);
         if (editorialAudioSource != null) editorialAudioSource.Stop();
         if (computerScreen != null && hasOriginalScreenUVRect) computerScreen.uvRect = originalScreenUVRect;
         if (editorialCanvasGroup != null) editorialCanvasGroup.alpha = 1f;
@@ -895,6 +984,9 @@ public class TruePixelPlayer : MonoBehaviour
 
         if (playbackTexture != null) Destroy(playbackTexture);
         if (thumb != null) Destroy(thumb);
+        if (crossfadePicture != null) Destroy(crossfadePicture.gameObject);
+        if (crossfadeTexture != null) Destroy(crossfadeTexture);
+        if (crossfadeMaterial != null) Destroy(crossfadeMaterial);
         if (editorialAudioClip != null) Destroy(editorialAudioClip);
     }
 }

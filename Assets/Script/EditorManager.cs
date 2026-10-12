@@ -83,6 +83,7 @@ public class EditorManager : MonoBehaviour
         inactiveTabColor = EditorWorkspaceUI.Control;
         BuildProfessionalPreview();
         BuildReviewBackButton();
+        if (reviewBackButton != null) reviewBackButton.interactable = !TutorialReviewLocked;
         SetupPlayerEditTools();
         // Keep the clip bank sprite, CLIPS heading, and typography authored in the scene.
         EditorWorkspaceUI.Surface(brandingBinPanel != null ? brandingBinPanel.transform : null);
@@ -624,7 +625,7 @@ public class EditorManager : MonoBehaviour
                 path = clip.clipFilePath,
                 startFrame = clip.startFrame,
                 endFrame = clip.endFrame,
-                useClipGrade = EditingLevel == 4,
+                sourceClip = clip, useClipGrade = true,
                 brightness = clip.gradeBrightness, contrast = clip.gradeContrast, saturation = clip.gradeSaturation,
                 uiStartX = trueStartX,
                 uiWidth = rt.rect.width
@@ -644,7 +645,7 @@ public class EditorManager : MonoBehaviour
         }
 
         bool hasFadeIn = false;
-        if (gradingManager != null && gradingManager.fadeInToggle != null) hasFadeIn = gradingManager.fadeInToggle.isOn;
+        // Fades now belong to individual clip transitions.
 
         pendingCam = totalCam;
         pendingLight = totalLight;
@@ -664,7 +665,7 @@ public class EditorManager : MonoBehaviour
             return false;
         }
 
-        UITransition.Show(reviewVideoPanel);
+        UITransition.ShowSmooth(reviewVideoPanel);
         BuildReviewBackButton();
 
         CommercialCompiler compiler = FindObjectOfType<CommercialCompiler>();
@@ -686,15 +687,64 @@ public class EditorManager : MonoBehaviour
             exportPlayer.SetOverlaySource(gradingManager != null ? gradingManager.computerScreen : null);
         }
 
-        exportPlayer.PlaySequence(sequence, hasFadeIn);
+        bool waitForBoss = TutorialReviewLocked;
+        exportPlayer.PlaySequence(sequence, hasFadeIn, waitForBoss);
+        if (waitForBoss) StartCoroutine(StartReviewAfterBoss());
         return true;
     }
+
+    public bool TutorialReviewLocked => CampaignProgression.GetCurrentLevel() == 1
+        && EditorTutorialManager.Instance != null && EditorTutorialManager.Instance.RestrictsEditor;
+
+    public bool ReviewPlaybackBlocked => TutorialReviewLocked
+        && (!EditorTutorialManager.Instance.AcceptsTaskInput
+            || EditorTutorialManager.Instance.currentStep != EditorTutorialManager.EditorStep.ReviewAndSubmit);
+
+    private System.Collections.IEnumerator StartReviewAfterBoss()
+    {
+        while (reviewVideoPanel != null && reviewVideoPanel.activeInHierarchy && !submissionStarted)
+        {
+            if (!ReviewPlaybackBlocked && exportPlayer != null && exportPlayer.CanStartPlayback && !PauseManager.isPaused)
+            {
+                if (!exportPlayer.IsPlayingVideo) exportPlayer.TogglePlayPause();
+                yield break;
+            }
+            yield return null;
+        }
+    }
+
+    public bool IsReviewPlaybackControl(Transform item)
+    {
+        if (exportPlayer == null) return false;
+        return IsWithinReviewControl(item, exportPlayer.playButtonUI != null ? exportPlayer.playButtonUI.transform : null)
+            || IsWithinReviewControl(item, exportPlayer.pauseButtonUI != null ? exportPlayer.pauseButtonUI.transform : null)
+            || IsWithinReviewControl(item, exportPlayer.exportProgressBar != null ? exportPlayer.exportProgressBar.transform : null);
+    }
+
+    private static bool IsWithinReviewControl(Transform item, Transform root)
+        => root != null && (item == root || item.IsChildOf(root));
 
     public bool IsReviewBackControl(Transform item) => reviewBackButton != null &&
         (item == reviewBackButton.transform || item.IsChildOf(reviewBackButton.transform));
     private void BuildReviewBackButton()
     {
         if (reviewBackButton != null || reviewVideoPanel == null) return;
+        // Authored review icons only toggled each other's visibility and were not
+        // registered as player controls, so the tutorial also blocked their clicks.
+        if (exportPlayer != null)
+        {
+            exportPlayer.HideSeparateTransport = false;
+            foreach (var transport in reviewVideoPanel.GetComponentsInChildren<Button>(true))
+            {
+                if (transport.name != "Play" && transport.name != "Pause") continue;
+                if (transport.name == "Play") exportPlayer.playButtonUI = transport.gameObject;
+                else exportPlayer.pauseButtonUI = transport.gameObject;
+                transport.onClick = new Button.ButtonClickedEvent();
+                transport.onClick.AddListener(exportPlayer.TogglePlayPause);
+                transport.interactable = true;
+                if (transport.targetGraphic != null) transport.targetGraphic.raycastTarget = true;
+            }
+        }
         var root = new GameObject("Back to edit", typeof(RectTransform), typeof(Image), typeof(Button));
         root.layer = reviewVideoPanel.layer;
         root.transform.SetParent(reviewVideoPanel.transform, false);
@@ -773,6 +823,7 @@ public class EditorManager : MonoBehaviour
     }
     public void BackToEditor()
     {
+        if (TutorialReviewLocked) return;
         if (submissionStarted || reviewVideoPanel == null || !reviewVideoPanel.activeInHierarchy || PauseManager.isPaused) return;
         if (exportPlayer != null) exportPlayer.StopTape();
         reviewVideoPanel.SetActive(false);

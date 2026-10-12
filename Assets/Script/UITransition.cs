@@ -10,6 +10,7 @@ public sealed class UITransition : MonoBehaviour
     [Range(.15f, .8f)] public float duration = .44f;
     public float slideDistance = 55f;
     [Range(.8f, 1f)] public float entranceScale = .9f;
+    public bool smoothFadeOnly;
     // Eight held poses: approach, overshoot, squash and settle.
     private static readonly float[] Travel = { 0f, .24f, .55f, .83f, 1.07f, 1.025f, .99f, 1f };
     private static readonly float[] Opacity = { 0f, .3f, .65f, .9f, 1f, 1f, 1f, 1f };
@@ -58,6 +59,19 @@ public sealed class UITransition : MonoBehaviour
     {
         if (target == null) return;
         if (visible) Show(target); else Hide(target);
+    }
+
+    public static void ShowSmooth(GameObject target)
+    {
+        if (target == null) return;
+        var transition = target.GetComponent<UITransition>();
+        if (transition == null) transition = target.AddComponent<UITransition>();
+        transition.smoothFadeOnly = true;
+        transition.duration = .3f;
+        transition.enabled = true;
+        target.SetActive(true);
+        transition.Play();
+        UIMotionInstaller.DecorateButtons(target);
     }
 
     public static void Show(GameObject target)
@@ -254,6 +268,12 @@ public sealed class UITransition : MonoBehaviour
     private void ApplyPose(float progress)
     {
         progress = Mathf.Clamp01(progress);
+        if (smoothFadeOnly)
+        {
+            group.alpha = alpha * Mathf.SmoothStep(0f, 1f, progress);
+            if (moving) { rect.localScale = scale; rect.anchoredPosition = position; }
+            return;
+        }
         if (productionMenu)
         {
             // Fast initial travel, a slow clean settle, and a shorter crossfade.

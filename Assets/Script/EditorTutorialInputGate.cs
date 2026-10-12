@@ -19,8 +19,23 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
         var ui = TutorialUIManager.Instance;
         if (ui != null && ui.bossHUDCanvas != null && Within(item, ui.bossHUDCanvas.transform)) return true;
         var editor = EditorManager.Instance;
-        if (editor != null && editor.IsReviewBackControl(item)) return true;
+        if (editor != null && editor.IsReviewBackControl(item)) return !editor.TutorialReviewLocked;
+        if (TimelineRuler.CanSeek && TimelineManager.Instance != null
+            && Within(item, TimelineManager.Instance.timestampContainer)) return true;
         if (!t.AcceptsTaskInput) return false;
+        if (item.GetComponentInParent<DraggableClip>() is DraggableClip clip && clip.isOnTimeline)
+        {
+            switch (t.currentStep)
+            {
+                case EditorTutorialManager.EditorStep.ChooseCameraMotion:
+                case EditorTutorialManager.EditorStep.ChooseGraphicAnimation:
+                case EditorTutorialManager.EditorStep.ChooseTransition:
+                case EditorTutorialManager.EditorStep.ChooseMusic:
+                case EditorTutorialManager.EditorStep.AdjustBrightness:
+                case EditorTutorialManager.EditorStep.AdjustContrast:
+                case EditorTutorialManager.EditorStep.AdjustSaturation: return true;
+            }
+        }
         if (editor != null && editor.gradingManager != null && editor.gradingManager.IsComparisonControl(item))
         {
             switch (t.currentStep)
@@ -64,7 +79,8 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
                 if (source != null && source.childCount > index) source = source.GetChild(index);
                 return Within(item, source) || Within(item, t.previewScreenRect);
             case EditorTutorialManager.EditorStep.TrimBranding: return Within(item, t.brandingTimelineClipRect);
-            case EditorTutorialManager.EditorStep.PositionSecondBranding: return Within(item, t.otherBrandingTrackRect);
+            case EditorTutorialManager.EditorStep.PositionSecondBranding:
+                return Within(item, t.otherBrandingTrackRect) || Within(item, t.SecondOverlayClipRect);
             case EditorTutorialManager.EditorStep.ChooseCameraMotion: return tools != null && Within(item, tools.GetCameraMotionButtonRect());
             case EditorTutorialManager.EditorStep.ChooseGraphicAnimation: return tools != null && Within(item, tools.GetGraphicAnimationButtonRect());
             case EditorTutorialManager.EditorStep.ChooseTransition: return tools != null && Within(item, tools.GetTransitionButtonRect());
@@ -74,7 +90,8 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
             case EditorTutorialManager.EditorStep.AdjustContrast: return Within(item, t.contrastSliderRect);
             case EditorTutorialManager.EditorStep.AdjustSaturation: return Within(item, t.saturationSliderRect);
             case EditorTutorialManager.EditorStep.ClickExport: return Within(item, t.exportButtonRect);
-            case EditorTutorialManager.EditorStep.ReviewAndSubmit: return Within(item, t.submitButtonRect);
+            case EditorTutorialManager.EditorStep.ReviewAndSubmit:
+                return Within(item, t.submitButtonRect) || (editor != null && editor.IsReviewPlaybackControl(item));
             default: return false;
         }
     }

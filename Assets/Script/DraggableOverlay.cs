@@ -306,7 +306,11 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
                 PrepareForCommercialOutput();
 
-                if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnBrandDroppedToScreen();
+                var lesson = EditorTutorialManager.Instance;
+                bool guidedSecondOverlay = lesson != null && lesson.RestrictsEditor
+                    && lesson.currentStep == EditorTutorialManager.EditorStep.DragToOtherTimeline;
+                if (lesson != null) lesson.OnBrandDroppedToScreen(clipScript);
+                if (!guidedSecondOverlay) TimelineManager.Instance?.RevealTrack(targetTrack as RectTransform);
 
                 // --- THE FIX: Stop the script here so it doesn't accidentally run "ReturnToBin()" below! ---
                 return;
@@ -438,7 +442,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         return null;
     }
 
-    public void EvaluateVisibility(int currentFrame, bool isPlaying)
+    public void EvaluateVisibility(int currentFrame, bool isPlaying, PlayerEditTools.GraphicAnimationMode? clipAnimation = null)
     {
         if (!isOnTimeline || canvasGroup == null) return;
         // Playback must not restore the previous cached placement while the user drags.
@@ -449,7 +453,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         if (currentFrame >= startFrame && currentFrame < endFrame)
         {
             float targetAlpha = 1f;
-            PlayerEditTools.GraphicAnimationMode animationMode = PlayerEditTools.Instance != null ? PlayerEditTools.Instance.selectedGraphicAnimation : PlayerEditTools.GraphicAnimationMode.Cut;
+            PlayerEditTools.GraphicAnimationMode animationMode = clipAnimation ?? PlayerEditTools.GraphicAnimationMode.Cut;
             int animationFrames = Mathf.Max(2, Mathf.RoundToInt(TapeSettings.framesPerSecond * 0.55f));
 
             if (animationMode != PlayerEditTools.GraphicAnimationMode.Cut)

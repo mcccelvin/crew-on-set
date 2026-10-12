@@ -16,6 +16,16 @@ public class TutorialHighlighter : MonoBehaviour
     public Color dimColor = Color.black;
 
     private RectTransform targetElement;
+    private RectTransform secondaryElement;
+    private readonly System.Collections.Generic.List<RectTransform> extraPanels = new System.Collections.Generic.List<RectTransform>();
+    private readonly System.Collections.Generic.List<Rect> regions = new System.Collections.Generic.List<Rect>();
+
+    public void HighlightElements(RectTransform control, RectTransform preview)
+    {
+        HighlightElement(control);
+        secondaryElement = preview;
+        TrackTarget();
+    }
     private RectTransform worldTarget;
     private CanvasGroup frameCanvasGroup;
     private Canvas myCanvas;
@@ -120,10 +130,7 @@ public class TutorialHighlighter : MonoBehaviour
                 if (EditorManager.Instance != null && EditorManager.Instance.ReviewIsOpen)
                     dimmerGroup.alpha = 0f;
                 var lesson = EditorTutorialManager.Instance;
-                if (lesson != null && (lesson.currentStep == EditorTutorialManager.EditorStep.AdjustBrightness ||
-                    lesson.currentStep == EditorTutorialManager.EditorStep.AdjustContrast ||
-                    lesson.currentStep == EditorTutorialManager.EditorStep.AdjustSaturation ||
-                    lesson.currentStep == EditorTutorialManager.EditorStep.ClickExport))
+                if (lesson != null && lesson.currentStep == EditorTutorialManager.EditorStep.ClickExport)
                     dimmerGroup.alpha = 0f;
             }
 
@@ -231,6 +238,7 @@ public class TutorialHighlighter : MonoBehaviour
 
     public void HideHighlight()
     {
+        secondaryElement = null;
         targetElement = null;
         if (highlightFrame != null) highlightFrame.gameObject.SetActive(false);
         if (dimmerGroup != null)
@@ -309,6 +317,13 @@ public class TutorialHighlighter : MonoBehaviour
     private void UpdateDimmerPanels(RectTransform parentRect)
     {
         if (dimmerPanels[0] == null) return;
+        foreach (var panel in extraPanels) panel.gameObject.SetActive(false);
+        foreach (var panel in dimmerPanels) if (panel != null) panel.gameObject.SetActive(true);
+        if (secondaryElement != null && secondaryElement.gameObject.activeInHierarchy)
+        {
+            UpdateTwoOpenings(parentRect);
+            return;
+        }
 
         // Get the exact location of the "hole"
         Vector2 holePosition = parentRect.InverseTransformPoint(highlightFrame.position);
@@ -357,5 +372,57 @@ public class TutorialHighlighter : MonoBehaviour
     private void OnDestroy()
     {
         if (Instance == this) Instance = null;
+    }
+
+    private void UpdateTwoOpenings(RectTransform parent)
+    {
+        regions.Clear(); regions.Add(parent.rect);
+        CutOpening(parent, targetElement); CutOpening(parent, secondaryElement);
+        for (int i = 0; i < regions.Count; i++)
+        {
+            RectTransform panel;
+            if (i < dimmerPanels.Length) panel = dimmerPanels[i];
+            else
+            {
+                int index = i - dimmerPanels.Length;
+                if (index >= extraPanels.Count)
+                    extraPanels.Add(Instantiate(dimmerPanels[0], dimmerGroup.transform));
+                panel = extraPanels[index];
+            }
+            panel.gameObject.SetActive(true);
+            panel.localPosition = regions[i].center; panel.sizeDelta = regions[i].size;
+        }
+        for (int i = regions.Count; i < dimmerPanels.Length; i++) dimmerPanels[i].gameObject.SetActive(false);
+    }
+
+    private void CutOpening(RectTransform parent, RectTransform target)
+    {
+        target.GetWorldCorners(targetCorners);
+        var canvas = target.GetComponentInParent<Canvas>();
+        var sourceCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+        var destinationCamera = myCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : myCanvas.worldCamera;
+        Vector2 min = new Vector2(float.MaxValue, float.MaxValue), max = new Vector2(float.MinValue, float.MinValue);
+        foreach (var corner in targetCorners)
+        {
+            var screen = RectTransformUtility.WorldToScreenPoint(sourceCamera, corner);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen, destinationCamera, out var point);
+            min = Vector2.Min(min, point); max = Vector2.Max(max, point);
+        }
+        min -= Vector2.one * 4f; max += Vector2.one * 4f;
+        for (int i = regions.Count - 1; i >= 0; i--)
+        {
+            var r = regions[i];
+            float left = Mathf.Max(r.xMin, min.x), right = Mathf.Min(r.xMax, max.x);
+            float bottom = Mathf.Max(r.yMin, min.y), top = Mathf.Min(r.yMax, max.y);
+            if (left >= right || bottom >= top) continue;
+            regions.RemoveAt(i);
+            AddRegion(r.xMin, r.yMin, r.xMax, bottom); AddRegion(r.xMin, top, r.xMax, r.yMax);
+            AddRegion(r.xMin, bottom, left, top); AddRegion(right, bottom, r.xMax, top);
+        }
+    }
+
+    private void AddRegion(float left, float bottom, float right, float top)
+    {
+        if (right > left && top > bottom) regions.Add(Rect.MinMaxRect(left, bottom, right, top));
     }
 }

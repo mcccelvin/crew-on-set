@@ -81,14 +81,21 @@ public sealed class DirectorColorFields : MonoBehaviour
         if (terminal.selectionIndicatorText != null)
         {
             var status = terminal.selectionIndicatorText;
-            status.transform.SetParent(parent,false);
-            status.rectTransform.anchorMin = field.anchorMin; status.rectTransform.anchorMax = field.anchorMax;
+            status.transform.SetParent(terminal.viewportUI != null ? terminal.viewportUI : parent,false);
+            status.transform.SetAsLastSibling();
+            status.rectTransform.anchorMin = new Vector2(.15f,1f);
+            status.rectTransform.anchorMax = new Vector2(.85f,1f);
             status.rectTransform.pivot = new Vector2(.5f,1);
-            status.rectTransform.anchoredPosition = new Vector2(0,field.anchoredPosition.y-38);
-            status.rectTransform.sizeDelta = new Vector2(350,44);
+            status.rectTransform.anchoredPosition = new Vector2(0,-22);
+            status.rectTransform.sizeDelta = new Vector2(0,56);
+            status.rectTransform.localScale = Vector3.one;
             status.font = TMP_Settings.defaultFontAsset;
-            status.fontSize = 20; status.enableAutoSizing = true; status.fontSizeMin = 14; status.fontSizeMax = 20;
-            status.color = guide.color; status.alignment = TextAlignmentOptions.Center;
+            status.fontSize = 28; status.enableAutoSizing = true; status.fontSizeMin = 20; status.fontSizeMax = 28;
+            status.fontStyle = FontStyles.Bold;
+            status.enableWordWrapping = false;
+            status.overflowMode = TextOverflowModes.Ellipsis;
+            status.color = Color.white; status.alignment = TextAlignmentOptions.Center;
+            status.outlineColor = new Color32(19,32,48,255); status.outlineWidth = .22f;
             status.raycastTarget = false;
         }
     }

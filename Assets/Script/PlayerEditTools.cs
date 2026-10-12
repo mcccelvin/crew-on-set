@@ -11,15 +11,21 @@ public class PlayerEditTools : MonoBehaviour
 {
     public enum CameraMotionMode { None, SlowPushIn, SlowPullOut, PanLeft, PanRight }
     public enum GraphicAnimationMode { Cut, Fade, SlideUp, Pop }
-    public enum TransitionMode { Cut, FadeInOut, DipToBlack }
+    public enum TransitionMode { Cut, FadeInOut, DipToBlack, Crossfade }
     public enum MusicMode { None, Clean, Energy, Cinematic }
 
     public static PlayerEditTools Instance;
 
-    [HideInInspector] public CameraMotionMode selectedCameraMotion = CameraMotionMode.None;
-    [HideInInspector] public GraphicAnimationMode selectedGraphicAnimation = GraphicAnimationMode.Cut;
-    [HideInInspector] public TransitionMode selectedTransition = TransitionMode.Cut;
-    [HideInInspector] public MusicMode selectedMusic = MusicMode.None;
+    private DraggableClip Selection => DraggableClip.Selected != null && DraggableClip.Selected.isOnTimeline && DraggableClip.Selected.gameObject.activeInHierarchy ? DraggableClip.Selected : null;
+    public CameraMotionMode selectedCameraMotion { get => Selection != null ? Selection.cameraMotion : CameraMotionMode.None; set { if (Selection != null) Selection.cameraMotion = value; } }
+    public GraphicAnimationMode selectedGraphicAnimation { get => Selection != null ? Selection.graphicAnimation : GraphicAnimationMode.Cut; set { if (Selection != null) Selection.graphicAnimation = value; } }
+    public TransitionMode selectedTransition { get => Selection != null ? Selection.transition : TransitionMode.Cut; set { if (Selection != null) Selection.transition = value; } }
+    public MusicMode selectedMusic { get => Selection != null ? Selection.music : MusicMode.None; set { if (Selection != null) Selection.music = value; } }
+    private DraggableClip displayedSelection;
+    private void Update()
+    {
+        if (displayedSelection != Selection) { displayedSelection = Selection; RefreshLabels(); }
+    }
 
     [SerializeField] private GameObject toolsPanel;
     [SerializeField] private TextMeshProUGUI cameraMotionText;
@@ -70,7 +76,7 @@ public class PlayerEditTools : MonoBehaviour
         outline.effectColor = Color.black;
         outline.effectDistance = new Vector2(1f, -1f);
 
-        TextMeshProUGUI header = CreateText("Effects & audio\n<size=75%>Choose a treatment · Click a control to change it</size>", toolsPanel.transform, 16f, TextAlignmentOptions.Center);
+        TextMeshProUGUI header = CreateText("Effects & audio\n<size=75%>Select a timeline clip, then choose its treatment</size>", toolsPanel.transform, 16f, TextAlignmentOptions.Center);
         SetRect(header.rectTransform, new Vector2(0f, 0.73f), new Vector2(1f, 1f), new Vector2(12f, 0f), new Vector2(-12f, 0f));
         header.color = Color.white;
 
@@ -86,6 +92,8 @@ public class PlayerEditTools : MonoBehaviour
 
     private void PolishToolsLayout(Transform brandingPanel)
     {
+        foreach (var label in toolsPanel.GetComponentsInChildren<TextMeshProUGUI>(true))
+            if (label.text.StartsWith("Effects & audio")) label.text = "Effects & audio\n<size=75%>Select a timeline clip, then choose its treatment</size>";
         // Blend the controls into the authored panel without an extra enclosing box.
         var background = toolsPanel.GetComponent<Image>();
         if (background != null) { background.enabled = false; background.raycastTarget = false; }
@@ -135,19 +143,23 @@ public class PlayerEditTools : MonoBehaviour
     }
 
     public RectTransform GetCameraMotionButtonRect() { return cameraMotionButtonRect; }
+    public bool AnyClip(System.Predicate<DraggableClip> predicate)
+    {
+        var compiler = FindObjectOfType<CommercialCompiler>();
+        if (compiler == null || compiler.videoTimelineContainer == null) return false;
+        foreach (var clip in compiler.videoTimelineContainer.GetComponentsInChildren<DraggableClip>())
+            if (clip.isOnTimeline && predicate(clip)) return true;
+        return false;
+    }
     public RectTransform GetGraphicAnimationButtonRect() { return graphicAnimationButtonRect; }
     public RectTransform GetTransitionButtonRect() { return transitionButtonRect; }
     public RectTransform GetMusicButtonRect() { return musicButtonRect; }
     internal EditorEditState CaptureUndo()
     {
-        var motion = selectedCameraMotion; var animation = selectedGraphicAnimation;
-        var transition = selectedTransition; var music = selectedMusic;
         return new EditorEditState {
-            key = "effects", fingerprint = motion + "/" + animation + "/" + transition + "/" + music,
+            key = "effects", fingerprint = "per-clip",
             restore = () => {
                 if (this == null) return;
-                selectedCameraMotion = motion; selectedGraphicAnimation = animation;
-                selectedTransition = transition; selectedMusic = music;
                 RefreshAfterUndo();
             }
         };
@@ -173,7 +185,7 @@ public class PlayerEditTools : MonoBehaviour
 
     public void CycleTransition()
     {
-        selectedTransition = (TransitionMode)(((int)selectedTransition + 1) % 3);
+        selectedTransition = (TransitionMode)(((int)selectedTransition + 1) % 4);
         RefreshLabels();
         NotifyEditChanged();
     }
@@ -203,6 +215,8 @@ public class PlayerEditTools : MonoBehaviour
 
     private void RefreshLabels()
     {
+        foreach (var rect in new[] { cameraMotionButtonRect, graphicAnimationButtonRect, transitionButtonRect, musicButtonRect })
+            if (rect != null) rect.GetComponent<Button>().interactable = Selection != null;
         if (cameraMotionText != null) cameraMotionText.text = "CAMERA MOTION\n<color=#E6B58D>" + GetCameraMotionName() + "</color>";
         if (graphicAnimationText != null) graphicAnimationText.text = "GRAPHIC ANIMATION\n<color=#E6B58D>" + GetGraphicAnimationName() + "</color>";
         if (transitionText != null) transitionText.text = "TRANSITION\n<color=#E6B58D>" + GetTransitionName() + "</color>";
@@ -228,6 +242,7 @@ public class PlayerEditTools : MonoBehaviour
     {
         if (selectedTransition == TransitionMode.FadeInOut) return "FADE IN / OUT";
         if (selectedTransition == TransitionMode.DipToBlack) return "DIP TO BLACK";
+        if (selectedTransition == TransitionMode.Crossfade) return "CROSSFADE";
         return "STRAIGHT CUT";
     }
 

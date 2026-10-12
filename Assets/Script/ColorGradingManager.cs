@@ -15,32 +15,24 @@ public class ColorGradingManager : MonoBehaviour
     public DraggableClip SelectedClip { get; private set; }
     internal EditorEditState CaptureUndo()
     {
-        bool perClip = CampaignProgression.GetCurrentLevel() == 4;
-        float b = brightnessSlider != null ? brightnessSlider.value : 1f;
-        float c = contrastSlider != null ? contrastSlider.value : 1f;
-        float s = saturationSlider != null ? saturationSlider.value : 1f;
-        bool fade = fadeInToggle != null && fadeInToggle.isOn;
         return new EditorEditState {
-            key = "grade", fingerprint = fade + (perClip ? "" : "/" + EditorEditState.Number(b) + "/" + EditorEditState.Number(c) + "/" + EditorEditState.Number(s)),
+            key = "grade", fingerprint = "per-clip",
             restore = () => {
                 if (this == null) return;
-                if (!perClip) {
-                    brightnessSlider?.SetValueWithoutNotify(b); contrastSlider?.SetValueWithoutNotify(c); saturationSlider?.SetValueWithoutNotify(s);
-                }
-                fadeInToggle?.SetIsOnWithoutNotify(fade);
                 RefreshAfterUndo();
             }
         };
     }
     public void RefreshAfterUndo()
     {
-        if (CampaignProgression.GetCurrentLevel() == 4)
+        // Clip grades are available in every contract.
         {
-            if (SelectedClip == null || !SelectedClip.isOnTimeline) SelectedClip = DraggableClip.Selected;
+            SelectedClip = DraggableClip.Selected;
             if (SelectedClip != null && SelectedClip.isOnTimeline) {
                 brightnessSlider?.SetValueWithoutNotify(SelectedClip.gradeBrightness);
                 contrastSlider?.SetValueWithoutNotify(SelectedClip.gradeContrast);
                 saturationSlider?.SetValueWithoutNotify(SelectedClip.gradeSaturation);
+                fadeInToggle?.SetIsOnWithoutNotify(SelectedClip.transition == PlayerEditTools.TransitionMode.FadeInOut);
             }
         }
         appliedB = appliedC = appliedS = float.NaN;
@@ -48,17 +40,26 @@ public class ColorGradingManager : MonoBehaviour
     }
     public void SelectClip(DraggableClip clip)
     {
+        if (SelectedClip != null && SelectedClip.isOnTimeline && brightnessSlider != null && contrastSlider != null && saturationSlider != null)
+        {
+            SelectedClip.gradeBrightness = brightnessSlider.value;
+            SelectedClip.gradeContrast = contrastSlider.value;
+            SelectedClip.gradeSaturation = saturationSlider.value;
+        }
         SelectedClip = clip;
+        compareOriginal = false;
+        PlayerEditTools.Instance?.RefreshAfterUndo();
         if (clip == null) return;
         brightnessSlider.SetValueWithoutNotify(clip.gradeBrightness);
         contrastSlider.SetValueWithoutNotify(clip.gradeContrast);
         saturationSlider.SetValueWithoutNotify(clip.gradeSaturation);
+        if (fadeInToggle != null) fadeInToggle.SetIsOnWithoutNotify(clip.transition == PlayerEditTools.TransitionMode.FadeInOut);
         appliedB = appliedC = appliedS = float.NaN;
         var player = FindObjectOfType<CommercialCompiler>()?.editorPlayer;
         if (player != null)
             player.PlaySequence(new System.Collections.Generic.List<ClipSegment> {
                 new ClipSegment { path = clip.clipFilePath, startFrame = clip.startFrame, endFrame = clip.endFrame,
-                    uiStartX = GokeSequence.Left(clip), uiWidth = clip.GetComponent<RectTransform>().rect.width }
+                    sourceClip = clip, uiStartX = GokeSequence.Left(clip), uiWidth = clip.GetComponent<RectTransform>().rect.width }
             }, false, true);
     }
 
@@ -78,6 +79,7 @@ public class ColorGradingManager : MonoBehaviour
 
     [SerializeField] private TextMeshProUGUI qualityText;
     private bool compareOriginal;
+    public bool ViewingOriginal => compareOriginal;
     [SerializeField] private TMP_InputField[] valueInputs = new TMP_InputField[3];
     private float appliedB = float.NaN;
     private float appliedC = float.NaN;
@@ -107,6 +109,11 @@ public class ColorGradingManager : MonoBehaviour
         if (contrastSlider) contrastSlider.value = 1f;
         if (saturationSlider) saturationSlider.value = 1f;
         if (fadeInToggle) fadeInToggle.isOn = false;
+        if (fadeInToggle) fadeInToggle.onValueChanged.AddListener(value => {
+            if (SelectedClip == null || !SelectedClip.isOnTimeline) return;
+            SelectedClip.transition = value ? PlayerEditTools.TransitionMode.FadeInOut : PlayerEditTools.TransitionMode.Cut;
+            PlayerEditTools.Instance?.RefreshAfterUndo();
+        });
 
         if (CampaignProgression.GetCurrentLevel() >= 3)
         {
@@ -121,10 +128,12 @@ public class ColorGradingManager : MonoBehaviour
     void Update()
     {
         if (brightnessSlider == null || contrastSlider == null || saturationSlider == null) return;
-        if (CampaignProgression.GetCurrentLevel() == 4)
+        // Editing requires an explicitly selected timeline clip.
         {
             bool selected = SelectedClip != null && SelectedClip.isOnTimeline;
+            if (fadeInToggle != null) fadeInToggle.interactable = selected;
             brightnessSlider.interactable = contrastSlider.interactable = saturationSlider.interactable = selected;
+            SyncNumericFields();
             if (!selected)
             {
                 if (qualityText != null) qualityText.text = "SELECT A TIMELINE CLIP TO COLOR GRADE";
@@ -143,7 +152,7 @@ public class ColorGradingManager : MonoBehaviour
             appliedB = brightnessSlider.value;
             appliedC = contrastSlider.value;
             appliedS = saturationSlider.value;
-            if (CampaignProgression.GetCurrentLevel() == 4 && SelectedClip != null && SelectedClip.isOnTimeline)
+            if (SelectedClip != null && SelectedClip.isOnTimeline)
             {
                 SelectedClip.gradeBrightness = appliedB;
                 SelectedClip.gradeContrast = appliedC;
@@ -276,11 +285,23 @@ public class ColorGradingManager : MonoBehaviour
     private Coroutine comparisonScroll;
     public void RevealComparisonForTutorial()
     {
+        PreviewClipMiddle();
         if (compareButton == null || !isActiveAndEnabled) return;
         var scroll = compareButton.GetComponentInParent<ScrollRect>();
         if (scroll == null || !scroll.gameObject.activeInHierarchy) return;
         if (comparisonScroll != null) StopCoroutine(comparisonScroll);
         comparisonScroll = StartCoroutine(ScrollToComparison(scroll));
+    }
+
+    private void PreviewClipMiddle()
+    {
+        var clip = SelectedClip != null ? SelectedClip : DraggableClip.Selected;
+        var compiler = FindObjectOfType<CommercialCompiler>();
+        if (clip == null || !clip.isOnTimeline || compiler == null || TimelineManager.Instance == null) return;
+        float pps = Mathf.Max(1f, TimelineManager.Instance.pixelsPerSecond);
+        float middle = (GokeSequence.Left(clip) + clip.GetComponent<RectTransform>().rect.width * .5f) / pps;
+        compiler.SeekTimeline(middle);
+        appliedB = appliedC = appliedS = float.NaN;
     }
 
     private System.Collections.IEnumerator ScrollToComparison(ScrollRect scroll)
@@ -316,6 +337,8 @@ public class ColorGradingManager : MonoBehaviour
         gradeControlsBound = true;
         compareButton.onClick.AddListener(() => {
             compareOriginal = !compareOriginal;
+            var previewPlayer = FindObjectOfType<CommercialCompiler>()?.editorPlayer;
+            if (previewPlayer != null && previewPlayer.isFinished) PreviewClipMiddle();
             compareButton.GetComponentInChildren<TextMeshProUGUI>().text = compareOriginal ? "Viewing original" : "Before / After";
             appliedB = appliedC = appliedS = float.NaN;
         });
@@ -589,6 +612,33 @@ public class ColorGradingManager : MonoBehaviour
     }
 
     public bool IsProfessionalGrade()
+    {
+        return AllClipGradesInRange(0, targetBrightness - brightnessTolerance, targetBrightness + brightnessTolerance)
+            && AllClipGradesInRange(1, targetContrast - contrastTolerance, targetContrast + contrastTolerance)
+            && AllClipGradesInRange(2, targetSaturation - saturationTolerance, targetSaturation + saturationTolerance);
+    }
+
+    public float TimelineGradeValue(int channel, float minimum, float maximum)
+    {
+        float value = 1f, worst = -1f;
+        var compiler = FindObjectOfType<CommercialCompiler>();
+        if (compiler == null || compiler.videoTimelineContainer == null) return value;
+        foreach (var clip in compiler.videoTimelineContainer.GetComponentsInChildren<DraggableClip>())
+        {
+            if (!clip.isOnTimeline || clip.providedRole != ProvidedClipRole.None) continue;
+            float grade = channel == 0 ? clip.gradeBrightness : channel == 1 ? clip.gradeContrast : clip.gradeSaturation;
+            float deviation = Mathf.Max(0, minimum - grade, grade - maximum);
+            if (deviation > worst) { worst = deviation; value = grade; }
+        }
+        return value;
+    }
+    public bool AllClipGradesInRange(int channel, float minimum, float maximum)
+    {
+        float value = TimelineGradeValue(channel, minimum, maximum);
+        return value >= minimum - .0001f && value <= maximum + .0001f;
+    }
+
+    private bool InspectorGradeMatchesBrief()
     {
         if (brightnessSlider == null || contrastSlider == null || saturationSlider == null) return false;
 

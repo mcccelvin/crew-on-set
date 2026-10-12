@@ -405,8 +405,7 @@ public class EditorTutorialManager : MonoBehaviour
 
             case EditorStep.PositionSecondBranding:
                 TutorialUIManager.Instance.SetupTasks(new string[] { isGokeTutorial ? "- Choose when the Goke tagline appears in your 12-second cut" : "- Time FLORA & FORM HOME from 5.0s to 10.0s" });
-                if (timelineScrollRect != null) timelineScrollRect.verticalNormalizedPosition = 0f;
-                if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(otherBrandingTrackRect);
+                StartCoroutine(ShowSecondOverlayTrack());
                 break;
 
             case EditorStep.ChooseCameraMotion:
@@ -441,9 +440,9 @@ public class EditorTutorialManager : MonoBehaviour
                 if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(colorGradeTabBtnRect);
                 break;
 
-            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Brightness; pause to inspect the product" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(brightnessSliderRect); brightAdjusted = false; break;
-            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Contrast; pause to inspect light and shadow" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(contrastSliderRect); contAdjusted = false; break;
-            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Saturation; pause to inspect the colors" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(saturationSliderRect); satAdjusted = false; break;
+            case EditorStep.AdjustBrightness: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Brightness; watch the product in the preview" }); HighlightGradeAdjustment(brightnessSliderRect); brightAdjusted = false; break;
+            case EditorStep.AdjustContrast: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Contrast; watch light and shadow in the preview" }); HighlightGradeAdjustment(contrastSliderRect); contAdjusted = false; break;
+            case EditorStep.AdjustSaturation: TutorialUIManager.Instance.SetupTasks(new string[] { "- Try Saturation; watch the colors in the preview" }); HighlightGradeAdjustment(saturationSliderRect); satAdjusted = false; break;
 
             case EditorStep.ClickExport:
                 TutorialUIManager.Instance.SetupTasks(new string[] { "- Compare BEFORE / AFTER, then EXPORT" });
@@ -455,6 +454,13 @@ public class EditorTutorialManager : MonoBehaviour
 
             case EditorStep.ReviewAndSubmit: TutorialUIManager.Instance.SetupTasks(new string[] { "- Watch your final video", "- Click 'Submit Video'" }); if (TutorialHighlighter.Instance != null) TutorialHighlighter.Instance.HighlightElement(submitButtonRect); submitted = false; break;
         }
+    }
+
+    private void HighlightGradeAdjustment(RectTransform slider)
+    {
+        var grade = EditorManager.Instance != null ? EditorManager.Instance.gradingManager : null;
+        var preview = grade != null && grade.computerScreen != null ? grade.computerScreen.rectTransform : previewScreenRect;
+        TutorialHighlighter.Instance?.HighlightElements(slider, preview);
     }
 
     private IEnumerator TransitionToNextStep(EditorStep nextStep, bool didTaskJustComplete)
@@ -526,6 +532,10 @@ public class EditorTutorialManager : MonoBehaviour
     private bool tutorialPreviewStarted;
     private EditorStep tutorialPreviewStep;
     private TruePixelPlayer tutorialPreviewPlayer;
+    public bool NeedsTutorialPreviewStart => RestrictsEditor && AcceptsTaskInput
+        && (!tutorialPreviewStarted || tutorialPreviewStep != currentStep)
+        && (currentStep == EditorStep.PlayPreview || currentStep == EditorStep.PlayBrandingPreview
+            || currentStep == EditorStep.PreviewCommercialFinish);
 
     public void OnTimelinePlayed(TruePixelPlayer player)
     {
@@ -667,6 +677,27 @@ public class EditorTutorialManager : MonoBehaviour
         }
     }
 
+    private RectTransform overlayPlacementGuide;
+
+    private RectTransform GetOverlayPlacementGuide()
+    {
+        var editor = EditorManager.Instance;
+        var preview = editor != null && editor.gradingManager != null && editor.gradingManager.computerScreen != null
+            ? editor.gradingManager.computerScreen.rectTransform : previewScreenRect;
+        if (preview == null) return previewScreenRect;
+        if (overlayPlacementGuide == null)
+        {
+            // Geometry only: no graphic to intercept drops or appear in exported footage.
+            overlayPlacementGuide = new GameObject("Tutorial overlay placement zone", typeof(RectTransform)).GetComponent<RectTransform>();
+        }
+        overlayPlacementGuide.SetParent(preview, false);
+        bool second = currentStep == EditorStep.DragToOtherTimeline;
+        overlayPlacementGuide.anchorMin = new Vector2(second ? .49f : .07f, .07f);
+        overlayPlacementGuide.anchorMax = new Vector2(second ? .93f : .51f, .23f);
+        overlayPlacementGuide.offsetMin = overlayPlacementGuide.offsetMax = Vector2.zero;
+        return overlayPlacementGuide;
+    }
+
     public void OnClipDragStarted()
     {
         if (TutorialHighlighter.Instance == null || !isTaskPhaseActive) return;
@@ -674,7 +705,7 @@ public class EditorTutorialManager : MonoBehaviour
         if (currentStep == EditorStep.DragVideoToTimeline || currentStep == EditorStep.PositionVideoAtStart)
             TutorialHighlighter.Instance.HighlightElement(timelineVideoTrackRect);
         else if (currentStep == EditorStep.DragLogoToScreen || currentStep == EditorStep.DragToOtherTimeline)
-            TutorialHighlighter.Instance.HighlightElement(previewScreenRect);
+            TutorialHighlighter.Instance.HighlightElement(GetOverlayPlacementGuide());
     }
 
     public void OnClipDragCancelled()
@@ -698,7 +729,38 @@ public class EditorTutorialManager : MonoBehaviour
         }
     }
 
-    public void OnBrandDroppedToScreen()
+    private BrandingClip secondOverlayClip;
+    private bool secondOverlayInteracted;
+
+    public void OnSecondOverlayInteraction(BrandingClip clip)
+    {
+        if (!AcceptsTaskInput || currentStep != EditorStep.PositionSecondBranding || clip != secondOverlayClip) return;
+        secondOverlayInteracted = true;
+    }
+    public RectTransform SecondOverlayClipRect => secondOverlayClip != null ? secondOverlayClip.GetComponent<RectTransform>() : null;
+
+    private IEnumerator ShowSecondOverlayTrack()
+    {
+        secondOverlayInteracted = false;
+        var clipRect = SecondOverlayClipRect;
+        if (clipRect != null)
+        {
+            TimelineManager.Instance?.RevealTrack(clipRect);
+            TutorialHighlighter.Instance?.HighlightElement(clipRect);
+            while (!secondOverlayInteracted)
+            {
+                if (currentStep != EditorStep.PositionSecondBranding || !isTaskPhaseActive || isTransitioning) yield break;
+                yield return null;
+            }
+        }
+        if (currentStep != EditorStep.PositionSecondBranding || !isTaskPhaseActive || isTransitioning) yield break;
+        TimelineManager.Instance?.RevealTrack(otherBrandingTrackRect);
+        TutorialHighlighter.Instance?.HighlightElement(otherBrandingTrackRect);
+    }
+
+    public void OnBrandDroppedToScreen() => OnBrandDroppedToScreen(null);
+
+    public void OnBrandDroppedToScreen(BrandingClip addedClip)
     {
         if (currentStep == EditorStep.DragLogoToScreen && isTaskPhaseActive)
         {
@@ -708,6 +770,7 @@ public class EditorTutorialManager : MonoBehaviour
         }
         else if (currentStep == EditorStep.DragToOtherTimeline && isTaskPhaseActive)
         {
+            secondOverlayClip = addedClip;
             TutorialUIManager.Instance.MarkTaskComplete(0);
             StartCoroutine(TransitionToNextStep(EditorStep.PositionSecondBranding, true));
         }
@@ -883,7 +946,7 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("You have tried all three controls. Before / After compares your grade with the original picture. Reset returns the controls to 1.00. You can keep the original look if it reads best. Take your time comparing the product, not just the background. When ready, press SPACE for the delivery lesson.", ui.poseHappy, false, false); break;
             case EditorStep.ClickExport: ui.ShowBossDialogue(isGokeTutorial ? "Click EXPORT when the 12-second cut is ready. Effects and color changes are optional. You'll review it before submitting." : "Export prepares your timeline as the finished commercial. You can still adjust your grade before clicking it. Check that the product is clear, the text is readable, and the colors suit the brief. Click EXPORT when you are satisfied; the next screen lets you watch it before submitting to the client.", ui.poseBoss, false, false); break;
 
-            case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. Watch it through once: check the opening, product, embedded graphics, sound and color. Need a change? Click <color=red>BACK</color> to return to the editor, make your changes, then <color=red>EXPORT</color> again. Only <color=red>SUBMIT VIDEO</color> delivers it to the client.", ui.poseOpenHand, false, false); break;
+            case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. It will play when we're done talking. Check the opening, product, graphics, sound and color. You can pause, scrub or replay it as often as you like. BACK is locked for this tutorial review. Only <color=red>SUBMIT VIDEO</color> delivers it to the client.", ui.poseOpenHand, false, false); break;
             case EditorStep.ReviewAndSubmit: ui.ShowBossDialogue("Happy it matches the brief? Click <color=red>SUBMIT VIDEO</color>. We'll read five result papers: pre-production, production, post-production, budget and the client's decision. Use <color=red>NEXT</color> and <color=red>BACK</color>; scroll for every note. The final stamp shows whether the contract passed.", ui.poseHappy, false, false); break;
         }
     }

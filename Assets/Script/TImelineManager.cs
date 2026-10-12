@@ -1,5 +1,6 @@
 using UnityEngine;
 using TMPro;
+using UnityEngine.UI;
 
 public class TimelineManager : MonoBehaviour
 {
@@ -15,6 +16,121 @@ public class TimelineManager : MonoBehaviour
 
     [HideInInspector] 
     public float pixelsPerSecond = 0f; 
+    private ScrollRect trackScroll;
+    private Coroutine revealTrack;
+
+    private void ConfigureTrackScrolling()
+    {
+        if (scrollContent == null) return;
+        trackScroll = scrollContent.GetComponentInParent<ScrollRect>();
+        if (trackScroll == null || trackScroll.content != scrollContent) return;
+        trackScroll.vertical = true;
+        trackScroll.horizontal = false;
+        trackScroll.movementType = ScrollRect.MovementType.Clamped;
+        trackScroll.scrollSensitivity = 35f;
+        if (trackScroll.verticalScrollbar != null)
+        {
+            PlaceScrollbarOnOuterRail();
+            return;
+        }
+        var viewport = trackScroll.viewport != null ? trackScroll.viewport : (RectTransform)trackScroll.transform;
+        // An actual interactive rail replaces the decorative scrollbar in the editor artwork.
+        var rail = new GameObject("Timeline vertical scrollbar", typeof(RectTransform), typeof(Image), typeof(Scrollbar));
+        rail.layer = viewport.gameObject.layer;
+        rail.transform.SetParent(viewport, false);
+        var rect = (RectTransform)rail.transform;
+        rect.anchorMin = new Vector2(1, 0); rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(1, .5f);
+        rect.offsetMin = new Vector2(-32, 4); rect.offsetMax = new Vector2(0, -44);
+        rail.GetComponent<Image>().color = new Color32(30, 31, 34, 255);
+        var handle = new GameObject("Handle", typeof(RectTransform), typeof(Image));
+        handle.layer = rail.layer; handle.transform.SetParent(rect, false);
+        var handleRect = (RectTransform)handle.transform;
+        handleRect.anchorMin = Vector2.zero; handleRect.anchorMax = Vector2.one;
+        handleRect.offsetMin = new Vector2(5, 3); handleRect.offsetMax = new Vector2(-5, -3);
+        var handleImage = handle.GetComponent<Image>();
+        CrewPaperStyle.Round(handleImage); handleImage.color = new Color32(203, 212, 218, 255);
+        var bar = rail.GetComponent<Scrollbar>();
+        bar.direction = Scrollbar.Direction.BottomToTop;
+        bar.handleRect = handleRect; bar.targetGraphic = handleImage;
+        trackScroll.verticalScrollbar = bar;
+        trackScroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+        PlaceScrollbarOnOuterRail();
+    }
+
+    private readonly Vector3[] viewportCorners = new Vector3[4];
+
+    private void LateUpdate()
+    {
+        PlaceScrollbarOnOuterRail();
+    }
+
+    private void PlaceScrollbarOnOuterRail()
+    {
+        if (trackScroll == null || trackScroll.verticalScrollbar == null) return;
+        var viewport = trackScroll.viewport != null ? trackScroll.viewport : (RectTransform)trackScroll.transform;
+        var parent = viewport.parent as RectTransform;
+        if (parent == null) return;
+        var bar = trackScroll.verticalScrollbar;
+        var rect = (RectTransform)bar.transform;
+        // Put the real control over the white rail in the artwork, outside the track mask.
+        if (rect.parent != parent) rect.SetParent(parent, false);
+        rect.SetAsLastSibling();
+        viewport.GetWorldCorners(viewportCorners);
+        Vector3 bottom = parent.InverseTransformPoint(viewportCorners[3]);
+        Vector3 top = parent.InverseTransformPoint(viewportCorners[2]);
+        rect.anchorMin = rect.anchorMax = new Vector2(.5f, .5f);
+        rect.pivot = new Vector2(0, .5f);
+        rect.localScale = Vector3.one;
+        rect.localPosition = new Vector3(bottom.x, (bottom.y + top.y) * .5f, 0);
+        rect.sizeDelta = new Vector2(40f, Mathf.Max(0f, top.y - bottom.y));
+        var rail = bar.GetComponent<Image>();
+        if (rail != null) { rail.sprite = null; rail.color = new Color32(24, 24, 24, 255); }
+        if (bar.targetGraphic != null) bar.targetGraphic.color = new Color32(224, 224, 224, 255);
+        if (bar.handleRect != null)
+        {
+            bar.handleRect.offsetMin = new Vector2(6, 3);
+            bar.handleRect.offsetMax = new Vector2(-6, -3);
+        }
+    }
+
+    public void RevealTrack(RectTransform track)
+    {
+        if (track == null || !isActiveAndEnabled) return;
+        ConfigureTrackScrolling();
+        if (trackScroll == null || !track.IsChildOf(scrollContent)) return;
+        if (revealTrack != null) StopCoroutine(revealTrack);
+        revealTrack = StartCoroutine(RevealTrackAfterLayout(track));
+    }
+
+    private System.Collections.IEnumerator RevealTrackAfterLayout(RectTransform track)
+    {
+        yield return null;
+        if (track == null || trackScroll == null) yield break;
+        Canvas.ForceUpdateCanvases();
+        var viewport = trackScroll.viewport != null ? trackScroll.viewport : (RectTransform)trackScroll.transform;
+        var bounds = RectTransformUtility.CalculateRelativeRectTransformBounds(viewport, track);
+        float hidden = RectTransformUtility.CalculateRelativeRectTransformBounds(viewport, scrollContent).size.y - viewport.rect.height;
+        if (hidden <= 0f) yield break;
+        float move = 0f;
+        if (bounds.min.y < viewport.rect.yMin + 12f) move = viewport.rect.yMin + 12f - bounds.min.y;
+        if (bounds.max.y + move > viewport.rect.yMax - 48f) move = viewport.rect.yMax - 48f - bounds.max.y;
+        trackScroll.StopMovement();
+        float start = trackScroll.verticalNormalizedPosition;
+        float destination = Mathf.Clamp01(start - move / hidden);
+        float elapsed = 0f;
+        while (elapsed < .45f && trackScroll != null)
+        {
+            if (!PauseManager.isPaused)
+            {
+                elapsed += Time.unscaledDeltaTime;
+                trackScroll.verticalNormalizedPosition = Mathf.Lerp(start, destination, Mathf.SmoothStep(0f, 1f, elapsed / .45f));
+                trackScroll.StopMovement();
+            }
+            yield return null;
+        }
+        revealTrack = null;
+    }
 
     private void Awake()
     {
@@ -24,6 +140,7 @@ public class TimelineManager : MonoBehaviour
     private void Start()
     {
         TimelineRuler.Install(this);
+        ConfigureTrackScrolling();
         RefreshTimeline();
     }
 

@@ -111,7 +111,7 @@ public sealed class DevCommandsPanel : MonoBehaviour
         var contracts=Group(paper,"Contract shortcuts","CONTRACTS","Jump to a contract; this closes the panel",new Vector2(-244,-170),new Vector2(956,216));
         var recovery=Group(paper,"Career recovery","CAREER RESET","Current save only. Account identity stays.",new Vector2(488,-170),new Vector2(468,216));
         var note=Label(tutorials,"Tutorial note","FAST dialogue keeps the tasks active.",new Vector2(0,-136),new Vector2(412,36),18);note.color=CrewPaperStyle.MutedInk;
-        note=Label(media,"Media note","Test clip: editor  /  Test card: studio",new Vector2(0,-136),new Vector2(412,30),17);note.color=CrewPaperStyle.MutedInk;
+        Button(media,"Open Editor","OPEN EDITOR",new Vector2(0,-141),new Vector2(412,38),OpenEditor);
         var walletNote=Surface(wallet,"Test wallet notice",new Vector2(0,-104),new Vector2(412,92),new Color32(255,240,194,255));
         note=Label(walletNote,"Test wallet explanation","LOCAL TEST ONLY\nReal coins and ownership are untouched.",Vector2.zero,new Vector2(388,78),20);note.fontStyle=FontStyles.Bold;
         note=Label(contracts,"Contract names","1 / VASE    2 / GOKE    3 / TERRARI    4 / COFFEE",new Vector2(0,-78),new Vector2(880,24),16);note.color=CrewPaperStyle.MutedInk;
@@ -156,6 +156,31 @@ public sealed class DevCommandsPanel : MonoBehaviour
         status.alignment=TextAlignmentOptions.MidlineLeft;status.lineSpacing=2;
         canvasRoot.SetActive(false);
     }
+    void OpenEditor()
+    {
+        if (!CommandsAllowed) return;
+        if (SceneManager.GetActiveScene().name == "Editor")
+        {
+            status.text = "You are already in the editor. Use CREATE 12-SECOND CLIP for test footage.";
+            return;
+        }
+        if (!Application.CanStreamedLevelBeLoaded("Editor"))
+        {
+            status.text = "Editor scene is missing from this build. Add it to Build Settings and rebuild.";
+            return;
+        }
+        Execute(() =>
+        {
+            // Keep imported footage and the current contract; this shortcut only changes scenes.
+            if (ProjectDataManager.Instance == null)
+                new GameObject("ProjectDataManager").AddComponent<ProjectDataManager>();
+            PauseManager.isPaused = false;
+            Time.timeScale = 1f;
+            AudioListener.pause = false;
+            LoadingScreenController.LoadScene("Editor");
+        }, "Opening editor. Use CREATE 12-SECOND CLIP if you need test footage.", true);
+    }
+
     static RectTransform Surface(Transform parent,string name,Vector2 position,Vector2 size,Color colour)
     {
         var rect=CCoinShopUI.Rect(parent,name,position,size);

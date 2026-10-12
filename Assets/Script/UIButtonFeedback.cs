@@ -37,16 +37,17 @@ public sealed class UIButtonFeedback : MonoBehaviour, IPointerEnterHandler, IPoi
         {
             float progress = Mathf.Clamp01((Time.unscaledTime - poseStarted) / (pose == 2 ? .1f : .16f));
             float eased = 1f - Mathf.Pow(1f - progress, 3f);
-            Vector2 target = Vector2.one * (pose == 2 ? .985f : pose == 1 ? 1.025f : 1f);
+            Vector2 target = Vector2.one * (pose == 2 ? 1f : pose == 1 ? 1.025f : 1f);
             current = Vector2.Lerp(from, target, eased);
         }
         else
         {
             int frame = Mathf.Min(Frames.Length - 1, Mathf.FloorToInt((Time.unscaledTime - poseStarted) * 24f));
-            Vector2 target = pose == 2 ? new Vector2(1.04f, .9f) : pose == 1 ? new Vector2(1.045f, 1.045f) : Vector2.one;
+            Vector2 target = pose == 2 ? Vector2.one : pose == 1 ? new Vector2(1.045f, 1.045f) : Vector2.one;
             current = Vector2.LerpUnclamped(from, target, Frames[frame]);
         }
-        transform.localScale = Vector3.Scale(originalScale, new Vector3(current.x, current.y, 1f));
+        // Never shrink the raycast rectangle underneath a held mouse/touch press.
+        transform.localScale = Vector3.Scale(originalScale, new Vector3(Mathf.Max(1f,current.x), Mathf.Max(1f,current.y), 1f));
     }
 
     public void OnPointerEnter(PointerEventData e) { hovered = true; }

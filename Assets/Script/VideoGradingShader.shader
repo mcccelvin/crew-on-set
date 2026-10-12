@@ -14,13 +14,17 @@ Shader "UI/VideoGrading"
         Tags { "Queue"="Transparent" "RenderType"="Transparent" }
         Pass
         {
+            Blend SrcAlpha OneMinusSrcAlpha
+            ZWrite Off
+            Cull Off
+            ZTest [unity_GUIZTestMode]
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; };
-            struct v2f { float4 vertex : SV_POSITION; float2 uv : TEXCOORD0; };
+            struct appdata { float4 vertex : POSITION; float2 uv : TEXCOORD0; fixed4 color : COLOR; };
+            struct v2f { float4 vertex : SV_POSITION; float2 uv : TEXCOORD0; fixed4 color : COLOR; };
 
             sampler2D _MainTex;
             float _Brightness, _Contrast, _Saturation;
@@ -30,6 +34,7 @@ Shader "UI/VideoGrading"
                 v2f o;
                 o.vertex = UnityObjectToClipPos(v.vertex);
                 o.uv = v.uv;
+                o.color = v.color;
                 return o;
             }
 
@@ -49,6 +54,7 @@ Shader "UI/VideoGrading"
                 if (brightestChannel > 1.0) gradedColor /= brightestChannel;
 
                 col.rgb = saturate(gradedColor);
+                col *= i.color;
                 return col;
             }
             ENDCG

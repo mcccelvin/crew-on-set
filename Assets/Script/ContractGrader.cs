@@ -157,7 +157,7 @@ public class ContractGrader : MonoBehaviour
         ColorGradingManager grading = FindObjectOfType<ColorGradingManager>(true);
         if (HasColorControls(grading))
         {
-            if (LamborminiBrief.InRange(grading.contrastSlider.value, LamborminiBrief.ContrastMin, LamborminiBrief.ContrastMax))
+            if (grading.AllClipGradesInRange(1, LamborminiBrief.ContrastMin, LamborminiBrief.ContrastMax))
                 feedback += "<color=green>+ Vehicle shape has premium contrast.</color>\n";
             else
             {
@@ -165,7 +165,7 @@ public class ContractGrader : MonoBehaviour
                 feedback += "<color=yellow>- Contrast: Keep reflective body detail between 1.05 and 1.45.</color>\n";
             }
 
-            if (LamborminiBrief.InRange(grading.saturationSlider.value, LamborminiBrief.SaturationMin, LamborminiBrief.SaturationMax))
+            if (grading.AllClipGradesInRange(2, LamborminiBrief.SaturationMin, LamborminiBrief.SaturationMax))
                 feedback += "<color=green>+ Paint color stays refined.</color>\n";
             else
             {
@@ -173,7 +173,7 @@ public class ContractGrader : MonoBehaviour
                 feedback += "<color=yellow>- Saturation: Use 0.95 to 1.30 for readable orange paint.</color>\n";
             }
 
-            if (LamborminiBrief.InRange(grading.brightnessSlider.value, LamborminiBrief.BrightnessMin, LamborminiBrief.BrightnessMax))
+            if (grading.AllClipGradesInRange(0, LamborminiBrief.BrightnessMin, LamborminiBrief.BrightnessMax))
                 feedback += "<color=green>+ Reflections retain highlight detail.</color>\n";
             else
             {
@@ -364,7 +364,7 @@ public class ContractGrader : MonoBehaviour
         }
         else if (level == GameLevel.Level2)
         {
-            feedback += "<color=white>Tip: Keep the whole subject near a thirds intersection and leave space for branding. One powered, aimed light is enough for Goke; three-point lighting is a Level 3 lesson.</color>\n\n";
+            feedback += "<color=white>Tip: Keep the whole can near a thirds intersection and leave space for branding. Aim your light so the product and its label are easy to read.</color>\n\n";
         }
         else if (level == GameLevel.Level3)
         {
@@ -544,7 +544,7 @@ public class ContractGrader : MonoBehaviour
             return;
         }
 
-        if (tools.selectedCameraMotion != PlayerEditTools.CameraMotionMode.None)
+        if (tools.AnyClip(clip => clip.cameraMotion != PlayerEditTools.CameraMotionMode.None))
         {
             feedback += "<color=green>+ You selected a deliberate camera movement for the final edit.</color>\n";
         }
@@ -554,7 +554,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=yellow>- Camera motion: Choose a motivated Push In or Pan in the Branding tools.</color>\n";
         }
 
-        if (tools.selectedMusic != PlayerEditTools.MusicMode.None)
+        if (tools.AnyClip(clip => clip.music != PlayerEditTools.MusicMode.None))
         {
             feedback += "<color=green>+ You selected a soundtrack to support the commercial's pacing.</color>\n";
         }
@@ -564,7 +564,7 @@ public class ContractGrader : MonoBehaviour
             feedback += "<color=yellow>- Soundtrack: Select music in the Branding tools instead of submitting silent footage.</color>\n";
         }
 
-        if (tools.selectedTransition != PlayerEditTools.TransitionMode.Cut)
+        if (tools.AnyClip(clip => clip.transition != PlayerEditTools.TransitionMode.Cut))
         {
             feedback += "<color=green>+ You selected an opening and closing transition for a finished delivery.</color>\n";
         }
@@ -576,7 +576,7 @@ public class ContractGrader : MonoBehaviour
 
         if (!requiresGraphicAnimation) return;
 
-        if (tools.selectedGraphicAnimation != PlayerEditTools.GraphicAnimationMode.Cut)
+        if (tools.AnyClip(clip => clip.graphicAnimation != PlayerEditTools.GraphicAnimationMode.Cut))
         {
             feedback += "<color=green>+ Your placed graphics use a player-selected entrance animation.</color>\n";
         }
@@ -589,6 +589,8 @@ public class ContractGrader : MonoBehaviour
 
     private void GradeColorRange(float value, float minimum, float maximum, float deduction, string label, string correction, ref float post, ref string feedback)
     {
+        var clipGrading = FindObjectOfType<ColorGradingManager>();
+        if (clipGrading != null) value = clipGrading.TimelineGradeValue(label == "Contrast" ? 1 : label == "Saturation" ? 2 : 0, minimum, maximum);
         if (value >= minimum && value <= maximum)
         {
             feedback += $"<color=green>+ {label}: {value:F2}, within this brief's {minimum:F2}-{maximum:F2} range. Review the actual image before finalizing the look.</color>\n";

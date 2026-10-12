@@ -10,6 +10,8 @@ public sealed class TimelineClipAppearance : MonoBehaviour
     private GameObject face;
     private TextMeshProUGUI title, bankDetails;
     private Image fill;
+    private Image header;
+    private readonly Image[] selectionEdges = new Image[4];
     private readonly Image[] trimEdges = new Image[2];
     private RawImage thumbnail, sourceThumbnail;
     private Graphic[] originals;
@@ -29,7 +31,7 @@ public sealed class TimelineClipAppearance : MonoBehaviour
         Stretch(rect, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
         fill = face.GetComponent<Image>();
         fill.color = new Color32(35, 66, 86, 255); fill.raycastTarget = false;
-        var header = Make<Image>("Clip Header");
+        header = Make<Image>("Clip Header");
         Stretch(header.rectTransform, new Vector2(0, 1), Vector2.one, new Vector2(4, -30), new Vector2(-4, 0));
         header.color = new Color32(48, 97, 124, 255);
         thumbnail = Make<RawImage>("Source Thumbnail");
@@ -57,6 +59,22 @@ public sealed class TimelineClipAppearance : MonoBehaviour
             edge.color = new Color32(106, 180, 209, 255);
         }
         // Keep original objects for existing thumbnail references, but replace their visuals.
+        for (int side = 0; side < selectionEdges.Length; side++)
+        {
+            var edge = Make<Image>("Selected Clip Border " + side);
+            selectionEdges[side] = edge;
+            edge.color = new Color32(255,196,75,255);
+            if (side < 2)
+                Stretch(edge.rectTransform, new Vector2(side,0), new Vector2(side,1),
+                    new Vector2(side == 0 ? 0 : -3,0), new Vector2(side == 0 ? 3 : 0,0));
+            else
+            {
+                int top = side - 2;
+                Stretch(edge.rectTransform, new Vector2(0,top), new Vector2(1,top),
+                    new Vector2(0,top == 0 ? 0 : -3), new Vector2(0,top == 0 ? 3 : 0));
+            }
+            edge.enabled = false;
+        }
         for (int i = 0; i < originals.Length; i++)
             if (originals[i] != null && originals[i].gameObject != gameObject) originals[i].enabled = false;
     }
@@ -78,10 +96,17 @@ public sealed class TimelineClipAppearance : MonoBehaviour
     {
         if (clip == null || face == null) return;
         bool timeline = clip.isOnTimeline;
+        bool selected = timeline && DraggableClip.Selected == clip;
+        foreach (var edge in selectionEdges) if (edge != null) edge.enabled = selected;
+        header.color = selected ? new Color32(120,87,34,255) : new Color32(48,97,124,255);
+        title.color = selected ? new Color32(255,234,177,255) : Color.white;
+        title.fontStyle = selected ? FontStyles.Bold : FontStyles.Normal;
         foreach (var edge in trimEdges) edge.enabled = timeline;
         fill.color = timeline ? new Color32(35, 66, 86, 255) : new Color32(35, 44, 53, 255);
+        if (selected) fill.color = new Color32(47,79,98,255);
         float duration = Mathf.Max(0, timeline ? clip.endFrame - clip.startFrame : clip.totalFrames) / Mathf.Max(1f, TapeSettings.framesPerSecond);
         title.text = Path.GetFileNameWithoutExtension(clip.clipFilePath) + "  |  " + duration.ToString("0.0") + " s";
+        if (selected) title.text = "SELECTED  |  " + title.text;
         bankDetails.gameObject.SetActive(!timeline);
         bankDetails.text = "<b>SOURCE VIDEO</b>\n<size=85%>Drag to the video track</size>";
         thumbnail.texture = sourceThumbnail != null ? sourceThumbnail.texture : null;

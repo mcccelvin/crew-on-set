@@ -15,7 +15,7 @@ public class LevelPropBank
     public List<GameObject> allowedProps = new List<GameObject>();
 }
 
-public class DirectorTerminal : MonoBehaviour
+public partial class DirectorTerminal : MonoBehaviour
 {
     private GameObject BackdropPrefab => ProductModelCatalog.GetActiveGreenScreen()?.model ?? wallPrefab;
 
@@ -331,6 +331,7 @@ public class DirectorTerminal : MonoBehaviour
         colorFields = GetComponent<DirectorColorFields>();
         if(colorFields==null) colorFields = gameObject.AddComponent<DirectorColorFields>();
         colorFields.Initialize(this);
+        BuildStorageUI();
         UpdateStageButtonLabel();
 
         RestoreOwnedInterior();
@@ -1036,7 +1037,7 @@ public class DirectorTerminal : MonoBehaviour
             if ((propName.Contains("flower") || propName.Contains("floral")) && !TutorialManager.Instance.CanUseTabletFeature("SpawnFlower")) return;
         }
 
-        if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(ProductionEconomy.Prop, "Props", prefab3D.name))
+        if (placingStoredItem || (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(ProductionEconomy.Prop, "Props", prefab3D.name)))
         {
             if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep >= TutorialManager.TutorialStep.FreePlayDirectorTablet && !hasShownPropCostWarning)
             {
@@ -1056,6 +1057,7 @@ public class DirectorTerminal : MonoBehaviour
         if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
 
         GameObject wrapper = new GameObject(prefab3D.name + "_Wrapper");
+        RememberTabletPurchase("prefab", prefab3D.name, 0, prefab3D.name, wrapper);
         wrapper.transform.position = spawnPos;
 
         string sourceName = prefab3D.name.ToLowerInvariant();
@@ -1129,7 +1131,8 @@ public class DirectorTerminal : MonoBehaviour
         showPropCostWarningOnDrop = false;
 
         int itemCost = isChair ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle;
-        if (!(IsActorPractice && (isChair || (isActor && FindObjectOfType<CubeActor>() == null))) && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost, isActor ? "Actors" : "Stage elements", itemName))
+        bool freePracticeItem = IsActorPractice && (isChair || (isActor && FindObjectOfType<CubeActor>() == null));
+        if (!placingStoredItem && !freePracticeItem && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost, isActor ? "Actors" : "Stage elements", itemName))
         {
             if (TutorialManager.Instance != null)
             {
@@ -1149,6 +1152,7 @@ public class DirectorTerminal : MonoBehaviour
             itemIndex == -1 ? StageLightStrip.Create() : itemIndex <= -2 ? AutomotiveGrip.Create(itemIndex == -2) : CreateCubeCar(itemName);
         if (wrapper == null) return;
         // Reverse the initial actor facing only; later player-directed rotations stay intact.
+        if (!freePracticeItem) RememberTabletPurchase(isActor ? "actor" : "stage", itemName, itemIndex, null, wrapper);
         if (isActor) wrapper.transform.Rotate(0f, 180f, 0f, Space.World);
         if (practice != null && practice.IsContract4PracticeActive && (isChair || isActor))
             contract4PracticeProps.Add(wrapper);
@@ -1182,7 +1186,7 @@ public class DirectorTerminal : MonoBehaviour
 
         showPropCostWarningOnDrop = false;
 
-        if (CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(ProductionEconomy.Prop, "Props", itemName))
+        if (!placingStoredItem && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(ProductionEconomy.Prop, "Props", itemName))
         {
             if (TutorialManager.Instance != null) TutorialManager.Instance.ShowWarning("Not enough money! Props cost 250 B-Coins.");
             return;
@@ -1195,6 +1199,7 @@ public class DirectorTerminal : MonoBehaviour
         if (groundPlane.Raycast(ray, out float enter)) spawnPos = ray.GetPoint(enter);
 
         GameObject wrapper = CreateCubeCampaignProduct(itemName, campaignLevel, modelName);
+        RememberTabletPurchase("product", itemName, campaignLevel, modelName, wrapper);
         wrapper.transform.position = spawnPos;
 
         foreach (Transform t in wrapper.GetComponentsInChildren<Transform>(true))
@@ -1603,6 +1608,7 @@ public class DirectorTerminal : MonoBehaviour
         CancelInteriorPreview();
 
         isTerminalActive = false;
+        if (storagePanel != null) storagePanel.SetActive(false);
         GameSavePrefs.Save();
         GameSaveManager.Instance?.SaveCheckpoint();
         studioPaintChanged = false;

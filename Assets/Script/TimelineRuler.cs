@@ -13,9 +13,8 @@ public sealed class TimelineRuler : MonoBehaviour, IPointerDownHandler, IBeginDr
             if (editor == null || !editor.gameObject.activeInHierarchy || editor.timelineContainer == null ||
                 !editor.timelineContainer.gameObject.activeInHierarchy || PauseManager.isPaused || editor.ReviewIsOpen) return false;
             if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsQualificationsOpen()) return false;
-            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) return false;
-            var lesson = EditorTutorialManager.Instance;
-            return lesson == null || !lesson.RestrictsEditor || lesson.AcceptsTaskInput && lesson.currentStep == EditorTutorialManager.EditorStep.SeekTimeline;
+            // Seeking is available throughout lessons, including Boss explanations.
+            return true;
         }
     }
     public static TimelineRuler Install(TimelineManager manager)

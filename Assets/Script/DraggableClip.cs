@@ -22,6 +22,10 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
     public bool usedSoftLight;
     public bool hasThreePointRoles;
     public float gradeBrightness = 1f, gradeContrast = 1f, gradeSaturation = 1f;
+    public PlayerEditTools.CameraMotionMode cameraMotion;
+    public PlayerEditTools.GraphicAnimationMode graphicAnimation;
+    public PlayerEditTools.TransitionMode transition;
+    public PlayerEditTools.MusicMode music;
     public static DraggableClip Selected { get; private set; }
     public static int SplitCount { get; private set; }
     public static int SplitUndoCount { get; private set; }
@@ -110,13 +114,14 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         float left = leftTrimPixels / (onTrack ? pps : 1f), right = rightTrimPixels / (onTrack ? pps : 1f);
         Vector3 grade = new Vector3(gradeBrightness, gradeContrast, gradeSaturation);
         var grading = EditorManager.Instance != null ? EditorManager.Instance.gradingManager : null;
-        if (CampaignProgression.GetCurrentLevel() == 4 && grading != null && grading.SelectedClip == this &&
+        if (grading != null && grading.SelectedClip == this &&
             grading.brightnessSlider != null && grading.contrastSlider != null && grading.saturationSlider != null)
             grade = new Vector3(grading.brightnessSlider.value, grading.contrastSlider.value, grading.saturationSlider.value);
+        var motion = cameraMotion; var graphic = graphicAnimation; var cut = transition; var soundtrack = music;
         return new EditorEditState {
             key = "clip/" + GetInstanceID(),
             fingerprint = onTrack + "/" + first + "/" + last + "/" + rect.Fingerprint(onTrack) + "/" +
-                EditorEditState.Number(grade.x) + "/" + EditorEditState.Number(grade.y) + "/" + EditorEditState.Number(grade.z),
+                EditorEditState.Number(grade.x) + "/" + EditorEditState.Number(grade.y) + "/" + EditorEditState.Number(grade.z) + "/" + motion + "/" + graphic + "/" + cut + "/" + soundtrack,
             remove = onTrack ? (System.Action)(() => { if (this != null) { isOnTimeline = false; gameObject.SetActive(false); Destroy(gameObject); } }) : null,
             restore = () => {
                 if (this == null) return;
@@ -125,6 +130,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 float zoom = onTrack ? EditorRectState.PixelsPerSecond : 1f;
                 originalWidth = sourceSize * zoom; leftTrimPixels = left * zoom; rightTrimPixels = right * zoom;
                 gradeBrightness = grade.x; gradeContrast = grade.y; gradeSaturation = grade.z;
+                cameraMotion = motion; graphicAnimation = graphic; transition = cut; music = soundtrack;
                 rect.Restore(rectTransform); canvasGroup.alpha = 1f; canvasGroup.blocksRaycasts = true;
                 tutorialRejectedDrag = false;
             }
@@ -162,7 +168,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         }
         else if (eventData.button == PointerEventData.InputButton.Left)
         {
-            if (isOnTimeline && CampaignProgression.GetCurrentLevel() == 4)
+            if (isOnTimeline)
             {
                 Selected = this;
                 FindObjectOfType<ColorGradingManager>()?.SelectClip(this);

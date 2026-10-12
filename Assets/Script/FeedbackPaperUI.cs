@@ -71,7 +71,7 @@ public sealed class FeedbackPaperUI : MonoBehaviour
             var heading = contents[i].transform.Find("Department title").GetComponent<TMP_Text>(); heading.text = FeedbackTypography.Heading(FeedbackReport.Titles[i]);
             contents[i].transform.Find("Department score").GetComponent<TMP_Text>().text = report.scores[i];
             var body = scrolls[i].content.GetComponent<TMP_Text>(); body.text = report.bodies[i];
-            float height = Mathf.Max(i == 4 ? 300 : 460, body.GetPreferredValues(body.text,1040,0).y + 24);
+            float height = Mathf.Max(i == 4 ? 300 : 460, body.GetPreferredValues(body.text,984,0).y + 24);
             scrolls[i].content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical,height);
             scrolls[i].verticalNormalizedPosition = 1;
         }
@@ -82,7 +82,7 @@ public sealed class FeedbackPaperUI : MonoBehaviour
     public void SetContinueLabel(string value) { proceedLabel = value; UpdateButtons(); }
     private void SetBossVisibility()
     {
-        portrait.gameObject.SetActive(tutorial);
+        portrait.gameObject.SetActive(false);
         boss.transform.parent.gameObject.SetActive(tutorial);
         contentsIndex.SetActive(!tutorial);
     }
@@ -113,6 +113,7 @@ public sealed class FeedbackPaperUI : MonoBehaviour
         }
         Text(index.transform,"Contents reading note","Use Back / Next to turn the papers.\nScroll to read every note.",38,591,393,76,23,TextAlignmentOptions.Center);
         portrait = Image(frame,"Boss portrait","feedbackBossOpen",35,273,475,435,false); portrait.preserveAspect = true;
+        portrait.gameObject.SetActive(false);
         var speech = Image(frame,"Boss dialogue paper","feedbackPaper1",36,730,487,274,false);
         boss = Text(speech.transform,"Boss dialogue","",20,18,447,232,30,TextAlignmentOptions.Center);
         BossDialogueStyle.Apply(boss); FeedbackTypography.Apply(boss); boss.color = Ink;
@@ -130,20 +131,20 @@ public sealed class FeedbackPaperUI : MonoBehaviour
             Text(content,"Department score","",110,157,1040,53,32,TextAlignmentOptions.Center);
             Stroke(content,"Hand drawn underline",424,219,404,2,new Color32(35,57,77,180),-.65f);
             Stroke(content,"Header rule",104,238,1040,1,new Color32(35,57,77,42));
-            Stroke(content,"Red notebook margin",82,255,1,i==4?300:460,new Color32(145,53,48,48));
             var viewport = Rect(content,"Notes viewport",104,260,1040,i==4?300:460);
             var surface = viewport.gameObject.AddComponent<UnityEngine.UI.Image>(); surface.color = Color.clear;
             viewport.gameObject.AddComponent<RectMask2D>();
-            for (int line = 1; line <= (i == 4 ? 5 : 8); line++)
-                Stroke(viewport,"Writing rule " + line,0,line*53,1040,1,new Color32(35,57,77,19));
-            var body = Text(viewport,"Department notes","",0,0,1040,460,32,TextAlignmentOptions.TopLeft);
+            // Keep the paper visible without a rectangular ruled patch behind the notes.
+            var body = Text(viewport,"Department notes","",0,0,984,460,32,TextAlignmentOptions.TopLeft);
             body.enableAutoSizing = false; body.lineSpacing = 4;
             body.rectTransform.anchorMin = new Vector2(0,1); body.rectTransform.anchorMax = new Vector2(1,1);
             body.rectTransform.pivot = new Vector2(0,1); body.rectTransform.anchoredPosition = Vector2.zero;
-            body.rectTransform.sizeDelta = new Vector2(0,460);
+            // Stretch anchors otherwise override the authored width: reserve a real scrollbar gutter.
+            body.rectTransform.sizeDelta = new Vector2(-56,460);
             var scroll = viewport.gameObject.AddComponent<ScrollRect>(); scroll.viewport = viewport; scroll.content = body.rectTransform;
             scroll.horizontal = false; scroll.vertical = true; scroll.scrollSensitivity = 42; scroll.movementType = ScrollRect.MovementType.Clamped;
             scrolls[i] = scroll;
+            UIMotionInstaller.EnsureScrollHandles(scroll);
             Text(content,"Reading hint","Scroll for all notes   /   Back & Next to turn papers",90,heights[i]-103,1060,40,23,TextAlignmentOptions.Center);
             if (i == 4)
             {
