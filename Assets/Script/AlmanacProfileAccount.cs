@@ -55,7 +55,7 @@ public partial class AlmanacManager
         BuildProfileUI(); ApplyAccountProfileStyle();
         CaptureInputState(); isProfileOpen = true; profileInputsDirty = false;
         RefreshAllUI(); RefreshAccountFields(true); OpenTab(0);
-        UITransition.Show(profileCanvas);
+        ShowProfileAnimated();
         var card = profileCanvas.transform.Find("Profile backdrop/Profile stage/Career card");
         if (card != null) UITransition.ConfigurePanel(card.gameObject);
         profileInputsDirty = false; RefreshAccountFields(true); RenderProfileCharacter();
@@ -75,6 +75,23 @@ public partial class AlmanacManager
         var colors = button.colors; colors.normalColor = colors.highlightedColor = colors.pressedColor = colors.selectedColor = colors.disabledColor = Color.white; button.colors = colors;
         foreach (var text in button.GetComponentsInChildren<TMP_Text>(true)) text.gameObject.SetActive(false);
     }
+    private void StyleProfileFooter(Button button, string caption, Vector2 position)
+    {
+        if (button == null) return;
+        SetRect(button.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, position, new Vector2(340, 94));
+        ExportUIArt.Apply(button.GetComponent<Image>(), "blueButton");
+        var label = button.GetComponentInChildren<TMP_Text>(true);
+        if (label == null) return;
+        label.gameObject.SetActive(true);
+        label.text = caption;
+        label.fontSize = label.fontSizeMax = 30;
+        label.fontSizeMin = 26;
+        label.enableAutoSizing = true;
+        label.enableWordWrapping = false;
+        label.alignment = TextAlignmentOptions.Center;
+        SetStretchRect(label.rectTransform, Vector2.zero, Vector2.one, new Vector2(30, 16), new Vector2(-30, -16));
+    }
+
     private void EnsureSharedProfileUI()
     {
         if (profileCanvas == null || playerInfoPanel == null) return;
@@ -113,14 +130,17 @@ public partial class AlmanacManager
         if (profileShopPanel == null) BuildProfileShop(stage);
         SetStretchRect(achievementsPanel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(100, 20), new Vector2(-24, -20));
         achievementsPanel.GetComponent<Image>().color = new Color32(252, 245, 220, 255);
-        SetRect(achievementsTabBtn.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(340, -425), new Vector2(265, 72));
-        ExportUIArt.Apply(achievementsTabBtn.GetComponent<Image>(), "blueButton");
+        StyleProfileFooter(achievementsTabBtn, "ACHIEVEMENTS", new Vector2(320, -425));
+        // Restore the original Back artwork, including its baked outlined caption.
+        SetRect(profileBackButton.GetComponent<RectTransform>(), Vector2.one * .5f, Vector2.one * .5f, new Vector2(665, -425), new Vector2(235, 94));
+        ExportUIArt.Apply(profileBackButton.GetComponent<Image>(), "profileBack");
+        var backLabel = profileBackButton.GetComponentInChildren<TMP_Text>(true);
+        if (backLabel != null) backLabel.text = "";
         var achievementLabel = achievementsTabBtn.GetComponentInChildren<TextMeshProUGUI>(true);
         if (achievementLabel != null)
         {
             achievementLabel.gameObject.SetActive(true); achievementLabel.text = "ACHIEVEMENTS";
-            achievementLabel.enableAutoSizing = true; achievementLabel.fontSizeMin = 16; achievementLabel.fontSizeMax = 24;
-            if (achievementLabel.fontSharedMaterial == null || !achievementLabel.fontSharedMaterial.IsKeywordEnabled("OUTLINE_ON")) ExportUIArt.OutlineText(achievementLabel);
+            achievementLabel.enableAutoSizing = true; achievementLabel.fontSizeMin = 26; achievementLabel.fontSizeMax = 30;
         }
         if (profileReturnStats == null)
         {
@@ -393,10 +413,19 @@ public partial class AlmanacManager
         profileBioInput.interactable = canEdit;
         if (profileChangeUsernameButton != null) profileChangeUsernameButton.gameObject.SetActive(canEdit);
         if (profileSaveButton != null) profileSaveButton.interactable = canEdit && !AccountProfileData.Busy;
-        if (profileAccountId != null) profileAccountId.text = AccountProfileData.Owner == "guest" ? "GUEST · LOCAL PROFILE" : AccountProfileData.Owner;
+        var saves = GameSaveManager.Instance;
+        bool restoring = saves != null && saves.RestoringSignIn;
+        bool signedIn = saves != null && saves.HasCloudSession;
+        if (profileAccountId != null) profileAccountId.text = signedIn ? AccountProfileData.Owner :
+            restoring ? "Reconnecting…" : "Not signed in · local profile";
         if (profileSyncStatus != null) profileSyncStatus.text = profileInputsDirty ? "Unsaved changes · click SAVE" : AccountProfileData.Status;
         var label = playerInfoPanel.transform.Find("Account sign in or logout")?.GetComponentInChildren<TMP_Text>();
-        if (label != null) label.text = GameSaveManager.Instance != null && GameSaveManager.Instance.HasCloudSession ? "LOG OUT" : "SIGN IN";
+        if (label != null)
+        {
+            label.text = signedIn ? "LOG OUT" : restoring ? "CONNECTING" : "SIGN IN";
+            var accountButton = label.GetComponentInParent<Button>();
+            if (accountButton != null) accountButton.interactable = !restoring;
+        }
         RefreshProfileSyncStatus();
         ApplyProfileTypography();
     }
@@ -460,6 +489,7 @@ public partial class AlmanacManager
         notice.GetComponent<Image>().raycastTarget = false;
         profileWalletStatus = ProfileText(notice.transform, "Shop wallet status", "", 17, 12, 2, 40);
         profileWalletStatus.color = ShopMuted;
+        notice.SetActive(false); // Shop feedback uses the shared notification pop-up.
         profileShopContent = CreateProfileShopGrid(profileShopPanel.transform);
         profileShopPanel.SetActive(false);
     }
@@ -513,12 +543,12 @@ public partial class AlmanacManager
         var rig=CharacterCosmeticRig.Load();var item=CharacterCosmetics.Find(id);
         if(item==null || profileCharacterImage==null)return;
         if(item.kind!="body" && !System.Array.Exists(profileWallet.EquippedParts, x=>CharacterCosmetics.Find(x)?.kind=="body"))
-        { profileWalletStatus.text="Equip Boy or Girl in BODY first."; return; }
-        if(rig==null || !rig.Contains(id)){profileWalletStatus.text="This item's character fitting is not available in this build.";return;}
+        { GameFeedback.Show("Equip Boy or Girl in BODY first.", true); return; }
+        if(rig==null || !rig.Contains(id)){GameFeedback.Show("This item's character fitting is not available in this build.", true);return;}
         if(profileTryOnParts.Count==0)profileTryOnParts.AddRange(profileWallet.EquippedParts);
         profileTryOnParts.RemoveAll(x=>CharacterCosmetics.Find(x)?.kind==item.kind);profileTryOnParts.Add(id);
         RenderDressedProfileCharacter(profileTryOnParts.ToArray());
-        profileWalletStatus.text="Trying on: "+item.name+" · preview only, not purchased or equipped.";
+        GameFeedback.Show("Trying on: "+item.name+" · preview only, not purchased or equipped.");
     }
     private void CreateProfileSkillsRow()
     {

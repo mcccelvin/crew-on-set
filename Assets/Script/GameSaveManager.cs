@@ -64,6 +64,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         // Never bind cloud writes from a remembered ID alone or another SDK account.
         if (string.IsNullOrWhiteSpace(playFabId) || !PlayFabClientAPI.IsClientLoggedIn() ||
             PlayFabSettings.staticPlayer.PlayFabId != playFabId) return;
+        CancelSessionRestore();
         // Import legacy/offline progress under its remembered owner before the login
         // changes that owner. A different account's local career must never be claimed.
         try { OpenRepository(); SaveCheckpoint(); }
@@ -86,6 +87,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         nextSync = float.PositiveInfinity; // Replace the previous account/session's scheduled retry.
         OpenRepository();
         BindProductionLogs(playFabId);
+        RememberCurrentSession();
         localProgressLinkPending = true;
         SyncCloud();
         RefreshAccountServices();
@@ -131,6 +133,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
     }
     public void SignInToSync()
     {
+        CancelSessionRestore();
         SaveCheckpoint();
         // Keep the remembered owner and its files while the login screen is open.
         LoadingScreenController.LoadScene("Login");
@@ -176,9 +179,42 @@ public sealed partial class GameSaveManager : MonoBehaviour
         try { OpenRepository(); GameSaveMenu.Show(this); SyncCloud(); }
         catch (Exception) { GameFeedback.Show("SAVE LIST UNAVAILABLE\nCould not read the save folder. Your existing saves have been kept.", true); }
     }
-    public void StartGame(GameSaveSlot slot, bool isNew)
+    private bool isolatedContractReplay;
+    public static bool IsTrainingRoom => GameSavePrefs.Values != null && GameSavePrefs.GetInt("TrainingRoom.Active", 0) == 1;
+    public void StartTrainingRoom()
+    {
+        if (Syncing) return;
+        Active = null;
+        isolatedContractReplay = false;
+        GameSavePrefs.Activate(new GameSaveSlot());
+        GameSavePrefs.SetInt("TrainingRoom.Active", 1);
+        GameSavePrefs.SetInt("CampaignLevelCheatOverride", 5);
+        GameSavePrefs.SetInt("CurrentLevel", 5);
+        GameSavePrefs.SetInt("TutorialProgress", 5);
+        GameSavePrefs.SetInt("AlmanacUnlocked", 1);
+        GameSavePrefs.SetInt("PlayerMoney", 1000000);
+        if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
+        CrossSceneData.finalGrades = default;
+        CrossSceneData.submittedLevel = 0;
+        CrossSceneData.resultApplied = false;
+        CrossSceneData.submittedWithTutorial = false;
+        DevTutorialBypass.ResetForNewGame();
+        PauseManager.isPaused = false;
+        Time.timeScale = 1;
+        LoadingScreenController.LoadScene("SingleStudio");
+    }
+    public static int UnlockedContractLevel(GameSaveSlot slot)
+    {
+        int level = slot.Level;
+        for (int i = 1; i <= CampaignProgression.MaximumLevel; i++)
+            if (slot.Int(CampaignProgression.GetGradedKey(i), 0) == 1) level = Math.Max(level, i + 1);
+        return Mathf.Clamp(level, 1, CampaignProgression.MaximumLevel);
+    }
+    public void StartGame(GameSaveSlot slot, bool isNew, int contractLevel = 0)
     {
         if (Syncing || slot == null || Repository == null || !Repository.Slots.Contains(slot)) return;
+        if (contractLevel < 0 || contractLevel > UnlockedContractLevel(slot)) return;
+        isolatedContractReplay = false;
         Active = slot;
         GameSavePrefs.Activate(slot);
         var checkpoint = ReadProductionCheckpoint(slot.values);
@@ -187,15 +223,41 @@ public sealed partial class GameSaveManager : MonoBehaviour
         // Studio objects/media restart on Continue, so restore the matching budget,
         // not the cash remaining in an abandoned production attempt.
         GameSavePrefs.SetInt("PlayerMoney", ReadCheckpointBudget(slot.values));
+        if (contractLevel > 0 && (slot.Level != contractLevel || slot.Int(CampaignProgression.GetGradedKey(contractLevel), 0) == 1))
+        {
+            // Replay uses an isolated working copy. Active.values remains the original
+            // career checkpoint, including its production state, budget and unknown keys.
+            isolatedContractReplay = true;
+            GameSavePrefs.Activate(new GameSaveSlot {
+                values = GameSaveRepository.Clone(slot.values.FindAll(v => IsReplayResultKey(v.key)))
+            });
+            CampaignProgression.SetRetryLevel(contractLevel);
+            GameSavePrefs.SetInt("Contracts.Replaying", contractLevel);
+            if (contractLevel == 1)
+            {
+                GameSavePrefs.SetInt(CampaignProgression.GetAcceptedKey(1), 1);
+                GameSavePrefs.SetInt("PlayerMoney", ProductionEconomy.StartingBudget);
+            }
+            // Later contracts grant their normal production advance on acceptance.
+        }
         // Transient editor/recording state must never cross between careers.
         if (ProjectDataManager.Instance != null) ProjectDataManager.Instance.ClearProject();
         CrossSceneData.finalGrades = default;
         CrossSceneData.submittedLevel = 0;
         CrossSceneData.resultApplied = false;
+        CrossSceneData.submittedWithTutorial = false;
         DevTutorialBypass.ResetForNewGame();
         PauseManager.isPaused = false;
         Time.timeScale = 1f;
         LoadingScreenController.LoadScene(isNew ? "CutScene" : "SingleStudio");
+    }
+    private static bool IsReplayResultKey(string key)
+    {
+        if ((RetainBetweenCheckpoints(key) && !BudgetRetryPrompt.IsSnapshotKey(key)) || key == "TotalJobsCompleted" ||
+            key.StartsWith("CCoins.RewardQueued.Level", StringComparison.Ordinal)) return true;
+        for (int level = 1; level <= CampaignProgression.MaximumLevel; level++)
+            if (key == CampaignProgression.GetGradedKey(level) || key == CampaignProgression.GetRewardKey(level)) return true;
+        return false;
     }
     public GameSaveSlot CreateGame(string name)
     {
@@ -207,6 +269,8 @@ public sealed partial class GameSaveManager : MonoBehaviour
     }
     public void Logout()
     {
+        CancelSessionRestore();
+        SessionVault.Delete(SessionVaultKey);
         // Invalidate in-flight callbacks before changing the save owner.
         session++;authenticatedId=null;Syncing=false;nextSync=float.PositiveInfinity;
         productionUpload?.Dispose(); productionUpload = null; productionJournal = null;
@@ -295,19 +359,34 @@ public sealed partial class GameSaveManager : MonoBehaviour
             // Repair oversized snapshots already captured by older code, without
             // changing their budget or production state.
             BudgetRetryPrompt.NormalizeSnapshotValues(GameSavePrefs.Values);
-            Active.values = updateBudget ? GameSaveRepository.Clone(GameSavePrefs.Values) : ReadProductionCheckpoint(previous);
-            if (!updateBudget)
+            Active.values = isolatedContractReplay ? GameSaveRepository.Clone(previous) :
+                updateBudget ? GameSaveRepository.Clone(GameSavePrefs.Values) : ReadProductionCheckpoint(previous);
+            if (isolatedContractReplay)
+            {
+                // Overlay only present result records; never delete absent/unknown
+                // original values or replace the original production checkpoint.
+                foreach (var value in GameSaveRepository.Clone(GameSavePrefs.Values.FindAll(v => IsReplayResultKey(v.key))))
+                {
+                    int index = Active.values.FindIndex(v => v.key == value.key);
+                    if (index >= 0) Active.values[index] = value;
+                    else Active.values.Add(value);
+                }
+            }
+            else if (!updateBudget)
             {
                 // Saving a purchase/profile event must not turn that unfinished
                 // purchase into an owned/out-of-stock item on the next Continue.
                 Active.values.RemoveAll(v => RetainBetweenCheckpoints(v.key));
                 Active.values.AddRange(GameSaveRepository.Clone(GameSavePrefs.Values.FindAll(v => RetainBetweenCheckpoints(v.key))));
             }
-            int budget = updateBudget ? Math.Max(0, GameSavePrefs.GetInt("PlayerMoney", 0)) : ReadCheckpointBudget(previous);
-            Active.values.RemoveAll(v => v.key == "PlayerMoney" || v.key == BudgetCheckpointKey || v.key == ProductionCheckpointKey);
-            Active.values.Add(new GameSaveValue { key = "PlayerMoney", integer = budget });
-            Active.values.Add(new GameSaveValue { key = BudgetCheckpointKey, integer = budget });
-            Active.values.Add(new GameSaveValue { key = ProductionCheckpointKey, integer = 1 });
+            if (!isolatedContractReplay)
+            {
+                int budget = updateBudget ? Math.Max(0, GameSavePrefs.GetInt("PlayerMoney", 0)) : ReadCheckpointBudget(previous);
+                Active.values.RemoveAll(v => v.key == "PlayerMoney" || v.key == BudgetCheckpointKey || v.key == ProductionCheckpointKey);
+                Active.values.Add(new GameSaveValue { key = "PlayerMoney", integer = budget });
+                Active.values.Add(new GameSaveValue { key = BudgetCheckpointKey, integer = budget });
+                Active.values.Add(new GameSaveValue { key = ProductionCheckpointKey, integer = 1 });
+            }
             Repository.Commit(Active);
         }
         catch (Exception error)
@@ -354,6 +433,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         {
             nextSessionCheck = Time.unscaledTime + 1f;
             ReconcileSession();
+            TryRestoreRememberedSession();
             // Reachability is only a reconnect hint. Actual SDK results determine
             // success, and existing bounded retries handle unavailable services.
             bool connected = Application.internetReachability != NetworkReachability.NotReachable;

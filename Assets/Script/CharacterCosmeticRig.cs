@@ -48,6 +48,9 @@ public sealed class CharacterCosmeticRig : ScriptableObject
             var part=Array.Find(parts,p=>p!=null&&p.id==slot.Value);
             var obj=new GameObject("Wearing "+slot.Value);obj.transform.SetParent(character.transform,false);
             var skin=obj.AddComponent<SkinnedMeshRenderer>();skin.sharedMesh=part.mesh;skin.sharedMaterials=part.materials;
+            if (slot.Key == "shirt" || slot.Key == "pants")
+                obj.AddComponent<CosmeticClothingSurface>().Initialize(skin);
+            skin.quality = SkinQuality.Bone4;
             skin.bones=mapped;skin.rootBone=character.transform;skin.localBounds=part.mesh.bounds;skin.updateWhenOffscreen=true;
             foreach(var original in originals)if(Replaces(slot.Key,original.name))original.enabled=false;
         }

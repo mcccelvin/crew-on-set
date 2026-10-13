@@ -66,6 +66,8 @@ public static class LoginScreenPresentation
     private static void Field(TMP_InputField input, string hint)
     {
         input.fontAsset = font;
+        input.pointSize = 28;
+        input.lineType = TMP_InputField.LineType.SingleLine;
         input.richText = false;
         input.customCaretColor = true; input.caretColor = Ink;
         input.selectionColor = new Color32(85, 147, 202, 80);
@@ -78,6 +80,23 @@ public static class LoginScreenPresentation
         input.colors = colors;
         Style(input.textComponent, 28, Ink, false);
         InputText(input.textComponent);
+        if (input.textComponent != null)
+        {
+            var textRect = input.textComponent.rectTransform;
+            Vector2 restingPosition = textRect.anchoredPosition;
+            // TMP horizontally scrolls long values. Clearing a selection should
+            // restore the empty field, not leave its caret at the scrolled offset.
+            input.onValueChanged.AddListener(value =>
+            {
+                if (!string.IsNullOrEmpty(value) || input == null) return;
+                input.selectionStringAnchorPosition = 0;
+                input.selectionStringFocusPosition = 0;
+                input.caretPosition = 0;
+                textRect.anchoredPosition = restingPosition;
+                input.ForceLabelUpdate();
+                input.textComponent.SetVerticesDirty();
+            });
+        }
         if (input.placeholder is TMP_Text placeholder)
         {
             Style(placeholder, 28, new Color32(103, 76, 51, 255), false);

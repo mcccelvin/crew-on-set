@@ -805,7 +805,7 @@ public partial class DirectorTerminal : MonoBehaviour
         if (bCoinsText != null && CareerManager.Instance != null && displayedMoney != CareerManager.Instance.playerMoney)
         {
             displayedMoney = CareerManager.Instance.playerMoney;
-            bCoinsText.text = displayedMoney + " B-Coins";
+            bCoinsText.text = displayedMoney.ToString("N0");
         }
     }
 
@@ -1430,7 +1430,7 @@ public partial class DirectorTerminal : MonoBehaviour
             bool isTutorialMatch = (currentLevel == 1 && bank.progressLevel < 2);
             bool isLevelMatch = (currentLevel == bank.progressLevel);
 
-            if (isTutorialMatch || isLevelMatch)
+            if (GameSaveManager.IsTrainingRoom || isTutorialMatch || isLevelMatch)
             {
                 foreach (GameObject allowedPrefab in bank.allowedProps)
                 {
@@ -1467,7 +1467,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
         }
 
-        if (currentLevel == 4)
+        if (currentLevel == 4 || GameSaveManager.IsTrainingRoom)
         {
             var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
             bool added = false;
@@ -1475,15 +1475,15 @@ public partial class DirectorTerminal : MonoBehaviour
             {
                 foreach (var product in catalog.products)
                 {
-                    if (product == null || product.level != 4 || product.model == null) continue;
+                    if (product == null || (!GameSaveManager.IsTrainingRoom && product.level != 4) || product.model == null) continue;
                     string label = string.IsNullOrEmpty(product.displayName) ? product.model.name : product.displayName;
-                    CreateCampaignProductCard(label, 4, product.model.name);
+                    CreateCampaignProductCard(label, product.level, product.model.name);
                     added = true;
                 }
             }
             if (!added) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
         }
-        if (currentLevel == 5) CreateCampaignProductCard("HARAYA PRODUCT", 5);
+        if (currentLevel == 5 && !GameSaveManager.IsTrainingRoom) CreateCampaignProductCard("HARAYA PRODUCT", 5);
         StyleElementCards();
     }
 
@@ -1586,6 +1586,7 @@ public partial class DirectorTerminal : MonoBehaviour
         }
 
         UITransition.Show(tabletUI);
+        ConfigureTabletCloseButton();
         if (selectionIndicatorText != null) selectionIndicatorText.gameObject.SetActive(true);
         if (mainPlayerUI != null) mainPlayerUI.SetActive(false);
         Cursor.lockState = CursorLockMode.None;
@@ -1608,7 +1609,7 @@ public partial class DirectorTerminal : MonoBehaviour
         CancelInteriorPreview();
 
         isTerminalActive = false;
-        if (storagePanel != null) storagePanel.SetActive(false);
+        SetStorageMode(false);
         GameSavePrefs.Save();
         GameSaveManager.Instance?.SaveCheckpoint();
         studioPaintChanged = false;

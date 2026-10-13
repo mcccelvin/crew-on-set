@@ -112,6 +112,7 @@ public sealed class StudioArrivalTour : MonoBehaviour
     }
     public static void BeginWelcomeTour()
     {
+        if(GameSaveManager.IsTrainingRoom) { IsPendingOrPlaying=false; return; }
         // Retain the completed instance until scene unload to avoid playing twice.
         if (active != null) return;
         IsPendingOrPlaying = true;

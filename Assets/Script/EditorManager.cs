@@ -836,6 +836,11 @@ public class EditorManager : MonoBehaviour
 
     public void SubmitVideo()
     {
+        if(GameSaveManager.IsTrainingRoom)
+        {
+            GameFeedback.Show("TRAINING ROOM\nPractice videos are not submitted for contract rewards.");
+            return;
+        }
         if (submissionStarted || reviewVideoPanel == null || !reviewVideoPanel.activeInHierarchy || exportPlayer == null || !exportPlayer.CanStartPlayback) return;
         if (IsRoomEditor)
         {

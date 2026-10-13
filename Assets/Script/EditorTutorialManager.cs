@@ -35,6 +35,35 @@ public class EditorTutorialManager : MonoBehaviour
     public bool RestrictsEditor => enabled && !submitted && !RevisingReview && !DevTutorialBypass.Disabled;
     public bool AcceptsTaskInput => isTutorialReady && isTaskPhaseActive && !isTransitioning && !isWarningActive;
 
+    // Explicit lesson order: appended serialized enum values are not chronological.
+    private static readonly EditorStep[] ProgressSteps = {
+        EditorStep.ShowPostProductionTitle, EditorStep.ExplainPostProduction,
+        EditorStep.DragVideoToTimeline, EditorStep.PlayPreview, EditorStep.SeekTimeline,
+        EditorStep.DoubleClickToTrim, EditorStep.TrimLeftHandle, EditorStep.TrimRightHandle,
+        EditorStep.TrimTo10Seconds, EditorStep.PositionVideoAtStart, EditorStep.PracticeUndo,
+        EditorStep.GoToBrandingPhase, EditorStep.ExplainBrandingPhase, EditorStep.DragLogoToScreen,
+        EditorStep.ExplainBrandingTimeline, EditorStep.TrimBranding, EditorStep.PlayBrandingPreview,
+        EditorStep.DragToOtherTimeline, EditorStep.PositionSecondBranding, EditorStep.ExplainPlayerEditTools,
+        EditorStep.ChooseCameraMotion, EditorStep.ChooseGraphicAnimation, EditorStep.ChooseTransition,
+        EditorStep.ChooseMusic, EditorStep.PreviewCommercialFinish, EditorStep.PrepareForColorGrade,
+        EditorStep.ExplainColorGrading, EditorStep.AdjustBrightness, EditorStep.AdjustContrast,
+        EditorStep.AdjustSaturation, EditorStep.ExplainColorSettings, EditorStep.ClickExport,
+        EditorStep.ExplainReviewPanel, EditorStep.ReviewAndSubmit
+    };
+    public bool ShowTutorialProgress => isActiveAndEnabled && isTutorialReady &&
+        !RevisingReview && !DevTutorialBypass.Disabled && CampaignProgression.GetCurrentLevel() == 1 &&
+        GameSavePrefs.GetInt("FlowerContractAccepted", 0) == 1;
+    public float TutorialProgress
+    {
+        get
+        {
+            if (submitted) return 1f;
+            var step = currentStep == EditorStep.CloseTrimWindow ? EditorStep.TrimTo10Seconds : currentStep;
+            int index = System.Array.IndexOf(ProgressSteps, step);
+            return .65f + .35f * Mathf.Max(0, index) / ProgressSteps.Length;
+        }
+    }
+
     private const float brandingTimeTolerance = 0.15f;
 
     [Header("UI References")]
@@ -96,7 +125,7 @@ public class EditorTutorialManager : MonoBehaviour
 
     private void Start()
     {
-        if (DevTutorialBypass.Disabled) { DisableForDevTesting(); return; }
+        if (DevTutorialBypass.Disabled || GameSaveManager.IsTrainingRoom) { DisableForDevTesting(); return; }
         CleanupTutorialUI();
 
         if (!ShouldRunTutorial())

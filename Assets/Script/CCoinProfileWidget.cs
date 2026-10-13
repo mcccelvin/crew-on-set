@@ -48,8 +48,9 @@ public sealed class CCoinProfileWidget : MonoBehaviour
     {
         if (balance == null) return;
         balance.text = service.Balance.ToString("N0");
-        walletStatus.text = "C-COINS"
-            + (service.PendingRewards > 0 ? "\n+" + service.PendingRewards*CCoinRules.ContractReward + " pending" : "");
+        walletStatus.text = service.PendingRewards > 0
+            ? "+" + service.PendingRewards*CCoinRules.ContractReward + " pending" : "";
+        walletStatus.gameObject.SetActive(service.PendingRewards > 0);
         var item = CCoinRules.Find(service.Wallet,service.SelectedCosmetic);
         bool equipped = item != null && CCoinRules.Owns(service.Wallet,item.id);
         Color color = Color.white; if (equipped) ColorUtility.TryParseHtmlString(item.color,out color);

@@ -13,6 +13,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private Button create;
     private GameObject newGameDialog;
     private GameSaveSlot selected;
+    private int selectedContract = 1;
     private bool joining;
     private bool closingMenu;
     [SerializeField] private Transform paper;
@@ -34,9 +35,62 @@ public sealed class GameSaveMenu : MonoBehaviour
             joining=true;sourceHost.gameObject.SetActive(false);joinPanel.gameObject.SetActive(true);
             sourceHost.transform.parent.gameObject.SetActive(true);CloseMenu();
         });
-        Bind(paper.Find("Start selected save"),()=>{if(selected!=null&&!saves.Syncing)saves.StartGame(selected,false);});
-        Bind(paper.Find("Delete selected save"),ShowDeleteDialog);
-        StyleDeleteButton(paper.Find("Delete selected save").GetComponent<Button>(), "DELETE SAVE", true);
+        Bind(paper.Find("Start selected save"),StartContract);
+        var deleteButton = paper.Find("Delete selected save");
+        if (deleteButton != null) deleteButton.gameObject.SetActive(false);
+        var startButton = paper.Find("Start selected save").GetComponent<Button>();
+        StyleSaveAction(startButton, "START", false, .495f);
+    }
+    private void StartContract()
+    {
+        if (saves.Syncing) return;
+        if (selectedContract == 6) { saves.StartTrainingRoom(); return; }
+        try
+        {
+            // Only the first play creates a career. Replays keep its identity and rewards.
+            if (selected == null) selected = saves.CreateGame("My contracts");
+            saves.StartGame(selected, false, selectedContract);
+        }
+        catch (Exception) { status.text = "Could not open this contract. Please try again."; }
+    }
+    private static TMP_FontAsset saveActionFont;
+    private static Material saveActionMaterial;
+    private static void StyleSaveAction(Button button, string caption, bool destructive, float centre)
+    {
+        // Both captions are live text on blank artwork; baked START lettering
+        // cannot share font metrics or padding with a generated DELETE caption.
+        StyleDeleteButton(button, caption, destructive);
+        var rect = (RectTransform)button.transform;
+        rect.anchorMin = new Vector2(centre - .0715f, .148f);
+        rect.anchorMax = new Vector2(centre + .0715f, .251f);
+        rect.offsetMin = rect.offsetMax = Vector2.zero;
+        if (saveActionFont == null)
+            saveActionFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF") ?? TMP_Settings.defaultFontAsset;
+        if (saveActionMaterial == null && saveActionFont != null)
+        {
+            saveActionMaterial = new Material(saveActionFont.material) { name = "Save actions outlined lettering" };
+            saveActionMaterial.EnableKeyword("OUTLINE_ON");
+            saveActionMaterial.SetColor("_FaceColor", Color.white);
+            saveActionMaterial.SetColor("_OutlineColor", Color.black);
+            saveActionMaterial.SetFloat("_OutlineWidth", .22f);
+            saveActionMaterial.SetFloat("_OutlineSoftness", 0);
+        }
+        var label = button.GetComponentInChildren<TMP_Text>(true);
+        label.font = saveActionFont;
+        label.fontSharedMaterial = saveActionMaterial;
+        label.fontStyle = FontStyles.Bold;
+        label.fontSize = label.fontSizeMax = 40;
+        label.fontSizeMin = 40;
+        label.enableAutoSizing = false;
+        label.enableWordWrapping = false;
+        label.characterSpacing = 0;
+        label.margin = Vector4.zero;
+        label.alignment = TextAlignmentOptions.Center;
+        label.rectTransform.anchorMin = Vector2.zero;
+        label.rectTransform.anchorMax = Vector2.one;
+        label.rectTransform.offsetMin = new Vector2(18, 10);
+        label.rectTransform.offsetMax = new Vector2(-18, -10);
+        label.UpdateMeshPadding();
     }
     private static void Bind(Transform target,UnityEngine.Events.UnityAction action)
     {
@@ -248,30 +302,77 @@ public sealed class GameSaveMenu : MonoBehaviour
         if(rows==null)return;
         foreach(Transform child in rows){child.gameObject.SetActive(false);Destroy(child.gameObject);}
         var slots=saves.Repository.Slots.Where(s=>s.Int("SaveDeleted",0)==0).OrderByDescending(s=>s.updatedUtc).ToList();
-        int rowCount=(slots.Count+3)/3;
-        float height=Math.Max(1,rowCount)*295f;
+        int rowCount=2;
+        const float rowHeight = 245f;
+        float height=Math.Max(1,rowCount)*rowHeight;
         rows.sizeDelta=new Vector2(0,height);
-        status.text=saves.Status;
-        if(selected==null||!slots.Contains(selected))selected=slots.FirstOrDefault();
-        var deleteButton=paper.Find("Delete selected save").GetComponent<Button>();
-        deleteButton.interactable=selected!=null&&!saves.Syncing;
+        // Project legacy careers into a single contract catalogue, without deleting files.
+        if(selected==null||!slots.Contains(selected))
+            selected=slots.OrderByDescending(GameSaveManager.UnlockedContractLevel).ThenByDescending(s=>s.updatedUtc).FirstOrDefault();
+        int unlocked=selected==null?1:GameSaveManager.UnlockedContractLevel(selected);
+        if(selectedContract!=6) selectedContract=Mathf.Clamp(selectedContract,1,unlocked);
+        status.text=saves.Syncing?"Syncing contracts…":"";
+        paper.Find("Start selected save").GetComponent<Button>().interactable=!saves.Syncing;
         if(deleteConfirm!=null && newGameDialog==deleteDialogLayout) deleteConfirm.interactable=!saves.Syncing;
-        for(int i=0;i<slots.Count;i++)
+        for(int i=0;i<6;i++)
         {
-            var slot=slots[i];float left=(i%3)*.35f;float top=1-(i/3)*295f/height;
-            var cardRect=Rect("Save "+slot.id,rows,new Vector2(left,top-265f/height),new Vector2(left+.30f,top));
-            var border=cardRect.gameObject.AddComponent<Image>();border.color=slot==selected?new Color32(208,147,42,255):new Color32(210,188,143,255);
-            var card=cardRect.gameObject.AddComponent<Button>();card.targetGraphic=border;card.onClick.AddListener(()=>{selected=slot;Refresh();});
-            var surface=Rect("Cream surface",cardRect,new Vector2(.012f,.018f),new Vector2(.988f,.982f));surface.gameObject.AddComponent<Image>().color=new Color32(255,245,217,255);
-            surface.GetComponent<Image>().raycastTarget=false;
-            var footer=Rect("Name band",surface,Vector2.zero,new Vector2(1,.23f));footer.gameObject.AddComponent<Image>().color=new Color32(239,215,168,255);footer.GetComponent<Image>().raycastTarget=false;
-            var name=Text(card.transform,slot.name,new Vector2(.05f,.025f),new Vector2(.95f,.21f),23);name.richText=false;
-            Text(card.transform,slot==selected?"SELECTED":"SELECT SAVE",new Vector2(.05f,.30f),new Vector2(.95f,.58f),27).alignment=TextAlignmentOptions.Center;
-            Text(card.transform,"Level "+slot.Level+"  ·  "+slot.Money.ToString("N0")+" B",new Vector2(.05f,.68f),new Vector2(.95f,.87f),23);
+            int level=i+1;
+            bool training=level==6;
+            bool available=training||level<=unlocked;
+            bool completed=!training&&selected!=null&&selected.Int(CampaignProgression.GetGradedKey(level),0)==1;
+            // Match the surrounding cream folder, without product-cover artwork.
+            // Keep two compact rows and reserve a gutter for the scrollbar.
+            float left=.012f+(i%3)*.322f;float top=1-(i/3)*rowHeight/height;
+            var cardRect=Rect("Contract "+level,rows,new Vector2(left,top-225f/height),new Vector2(left+.292f,top));
+            Color ink=new Color32(65, 40,20,255);
+            bool isSelected=level==selectedContract;
+            var border=cardRect.gameObject.AddComponent<Image>();
+            border.color=Color.clear;
+            var tab=ContractBoxBand(cardRect,"Folder tab outline",new Vector2(.035f,.82f),new Vector2(.60f,1f),ink);
+            var band=ContractBoxBand(tab,"Tan folder tab",Vector2.zero,Vector2.one,available?new Color32(237,207,148,255):new Color32(149,124,84,255));
+            band.offsetMin=new Vector2(3,0);band.offsetMax=new Vector2(-3,-3);
+            var body=ContractBoxBand(cardRect,"Folder box outline",Vector2.zero,new Vector2(1,.85f),ink);
+            var shadow=body.gameObject.AddComponent<Shadow>();
+            shadow.effectColor=new Color(0.18f,.1f,.03f,.20f);shadow.effectDistance=new Vector2(3,-4);
+            var surface=Rect("Contract paper",body,Vector2.zero,Vector2.one);
+            surface.offsetMin=new Vector2(4,4);surface.offsetMax=new Vector2(-4,-4);
+            var surfaceImage=surface.gameObject.AddComponent<Image>();surfaceImage.raycastTarget=false;
+            Color paperColor=available?new Color32(255,244,210,255):new Color32(185,165,129,255);
+            surfaceImage.color=paperColor;
+            // A tan inset and restrained selection edge echo the large folder frame.
+            var inset=ContractBoxBand(surface,"Paper inset",new Vector2(.025f,.04f),new Vector2(.975f,.96f),new Color32(193,164,111,255));
+            var inner=ContractBoxBand(inset,"Paper inset fill",Vector2.zero,Vector2.one,paperColor);
+            inner.offsetMin=new Vector2(2,2);inner.offsetMax=new Vector2(-2,-2);
+            if(isSelected)
+            {
+                var selection=body.gameObject.AddComponent<Outline>();
+                selection.effectColor=new Color32(213,153,42,255);selection.effectDistance=new Vector2(3,-3);
+            }
+            ContractBoxBand(surface,"Title rule",new Vector2(.075f,.29f),new Vector2(.925f,.297f),new Color32(193,164,111,255));
+            var card=cardRect.gameObject.AddComponent<Button>();card.targetGraphic=surfaceImage;
+            card.interactable=available&&!saves.Syncing;card.onClick.AddListener(()=>{selectedContract=level;Refresh();});
+            var colors=card.colors;colors.normalColor=Color.white;colors.highlightedColor=new Color(1f,.94f,.8f);
+            colors.pressedColor=new Color(.88f,.79f,.61f);colors.disabledColor=Color.white;card.colors=colors;
+            var heading=Text(band,training?"FREE PRACTICE":"CONTRACT 0"+level,new Vector2(.07f,.08f),new Vector2(.93f,.92f),20);
+            heading.color=ink;heading.fontStyle=FontStyles.Bold;heading.alignment=TextAlignmentOptions.Center;
+            var marker=Text(surface,isSelected?"SELECTED":!available?"LOCKED":"",new Vector2(.55f,.77f),new Vector2(.92f,.94f),16);
+            marker.color=heading.color;marker.alignment=TextAlignmentOptions.MidlineRight;
+            var title=Text(surface,training?"Training Room":CampaignProgression.GetContractName(level),new Vector2(.07f,.34f),new Vector2(.93f,.69f),27);
+            title.fontStyle=FontStyles.Bold;title.alignment=TextAlignmentOptions.MidlineLeft;
+            title.enableAutoSizing=false;title.fontSize=27;title.enableWordWrapping=true;
+            var footer=Rect("Contract status",surface,new Vector2(.035f,.025f),new Vector2(.965f,.24f));
+            var footerImage=footer.gameObject.AddComponent<Image>();footerImage.raycastTarget=false;
+            footerImage.color=Color.clear;
+            var label=Text(footer,training?"ALL PRODUCTS & EQUIPMENT":completed?"COMPLETED · PLAY AGAIN":available?"":"FINISH CONTRACT "+(level-1)+" TO UNLOCK",new Vector2(.04f,.1f),new Vector2(.96f,.9f),18);
+            label.alignment=TextAlignmentOptions.Center;label.fontStyle=FontStyles.Bold;label.enableWordWrapping=false;
+            label.color=ink;
         }
-        float plusLeft=(slots.Count%3)*.35f;float plusTop=1-(slots.Count/3)*295f/height;
-        create=Artwork("Create save","playCreate",rows,new Vector2(plusLeft,plusTop-265f/height),new Vector2(plusLeft+.30f,plusTop),ShowNewGameDialog);
-        create.interactable=!saves.Syncing;
+    }
+    private static RectTransform ContractBoxBand(Transform parent,string name,Vector2 min,Vector2 max,Color color)
+    {
+        var rect=Rect(name,parent,min,max);
+        var image=rect.gameObject.AddComponent<Image>();image.color=color;image.raycastTarget=false;
+        return rect;
     }
     private Transform CreateFolderDialog(string title)
     {

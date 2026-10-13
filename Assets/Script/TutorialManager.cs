@@ -131,6 +131,18 @@ public class TutorialManager : MonoBehaviour
     private float spacebarCooldown = 0f;
     private bool wasJumpHeld = false;
     private bool isTutorialInitialized = false;
+    private bool progressContractAccepted;
+    public bool ShowTutorialProgress => isActiveAndEnabled && isTutorialInitialized &&
+        progressContractAccepted && !GameSaveManager.IsTrainingRoom &&
+        !DevTutorialBypass.Disabled && CampaignProgression.GetCurrentLevel() == 1 &&
+        PlayerPrefs.GetInt("FlowerContractAccepted", 0) == 1 &&
+        currentStep >= TutorialStep.SetTrainingObjectAndMoney &&
+        currentStep != TutorialStep.Level1Accepted;
+    public float TutorialProgress => currentStep >= TutorialStep.PostEditComplete ? 1f :
+        .65f * Mathf.Clamp01(((int)currentStep - (int)TutorialStep.SetTrainingObjectAndMoney) /
+            (float)((int)TutorialStep.Complete - (int)TutorialStep.SetTrainingObjectAndMoney));
+    public string TutorialProgressPhase => currentStep >= TutorialStep.PostEditComplete ? "COMPLETE" :
+        currentStep >= TutorialStep.ShowProductionTitle ? "PRODUCTION" : "PRE-PRODUCTION";
 
     [Header("Game Explanation Dialogue")]
     private string[] explanationPages = new string[]
@@ -155,6 +167,12 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator Start()
     {
+        if(GameSaveManager.IsTrainingRoom)
+        {
+            Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+            DisableForDevTesting();
+            yield break;
+        }
         BuildRuntimePracticeMarkers();
         while (StudioArrivalTour.IsPendingOrPlaying) yield return null;
         StartAfterStudioTour();
@@ -166,12 +184,12 @@ public class TutorialManager : MonoBehaviour
         foreach (var candidate in FindObjectsOfType<Transform>(true))
             if (candidate.name == "stage" && candidate.gameObject.scene == gameObject.scene) { stage = candidate; break; }
         if (stage == null) stage = stageSpawnPoint;
-        stageWalkTriggerCircle = ReplacePracticeMarker(stageWalkTriggerCircle, stage, new Vector3(-.0554f, -.1377f, .00444f), "LIGHT POSITION");
+        stageWalkTriggerCircle = ReplacePracticeMarker(stageWalkTriggerCircle, stage, new Vector3(-.0554f, -.1377f, .00444f), "LIGHT POSITION", false);
         cubePlacementTarget = ReplacePracticeMarker(cubePlacementTarget, stage, new Vector3(0, -.2476f, .0047f), "PRODUCT POSITION");
-        cameraWalkTriggerCircle = ReplacePracticeMarker(cameraWalkTriggerCircle, stage, new Vector3(0, -.1854f, .00464f), "CAMERA POSITION");
+        cameraWalkTriggerCircle = ReplacePracticeMarker(cameraWalkTriggerCircle, stage, new Vector3(0, -.1854f, .00464f), "CAMERA POSITION", false);
     }
 
-    private GameObject ReplacePracticeMarker(GameObject previous, Transform stage, Vector3 localPoint, string label)
+    private GameObject ReplacePracticeMarker(GameObject previous, Transform stage, Vector3 localPoint, string label, bool showDisc = true)
     {
         if (previous == null && stage == null) return null;
         Vector3 position = previous != null ? previous.transform.position : stage.TransformPoint(localPoint);
@@ -179,6 +197,13 @@ public class TutorialManager : MonoBehaviour
         var root = new GameObject(label);
         root.transform.SetParent(transform, false);
         root.transform.position = position;
+        // Walking destinations use ProductionGuideLine's square floor brackets.
+        // Keep the target transform for navigation and centering, without a disc or floating label.
+        if (!showDisc)
+        {
+            root.SetActive(false);
+            return root;
+        }
         var disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         disc.transform.SetParent(root.transform, false);
         disc.transform.localPosition = Vector3.up * .12f;
@@ -936,6 +961,9 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator StartTutorialWithDelay()
     {
+        // A fresh introduction must wait for this run's ACCEPT action, even
+        // when a previous run left the saved acceptance flag set.
+        progressContractAccepted = false;
         if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
         StudioArrivalTour.BeginWelcomeTour();
         while (StudioArrivalTour.IsPendingOrPlaying) yield return null;
@@ -947,6 +975,7 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator StartLevel1RetryWithDelay()
     {
+        progressContractAccepted = PlayerPrefs.GetInt("FlowerContractAccepted", 0) == 1;
         yield return new WaitForSecondsRealtime(1f);
         isLevel1Retry = true;
         currentStep = TutorialStep.SetTrainingObjectAndMoney;
@@ -956,6 +985,7 @@ public class TutorialManager : MonoBehaviour
 
     private IEnumerator StartPostEditTutorial()
     {
+        progressContractAccepted = PlayerPrefs.GetInt("FlowerContractAccepted", 0) == 1;
         yield return new WaitForSecondsRealtime(1.5f);
         if (AlmanacManager.Instance != null) AlmanacManager.Instance.UnlockLevel1Knowledge();
         currentStep = TutorialStep.PostEditComplete;
@@ -1288,7 +1318,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.WalkToStageWithLight:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "Walk to the center of the green LIGHT circle on the pink stage" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Follow the path and stand inside the square LIGHT marker" });
                 TutorialUIManager.Instance.SetDynamicGlow("light", false);
                 if (stageWalkTriggerCircle != null) stageWalkTriggerCircle.SetActive(true);
                 TutorialUIManager.Instance.SetDynamicGlow("pointA", true);
@@ -1364,7 +1394,7 @@ public class TutorialManager : MonoBehaviour
                 break;
 
             case TutorialStep.WalkToStageWithCamera:
-                TutorialUIManager.Instance.SetupTasks(new string[] { "- Walk to the center of the green CAMERA circle on the stage" });
+                TutorialUIManager.Instance.SetupTasks(new string[] { "Follow the path and stand inside the square CAMERA marker" });
                 TutorialUIManager.Instance.SetDynamicGlow("camera", false);
                 if (cameraWalkTriggerCircle != null) cameraWalkTriggerCircle.SetActive(true);
                 TutorialUIManager.Instance.SetDynamicGlow("pointc", true);
@@ -1499,6 +1529,7 @@ public class TutorialManager : MonoBehaviour
         if (currentStep == TutorialStep.OfferFirstContract && isTaskPhaseActive)
         {
             PlayerPrefs.SetInt("FlowerContractAccepted", 1);
+            progressContractAccepted = true;
             PlayerPrefs.Save();
             if (firstContractPanel != null) firstContractPanel.SetActive(false);
             TutorialUIManager.Instance.MarkTaskComplete(0);
@@ -2108,7 +2139,7 @@ public class TutorialManager : MonoBehaviour
             case TutorialStep.PickUpCamera: ui.ShowBossDialogue("Let's grab the camera first. Look at it on the delivery table and press <color=red>[E]</color>.", ui.posePoint, true, false); break;
             case TutorialStep.PickUpSDCard: ui.ShowBossDialogue("Grab the SD Card with <color=red>[E]</color> too. It'll fit in another hotbar slot.", ui.poseOpenHand, true, false); break;
             case TutorialStep.InsertSDCard: ui.ShowBossDialogue("Select the camera in your hotbar, then press <color=red>[C]</color> to pop the SD Card in.", ui.poseBoss, true, false); break;
-            case TutorialStep.WalkToStageWithCamera: ui.ShowBossDialogue("Head over to the green CAMERA circle. Let's see how our set looks through the camera.", ui.posePointUp, true, false); break;
+            case TutorialStep.WalkToStageWithCamera: ui.ShowBossDialogue("Follow the path to the square CAMERA marker. Let's see how our set looks through the camera.", ui.posePointUp, true, false); break;
 
             case TutorialStep.EquipCameraView: ui.ShowBossDialogue("With the camera selected, click <color=red>[Left Click]</color> to look through the viewfinder. This is what your audience will see.", ui.poseHappy, true, false); break;
 

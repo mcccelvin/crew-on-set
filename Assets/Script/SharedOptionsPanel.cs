@@ -118,8 +118,8 @@ public sealed class SharedOptionsPanel
         sfxVolume=GameOptions.SfxVolume;musicVolume=GameOptions.MusicVolume;
         fullscreen=Application.isEditor ? PlayerPrefs.GetInt(GameOptions.FullscreenKey,1)==1 : Screen.fullScreen;
         quality=GameOptions.SavedQualityPreset;
-        fps=PlayerPrefs.GetInt("Options.FPS",60);section=0;UITransition.Show(root);Refresh();
-        if (frame != null) UITransition.ConfigurePanel(frame.gameObject);
+        fps=PlayerPrefs.GetInt("Options.FPS",60);section=0;UITransition.ShowSmooth(root);Refresh();
+        if (frame != null) UITransition.ShowSmooth(frame.gameObject, true);
         Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
     }
     public void Close(bool save)
@@ -145,7 +145,12 @@ public sealed class SharedOptionsPanel
     {
         for(int i=0;i<3;i++)
         {
-            UITransition.SetVisible(layout.pages[i],i==section);
+            if (i == section)
+            {
+                // Only animate newly selected tabs, not every settings value change.
+                if (!layout.pages[i].activeSelf) UITransition.ShowSmooth(layout.pages[i]);
+            }
+            else layout.pages[i].SetActive(false);
             var image=tabs[i].GetComponent<Image>();ExportUIArt.Apply(image,i==section?"settingsTabSelected":"settingsTab");
             image.color=i==section?Color.white:new Color(.65f,.65f,.65f);
         }

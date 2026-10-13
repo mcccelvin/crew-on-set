@@ -72,6 +72,21 @@ public partial class AlmanacManager
     }
     private void EnsureCareerAchievements()
     {
+        // Authored entries and runtime-added definitions may share an ID. Keep one
+        // display entry and merge evidence instead of counting/rendering it twice.
+        var unique = new System.Collections.Generic.Dictionary<string, AchievementEntry>(System.StringComparer.Ordinal);
+        for(int i=0;i<achievements.Count;)
+        {
+            var entry=achievements[i];
+            if(entry==null || string.IsNullOrWhiteSpace(entry.id)) { achievements.RemoveAt(i); continue; }
+            if(unique.TryGetValue(entry.id,out var existing))
+            {
+                existing.isUnlocked |= entry.isUnlocked;
+                existing.currentProgress=Mathf.Max(existing.currentProgress,entry.currentProgress);
+                achievements.RemoveAt(i);
+            }
+            else { unique.Add(entry.id,entry); i++; }
+        }
         var record = ProfileRecord();
         foreach (var definition in CareerProfileProgress.Achievements)
         {

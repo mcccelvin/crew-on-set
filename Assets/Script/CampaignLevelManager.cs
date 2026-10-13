@@ -151,7 +151,8 @@ public class CampaignLevelManager : MonoBehaviour
         RestoreOwnedEquipment();
         SetupContractUI();
 
-        if (activeLevel == 5 && PlayerPrefs.GetInt(CampaignProgression.GetGradedKey(5), 0) == 1)
+        if (activeLevel == 5 && PlayerPrefs.GetInt(CampaignProgression.GetGradedKey(5), 0) == 1 &&
+            PlayerPrefs.GetInt("Contracts.Replaying", 0) != 5)
         {
             ShowCampaignComplete();
             return;

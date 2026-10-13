@@ -237,6 +237,7 @@ public class CareerManager : MonoBehaviour
 
     public bool TrySpendMoney(int amount, string category, string item)
     {
+        if (GameSaveManager.IsTrainingRoom) return amount >= 0;
         playerMoney = Mathf.Max(0, PlayerPrefs.GetInt("PlayerMoney", 0));
         if (amount < 0) return false;
         BudgetRetryPrompt.CaptureStart();

@@ -70,6 +70,9 @@ public class GokeLevelManager : MonoBehaviour
     private Transform cameraPracticeMarker;
     private bool cameraPracticeViewOpen;
     private GokeLevelStep currentStep;
+    public bool ShowTutorialProgress => isActiveAndEnabled && isLevelStarted &&
+        !DevTutorialBypass.Disabled && currentStep != GokeLevelStep.LevelActive;
+    public float TutorialProgress => Mathf.Clamp01((float)currentStep / (int)GokeLevelStep.LevelActive);
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
     private int level2CameraItemIndex = -1;

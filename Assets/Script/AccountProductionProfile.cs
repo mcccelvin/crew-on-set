@@ -64,8 +64,22 @@ public static class AccountProductionProfile
         if (!result.hasBudget && latestBudget!=null)
         { result.hasBudget=true;result.bCoins=latestBudget.Money; }
         var submissions = new HashSet<string>(StringComparer.Ordinal);
+        // Contract selection now uses one progression, not additive independent
+        // careers. Old save copies remain evidence for badges, never extra counters.
+        Contribution primary = null;
         foreach (var item in origins.Values)
         {
+            if (item.slot.Int("SaveDeleted", 0) != 0) continue;
+            bool isActive = active != null && item.slot.id == active.id;
+            bool primaryActive = primary != null && active != null && primary.slot.id == active.id;
+            if (primary == null || (isActive && !primaryActive) || (!primaryActive &&
+                (GameSaveManager.UnlockedContractLevel(item.slot) > GameSaveManager.UnlockedContractLevel(primary.slot) ||
+                (GameSaveManager.UnlockedContractLevel(item.slot) == GameSaveManager.UnlockedContractLevel(primary.slot) &&
+                 string.CompareOrdinal(item.slot.updatedUtc, primary.slot.updatedUtc) > 0)))) primary = item;
+        }
+        foreach (var item in origins.Values)
+        {
+            if (item != primary) continue;
             Add(result.record,item.record);
             int historyIndex = 0;
             foreach (var attempt in PlayerAnalytics.ProfileHistory(item.slot))

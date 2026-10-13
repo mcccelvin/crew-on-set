@@ -106,6 +106,7 @@ public class AccountManager : MonoBehaviour
 
     private void Login(string email, string password)
     {
+        GameSaveManager.Ensure().BeginManualSignIn();
         PlayFabClientAPI.LoginWithEmailAddress(new LoginWithEmailAddressRequest
         {
             Email = email,

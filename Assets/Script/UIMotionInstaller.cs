@@ -112,6 +112,31 @@ public sealed class UIMotionInstaller : MonoBehaviour
             input.AssignDefaultActions();
     }
 
+    public static void EnsureTerminalClose(Transform parent, UnityEngine.Events.UnityAction close)
+    {
+        if (parent == null) return;
+        var existing = parent.Find("Terminal close button");
+        if (existing != null) { existing.SetAsLastSibling(); return; }
+        var obj = new GameObject("Terminal close button", typeof(RectTransform), typeof(Image), typeof(Button), typeof(LayoutElement));
+        obj.layer = parent.gameObject.layer; obj.transform.SetParent(parent, false);
+        obj.GetComponent<LayoutElement>().ignoreLayout = true;
+        var rect = (RectTransform)obj.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = Vector2.one;
+        rect.anchoredPosition = new Vector2(-24, -20); rect.sizeDelta = new Vector2(130, 48);
+        var button = obj.GetComponent<Button>(); button.targetGraphic = obj.GetComponent<Image>();
+        button.onClick.AddListener(close);
+        var textObj = new GameObject("Close caption", typeof(RectTransform), typeof(TMPro.TextMeshProUGUI));
+        textObj.layer = obj.layer; textObj.transform.SetParent(rect, false);
+        var text = textObj.GetComponent<TMPro.TextMeshProUGUI>();
+        text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one;
+        text.rectTransform.offsetMin = new Vector2(8,4); text.rectTransform.offsetMax = new Vector2(-8,-4);
+        text.text = "CLOSE"; text.font = TMPro.TMP_Settings.defaultFontAsset;
+        text.fontSize = 24; text.fontStyle = TMPro.FontStyles.Bold;
+        text.alignment = TMPro.TextAlignmentOptions.Center; text.raycastTarget = false;
+        CrewPaperStyle.ActionButton(button, true);
+        Decorate(button);
+    }
+
     public static void EnsureScrollHandles(ScrollRect scroll)
     {
         if (scroll == null || scroll.content == null || !scroll.gameObject.scene.IsValid()) return;

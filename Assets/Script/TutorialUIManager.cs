@@ -109,9 +109,141 @@ public class TutorialUIManager : MonoBehaviour
     private bool bossDialogueShowOk;
     private bool bossDialogueShowSkip;
 
+    private GameObject tutorialProgressRoot;
+    private RectTransform tutorialProgressSafeArea;
+    private RectTransform tutorialProgressFill;
+    private TMP_Text tutorialProgressCaption;
+    private float displayedTutorialProgress;
+    private string tutorialProgressScope;
+    private DirectorTerminal progressDirectorTerminal;
+
+    private void UpdateTutorialProgress()
+    {
+        float progress = 0;
+        string phase = null;
+        string scope = "FIRST TUTORIAL";
+        var editor = EditorTutorialManager.Instance;
+        var studio = TutorialManager.Instance;
+        // The active studio tutorial owns visibility. Do not allow an editor
+        // manager or a stale saved flag to reveal the bar during the introduction.
+        if (GameSaveManager.IsTrainingRoom ||
+            (CampaignProgression.GetCurrentLevel() == 1 &&
+             (GameSavePrefs.GetInt("FlowerContractAccepted", 0) != 1 ||
+              (studio != null && studio.isActiveAndEnabled && !studio.ShowTutorialProgress))))
+        {
+            if (tutorialProgressRoot != null) tutorialProgressRoot.SetActive(false);
+            displayedTutorialProgress = 0;
+            tutorialProgressScope = null;
+            if (tutorialProgressFill != null) tutorialProgressFill.anchorMax = new Vector2(0, 1);
+            return;
+        }
+        if (editor != null && editor.ShowTutorialProgress)
+        {
+            progress = editor.TutorialProgress;
+            phase = editor.submitted ? "COMPLETE" : "POST-PRODUCTION";
+        }
+        else if (studio != null && studio.ShowTutorialProgress)
+        {
+            progress = studio.TutorialProgress;
+            phase = studio.TutorialProgressPhase;
+        }
+        else if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.ShowTutorialProgress)
+        {
+            scope = "CONTRACT 2 LESSON";
+            phase = "GUIDED PRACTICE";
+            progress = GokeLevelManager.Instance.TutorialProgress;
+        }
+        else if (Level3Manager.Instance != null && Level3Manager.Instance.ShowTutorialProgress)
+        {
+            scope = "CONTRACT 3 LESSON";
+            phase = "GUIDED PRACTICE";
+            progress = Level3Manager.Instance.TutorialProgress;
+        }
+        if (phase == null || DevTutorialBypass.Disabled || PauseManager.isPaused ||
+            (progressDirectorTerminal != null && progressDirectorTerminal.IsTerminalActive()))
+        {
+            if (tutorialProgressRoot != null) tutorialProgressRoot.SetActive(false);
+            return;
+        }
+        if (tutorialProgressRoot == null) BuildTutorialProgress();
+        tutorialProgressRoot.SetActive(true);
+        if (tutorialProgressScope != scope)
+        {
+            tutorialProgressScope = scope;
+            displayedTutorialProgress = progress;
+        }
+        // Revisited instructions must not make the progress bar run backwards.
+        displayedTutorialProgress = Mathf.Max(displayedTutorialProgress, Mathf.Clamp01(progress));
+        var safe = Screen.safeArea;
+        tutorialProgressSafeArea.anchorMin = new Vector2(safe.xMin / Mathf.Max(1, Screen.width), safe.yMin / Mathf.Max(1, Screen.height));
+        tutorialProgressSafeArea.anchorMax = new Vector2(safe.xMax / Mathf.Max(1, Screen.width), safe.yMax / Mathf.Max(1, Screen.height));
+        float fill = Mathf.MoveTowards(tutorialProgressFill.anchorMax.x, displayedTutorialProgress, Time.unscaledDeltaTime * .5f);
+        tutorialProgressFill.anchorMax = new Vector2(fill, 1);
+        tutorialProgressFill.gameObject.SetActive(fill > .001f);
+        int percent = displayedTutorialProgress >= 1 ? 100 : Mathf.FloorToInt(displayedTutorialProgress * 100);
+        tutorialProgressCaption.text = phase + "  •  TUTORIAL " + percent + "%";
+    }
+
+    private void BuildTutorialProgress()
+    {
+        tutorialProgressRoot = new GameObject("Tutorial progress", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(CanvasGroup));
+        tutorialProgressRoot.transform.SetParent(transform, false);
+        var canvas = tutorialProgressRoot.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = 25000;
+        var scaler = tutorialProgressRoot.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+        var group = tutorialProgressRoot.GetComponent<CanvasGroup>();
+        group.blocksRaycasts = false; group.interactable = false;
+        tutorialProgressSafeArea = new GameObject("Safe area", typeof(RectTransform)).GetComponent<RectTransform>();
+        tutorialProgressSafeArea.SetParent(canvas.transform, false);
+        tutorialProgressSafeArea.offsetMin = tutorialProgressSafeArea.offsetMax = Vector2.zero;
+        var card = new GameObject("Tutorial progress layout", typeof(RectTransform));
+        card.transform.SetParent(tutorialProgressSafeArea, false);
+        var rect = (RectTransform)card.transform;
+        rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(.5f, 1);
+        rect.anchoredPosition = new Vector2(0, -24);
+        rect.sizeDelta = new Vector2(700, 92);
+        tutorialProgressCaption = new GameObject("Progress label", typeof(RectTransform), typeof(TextMeshProUGUI)).GetComponent<TextMeshProUGUI>();
+        tutorialProgressCaption.transform.SetParent(rect, false);
+        tutorialProgressCaption.rectTransform.anchorMin = Vector2.zero;
+        tutorialProgressCaption.rectTransform.anchorMax = Vector2.one;
+        tutorialProgressCaption.rectTransform.offsetMin = new Vector2(0, 44);
+        tutorialProgressCaption.rectTransform.offsetMax = new Vector2(0, -4);
+        tutorialProgressCaption.font = TMP_Settings.defaultFontAsset;
+        tutorialProgressCaption.fontSize = 28;
+        tutorialProgressCaption.color = Color.white;
+        tutorialProgressCaption.fontStyle = FontStyles.Bold;
+        tutorialProgressCaption.outlineColor = new Color32(17, 17, 17, 255);
+        tutorialProgressCaption.outlineWidth = .2f;
+        tutorialProgressCaption.alignment = TextAlignmentOptions.Center;
+        tutorialProgressCaption.raycastTarget = false;
+        var track = new GameObject("Progress track", typeof(RectTransform), typeof(Image));
+        track.transform.SetParent(rect, false);
+        var trackRect = (RectTransform)track.transform;
+        trackRect.anchorMin = Vector2.zero; trackRect.anchorMax = new Vector2(1, 0);
+        trackRect.pivot = Vector2.zero;
+        trackRect.offsetMin = new Vector2(0, 10); trackRect.offsetMax = new Vector2(0, 38);
+        CrewPaperStyle.Round(track.GetComponent<Image>());
+        track.GetComponent<Image>().color = new Color32(100, 100, 100, 255);
+        track.GetComponent<Image>().raycastTarget = false;
+        var fill = new GameObject("Progress fill", typeof(RectTransform), typeof(Image));
+        fill.transform.SetParent(trackRect, false);
+        tutorialProgressFill = (RectTransform)fill.transform;
+        tutorialProgressFill.anchorMin = Vector2.zero; tutorialProgressFill.anchorMax = new Vector2(0, 1);
+        tutorialProgressFill.offsetMin = tutorialProgressFill.offsetMax = Vector2.zero;
+        CrewPaperStyle.Round(fill.GetComponent<Image>());
+        fill.GetComponent<Image>().color = BlueLoadingIris.WipeBlue;
+        fill.GetComponent<Image>().raycastTarget = false;
+    }
+
     private void Awake()
     {
         Instance = this;
+        progressDirectorTerminal = FindObjectOfType<DirectorTerminal>(true);
         activeTextColor = CrewPaperStyle.Ink;
         completedTextColor = CrewPaperStyle.MutedInk;
         RecoverTaskPanel();
@@ -146,6 +278,7 @@ public class TutorialUIManager : MonoBehaviour
 
     private void Update()
     {
+        UpdateTutorialProgress();
         if (PauseManager.isPaused) return;
 
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();

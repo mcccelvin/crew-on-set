@@ -126,13 +126,14 @@ public static class CareerProfileProgress
     }
     public static void RecordTake(float duration)
     {
+        if(GameSaveManager.IsTrainingRoom)return;
         var r = Read(); r.recordings = Add(r.recordings, 1);
         if (duration > 0 && !float.IsNaN(duration) && !float.IsInfinity(duration)) r.recordedSeconds += duration;
         else r.partialDuration = true;
         Store(r, true);
     }
     public static void RecordTransaction(int amount, string category)
-    { var r = Read(); ApplyTransaction(r, amount, category); Store(r, false); }
+    { if(GameSaveManager.IsTrainingRoom)return; var r = Read(); ApplyTransaction(r, amount, category); Store(r, false); }
     private static void ApplyTransaction(Record r, int amount, string category)
     {
         if (category == "Developer funds") return;
@@ -141,6 +142,7 @@ public static class CareerProfileProgress
     }
     public static void RecordResult(PlayerAnalytics.Attempt attempt, float production)
     {
+        if(GameSaveManager.IsTrainingRoom)return;
         if (attempt == null || Rank(attempt.grade) == 0 || attempt.level < 1 || attempt.level > 5) return;
         var r = Read(); ApplyResult(r, attempt, production, false); Store(r, true);
     }
@@ -171,13 +173,22 @@ public static class CareerProfileProgress
     }
     private static void Store(Record record, bool notify)
     {
+        if(GameSaveManager.IsTrainingRoom)return;
         GameSavePrefs.SetString(SaveKey, JsonUtility.ToJson(record));
         var unlocked = new List<string>();
         foreach (var a in Achievements)
         {
             int progress = Mathf.Clamp(a.progress(record), 0, a.goal);
-            bool done = progress == a.goal || GameSavePrefs.GetInt("AchivDone_" + a.id, 0) == 1;
-            if (done && GameSavePrefs.GetInt("AchivDone_" + a.id, 0) == 0) unlocked.Add(a.title);
+            bool alreadyEarned = GameSavePrefs.GetInt("AchivDone_" + a.id, 0) == 1;
+            // Switching an old career or replaying a contract cannot award the
+            // same account badge again. Preserve earned evidence in this record.
+            var saves=GameSaveManager.Instance;
+            if(!GameSavePrefs.IsRoomSession && saves?.Repository!=null)
+                foreach(var slot in saves.Repository.Slots)
+                    if(slot.owner==saves.Repository.Owner && slot.Int("AchivDone_"+a.id,0)==1)
+                    { alreadyEarned=true; break; }
+            bool done = progress == a.goal || alreadyEarned;
+            if (done && !alreadyEarned) unlocked.Add(a.title);
             GameSavePrefs.SetInt("AchivProg_" + a.id, done ? a.goal : progress);
             GameSavePrefs.SetInt("AchivDone_" + a.id, done ? 1 : 0);
         }

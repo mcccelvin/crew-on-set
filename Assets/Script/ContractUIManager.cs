@@ -634,6 +634,8 @@ public class ContractUIManager : MonoBehaviour
 
     private static readonly string[] ContractNames={"ARTISAN FLOWER VASE","GOKE COLA","TERRARI","KAPE KULTURA","HARAYA"};
     private static readonly string[] ContractFolderArt={"contractArtisan","contractGoke","contractTerrari","contractKape","contractHaraya"};
+    public static Sprite GetContractCover(int level) =>
+        ExportUIArt.Get(ContractFolderArt[Mathf.Clamp(level, 1, ContractFolderArt.Length) - 1]);
 
     private void SetFolderArtwork(int index, int level)
     {
@@ -641,7 +643,7 @@ public class ContractUIManager : MonoBehaviour
         if (title == null) return;
         title.text = level == activeContractLevel ? liveTitle : ContractNames[level - 1];
         var image = title.transform.parent.GetComponent<Image>();
-        var sprite = ExportUIArt.Get(ContractFolderArt[level - 1]);
+        var sprite = GetContractCover(level);
         if (image == null || sprite == null) { title.enabled = true; return; }
         image.sprite = sprite;
         image.type = Image.Type.Simple;

@@ -515,14 +515,17 @@ public sealed class ActorBot : MonoBehaviour
     public static bool TryCreate(GameObject actor, int skillTier)
     {
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
-        if (CampaignProgression.GetCurrentLevel() == 4 && catalog != null && catalog.coffeeActorModels != null)
+        // Training uses the same dressed performers as Contract 4, not the
+        // generic armature used as a fallback in other contracts.
+        bool useCoffeeCast = GameSaveManager.IsTrainingRoom || CampaignProgression.GetCurrentLevel() == 4;
+        if (useCoffeeCast && catalog != null && catalog.coffeeActorModels != null)
         {
             int index = Mathf.Clamp(skillTier, 0, 2);
             if (index < catalog.coffeeActorModels.Length && catalog.coffeeActorModels[index] != null
                 && TryCreateIndividualCoffeeActor(actor, skillTier, catalog.coffeeActorModels[index], catalog.coffeeActorScale))
                 return true;
         }
-        if (CampaignProgression.GetCurrentLevel() == 4 && catalog != null && catalog.coffeeActors != null
+        if (useCoffeeCast && catalog != null && catalog.coffeeActors != null
             && TryCreateCoffeeActor(actor, skillTier, catalog.coffeeActors)) return true;
         var model = Resources.Load<GameObject>("Character/Models/Armature");
         if (model == null) return false;

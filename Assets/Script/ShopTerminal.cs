@@ -106,8 +106,11 @@ public class ShopTerminal : MonoBehaviour
             }
         }
 
-        ProductionKitShop.Setup(this);
         SetupMegaphone();
+        if(GameSaveManager.IsTrainingRoom && level3LightPrefab != null) SetupLevel3Light(level3LightPrefab,false);
+        ProductionKitShop.Setup(this);
+        if(GameSaveManager.IsTrainingRoom)
+            foreach(var item in availableItems) if(item!=null) item.price=0;
         RestoreOwnedEquipment();
         RefreshEquipmentIcons();
         crosshairClicker = FindObjectOfType<CrosshairUIClicker>();
@@ -757,13 +760,22 @@ public class ShopTerminal : MonoBehaviour
     public RectTransform GetTutorialCartTarget(string itemName)
     {
         Canvas canvas = screenSpaceCanvas != null && screenSpaceCanvas.gameObject.activeInHierarchy ? screenSpaceCanvas : worldSpaceCanvas;
+        if (canvas == null) return null;
+        // Hidden legacy cards can share a title; only guide to the visible purchase control.
+        foreach (var card in FindLayoutCards(canvas, itemName))
+        {
+            if (!card.gameObject.activeInHierarchy) continue;
+            foreach (var button in card.GetComponentsInChildren<Button>(true))
+                if (button.gameObject.activeInHierarchy && button.interactable && IsCartButton(button))
+                    return button.transform as RectTransform;
+        }
         TextMeshProUGUI title = FindShopText(canvas, itemName);
         if (title == null) return null;
         Transform node = title.transform.parent;
         while (node != null && node != canvas.transform)
         {
             foreach (Button button in node.GetComponentsInChildren<Button>(true))
-                if (button.gameObject.activeInHierarchy && button.interactable) return button.transform as RectTransform;
+                if (button.gameObject.activeInHierarchy && button.interactable && IsCartButton(button)) return button.transform as RectTransform;
             node = node.parent;
         }
         return null;
@@ -832,6 +844,13 @@ public class ShopTerminal : MonoBehaviour
     public void AddItemToCartByIndex(int itemIndex)
     {
         if (itemIndex < 0 || itemIndex >= availableItems.Count || availableItems[itemIndex] == null) return;
+        if(GameSaveManager.IsTrainingRoom)
+        {
+            if(availableItems[itemIndex].prefabToSpawn==null)return;
+            shoppingCart.Add(availableItems[itemIndex]);
+            UpdateTotalUI();
+            return;
+        }
         if (IsShopItemOwned(availableItems[itemIndex].itemName) || !IsShopItemAvailable(availableItems[itemIndex].itemName)) return;
         var practice = CampaignLevelManager.Instance;
         if (practice != null && practice.IsContract4PracticeActive &&
@@ -1121,7 +1140,11 @@ public class ShopTerminal : MonoBehaviour
 
         if (crosshairClicker != null) crosshairClicker.enabled = false;
 
-        if (screenSpaceCanvas != null) UITransition.Show(screenSpaceCanvas.gameObject);
+        if (screenSpaceCanvas != null)
+        {
+            UIMotionInstaller.EnsureTerminalClose(screenSpaceCanvas.transform, CloseTerminal);
+            UITransition.Show(screenSpaceCanvas.gameObject);
+        }
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;

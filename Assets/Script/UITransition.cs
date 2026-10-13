@@ -11,6 +11,7 @@ public sealed class UITransition : MonoBehaviour
     public float slideDistance = 55f;
     [Range(.8f, 1f)] public float entranceScale = .9f;
     public bool smoothFadeOnly;
+    public bool smoothSlideEntrance;
     // Eight held poses: approach, overshoot, squash and settle.
     private static readonly float[] Travel = { 0f, .24f, .55f, .83f, 1.07f, 1.025f, .99f, 1f };
     private static readonly float[] Opacity = { 0f, .3f, .65f, .9f, 1f, 1f, 1f, 1f };
@@ -61,12 +62,13 @@ public sealed class UITransition : MonoBehaviour
         if (visible) Show(target); else Hide(target);
     }
 
-    public static void ShowSmooth(GameObject target)
+    public static void ShowSmooth(GameObject target, bool slide = false)
     {
         if (target == null) return;
         var transition = target.GetComponent<UITransition>();
         if (transition == null) transition = target.AddComponent<UITransition>();
-        transition.smoothFadeOnly = true;
+        transition.smoothFadeOnly = !slide;
+        transition.smoothSlideEntrance = slide;
         transition.duration = .3f;
         transition.enabled = true;
         target.SetActive(true);
@@ -274,7 +276,7 @@ public sealed class UITransition : MonoBehaviour
             if (moving) { rect.localScale = scale; rect.anchoredPosition = position; }
             return;
         }
-        if (productionMenu)
+        if (productionMenu || smoothSlideEntrance)
         {
             // Fast initial travel, a slow clean settle, and a shorter crossfade.
             // No held frames, overshoot or asymmetric scaling of the artwork.

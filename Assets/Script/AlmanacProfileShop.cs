@@ -13,7 +13,7 @@ public partial class AlmanacManager
     private Transform CreateProfileShopGrid(Transform parent)
     {
         var panel = CreatePanel("Shared shop items", parent, ShopBackground);
-        SetStretchRect(panel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(2, 10), new Vector2(-2, -216));
+        SetStretchRect(panel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one, new Vector2(2, 10), new Vector2(-2, -164));
         var scroll = panel.AddComponent<ScrollRect>();
         scroll.horizontal = false; scroll.vertical = true; scroll.scrollSensitivity = 35;
         scroll.movementType = ScrollRect.MovementType.Clamped;
@@ -79,22 +79,16 @@ public partial class AlmanacManager
     private void StyleShopButton(Button button, bool primary)
     {
         var label = button.GetComponentInChildren<TMP_Text>();
-        bool enabledPrimary = primary && button.interactable;
         bool equipped = primary && label.text == "EQUIPPED";
         var image = button.GetComponent<Image>();
-        StyleShopBox(image, Color.white, !enabledPrimary);
-        if (enabledPrimary)
-        {
-            ExportUIArt.Apply(image, "blueButton");
-            image.type = Image.Type.Simple;
-        }
+        StyleShopBox(image, Color.white, true);
         var colors = button.colors;
-        colors.normalColor = enabledPrimary ? Color.white : ShopCard;
-        colors.highlightedColor = enabledPrimary ? new Color(1, .93f, .75f) : new Color32(237, 222, 191, 255);
+        colors.normalColor = ShopCard;
+        colors.highlightedColor = new Color32(237, 222, 191, 255);
         colors.selectedColor = colors.highlightedColor;
-        colors.pressedColor = enabledPrimary ? new Color(.75f, .86f, 1) : new Color32(224, 207, 179, 255);
+        colors.pressedColor = new Color32(224, 207, 179, 255);
         colors.disabledColor = equipped ? new Color32(224, 234, 214, 255) : new Color32(231, 218, 193, 255); button.colors = colors;
-        label.color = enabledPrimary ? Color.white : equipped ? ProfileGreen : button.interactable ? ProfileInk : ShopMuted;
+        label.color = equipped ? ProfileGreen : button.interactable ? ProfileInk : ShopMuted;
         label.fontSize = label.fontSizeMax = 20; label.fontSizeMin = 14;
         label.enableAutoSizing = true; label.enableWordWrapping = false;
         SetStretchRect(label.rectTransform, Vector2.zero, Vector2.one, new Vector2(6, 3), new Vector2(-6, -3));
@@ -142,8 +136,10 @@ public partial class AlmanacManager
             preview.onClick.AddListener(() => PreviewProfileCosmetic(item.id)); StyleShopButton(preview, false);
         }
         bool guestSignIn = profileWallet.IsGuest && !owned && available && listed;
-        bool canAct = available && listed && !equipped && (owned || profileWallet.CanBuy || guestSignIn);
-        string action = equipped ? "EQUIPPED" : owned ? "EQUIP" : guestSignIn ? "SIGN IN" : !available || !listed || !profileWallet.CanBuy ? "UNAVAILABLE" : "BUY";
+        bool processing = profileWallet.IsPurchaseProcessing(item.id) ||
+            (!owned && available && listed && profileWallet.Busy && !profileWallet.IsGuest);
+        bool canAct = !processing && available && listed && !equipped && (owned || profileWallet.CanBuy || guestSignIn);
+        string action = processing ? "PROCESSING…" : equipped ? "EQUIPPED" : owned ? "EQUIP" : guestSignIn ? "SIGN IN" : !available || !listed || !profileWallet.CanBuy ? "UNAVAILABLE" : "BUY";
         var buy = CreateButton("Buy or equip cosmetic", card.transform, action);
         SetStretchRect(buy.GetComponent<RectTransform>(), new Vector2(isPart && available ? .5f : 0, 0), new Vector2(1, 0), new Vector2(isPart && available ? 6 : 14, 16), new Vector2(-14, 60));
         buy.onClick.AddListener(() => { if (guestSignIn) GameSaveManager.Ensure().SignInToSync(); else if (owned) profileWallet.Equip(item.id); else profileWallet.BuyCosmetic(item.id); });

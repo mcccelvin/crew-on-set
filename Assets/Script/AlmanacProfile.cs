@@ -17,6 +17,7 @@ public partial class AlmanacManager
     private static Material profileLabelMaterial;
     private static TMP_FontAsset profileBodyFont;
     private static Material profileBodyMaterial;
+    private static Material achievementButtonMaterial;
 
     private void ApplyProfileTypography()
     {
@@ -58,6 +59,26 @@ public partial class AlmanacManager
             bool lightLettering = onColoredButton || onWallet || onCrewHeader;
             text.font = lightLettering ? profileLabelFont : profileBodyFont;
             text.fontSharedMaterial = lightLettering ? profileLabelMaterial : profileBodyMaterial;
+            if (button != null && button == achievementsTabBtn)
+            {
+                if (achievementButtonMaterial == null)
+                {
+                    achievementButtonMaterial = new Material(profileLabelMaterial) { name = "Achievements outlined lettering" };
+                    achievementButtonMaterial.SetFloat("_OutlineWidth", .22f);
+                }
+                text.fontSharedMaterial = achievementButtonMaterial;
+                text.color = Color.white;
+                text.fontStyle = FontStyles.Bold;
+                text.fontSize = text.fontSizeMax = 30;
+                text.fontSizeMin = 26;
+                text.characterSpacing = 0;
+                text.margin = Vector4.zero;
+                text.alignment = TextAlignmentOptions.Center;
+                text.enableWordWrapping = false;
+                text.enableAutoSizing = true;
+                text.UpdateMeshPadding();
+                continue;
+            }
             bool heading = text.name == "Title" || text.name == "Name" || text.name == "Value" ||
                 text.name.IndexOf("heading", System.StringComparison.OrdinalIgnoreCase) >= 0;
             text.fontStyle = lightLettering || heading || button != null ? FontStyles.Bold : FontStyles.Normal;
@@ -99,7 +120,8 @@ public partial class AlmanacManager
         profileAccountId.richText = false;
         profileAccountId.color = new Color32(54, 46, 38, 255);
         string accountId = PlayerPrefs.GetString("PlayFabId", "").Trim();
-        profileAccountId.text = string.IsNullOrEmpty(accountId) ? "GUEST" : accountId;
+        profileAccountId.text = GameSaveManager.Instance != null && GameSaveManager.Instance.HasCloudSession
+            ? accountId : "Not signed in · local profile";
         profileAccountId.enableAutoSizing = true;
         profileAccountId.fontSizeMin = 16;
         profileAccountId.fontSizeMax = 24;
@@ -375,13 +397,20 @@ public partial class AlmanacManager
         isProfileOpen = true;
         RefreshAllUI();
         OpenTab(0);
-        profileCanvas.SetActive(true);
+        ShowProfileAnimated();
         profileInputsDirty = false; RefreshAccountFields(true);
         CCoinService.Ensure().Refresh();
         AccountProfileData.Refresh();
         RenderProfileCharacter();
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    private void ShowProfileAnimated()
+    {
+        UITransition.ShowSmooth(profileCanvas);
+        var stage = profileCanvas.transform.Find("Profile backdrop/Profile stage");
+        if (stage != null) UITransition.ShowSmooth(stage.gameObject, true);
     }
 
     public void ClosePlayerProfile()

@@ -74,6 +74,12 @@ public static class CrewPaperStyle
         {
             label.color = danger ? Paper : Ink;
             label.raycastTarget = false;
+            label.fontStyle = FontStyles.Bold;
+            label.alignment = TextAlignmentOptions.Center;
+            label.enableWordWrapping = false;
+            label.enableAutoSizing = true;
+            label.fontSizeMax = Mathf.Max(18, label.fontSize);
+            label.fontSizeMin = Mathf.Min(16, label.fontSizeMax);
         }
     }
 

@@ -15,19 +15,26 @@ public sealed class ProductionKitShop : MonoBehaviour
         var catalog=shop.gameObject.AddComponent<ProductionKitShop>();catalog.shop=shop;catalog.Build();
     }
     // Reserved assets: enable only after a level has a dedicated guided lesson.
-    public static bool HasEquipmentLesson(int level) => false;
-    public static bool HasCameraGripLesson(int level) => false;
+    public static bool HasEquipmentLesson(int level) => GameSaveManager.IsTrainingRoom;
+    public static bool HasCameraGripLesson(int level) => GameSaveManager.IsTrainingRoom;
     void Build()
     {
         var indices=new List<int>();
         for(int kind=0;kind<ProductionKit.Names.Length;kind++)
         {
-            if(kind != 0) continue; // Rim-light lesson introduces only the strip.
+            if(kind != 0 && !GameSaveManager.IsTrainingRoom) continue;
             int index=shop.availableItems.FindIndex(x=>x.itemName==ProductionKit.Names[kind]);
             if(index<0){var prefab=ProductionKit.Template(kind);templates.Add(prefab);index=shop.availableItems.Count;shop.availableItems.Add(new ShopItem{itemName=ProductionKit.Names[kind],price=ProductionKit.Prices[kind],prefabToSpawn=prefab});}
             indices.Add(index);
         }
-        foreach(int index in indices){shop.CreateStripShopCard(shop.worldSpaceCanvas,index);shop.CreateStripShopCard(shop.screenSpaceCanvas,index);}
+        if(GameSaveManager.IsTrainingRoom)
+        {
+            indices.Clear();
+            for(int i=0;i<shop.availableItems.Count;i++)
+                if(shop.availableItems[i]!=null && shop.availableItems[i].prefabToSpawn!=null) indices.Add(i);
+            BuildPage(shop.worldSpaceCanvas,indices);BuildPage(shop.screenSpaceCanvas,indices);
+        }
+        else foreach(int index in indices){shop.CreateStripShopCard(shop.worldSpaceCanvas,index);shop.CreateStripShopCard(shop.screenSpaceCanvas,index);}
         if(FindObjectOfType<ProductionLightModifiers>()==null)new GameObject("Production light control").AddComponent<ProductionLightModifiers>();
     }
     RectTransform Box(Transform parent,string name,Vector2 min,Vector2 max,Color color)
@@ -42,14 +49,20 @@ public sealed class ProductionKitShop : MonoBehaviour
     {
         if(canvas==null)return;
         var page=Box(canvas.transform,"Lighting and grip catalog",new Vector2(.22f,.18f),new Vector2(.79f,.81f),new Color(.10f,.13f,.17f));pages.Add(page.gameObject);
+        var viewport=Box(page,"Equipment viewport",new Vector2(.02f,.02f),new Vector2(.98f,.98f),Color.clear);
+        viewport.gameObject.AddComponent<RectMask2D>();
+        var content=Box(viewport,"All equipment",new Vector2(0,1),Vector2.one,Color.clear);
+        content.pivot=new Vector2(.5f,1);content.sizeDelta=new Vector2(0,indices.Count*90f);
+        var scroll=viewport.gameObject.AddComponent<ScrollRect>();scroll.viewport=viewport;scroll.content=content;scroll.horizontal=false;scroll.scrollSensitivity=45;scroll.movementType=ScrollRect.MovementType.Clamped;
         for(int k=0;k<indices.Count;k++)
         {
-            int index=indices[k];float y=.98f-k*.132f;
-            var row=Box(page,"Add "+ProductionKit.Names[k],new Vector2(.02f,y-.12f),new Vector2(.98f,y),new Color(.16f,.23f,.30f));
-            Label(row,ProductionKit.Names[k]+"  |  "+ProductionKit.Prices[k]+" B  |  + ADD\n"+ProductionKit.Lessons[k]);
+            int index=indices[k];float y=1f-(float)k/indices.Count;
+            var item=shop.availableItems[index];
+            var row=Box(content,"Add "+item.itemName,new Vector2(.02f,y-.9f/indices.Count),new Vector2(.98f,y),new Color(.16f,.23f,.30f));
+            Label(row,item.itemName+"  |  FREE PRACTICE  |  + ADD");
             row.gameObject.AddComponent<Button>().onClick.AddListener(()=>shop.AddItemToCartByIndex(index));
         }
-        var toggle=Box(canvas.transform,"Lighting and grip tab",new Vector2(.23f,.82f),new Vector2(.51f,.875f),new Color(.1f,.3f,.48f));Label(toggle,"LIGHTING & GRIP / BACK");toggle.gameObject.AddComponent<Button>().onClick.AddListener(()=>{bool open=!page.gameObject.activeSelf;ClosePages();page.gameObject.SetActive(open);});page.gameObject.SetActive(false);
+        var toggle=Box(canvas.transform,"Lighting and grip tab",new Vector2(.23f,.82f),new Vector2(.51f,.875f),new Color(.1f,.3f,.48f));Label(toggle,"ALL EQUIPMENT / BACK");toggle.gameObject.AddComponent<Button>().onClick.AddListener(()=>{bool open=!page.gameObject.activeSelf;ClosePages();page.gameObject.SetActive(open);});page.gameObject.SetActive(false);
     }
     void BuildWorkflow(Canvas canvas)
     {

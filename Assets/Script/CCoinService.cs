@@ -35,6 +35,7 @@ public sealed class CCoinService : MonoBehaviour
     private float nextRefresh, deadline;
     public bool Authenticated => owner != "guest" && PlayFabSettings.staticPlayer.PlayFabId == owner && PlayFabClientAPI.IsClientLoggedIn();
     public bool CanBuy => DevWalletActive || Verified && !Busy && Authenticated && state.pendingPurchase == null;
+    public bool IsPurchaseProcessing(string id) => state.pendingPurchase != null && state.pendingPurchase.itemId == id;
     private static CCoinCosmetic FindWebsiteCosmetic(CatalogItem item)
     {
         if(item==null)return null;
@@ -111,6 +112,7 @@ public sealed class CCoinService : MonoBehaviour
     private static string CacheKey(string account) => "SaveSystem.CCoins.v1." + account;
     public void BindAccount(string account)
     {
+        purchaseNoticeItem = null;
         realState=null; // Never carry developer funds/equipment across accounts.
         session++; requestGeneration++; Busy = Verified = false;
         owner = CCoinRules.ValidId(account) ? account : "guest";
@@ -166,6 +168,7 @@ public sealed class CCoinService : MonoBehaviour
 
     public bool QueueContractReward(int level,string rank)
     {
+        if(GameSaveManager.IsTrainingRoom)return false;
         if(DevWalletActive)return false;
         if (GameSavePrefs.IsRoomSession || !CCoinRules.Passed(rank)) return false;
         // Reward identity follows checkpoint copies; returning to the result or
@@ -227,7 +230,9 @@ public sealed class CCoinService : MonoBehaviour
                 bool rejected=result?.operationId==purchase.operationId && result.status=="rejected";
                 if((!complete && !rejected) || !AcceptWallet(result.wallet))
                 { Finish(false,"Purchase confirmation pending. Reconnect to confirm it.");return; }
-                state.pendingPurchase=null;Save();SyncRewardBatch(state.pendingRewards.ToArray(),0);
+                state.pendingPurchase=null;Save();
+                if (rejected) { Finish(true,"Purchase could not be completed. Check your balance and try again."); return; }
+                SyncRewardBatch(state.pendingRewards.ToArray(),0);
             });
             return;
         }
@@ -368,7 +373,19 @@ public sealed class CCoinService : MonoBehaviour
         }
         catch { if(session==version && requestGeneration==generation)callback(false); }
     }
-    private void Finish(bool verified,string message) { Busy = false; Verified = verified; nextRefresh = Time.unscaledTime + 60; Publish(message); }
+    private string purchaseNoticeItem;
+    private void Finish(bool verified,string message)
+    {
+        Busy = false; Verified = verified; nextRefresh = Time.unscaledTime + 60;
+        if (!string.IsNullOrEmpty(purchaseNoticeItem))
+        {
+            bool owned = CCoinRules.Owns(state.wallet, purchaseNoticeItem);
+            GameFeedback.Show(owned ? "Purchase complete. Your item is ready to equip." : message,
+                owned ? GameFeedback.NoticeType.Success : GameFeedback.NoticeType.Caution);
+            purchaseNoticeItem = null;
+        }
+        Publish(message);
+    }
     private void Request(string action,object data,Action<CCoinOperationResult> callback)
     {
         int version = session, generation = ++requestGeneration; deadline = Time.unscaledTime + 45;
@@ -392,14 +409,22 @@ public sealed class CCoinService : MonoBehaviour
     {
         var item = CCoinRules.Find(state.wallet,id);
         if (!CanBuy || item == null || CCoinRules.Owns(state.wallet,id)) return;
-        if (Balance < item.price) { Publish("Insufficient C-Coins balance."); return; }
+        if (Balance < item.price)
+        {
+            Publish("Insufficient C-Coins balance.");
+            GameFeedback.Show("You need " + (item.price - Balance).ToString("N0") +
+                " more C-Coins. Choose TOP UP to add coins, or earn more by completing contracts.", true);
+            return;
+        }
         if(DevWalletActive)
         {
             state.wallet.balance-=item.price;
             var owned=new List<string>(state.wallet.owned);owned.Add(id);state.wallet.owned=owned.ToArray();
-            Publish("TEST PURCHASE · "+item.name+" · no real coins charged; equip to test the look.");return;
+            Publish("TEST PURCHASE · "+item.name+" · no real coins charged; equip to test the look.");
+            GameFeedback.Show("Test purchase complete · " + item.name + " is ready to equip.", GameFeedback.NoticeType.Success);return;
         }
         state.pendingPurchase = new CCoinPurchase { itemId = id, operationId = "buy:" + Guid.NewGuid().ToString("N") };
+        purchaseNoticeItem = id;
         Save(); Refresh(); // Backend determines price, settles atomically and returns ownership.
     }
     public void Equip(string id)
@@ -407,7 +432,7 @@ public sealed class CCoinService : MonoBehaviour
         if (!string.IsNullOrEmpty(id) && (!CCoinRules.Owns(state.wallet,id) || CCoinRules.Find(state.wallet,id) == null)) return;
         var part=CharacterCosmetics.Find(id);
         if (part != null && part.kind != "body" && !state.equippedParts.Exists(x => CharacterCosmetics.Find(x)?.kind == "body"))
-        { Publish("Equip Boy or Girl in BODY first."); return; }
+        { Publish("Equip Boy or Girl in BODY first."); GameFeedback.Show("Equip Boy or Girl in BODY first.", true); return; }
         if(part!=null)
         {
             state.equippedParts.RemoveAll(x=>CharacterCosmetics.Find(x)?.kind==part.kind);

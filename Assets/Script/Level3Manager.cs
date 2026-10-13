@@ -130,6 +130,9 @@ public class Level3Manager : MonoBehaviour
     private bool isBriefingOpen = false;
     private bool requiresLightPurchase = false;
     private Level3Step currentStep;
+    public bool ShowTutorialProgress => isActiveAndEnabled && isLevelStarted &&
+        !DevTutorialBypass.Disabled && currentStep != Level3Step.LevelActive;
+    public float TutorialProgress => Mathf.Clamp01((float)currentStep / (int)Level3Step.LevelActive);
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
     private int level3LightItemIndex = -1;
