@@ -5,14 +5,16 @@ using UnityEngine.InputSystem;
 [DefaultExecutionOrder(1000)]
 public sealed class DevTutorialBypass : MonoBehaviour
 {
-    public static bool Disabled { get; private set; }
+    private static bool developerDisabled;
+    public static bool DeveloperDisabled=>developerDisabled;
+    public static bool Disabled { get=>developerDisabled || ContractTutorialChoice.SkipThisContract; private set=>developerDisabled=value; }
     public static bool FastBossDialogue { get; private set; }
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetSession() { Disabled = false; FastBossDialogue = false; }
+    private static void ResetSession() { Disabled = false; FastBossDialogue = false; ContractTutorialChoice.Reset(); }
     public static void ResetForNewGame() { ResetSession(); }
 
     // A test restart restores tutorial tasks, but keeps the developer's pacing preference.
-    public static void ResetForCareerTesting() { Disabled = false; }
+    public static void ResetForCareerTesting() { Disabled = false; ContractTutorialChoice.Reset(); }
 
     public static bool PracticeDelayComplete(float elapsed, float duration)
     {
@@ -52,7 +54,7 @@ public sealed class DevTutorialBypass : MonoBehaviour
     {
         if (!Application.isFocused) return;
         if (!DevCommandsPanel.CommandsAllowed) return;
-        if (!Disabled) return;
+        if (!developerDisabled) return;
         if (TutorialManager.Instance != null && TutorialManager.Instance.enabled) TutorialManager.Instance.DisableForDevTesting();
         if (GokeLevelManager.Instance != null && GokeLevelManager.Instance.enabled) GokeLevelManager.Instance.DisableForDevTesting();
         if (Level3Manager.Instance != null && Level3Manager.Instance.enabled) Level3Manager.Instance.DisableForDevTesting();
@@ -64,5 +66,34 @@ public sealed class DevTutorialBypass : MonoBehaviour
         if (!DevCommandsPanel.CommandsAllowed) return;
         Disabled=true;
         GameFeedback.Show("DEV: Tutorials disabled for this session");
+    }
+
+    public static void EnableTutorials()
+    {
+        if(!DevCommandsPanel.CommandsAllowed)return;
+        Disabled=false;ContractTutorialChoice.Reset();
+        int level=CampaignProgression.GetCurrentLevel();
+        var scene=UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+        if(GameSaveManager.IsTrainingRoom)
+        {GameFeedback.Show("DEV: Tutorials enabled for contracts. Training remains free practice.");return;}
+        if(scene.name=="SingleStudio" || scene.name=="MultiStudio")
+        {
+            // Recreate disabled lesson owners without resetting career data,
+            // adding cheat funds, clearing the project or changing contracts.
+            ContractTutorialChoice.PlayAfterReload(level);
+            PauseManager.isPaused=false;Time.timeScale=1;AudioListener.pause=false;
+            GameFeedback.Show("DEV: Restarting Contract "+level+" tutorial");
+            LoadingScreenController.LoadScene("SingleStudio");
+            return;
+        }
+        if(scene.name=="Editor")
+        {
+            ContractTutorialChoice.PlayInCurrentScene(level);
+            var editor=EditorManager.Instance;
+            if(level==1)EditorTutorialManager.RestartForDevTesting();
+            else if(level==2 && editor!=null && editor.GetComponent<GokeIntroOutroLesson>()==null)editor.gameObject.AddComponent<GokeIntroOutroLesson>();
+            else if(level==4 && editor!=null && editor.GetComponent<CoffeeStoryEditLesson>()==null)editor.gameObject.AddComponent<CoffeeStoryEditLesson>();
+        }
+        GameFeedback.Show("DEV: Tutorial guidance enabled");
     }
 }

@@ -12,6 +12,7 @@ public class ShopManager : MonoBehaviour
     [Header("Delivery")]
     [Tooltip("Where should the item spawn when bought? (e.g., a delivery box or table)")]
     public Transform deliveryZone;
+    private int deliveryCount;
 
     // Link this to your "Buy" buttons! (0 for first item, 1 for second, etc.)
     public void BuyItem(int itemIndex)
@@ -30,7 +31,10 @@ public class ShopManager : MonoBehaviour
         if (CareerManager.Instance != null && CareerManager.Instance.TrySpendMoney(cost, PlayerAnalytics.EquipmentCategory(equipmentPrefabs[itemIndex].name), equipmentPrefabs[itemIndex].name))
         {
             // 3. Spawn the brand new equipment at the delivery zone
-            GameObject boughtItem = Instantiate(equipmentPrefabs[itemIndex], deliveryZone.position, deliveryZone.rotation);
+            var position=StudioDeliveryBay.Position(deliveryZone,deliveryCount++);
+            GameObject boughtItem = Instantiate(equipmentPrefabs[itemIndex],position,deliveryZone.rotation);
+            StudioDeliveryBay.SettleEquipment(boughtItem,position);
+            StudioDeliveryBay.ShowCollectionGuide();
 
             Debug.Log($"SUCCESS: Bought item {itemIndex} for {cost} B coins! Remaining balance: {CareerManager.Instance.playerMoney}");
 

@@ -17,11 +17,26 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     public string Notice { get; private set; } = "Connecting to crew...";
     public NetworkStudioFactory Studio { get; private set; }
     public event Action Changed;
+    public event Action<string> CommandRejected;
     private readonly System.Collections.Generic.Dictionary<int, float> lastCommand = new System.Collections.Generic.Dictionary<int, float>();
     private float nextRecordTick;
     private float nextRoomSync;
     private bool loadingStudio;
     public static bool IsLobbyScene => SceneManager.GetActiveScene().name == "MultiplayerLobby";
+    public static bool IsMenuLobby => SceneManager.GetActiveScene().name == "Main Menu";
+    public bool LocalIsReadingBriefing => State != null && (State.phase == "briefing" || State.phase == "build") &&
+        State.members.Exists(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber && !m.briefed);
+
+    public static void OpenMenuLobby()
+    {
+        if (PhotonNetwork.InRoom && !MultiplayerAccess.RequireTutorial()) { PhotonNetwork.LeaveRoom(); return; }
+        if (!PhotonNetwork.InRoom || !IsMenuLobby || Instance != null) return;
+        new GameObject("Main menu crew session").AddComponent<MultiplayerRoleManager>();
+    }
+
+    private CrewSession NewSession() => IsMenuLobby
+        ? new CrewSession { phase = "waiting", message = "Invite your crew, then press READY." }
+        : new CrewSession();
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void RegisterLobby()
@@ -45,8 +60,14 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     private void Awake()
     {
         Instance = this;
+        CrewVoiceChat.Ensure();
         productionOwner = GameSaveManager.Ensure().AuthenticatedPlayerId;
         GameSavePrefs.BeginRoomSession();
+        if (IsMenuLobby)
+        {
+            gameObject.AddComponent<MultiplayerWaitingLobby>();
+            return;
+        }
         gameObject.AddComponent<RoleSelectionUI>();
         if (IsLobbyScene) return;
         Studio = gameObject.AddComponent<NetworkStudioFactory>();
@@ -66,7 +87,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         ReadSnapshot();
         if (PhotonNetwork.IsMasterClient)
         {
-            if (State == null) State = new CrewSession();
+            if (State == null) State = NewSession();
             ReconcileMembers();
             Publish();
         }
@@ -102,11 +123,11 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         if (data.Code == SnapshotRequestEvent)
         {
             if (PhotonNetwork.IsMasterClient && PhotonNetwork.CurrentRoom.Players.ContainsKey(data.Sender))
-            { ReadSnapshot(); if (State == null) State = new CrewSession(); ReconcileMembers(); Publish(); }
+            { ReadSnapshot(); if (State == null) State = NewSession(); ReconcileMembers(); Publish(); }
             return;
         }
         if (data.Code == NoticeEvent && data.Sender == PhotonNetwork.MasterClient.ActorNumber)
-        { Notice = data.CustomData as string ?? ""; Changed?.Invoke(); return; }
+        { Notice = data.CustomData as string ?? ""; CommandRejected?.Invoke(Notice); Changed?.Invoke(); return; }
         if (data.Code != CommandEvent || !PhotonNetwork.IsMasterClient || !(data.CustomData is string json) || json.Length > 32768) return;
         try { Handle(JsonUtility.FromJson<CrewCommand>(json), data.Sender); }
         catch (Exception ex) { Debug.LogWarning("Crew command rejected: " + ex.Message); }
@@ -114,7 +135,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
 
     private void Reject(int sender, string message)
     {
-        if (sender == PhotonNetwork.LocalPlayer.ActorNumber) { Notice = message; Changed?.Invoke(); }
+        if (sender == PhotonNetwork.LocalPlayer.ActorNumber) { Notice = message; CommandRejected?.Invoke(message); Changed?.Invoke(); }
         else PhotonNetwork.RaiseEvent(NoticeEvent, message, new RaiseEventOptions { TargetActors = new[] { sender } }, SendOptions.SendReliable);
     }
 
@@ -127,7 +148,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         if (member == null) return;
         if (c.action == "contract")
         {
-            if (sender != PhotonNetwork.MasterClient.ActorNumber || State.phase != "lobby" || c.value < 1 || c.value > 5) return;
+            if (sender != PhotonNetwork.MasterClient.ActorNumber || (State.phase != "lobby" && State.phase != "waiting") || c.value < 2 || c.value > 5) return;
             State.contractLevel = c.value; State.budget = MultiplayerContractManager.InitialBudget(c.value);
             State.commercialTitle = MultiplayerContractManager.Title(c.value);
             foreach (var person in State.members) person.ready = false;
@@ -147,15 +168,23 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             State.budget += ProductionEconomy.Advance(State.contractLevel);
             State.objects.RemoveAll(o => !MultiplayerRoomActions.IsEquipment(o.kind) || o.kind == "sd" && o.tape != 0);
             State.shots.Clear(); State.cuts.Clear(); State.takeArmed = false;
-            foreach (var person in State.members) if (!State.objects.Any(o => o.id == person.equipped)) person.equipped = 0;
+            foreach(var gear in State.objects)
+            {
+                gear.holder=gear.slot=gear.loadedInto=0;
+                gear.action="stored";gear.powered=false;gear.revision++;
+                if(EquipmentStorageCabinet.Active!=null)gear.position=EquipmentStorageCabinet.Active.transform.position;
+            }
+            foreach(var person in State.members)person.equipped=0;
             State.commercialTitle = MultiplayerContractManager.Title(State.contractLevel);
             MultiplayerContractManager.SaveCheckpoint(State);
+            foreach (var person in State.members) { person.briefed = false; person.briefingPage = 0; }
             State.phase = "briefing"; State.briefingPage = 0;
             State.message = "Next contract: " + State.commercialTitle + ". Your shared equipment and unspent budget carry forward.";
             Publish(); return;
         }
         if (c.action == "role")
         {
+            if (State.phase == "waiting") { Reject(sender, "Role selection opens after the host starts."); return; }
             if (c.value != 1 && c.value != 2 && c.value != 4 && c.value != 8) return;
             if (State.phase == "lobby" && member.rolesLocked) { Reject(sender, "Unlock your roles before changing your selection."); return; }
             // Once production starts, only vacant roles can be claimed (for a departed crew member).
@@ -187,6 +216,12 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         }
         if (c.action == "ready")
         {
+            if (State.phase == "waiting")
+            {
+                member.ready = !member.ready;
+                State.message = "Crew readiness updated.";
+                Publish(); return;
+            }
             if (State.phase != "lobby") return;
             if (!member.rolesLocked || member.roles == 0) { Reject(sender, "Lock your roles before pressing READY."); return; }
             member.ready = !member.ready;
@@ -194,32 +229,41 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         }
         if (c.action == "start")
         {
+            if (State.phase == "waiting")
+            {
+                if (sender != PhotonNetwork.MasterClient.ActorNumber) return;
+                if (!MultiplayerContractManager.BeginRoleSelection(State))
+                { Reject(sender, "Need 2–4 players with everyone READY before role selection."); return; }
+                Publish(); return;
+            }
             if (sender != PhotonNetwork.MasterClient.ActorNumber || State.phase != "lobby") return;
             if (!MultiplayerContractManager.CanStart(State)) { Reject(sender, "Need 2–4 players covering all four roles, with roles locked and everyone ready."); return; }
-            foreach (var person in State.members) person.briefed = false;
+            foreach (var person in State.members) { person.briefed = false; person.briefingPage = 0; }
             MultiplayerContractManager.SaveCheckpoint(State);
             State.briefingPage = 0;
             State.phase = "briefing"; State.message = "Meet the Boss: read your crew briefing."; Publish(); return;
         }
-        if (c.action == "briefingNext" && State.phase == "briefing")
+        if (c.action == "briefingNext" && (State.phase == "briefing" || State.phase == "build"))
         {
-            // The first press for this page wins. Concurrent/stale presses cannot skip a page.
-            if (c.index != State.briefingPage) return;
-            State.briefingPage++;
+            // A page press belongs only to its sender, including after host migration.
+            if (member.briefed || c.index != member.briefingPage) return;
+            member.briefingPage++;
+            member.briefed = member.briefingPage >= MultiplayerContractManager.Briefing.Length;
+            AdvanceBriefing(); Publish(); return;
+        }
+        if (c.action == "briefed" && (State.phase == "briefing" || State.phase == "build"))
+        {
+            member.briefingPage = MultiplayerContractManager.Briefing.Length; member.briefed = true;
             AdvanceBriefing(); Publish(); return;
         }
         if (State.phase != "build" && State.phase != "review") return;
+        if (!member.briefed) { Reject(sender, "Finish your Boss briefing before using the studio."); return; }
         if (IsLobbyScene) return; // Never execute studio/world commands in the waiting room.
         if (MultiplayerRoomActions.Handle(this, c, sender, out var actionError))
         { if (actionError != null) Reject(sender, actionError); else Publish(); return; }
         if (c.action == "buy")
         {
-            if (c.kind != "camera" && c.kind != "megaphone" && c.kind != "editing") return;
-            if (!HasRole(sender, MultiplayerContractManager.RoleFor(c.kind))) { Reject(sender, "Only the assigned role can buy this kit."); return; }
-            int cost = MultiplayerContractManager.Price(c.kind);
-            if (State.recording || State.equipment.Contains(c.kind) || State.budget < cost) { Reject(sender, "Already owned, recording, or insufficient team budget."); return; }
-            State.budget -= cost; CrewProductionResults.BudgetChanged(State, -cost); State.equipment.Add(c.kind);
-            State.message = c.kind + " kit ready for its crew role."; Publish(); return;
+            Reject(sender, "Purchase equipment using the shop's Add to Cart and Confirm buttons."); return;
         }
         if (c.action == "footage")
         {
@@ -443,7 +487,7 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
             hasThreePointRoles = State.samples > 0 && State.threePointSamples == State.samples });
         var camera = State.objects.Find(o => o.kind == "camera" && o.holder == State.recorder);
         var card = camera != null ? State.objects.Find(o => o.loadedInto == camera.id) : null;
-        if (card != null) { card.loadedInto = 0; card.tape = State.activeShot; card.revision++; }
+        if (card != null) { card.tape = State.activeShot; card.revision++; }
         if (State.shots.Count > 12) State.shots.RemoveAt(0);
         State.recording = State.takeArmed = false;
         State.message = State.shotSize + " saved: " + Mathf.RoundToInt(score) + "/100. Framing " +
@@ -474,9 +518,8 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
 
     private void AdvanceBriefing()
     {
-        if (State.phase == "briefing" && State.briefingPage >= MultiplayerContractManager.Briefing.Length)
+        if (State.phase == "briefing" && State.members.Any(m => m.briefed))
         {
-            foreach (var member in State.members) member.briefed = true;
             State.phase = "build"; State.message = MultiplayerContractManager.Title(State.contractLevel) + ": follow the contract specifications. Shop, stage, record and edit together.";
         }
     }
@@ -495,7 +538,13 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
         {
             var next = JsonUtility.FromJson<CrewSession>(json);
             if (next == null || next.schema != 1 || (State != null && next.revision <= State.revision)) return;
-            next.contractLevel = Mathf.Clamp(next.contractLevel,1,5);
+            if (next.contractLevel < 2)
+            {
+                Notice = "Contract 1 is singleplayer only. Create a new multiplayer room for Contracts 2–5.";
+                GameFeedback.Show(Notice,GameFeedback.NoticeType.Caution);
+                PhotonNetwork.LeaveRoom(); return;
+            }
+            next.contractLevel = Mathf.Clamp(next.contractLevel,2,5);
             foreach (var shot in next.shots) if (shot.cachedBy == null) shot.cachedBy = new System.Collections.Generic.List<int>();
             State = next; Apply();
         }
@@ -527,10 +576,18 @@ public sealed class MultiplayerRoleManager : MonoBehaviourPunCallbacks, IOnEvent
     }
     private void EnterStudioIfStarted()
     {
+        if (IsMenuLobby)
+        {
+            if (loadingStudio || !PhotonNetwork.IsMasterClient || State == null || State.phase == "waiting") return;
+            loadingStudio = true;
+            PhotonNetwork.CurrentRoom.IsOpen = false;
+            LoadingScreenController.LoadNetworkScene("MultiplayerLobby");
+            return;
+        }
         if (!IsLobbyScene || loadingStudio || !PhotonNetwork.IsMasterClient || State == null || State.phase == "lobby") return;
         loadingStudio = true;
         PhotonNetwork.CurrentRoom.IsOpen = false;
-        LoadingScreenController.LoadNetworkScene("MultiStudio");
+        LoadingScreenController.LoadNetworkScene("SingleStudio");
     }
     public override void OnPlayerEnteredRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); Publish(); } }
     public override void OnPlayerLeftRoom(Photon.Realtime.Player player) { if (PhotonNetwork.IsMasterClient && State != null) { ReconcileMembers(); State.message = "Crew member left. Reassign their roles from the crew menu."; Publish(); } }

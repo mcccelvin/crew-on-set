@@ -19,7 +19,7 @@ public partial class DirectorTerminal
     private GameObject storagePanel;
     private RectTransform storageRows;
     private RectTransform elementsArea;
-    private TMP_Text storageToggleLabel;
+    private Button storageFlipButton;
 
     private void SetStorageMode(bool showStorage)
     {
@@ -29,7 +29,7 @@ public partial class DirectorTerminal
         elementsArea.Find("Elements viewport").gameObject.SetActive(!showStorage);
         elementsArea.Find("Elements scrollbar").gameObject.SetActive(!showStorage);
         elementsArea.GetComponent<ScrollRect>().enabled = !showStorage;
-        storageToggleLabel.text = showStorage ? "SHOP" : "STORAGE";
+        if(storageFlipButton!=null)storageFlipButton.name=showStorage?"Flip to element shop":"Flip to element storage";
     }
 
     private void ConfigureElementsBalance()
@@ -194,7 +194,7 @@ public partial class DirectorTerminal
         if (tabletUI == null || viewportUI == null || storagePanel != null) return;
         EnsureElementsScroll();
         ConfigureElementsBalance();
-        var open = StorageButton(elementsArea!=null?elementsArea:viewportUI, "STORAGE", new Vector2(14, 12), new Vector2(174, 42), () => {
+        var open = TabletFlipIcon.Create(elementsArea!=null?elementsArea:viewportUI,"Flip to element storage", () => {
             if (!CanUseContract4Practice("tablet.storage") || IsActorPractice) return;
             SetStorageMode(!storagePanel.activeSelf);
         });
@@ -202,18 +202,8 @@ public partial class DirectorTerminal
         // Place the action above the list, inside the blue Elements heading.
         openRect.anchorMin = openRect.anchorMax = new Vector2(0,1);
         openRect.pivot = new Vector2(0,0);
-        var storageImage=open.GetComponent<Image>();
-        ExportUIArt.Apply(storageImage,"blueButton");
-        foreach(var outline in open.GetComponents<Outline>())outline.enabled=false;
-        foreach(var shadow in open.GetComponents<Shadow>())shadow.enabled=false;
-        var storageLabel=open.GetComponentInChildren<TMP_Text>();
-        storageToggleLabel=storageLabel;
-        storageLabel.color=Color.white;storageLabel.fontStyle=FontStyles.Bold;
-        storageLabel.enableWordWrapping=false;storageLabel.fontSizeMin=18;storageLabel.fontSizeMax=23;
-        if(storageLabel is TextMeshProUGUI outlinedLabel)ExportUIArt.OutlineText(outlinedLabel);
-        var storageColors=open.colors;storageColors.normalColor=Color.white;
-        storageColors.highlightedColor=new Color(.85f,.92f,1);storageColors.pressedColor=new Color(.65f,.76f,.94f);
-        open.colors=storageColors;
+        openRect.anchoredPosition=new Vector2(14,10);
+        storageFlipButton=open;
         storagePanel = new GameObject("Tablet Storage", typeof(RectTransform), typeof(Image));
         storagePanel.transform.SetParent(elementsArea, false);
         var panelRect = (RectTransform)storagePanel.transform;

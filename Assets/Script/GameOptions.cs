@@ -11,8 +11,11 @@ public static class GameOptions
     public const string FullscreenKey = "Options.Fullscreen";
     public const string SfxKey = "Options.SfxVolume";
     public const string MusicKey = "Options.MusicVolume";
-    public static float SfxVolume => Mathf.Clamp01(PlayerPrefs.GetFloat(SfxKey, 1f));
-    public static float MusicVolume => Mathf.Clamp01(PlayerPrefs.GetFloat(MusicKey, 1f));
+    public const string ShowFpsKey = "Options.ShowFPS";
+    internal static float? previewSfx, previewMusic, previewSensitivity;
+    public static bool ShowFps => PlayerPrefs.GetInt(ShowFpsKey, 0) == 1;
+    public static float SfxVolume => Mathf.Clamp01(previewSfx ?? PlayerPrefs.GetFloat(SfxKey, 1f));
+    public static float MusicVolume => Mathf.Clamp01(previewMusic ?? PlayerPrefs.GetFloat(MusicKey, 1f));
     public static readonly string[] QualityNames = { "Low", "Medium", "High" };
     public static int QualityIndex(int preset)
     {
@@ -29,11 +32,12 @@ public static class GameOptions
     }
     public const float MinimumMouseSensitivity = 0.01f;
     public const float MaximumMouseSensitivity = 3f;
-    public static float MouseSensitivityMultiplier => Mathf.Clamp(PlayerPrefs.GetFloat(SensitivityKey, 1f), MinimumMouseSensitivity, MaximumMouseSensitivity);
+    public static float MouseSensitivityMultiplier => Mathf.Clamp(previewSensitivity ?? PlayerPrefs.GetFloat(SensitivityKey, 1f), MinimumMouseSensitivity, MaximumMouseSensitivity);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void LoadDisplaySettings()
     {
+        FpsViewer.SetVisible(ShowFps);
         if (PlayerPrefs.HasKey(FullscreenKey)) ApplyFullscreen(PlayerPrefs.GetInt(FullscreenKey) == 1);
         AudioListener.volume=Mathf.Clamp01(PlayerPrefs.GetFloat("Options.MasterVolume",1));
         if(PlayerPrefs.HasKey("Options.Quality"))QualitySettings.SetQualityLevel(QualityIndex(SavedQualityPreset));

@@ -2,6 +2,7 @@ using UnityEngine;
 using Photon.Pun;
 using System.Collections;
 
+[DefaultExecutionOrder(-10000)]
 public class PUNSpawner : MonoBehaviour
 {
     public GameObject playerPrefab;

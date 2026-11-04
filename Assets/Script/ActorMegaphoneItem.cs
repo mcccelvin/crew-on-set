@@ -205,7 +205,7 @@ namespace Player.Equipment
 
         public string GetAimPrompt(Camera camera)
         {
-            if (IsRepositioning) return "Aim at clear floor: [LMB] place actor | [T] cancel";
+            if (IsRepositioning) return "Aim at a clear surface: [LMB] place actor | [T] cancel";
             if (camera == null) return Controls;
             var ray = new Ray(camera.transform.position, camera.transform.forward);
             if (Physics.Raycast(ray, out var hit, 10f, ~0, QueryTriggerInteraction.Ignore) && hit.collider.GetComponentInParent<ActorBot>() != null)
@@ -279,8 +279,8 @@ namespace Player.Equipment
                 foreach (var hit in hits)
                 {
                     if (hit.collider.transform.IsChildOf(transform.root) || hit.collider.GetComponentInParent<ActorBot>() != null) continue;
-                    if (hit.normal.y < .7f || Mathf.Abs(hit.point.y - selectedActor.transform.position.y) > .5f) break;
-                    previewPosition = new Vector3(hit.point.x, selectedActor.transform.position.y, hit.point.z);
+                    if (!DirectorTerminal.IsActorSupport(hit)) break;
+                    previewPosition = hit.point + Vector3.up * .015f;
                     previewValid = selectedActor.CanStandAt(previewPosition);
                     if (!previewValid) break;
                     previewActor = selectedActor;

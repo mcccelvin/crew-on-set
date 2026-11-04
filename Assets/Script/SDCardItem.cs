@@ -41,6 +41,7 @@ namespace Player.Equipment
         protected override void Awake()
         {
             base.Awake();
+            EquipmentControls = "[LMB] Info  |  [G] Drop";
             blankCardIcon = EquipmentIcon;
             EnsurePickupCollider();
         }

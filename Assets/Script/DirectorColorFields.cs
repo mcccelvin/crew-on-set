@@ -27,6 +27,7 @@ public sealed class DirectorColorFields : MonoBehaviour
             }
             Refresh(owner.CanUseColorSliders());
             ConfigureControlsGuide();
+            ConfigureColourPicker();
             return;
         }
         listenersBound = true;
@@ -57,6 +58,13 @@ public sealed class DirectorColorFields : MonoBehaviour
         }
         Refresh(owner.CanUseColorSliders());
         ConfigureControlsGuide();
+        ConfigureColourPicker();
+    }
+
+    private void ConfigureColourPicker()
+    {
+        var picker=GetComponent<DirectorColorPicker>()??gameObject.AddComponent<DirectorColorPicker>();
+        picker.Initialize(terminal.rSlider,terminal.gSlider,terminal.bSlider,terminal.ApplyTypedColor,terminal.CanUseColorSliders);
     }
 
     private void ConfigureControlsGuide()

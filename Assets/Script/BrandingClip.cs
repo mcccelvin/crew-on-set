@@ -17,6 +17,19 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
     private int dragOriginalSiblingIndex;
     private Vector2 dragOriginalPosition;
     private bool restoredFromUndo;
+    private UnityEngine.UI.Outline selectionOutline;
+
+    private void LateUpdate()
+    {
+        bool selected = linkedOverlay != null && DraggableOverlay.Selected == linkedOverlay;
+        if (selected && selectionOutline == null)
+        {
+            selectionOutline = gameObject.AddComponent<UnityEngine.UI.Outline>();
+            selectionOutline.effectColor = new Color(1f, .77f, .2f, 1f);
+            selectionOutline.effectDistance = new Vector2(3f, -3f);
+        }
+        if (selectionOutline != null) selectionOutline.enabled = selected;
+    }
 
     internal EditorEditState CaptureUndo(EditorManager editor)
     {
@@ -104,6 +117,8 @@ public class BrandingClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEnd
 
     public void OnPointerDown(PointerEventData eventData)
     {
+        if (eventData.button == PointerEventData.InputButton.Left && linkedOverlay != null &&
+            EditorTutorialInputGate.Allowed(transform)) linkedOverlay.SelectForEffects();
         if (eventData.button == PointerEventData.InputButton.Left && !PauseManager.isPaused)
             EditorTutorialManager.Instance?.OnSecondOverlayInteraction(this);
     }

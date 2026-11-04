@@ -12,6 +12,38 @@ public class EditorManager : MonoBehaviour
     public static EditorManager Instance;
     public int EditingLevel { get; private set; }
     private bool submissionStarted;
+    private bool bossWasOpenForPlayback;
+
+    private void HandlePlaybackShortcut()
+    {
+        bool bossOpen = TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen();
+        bool dialogueConsumedInput = bossOpen || bossWasOpenForPlayback;
+        bossWasOpenForPlayback = bossOpen;
+        var keyboard = Keyboard.current;
+        if (PauseManager.isPaused || dialogueConsumedInput || keyboard == null || !keyboard.spaceKey.wasPressedThisFrame) return;
+        var selected = UnityEngine.EventSystems.EventSystem.current != null
+            ? UnityEngine.EventSystems.EventSystem.current.currentSelectedGameObject : null;
+        if (selected != null && (selected.GetComponentInParent<TMP_InputField>() != null ||
+            selected.GetComponentInParent<InputField>() != null)) return;
+
+        var lesson = EditorTutorialManager.Instance;
+        Transform control = ReviewIsOpen && exportPlayer != null && exportPlayer.playButtonUI != null
+            ? exportPlayer.playButtonUI.transform : lesson != null ? lesson.playButtonRect : null;
+        if (lesson != null && lesson.RestrictsEditor && (control == null || !EditorTutorialInputGate.Allowed(control)))
+        {
+            lesson.ShowCurrentTaskReminder();
+            return;
+        }
+        if (ReviewIsOpen)
+        {
+            if (!ReviewPlaybackBlocked && exportPlayer != null) exportPlayer.TogglePlayPause();
+            return;
+        }
+        var compiler = FindObjectOfType<CommercialCompiler>();
+        if (compiler != null && compiler.editorPlayer != null && compiler.editorPlayer.computerScreen != null &&
+            compiler.editorPlayer.computerScreen.gameObject.activeInHierarchy)
+            compiler.PlayTimelineSequence();
+    }
     public List<FootageData> RoomFootage { get; set; }
     public bool IsRoomEditor => RoomFootage != null;
     public bool ReviewIsOpen => submissionStarted || reviewVideoPanel != null && reviewVideoPanel.activeInHierarchy;
@@ -90,6 +122,7 @@ public class EditorManager : MonoBehaviour
         EditorWorkspaceUI.Surface(colorGradingBin != null ? colorGradingBin.transform : null);
         UpdatePhaseUI();
         ConfigureClipBank();
+        TimelineManager.Instance?.InstallVideoTracks(this);
         LoadClipsFromBridge();
         if (CampaignProgression.GetCurrentLevel() == 2)
         {
@@ -108,6 +141,7 @@ public class EditorManager : MonoBehaviour
 
     private void Update()
     {
+        HandlePlaybackShortcut();
         if (PauseManager.isPaused) return;
         if (emptyPreviewMessage != null && gradingManager != null && gradingManager.computerScreen != null)
         {
@@ -602,7 +636,7 @@ public class EditorManager : MonoBehaviour
         List<ClipSegment> sequence = new List<ClipSegment>();
 
         List<DraggableClip> sortedClips = new List<DraggableClip>(clips);
-        sortedClips.Sort((a, b) => a.transform.localPosition.x.CompareTo(b.transform.localPosition.x));
+        sortedClips.Sort((a, b) => GokeSequence.Left(a).CompareTo(GokeSequence.Left(b)));
 
         foreach (var clip in sortedClips)
         {
@@ -859,6 +893,37 @@ public class EditorManager : MonoBehaviour
             && EditorTutorialManager.Instance.isActiveAndEnabled && EditorTutorialManager.Instance.RestrictsEditor
             && EditorTutorialManager.Instance.currentStep == EditorTutorialManager.EditorStep.ReviewAndSubmit;
         if (EditorTutorialManager.Instance != null) EditorTutorialManager.Instance.OnVideoSubmitted();
+
+        StartCoroutine(ArchiveAndSubmit());
+    }
+
+    private System.Collections.IEnumerator ArchiveAndSubmit()
+    {
+        var grades = CrossSceneData.finalGrades;
+        var entry = new CommercialArchiveEntry {
+            id = System.Guid.NewGuid().ToString("N"), date = System.DateTime.UtcNow.ToString("O"),
+            level = CrossSceneData.submittedLevel, grade = grades.letterGrade, feedback = grades.feedback
+        };
+        CommercialArchiveEntry.pending = entry;
+        var dir = CommercialArchiveEntry.DirectoryPath;
+        var capture = exportPlayer.ArchiveCut(Path.Combine(dir,entry.id+".tape"));
+        try
+        {
+            while (true)
+            {
+                bool more;
+                try { Directory.CreateDirectory(dir); more = capture.MoveNext(); }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning("Could not archive commercial: " + ex.Message);
+                    GameFeedback.Show("Video could not be saved. Your grade will still be recorded.");
+                    break;
+                }
+                if (!more) break;
+                yield return capture.Current;
+            }
+        }
+        finally { (capture as System.IDisposable)?.Dispose(); }
 
         if (reviewVideoPanel != null) reviewVideoPanel.SetActive(false);
         if (exportPlayer != null) exportPlayer.StopTape();

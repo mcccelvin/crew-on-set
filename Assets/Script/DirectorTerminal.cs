@@ -173,34 +173,21 @@ public partial class DirectorTerminal : MonoBehaviour
     private const string SelectedInteriorKey = "Studio.SelectedInterior";
     private const string WallColorKey = "Studio.WallColor";
 
-    private void RestoreOwnedInterior()
-    {
-        if (currentWall != null || BackdropPrefab == null || spawnPoint == null) return;
-        if (GameSavePrefs.GetInt("Studio.StageCleared", 0) == 1) return;
-        int level = CampaignProgression.GetCurrentLevel();
-        // Continue restarts the first studio lesson (including retry), not its
-        // unfinished placement. Keep ownership, but let ADD WALL teach placement.
-        if (gameObject.scene.name == "SingleStudio" && level == 1 &&
-            (GameSavePrefs.GetInt("TutorialProgress", 0) < 1 || GameSavePrefs.GetInt("Level1RetryActive", 0) == 1)) return;
-        int style = GameSavePrefs.GetInt(SelectedInteriorKey, 0);
-        if (level < 4 || style != 2 || !OwnsInterior(2)) style = 0;
-        if (!OwnsInterior(style)) return;
-        currentWall = InstantiateStudioBackdrop();
-        persistentWall = currentWall;
-        RaiseBackdropFloorAboveStage();
-        currentWallColor = style == 2 ? new Color(128f / 255, 80f / 255, 46f / 255) : Color.white;
-        if (ColorUtility.TryParseHtmlString(GameSavePrefs.GetString(WallColorKey, ""), out Color savedColor))
-            currentWallColor = savedColor;
-        ApplyColorToWall(currentWallColor);
-        StageInterior.Furnish(currentWall, style);
-        SyncSlidersToColor(currentWallColor);
-    }
-
     private void RefreshInteriorLabels()
     {
         for (int i = 0; i < 3; i++)
-            if (interiorLabels[i] != null) interiorLabels[i].text = StageInterior.Title(i) + "\n" + (OwnsInterior(i) ? "OWNED - PREVIEW" : StageInterior.Cost(i) + " B - PREVIEW");
-        if (interiorLabels[3] != null) interiorLabels[3].text = previewStyle < 0 ? "SELECT A SET" : OwnsInterior(previewStyle) ? "USE SET" : "BUY SET";
+        {
+            var label = interiorLabels[i];
+            if (label == null) continue;
+            int style = i == 1 ? 3 : i;
+            bool selected = previewStyle == style;
+            label.text = StageInterior.Title(style) + "\n<size=72%>" +
+                (selected ? "PREVIEWING   /   " : "") + (OwnsInterior(style) ? "Owned" : StageInterior.Cost(style) + " B") + "</size>";
+            label.GetComponentInParent<Button>(true).GetComponent<Image>().color = selected
+                ? new Color32(191, 221, 252, 255) : new Color32(226, 235, 246, 255);
+        }
+        if (interiorLabels[3] != null) interiorLabels[3].GetComponentInParent<Button>(true).interactable = previewStyle >= 0;
+        if (interiorLabels[3] != null) interiorLabels[3].text = previewStyle < 0 ? "USE SET" : OwnsInterior(previewStyle) ? "USE SET" : "BUY SET";
     }
 
     private void BuyOrUseInterior()
@@ -263,6 +250,8 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private LineRenderer selectionOutline;
     private Material selectionOutlineMaterial;
+    private RectTransform selectionFrame;
+    private readonly RectTransform[] selectionCorners = new RectTransform[8];
 
     public bool HasWall() { return currentWall != null; }
     public GameObject GetCurrentWall() { return currentWall; }
@@ -303,7 +292,7 @@ public partial class DirectorTerminal : MonoBehaviour
         if (colorControlPanel != null) colorControlPanel.SetActive(true);
 
         SyncSlidersToColor(Color.white);
-        RestoreOwnedInterior();
+
     }
 
     private void Start()
@@ -334,7 +323,7 @@ public partial class DirectorTerminal : MonoBehaviour
         BuildStorageUI();
         UpdateStageButtonLabel();
 
-        RestoreOwnedInterior();
+
 
         Canvas[] allCanvases = FindObjectsOfType<Canvas>(true);
         foreach (Canvas canvas in allCanvases)
@@ -447,6 +436,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private void LateUpdate()
     {
+        UpdateSelectionOutline();
         // The tablet owns the mouse while it is open. Tutorial dialogue and other
         // systems also manage the cursor, so enforce this after their Update calls.
         if (!isTerminalActive) return;
@@ -529,7 +519,7 @@ public partial class DirectorTerminal : MonoBehaviour
     {
         if (style == 1) return;
         if (!CanUseContract4Practice("tablet.use")) return;
-        if (style < 0 || style > 2 || (style != 0 && CampaignProgression.GetCurrentLevel() < 4)) return;
+        if (style < 0 || style > (GameSaveManager.IsTrainingRoom ? 3 : 2) || (style != 0 && !GameSaveManager.IsTrainingRoom && CampaignProgression.GetCurrentLevel() < 4)) return;
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("AddWall")) return;
 
         bool reusable = CampaignProgression.GetCurrentLevel() >= 4;
@@ -615,38 +605,61 @@ public partial class DirectorTerminal : MonoBehaviour
                 button.onClick.AddListener(() => {
                     if(choice==4){CancelInteriorPreview();interiorPicker.SetActive(false);}
                     else if(choice==3) BuyOrUseInterior();
-                    else PreviewInterior(choice);
+                    else PreviewInterior(choice == 1 ? 3 : choice);
                 });
             }
         }
+        // Keep both baked and runtime pickers inside the tablet sidebar.
+        var pickerRect = (RectTransform)interiorPicker.transform;
+        if (elementsArea != null && pickerRect.parent != elementsArea.parent)
+            pickerRect.SetParent(elementsArea.parent, false);
+        pickerRect.anchorMin = new Vector2(.747f, .026f);
+        pickerRect.anchorMax = new Vector2(.979f, .902f);
+        pickerRect.offsetMin = pickerRect.offsetMax = Vector2.zero;
         if (!interiorButtonsBound)
         {
             interiorButtonsBound = true;
+            interiorPicker.GetComponent<Image>().color = Color.white;
+            var oldHeading = pickerRect.Find("Stage sets heading");
+            if (oldHeading != null) oldHeading.gameObject.SetActive(false);
             for (int i=0;i<interiorLabels.Length;i++)
             {
                 int choice=i;
                 if (interiorLabels[i] == null) continue;
                 var button=interiorLabels[i].GetComponentInParent<Button>(true);
                 if (button == null) continue;
-                button.gameObject.SetActive(i != 1);
-                if (i != 1)
+                bool visible = i != 1 || GameSaveManager.IsTrainingRoom;
+                button.gameObject.SetActive(visible);
+                if (visible)
                 {
-                    int row = i == 0 ? 0 : i - 1;
+                    float top = i == 0 ? .84f : i == 2 ? .70f : i == 1 ? .56f : .16f;
                     var optionRect = button.transform as RectTransform;
-                    optionRect.anchorMin = new Vector2(.04f, .76f - row * .21f);
-                    optionRect.anchorMax = new Vector2(.96f, .94f - row * .21f);
+                    optionRect.anchorMin = new Vector2(i == 3 ? .48f : .055f, top - (i < 3 ? .12f : .075f));
+                    optionRect.anchorMax = new Vector2(i == 4 ? .445f : .945f, top);
                     optionRect.offsetMin = optionRect.offsetMax = Vector2.zero;
+                    var face = button.GetComponent<Image>();
+                    face.sprite = null;
+                    face.type = Image.Type.Simple;
+                    face.color = i == 3 ? new Color32(36, 75, 135, 255) : new Color32(225, 234, 247, 255);
+                    var caption = interiorLabels[i];
+                    caption.color = i == 3 ? Color.white : new Color32(24, 46, 75, 255);
+                    caption.alignment = i < 3 ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center;
+                    caption.margin = new Vector4(12, 0, 12, 0);
+                    caption.fontSizeMin = 12;
+                    caption.fontSizeMax = i < 3 ? 24 : 20;
+                    caption.enableAutoSizing = true;
                 }
                 button.onClick = new Button.ButtonClickedEvent();
                 button.onClick.AddListener(() => {
                     if(choice==4){CancelInteriorPreview();interiorPicker.SetActive(false);}
-                    else if(choice==3) BuyOrUseInterior(); else PreviewInterior(choice);
+                    else if(choice==3) BuyOrUseInterior(); else PreviewInterior(choice == 1 ? 3 : choice);
                 });
             }
         }
-        UITransition.Show(interiorPicker);
+        interiorPicker.SetActive(true);
         RefreshInteriorLabels();
         interiorPicker.transform.SetAsLastSibling();
+        pickerRect.parent.Find("Terminal close button")?.SetAsLastSibling();
     }
 
     public void SetCustomColor(float r, float g, float b)
@@ -841,6 +854,54 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private void UpdateSelectionOutline()
     {
+        if (selectionOutline != null) selectionOutline.enabled = false;
+        bool visible = isTerminalActive && selectedObject != null && viewportUI != null && topDownCamera != null;
+        if (!visible) { if (selectionFrame != null) selectionFrame.gameObject.SetActive(false); return; }
+        Bounds bounds = default;
+        bool found = false;
+        if (selectedRenderers != null) foreach (var renderer in selectedRenderers)
+        {
+            if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy || renderer is LineRenderer) continue;
+            if (!found) { bounds = renderer.bounds; found = true; } else bounds.Encapsulate(renderer.bounds);
+        }
+        if (!found) { if (selectionFrame != null) selectionFrame.gameObject.SetActive(false); return; }
+        Vector2 min = Vector2.one * float.PositiveInfinity, max = Vector2.one * float.NegativeInfinity;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector3 point = bounds.center + Vector3.Scale(bounds.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+            Vector3 view = topDownCamera.WorldToViewportPoint(point);
+            if (view.z <= topDownCamera.nearClipPlane) { if (selectionFrame != null) selectionFrame.gameObject.SetActive(false); return; }
+            min = Vector2.Min(min, view); max = Vector2.Max(max, view);
+        }
+        if (max.x < 0 || max.y < 0 || min.x > 1 || min.y > 1)
+        { if (selectionFrame != null) selectionFrame.gameObject.SetActive(false); return; }
+        if (selectionFrame == null)
+        {
+            selectionFrame = new GameObject("Selected object corners", typeof(RectTransform), typeof(LayoutElement)).GetComponent<RectTransform>();
+            selectionFrame.SetParent(viewportUI, false);
+            selectionFrame.GetComponent<LayoutElement>().ignoreLayout = true;
+            for (int i = 0; i < 8; i++)
+            {
+                var corner = new GameObject("Corner " + i, typeof(RectTransform), typeof(Image), typeof(Shadow));
+                corner.layer = viewportUI.gameObject.layer; corner.transform.SetParent(selectionFrame, false);
+                var image = corner.GetComponent<Image>(); image.color = new Color32(255, 204, 70, 255); image.raycastTarget = false;
+                var shadow = corner.GetComponent<Shadow>(); shadow.effectColor = new Color(0,0,0,.8f); shadow.effectDistance = new Vector2(1,-1);
+                selectionCorners[i] = (RectTransform)corner.transform;
+                Vector2 anchor = new Vector2((i / 2 & 1) == 0 ? 0 : 1, (i / 2 & 2) == 0 ? 0 : 1);
+                selectionCorners[i].anchorMin = selectionCorners[i].anchorMax = selectionCorners[i].pivot = anchor;
+            }
+        }
+        Vector2 pad = new Vector2(8f / Mathf.Max(1, viewportUI.rect.width), 8f / Mathf.Max(1, viewportUI.rect.height));
+        selectionFrame.anchorMin = Vector2.Max(Vector2.zero, min - pad);
+        selectionFrame.anchorMax = Vector2.Min(Vector2.one, max + pad);
+        selectionFrame.offsetMin = selectionFrame.offsetMax = Vector2.zero;
+        selectionFrame.SetAsLastSibling(); selectionFrame.gameObject.SetActive(true);
+        float length = Mathf.Min(24, Mathf.Min(selectionFrame.rect.width, selectionFrame.rect.height) * .3f);
+        for (int i = 0; i < 8; i++) selectionCorners[i].sizeDelta = i % 2 == 0 ? new Vector2(length,3) : new Vector2(3,length);
+    }
+
+    private void LegacySelectionOutline()
+    {
         if (selectedObject != null)
         {
             if (selectionOutline == null)
@@ -987,6 +1048,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private void TryDelete3DObject()
     {
+        if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseTabletFeature("RemoveProp")) return;
         if (!CanUseContract4Practice("tablet.delete")) return;
         Ray ray = GetMouseRay();
         RaycastHit[] hits = Physics.RaycastAll(ray, 100f);
@@ -1130,7 +1192,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
         showPropCostWarningOnDrop = false;
 
-        int itemCost = isChair ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle;
+        int itemCost = isChair ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex % 3, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle;
         bool freePracticeItem = IsActorPractice && (isChair || (isActor && FindObjectOfType<CubeActor>() == null));
         if (!placingStoredItem && !freePracticeItem && CareerManager.Instance != null && !CareerManager.Instance.TrySpendMoney(itemCost, isActor ? "Actors" : "Stage elements", itemName))
         {
@@ -1260,6 +1322,11 @@ public partial class DirectorTerminal : MonoBehaviour
             !practice.CanUseContract4PracticeAction("tablet.move")) return;
         if (draggedObject != null)
         {
+            if (draggedObject.GetComponentInChildren<CubeActor>() != null && !TryPlaceActorOnFloor())
+            {
+                GameFeedback.ShowBriefWarning("ACTOR PLACEMENT\nChoose a flat surface with enough room for the actor.");
+                return;
+            }
             if (TutorialManager.Instance != null && !TutorialManager.Instance.CanPlaceTutorialProp(draggedObject)) return;
             GameObject placedObject = draggedObject;
             if (placedObject.name == "Practice Chair") TutorialChairPlaced = true;
@@ -1292,6 +1359,11 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private void MoveObjectWithMouse()
     {
+        if (draggedObject.GetComponentInChildren<CubeActor>() != null)
+        {
+            TryPlaceActorOnFloor();
+            return;
+        }
         Ray ray = GetMouseRay();
         bool stacked = false;
 
@@ -1338,6 +1410,26 @@ public partial class DirectorTerminal : MonoBehaviour
         }
     }
 
+    public static bool IsActorSupport(RaycastHit hit)
+    {
+        return hit.collider != null && hit.normal.y >= .7f &&
+            hit.collider.GetComponentInParent<CubeActor>() == null &&
+            hit.collider.GetComponentInParent<ActorBot>() == null &&
+            hit.collider.GetComponentInParent<Player.PlayerController.PlayerController>() == null;
+    }
+
+    private bool TryPlaceActorOnFloor()
+    {
+        if (!IsMouseOverViewport()) return false;
+        if (draggedColliders == null) draggedColliders = draggedObject.GetComponentsInChildren<Collider>();
+        if (!RaycastPastDraggedObject(GetMouseRay(), out RaycastHit hit, ~0) || !IsActorSupport(hit)) return false;
+        Vector3 destination = hit.point + Vector3.up * .015f;
+        var actor = draggedObject.GetComponent<ActorBot>();
+        if (actor != null && !actor.CanStandAt(destination)) return false;
+        draggedObject.transform.position = destination;
+        return true;
+    }
+
     private bool RaycastPastDraggedObject(Ray ray, out RaycastHit hit, int layerMask)
     {
         temporarilyDisabledColliders.Clear();
@@ -1350,7 +1442,7 @@ public partial class DirectorTerminal : MonoBehaviour
                 temporarilyDisabledColliders.Add(collider);
                 collider.enabled = false;
             }
-            return Physics.Raycast(ray, out hit, 100f, layerMask);
+            return Physics.Raycast(ray, out hit, 100f, layerMask, QueryTriggerInteraction.Ignore);
         }
         finally
         {
@@ -1447,7 +1539,7 @@ public partial class DirectorTerminal : MonoBehaviour
             }
         }
 
-        if (currentLevel >= 4)
+        if (currentLevel >= 4 || GameSaveManager.IsTrainingRoom)
         {
             CreateStageItemCard("CHAIR", false, -4);
             CreateStageItemCard("ACTOR A", true, 0);
@@ -1455,16 +1547,19 @@ public partial class DirectorTerminal : MonoBehaviour
             CreateStageItemCard("ACTOR C", true, 2);
         }
 
-        if (currentLevel == 3 || currentLevel == 5)
+        if (currentLevel == 3 || currentLevel == 5 || GameSaveManager.IsTrainingRoom)
         {
             CreateStageItemCard("TERRARI CAR", false, 0);
         }
 
-        if (currentLevel >= 3)
+        if (GameSaveManager.IsTrainingRoom)
         {
-
-
-
+            CreateStageItemCard("HARAYA ACTOR A", true, 3);
+            CreateStageItemCard("HARAYA ACTOR B", true, 4);
+            CreateStageItemCard("HARAYA ACTOR C", true, 5);
+            CreateStageItemCard("LIGHT STRIP", false, -1);
+            CreateStageItemCard("OVERHEAD LIGHT BANK", false, -2);
+            CreateStageItemCard("BLACK FLAG", false, -3);
         }
 
         if (currentLevel == 4 || GameSaveManager.IsTrainingRoom)
@@ -1483,7 +1578,7 @@ public partial class DirectorTerminal : MonoBehaviour
             }
             if (!added) CreateCampaignProductCard("KAPE KULTURA PRODUCT", 4);
         }
-        if (currentLevel == 5 && !GameSaveManager.IsTrainingRoom) CreateCampaignProductCard("HARAYA PRODUCT", 5);
+        if (currentLevel == 5 && !GameSaveManager.IsTrainingRoom) CreateCampaignProductCard("HARAYA PERFUME", 5);
         StyleElementCards();
     }
 
@@ -1601,6 +1696,11 @@ public partial class DirectorTerminal : MonoBehaviour
     public void CloseTerminal()
     {
         if (!CanUseContract4Practice("tablet.close")) return;
+        if (draggedObject != null)
+        {
+            DropDraggedProp();
+            if (draggedObject != null) return;
+        }
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanCloseUI("DirectorTerminal"))
         {
             return;
@@ -1610,6 +1710,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
         isTerminalActive = false;
         SetStorageMode(false);
+        if (selectionFrame != null) selectionFrame.gameObject.SetActive(false);
         GameSavePrefs.Save();
         GameSaveManager.Instance?.SaveCheckpoint();
         studioPaintChanged = false;
@@ -1679,8 +1780,8 @@ public partial class DirectorTerminal : MonoBehaviour
         TextMeshProUGUI cardText = newUICard.GetComponentInChildren<TextMeshProUGUI>();
         if (cardText != null)
         {
-            cardText.text = itemName + (isActor ? "\n" + ActorBot.TierName(itemIndex) : "") + "\n" +
-                (IsActorPractice && !isActor && itemIndex == -4 ? 0 : !isActor && itemIndex == -4 ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle) + " B";
+            cardText.text = itemName + (isActor ? "\n" + ActorBot.TierName(itemIndex % 3) : "") + "\n" +
+                (IsActorPractice && !isActor && itemIndex == -4 ? 0 : !isActor && itemIndex == -4 ? ProductionEconomy.Prop : isActor ? ActorBot.HirePrice(itemIndex % 3, ProductionEconomy.ActorBase) : itemIndex == -1 ? ProductionEconomy.LightStrip : itemIndex <= -2 ? AutomotiveGrip.Cost(itemIndex) : ProductionEconomy.Vehicle) + " B";
             if (isActor)
             {
                 cardText.enableAutoSizing = true;
@@ -1849,6 +1950,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private void OnDisable()
     {
+        if (selectionFrame != null) selectionFrame.gameObject.SetActive(false);
         // Also flush paint when exiting directly from Pause while the tablet is open.
         if (!studioPaintChanged) return;
         GameSavePrefs.Save();
@@ -1858,6 +1960,7 @@ public partial class DirectorTerminal : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (selectionFrame != null) Destroy(selectionFrame.gameObject);
         CancelInteriorPreview();
         if (selectionOutlineMaterial != null) Destroy(selectionOutlineMaterial);
     }
@@ -1869,6 +1972,34 @@ public class CubeVehicle : MonoBehaviour
 
 public class CubeActor : MonoBehaviour
 {
+    private readonly RaycastHit[] supportHits = new RaycastHit[32];
+    private float fallSpeed;
+
+    private void FixedUpdate()
+    {
+        var bot = GetComponent<ActorBot>();
+        if (bot != null && bot.IsUsingFurniture) { fallSpeed = 0f; return; }
+        Vector3 feet = transform.position;
+        fallSpeed += Mathf.Abs(Physics.gravity.y) * Time.fixedDeltaTime;
+        float drop = fallSpeed * Time.fixedDeltaTime;
+        int count = Physics.RaycastNonAlloc(feet + Vector3.up * .12f, Vector3.down,
+            supportHits, .135f + drop, ~0, QueryTriggerInteraction.Ignore);
+        float highest = float.NegativeInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            var hit = supportHits[i];
+            if (!hit.transform.IsChildOf(transform) && DirectorTerminal.IsActorSupport(hit))
+                highest = Mathf.Max(highest, hit.point.y);
+        }
+        if (highest > float.NegativeInfinity)
+        {
+            feet.y = highest + .015f;
+            fallSpeed = 0f;
+        }
+        else feet.y -= drop;
+        transform.position = feet;
+    }
+
     private Transform leftArmPivot;
     private Transform rightArmPivot;
     private Transform leftLegPivot;

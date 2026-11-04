@@ -9,17 +9,19 @@ The panel uses the game's rounded cream paper, brown ink/outline, gold key/actio
 Buttons:
 
 - Fast dialogue ON/OFF: instant Boss text and practice waits, with tasks still active.
-- Disable tutorials: bypass for this session.
+- Enable/disable tutorials: the same button changes label with the effective tutorial state, including a skipped Boss choice. Disable bypasses guidance for the session. Enable in the studio reloads the current contract and directly starts its tutorial; it does not invoke the level cheat's budget grant or career reset. Enable in the editor restarts its existing lesson in place (Contracts 1, 2 and 4 have editor lessons); the first editor tutorial retains its authored references while disabled. Training remains free practice and room commands stay blocked.
 - Skip tutorial step: invokes the existing studio/editor step completion, retaining transition/readiness guards.
 - +1,000 / -1,000 B-Coins: changes the current production budget, with no negative balance.
 - +100 TEST C-Coins: starts/adds to an isolated session-only test wallet.
 - Create 12-second clip: editing-scene test recording.
 - Spawn test SD card: studio test card.
 - Restore real C-wallet: discards test coins, purchases and equipment and restores the previous account state.
-- Load contract 1–4: the existing level-jump commands.
+- Load contract 1–5: five equal-width buttons use `CampaignProgression.MinimumLevel`/`MaximumLevel`; `CareerManager.SwitchLevelCheat` accepts the same range. Contract 5 routes to the existing Haraya campaign slot so it is available for further level development.
 - Reset current career: requires a second click within eight seconds. Another command or closing the panel cancels confirmation. Uses the existing career-scoped reset, not global Unity PlayerPrefs deletion.
 
 `DevCommandsPanel` owns its overlay and remembers the previous pause, time scale, audio pause and cursor state. It blocks input behind the sheet and restores those states on close, including when opened over an already-paused game. Scene-changing/tutorial commands close it before invoking the existing gameplay method. `PauseManager` and `AlmanacManager` ignore the closing Escape frame so it cannot also close an underlying menu.
+
+The tutorial-toggle and Contract 5 update passed the 48 focused tutorial-policy checks and script compilation with editor and actual standalone-player references. Its in-game layout and end-to-end restart behavior still require Play Mode checks.
 
 ## Test C-Coins are not paid currency
 

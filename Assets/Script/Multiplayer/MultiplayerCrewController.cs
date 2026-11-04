@@ -67,8 +67,8 @@ public sealed class MultiplayerCrewController : MonoBehaviour
             {
                 if (marker == null)
                 {
-                    marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder); marker.name = "Local placement marker";
-                    Destroy(marker.GetComponent<Collider>()); marker.transform.localScale = new Vector3(.6f, .01f, .6f);
+                    marker = new GameObject("Local placement square");
+                    SquareGuideMarker.Apply(marker);
                 }
                 marker.SetActive(valid); if (valid) marker.transform.position = hit.point + Vector3.up * .015f;
             }

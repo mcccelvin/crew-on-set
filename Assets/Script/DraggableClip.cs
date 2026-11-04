@@ -6,6 +6,76 @@ public enum ProvidedClipRole { None, GokeIntro, GokeOutro, TerrariIntro, Terrari
 
 public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerDownHandler
 {
+    private RectTransform placementPreview;
+
+    public Vector2 GetDropPlacement(RectTransform track)
+    {
+        float width = rectTransform.rect.width;
+        if (TimelineManager.Instance != null && totalFrames > 0)
+        {
+            var player = FindObjectOfType<TruePixelPlayer>();
+            float fps = player != null && player.framesPerSecond > 0 ? player.framesPerSecond : TapeSettings.framesPerSecond;
+            width = Mathf.Max(1, endFrame - startFrame) / fps * TimelineManager.Instance.pixelsPerSecond;
+        }
+        // Match the bank item's left edge, then expand to its true duration.
+        Vector3 local = track.InverseTransformPoint(rectTransform.position);
+        float anchor = Mathf.Lerp(track.rect.xMin, track.rect.xMax,
+            Mathf.Lerp(rectTransform.anchorMin.x, rectTransform.anchorMax.x, rectTransform.pivot.x));
+        float start = local.x - anchor - rectTransform.rect.width * rectTransform.pivot.x;
+        float lastEnd = 0;
+        bool overlaps = false;
+        foreach (Transform child in track)
+        {
+            var clip = child.GetComponent<DraggableClip>();
+            if (clip == null || clip == this || !clip.isOnTimeline) continue;
+            var other = child as RectTransform;
+            float left = other.anchoredPosition.x - other.rect.width * other.pivot.x;
+            float end = left + other.rect.width;
+            lastEnd = Mathf.Max(lastEnd, end);
+            overlaps |= start < end && start + width > left;
+        }
+        if (overlaps) start = lastEnd;
+        var lesson = EditorTutorialManager.Instance;
+        if (lesson != null && lesson.gameObject.activeInHierarchy &&
+            lesson.currentStep == EditorTutorialManager.EditorStep.DragVideoToTimeline) start = 0;
+        return new Vector2(Mathf.Max(0, start), width);
+    }
+
+    private void ClearPlacementPreview()
+    {
+        if (placementPreview != null) { placementPreview.gameObject.SetActive(false); Destroy(placementPreview.gameObject); }
+        placementPreview = null;
+    }
+
+    private void OnDisable() { ClearPlacementPreview(); }
+
+    private void UpdatePlacementPreview(PointerEventData data)
+    {
+        var hit = data.pointerCurrentRaycast.gameObject;
+        var zone = hit != null ? hit.GetComponentInParent<TimelineDropZone>() : null;
+        if (zone == null) { ClearPlacementPreview(); return; }
+        var track = zone.transform as RectTransform;
+        if (track == null) return;
+        if (placementPreview == null)
+        {
+            placementPreview = new GameObject("Clip placement preview", typeof(RectTransform), typeof(Image), typeof(LayoutElement)).GetComponent<RectTransform>();
+            placementPreview.GetComponent<LayoutElement>().ignoreLayout = true;
+            var image = placementPreview.GetComponent<Image>();
+            var source = GetComponent<Image>();
+            image.sprite = source != null ? source.sprite : null;
+            image.color = source != null ? source.color : new Color(.3f, .7f, 1f);
+            var color = image.color; color.a = .4f; image.color = color;
+            image.raycastTarget = false;
+        }
+        placementPreview.SetParent(track, false);
+        placementPreview.anchorMin = rectTransform.anchorMin;
+        placementPreview.anchorMax = rectTransform.anchorMax;
+        placementPreview.pivot = rectTransform.pivot;
+        Vector2 placement = GetDropPlacement(track);
+        placementPreview.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, placement.y);
+        placementPreview.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, rectTransform.rect.height);
+        placementPreview.anchoredPosition = new Vector2(placement.x + placement.y * rectTransform.pivot.x, 0);
+    }
     [Header("Clip Data")]
     public string clipFilePath;
     [HideInInspector] public ProvidedClipRole providedRole;
@@ -171,6 +241,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             if (isOnTimeline)
             {
                 Selected = this;
+                DraggableOverlay.ClearSelection();
                 FindObjectOfType<ColorGradingManager>()?.SelectClip(this);
             }
             if (Time.time - lastLeftClickTime < doubleClickThreshold)
@@ -203,9 +274,9 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             transform.SetSiblingIndex(trueBankSiblingIndex);
 
             rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, binWidth);
-            leftTrimPixels = 0f;
-            rightTrimPixels = 0f;
-            UpdateFrameData();
+            originalWidth = binWidth;
+            leftTrimPixels = startFrame * originalWidth / Mathf.Max(1, totalFrames);
+            rightTrimPixels = (totalFrames - endFrame) * originalWidth / Mathf.Max(1, totalFrames);
 
             rectTransform.anchoredPosition3D = Vector3.zero;
             rectTransform.localRotation = Quaternion.identity;
@@ -254,6 +325,18 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         float newWidth = originalWidth - leftTrimPixels - rightTrimPixels;
         newWidth = Mathf.Max(pixelsPerFrame, newWidth);
         float newLeftEdge = trueZeroX + leftTrimPixels;
+
+        if (isOnTimeline && TimelineManager.Instance != null && TimelineManager.Instance.HasMultipleVideoTracks &&
+            !TimelineManager.Instance.TryFitVideoRange(this, newLeftEdge, newWidth))
+        {
+            // Both lanes are occupied. Keep the previous in/out points and geometry.
+            startFrame = Mathf.RoundToInt((currentLeftEdge - trueZeroX) / pixelsPerFrame);
+            endFrame = startFrame + Mathf.RoundToInt(rectTransform.rect.width / pixelsPerFrame);
+            leftTrimPixels = startFrame * pixelsPerFrame;
+            rightTrimPixels = (totalFrames - endFrame) * pixelsPerFrame;
+            GameFeedback.Show("Both video tracks are occupied here. Move a clip before extending this trim.");
+            return;
+        }
 
         rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, newWidth);
         float newPivotXPos = newLeftEdge + (newWidth * rectTransform.pivot.x);
@@ -350,6 +433,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
         if (currentDragMode == DragMode.MoveFree)
         {
             rectTransform.anchoredPosition += eventData.delta / parentCanvas.scaleFactor;
+            UpdatePlacementPreview(eventData);
         }
         else if (currentDragMode == DragMode.SlideTimeline)
         {
@@ -378,10 +462,13 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             float rightEdge = rectTransform.anchoredPosition.x + (oldWidth * (1f - rectTransform.pivot.x));
             float proposedLeftEdge = rightEdge - newWidth;
 
-            if (proposedLeftEdge < dragMinX) { newWidth = rightEdge - dragMinX; deltaX = oldWidth - newWidth; }
+            bool multiTrack = TimelineManager.Instance != null && TimelineManager.Instance.HasMultipleVideoTracks;
+            if (!multiTrack && proposedLeftEdge < dragMinX) { newWidth = rightEdge - dragMinX; deltaX = oldWidth - newWidth; }
             if (proposedLeftEdge < 0) { newWidth = rightEdge; deltaX = oldWidth - newWidth; }
 
             if (newWidth < 20f) { newWidth = 20f; deltaX = oldWidth - newWidth; }
+
+            if (multiTrack && !TimelineManager.Instance.TryFitVideoRange(this, rightEdge - newWidth, newWidth)) return;
 
             rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, newWidth);
             float newX = rightEdge - (newWidth * (1f - rectTransform.pivot.x));
@@ -400,8 +487,11 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
             float leftEdge = rectTransform.anchoredPosition.x - (oldWidth * rectTransform.pivot.x);
             float proposedRightEdge = leftEdge + newWidth;
 
-            if (proposedRightEdge > dragMaxX) { newWidth = dragMaxX - leftEdge; deltaX = newWidth - oldWidth; }
+            bool multiTrack = TimelineManager.Instance != null && TimelineManager.Instance.HasMultipleVideoTracks;
+            if (!multiTrack && proposedRightEdge > dragMaxX) { newWidth = dragMaxX - leftEdge; deltaX = newWidth - oldWidth; }
             if (newWidth < 20f) { newWidth = 20f; deltaX = newWidth - oldWidth; }
+
+            if (multiTrack && !TimelineManager.Instance.TryFitVideoRange(this, leftEdge, newWidth)) return;
 
             rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, newWidth);
             float newX = leftEdge + (newWidth * rectTransform.pivot.x);
@@ -414,6 +504,7 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        ClearPlacementPreview();
         if (tutorialRejectedDrag) { tutorialRejectedDrag = false; return; }
         if (eventData.button == PointerEventData.InputButton.Right) return;
         canvasGroup.blocksRaycasts = true;
@@ -471,7 +562,9 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 if (TimelineManager.Instance.pixelsPerSecond <= 0) TimelineManager.Instance.RefreshTimeline();
 
                 float fps = (tvPlayer != null && tvPlayer.framesPerSecond > 0) ? tvPlayer.framesPerSecond : TapeSettings.framesPerSecond;
-                float durationInSeconds = (float)totalFrames / fps;
+                startFrame = Mathf.Clamp(startFrame, 0, totalFrames - 1);
+                endFrame = Mathf.Clamp(endFrame, startFrame + 1, totalFrames);
+                float durationInSeconds = (endFrame - startFrame) / fps;
 
                 float oldWidth = rectTransform.rect.width;
                 float trueTimelineWidth = durationInSeconds * TimelineManager.Instance.pixelsPerSecond;
@@ -481,7 +574,10 @@ public class DraggableClip : MonoBehaviour, IBeginDragHandler, IDragHandler, IEn
                 float widthDifference = trueTimelineWidth - oldWidth;
                 rectTransform.anchoredPosition += new Vector2(widthDifference * rectTransform.pivot.x, 0);
 
-                originalWidth = trueTimelineWidth;
+                float pixelsPerFrame = TimelineManager.Instance.pixelsPerSecond / fps;
+                originalWidth = totalFrames * pixelsPerFrame;
+                leftTrimPixels = startFrame * pixelsPerFrame;
+                rightTrimPixels = (totalFrames - endFrame) * pixelsPerFrame;
 
                 float proposedStart = rectTransform.anchoredPosition.x - (trueTimelineWidth * rectTransform.pivot.x);
                 float proposedEnd = proposedStart + trueTimelineWidth;

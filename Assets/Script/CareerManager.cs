@@ -380,7 +380,7 @@ public class CareerManager : MonoBehaviour
 
     public static void SwitchLevelCheat(int targetLevel)
     {
-        if (!DevCommandsPanel.CommandsAllowed || targetLevel<1 || targetLevel>4) return;
+        if (!DevCommandsPanel.CommandsAllowed || targetLevel<CampaignProgression.MinimumLevel || targetLevel>CampaignProgression.MaximumLevel) return;
         CampaignProgression.SetCheatLevel(targetLevel);
         // Restart the flower setup only for an explicit level-one cheat.
         if (targetLevel == 1)
@@ -422,8 +422,7 @@ public class CareerManager : MonoBehaviour
         PlayerPrefs.Save();
         Debug.Log("<color=yellow>DEV LEVEL CHEAT: Loading Level " + targetLevel + "</color>");
         GameFeedback.Show("CHEAT ACTIVATED\nLoading Level " + targetLevel);
-        if (targetLevel == 1) StudioArrivalTour.Queue();
-        LoadingScreenController.LoadScene("SingleStudio");
+        LoadingScreenController.LoadScene(targetLevel==1?"CutScene":"SingleStudio");
     }
 
     private void OnDestroy()

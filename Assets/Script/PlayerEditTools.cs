@@ -18,13 +18,22 @@ public class PlayerEditTools : MonoBehaviour
 
     private DraggableClip Selection => DraggableClip.Selected != null && DraggableClip.Selected.isOnTimeline && DraggableClip.Selected.gameObject.activeInHierarchy ? DraggableClip.Selected : null;
     public CameraMotionMode selectedCameraMotion { get => Selection != null ? Selection.cameraMotion : CameraMotionMode.None; set { if (Selection != null) Selection.cameraMotion = value; } }
-    public GraphicAnimationMode selectedGraphicAnimation { get => Selection != null ? Selection.graphicAnimation : GraphicAnimationMode.Cut; set { if (Selection != null) Selection.graphicAnimation = value; } }
+    private DraggableOverlay OverlaySelection => DraggableOverlay.Selected != null && DraggableOverlay.Selected.isOnTimeline && DraggableOverlay.Selected.gameObject.activeInHierarchy ? DraggableOverlay.Selected : null;
+    public GraphicAnimationMode selectedGraphicAnimation {
+        get => OverlaySelection != null && OverlaySelection.hasIndividualAnimation ? OverlaySelection.individualAnimation : Selection != null ? Selection.graphicAnimation : GraphicAnimationMode.Cut;
+        set {
+            if (OverlaySelection != null) { OverlaySelection.individualAnimation = value; OverlaySelection.hasIndividualAnimation = true; }
+            else if (Selection != null) Selection.graphicAnimation = value;
+        }
+    }
     public TransitionMode selectedTransition { get => Selection != null ? Selection.transition : TransitionMode.Cut; set { if (Selection != null) Selection.transition = value; } }
     public MusicMode selectedMusic { get => Selection != null ? Selection.music : MusicMode.None; set { if (Selection != null) Selection.music = value; } }
     private DraggableClip displayedSelection;
+    private DraggableOverlay displayedOverlay;
     private void Update()
     {
-        if (displayedSelection != Selection) { displayedSelection = Selection; RefreshLabels(); }
+        if (displayedSelection != Selection || displayedOverlay != OverlaySelection)
+        { displayedSelection = Selection; displayedOverlay = OverlaySelection; RefreshLabels(); }
     }
 
     [SerializeField] private GameObject toolsPanel;
@@ -185,6 +194,7 @@ public class PlayerEditTools : MonoBehaviour
 
     public void CycleTransition()
     {
+        if (OverlaySelection != null) { CycleGraphicAnimation(); return; }
         selectedTransition = (TransitionMode)(((int)selectedTransition + 1) % 4);
         RefreshLabels();
         NotifyEditChanged();
@@ -216,10 +226,11 @@ public class PlayerEditTools : MonoBehaviour
     private void RefreshLabels()
     {
         foreach (var rect in new[] { cameraMotionButtonRect, graphicAnimationButtonRect, transitionButtonRect, musicButtonRect })
-            if (rect != null) rect.GetComponent<Button>().interactable = Selection != null;
+            if (rect != null) rect.GetComponent<Button>().interactable = OverlaySelection != null
+                ? rect == graphicAnimationButtonRect || rect == transitionButtonRect : Selection != null;
         if (cameraMotionText != null) cameraMotionText.text = "CAMERA MOTION\n<color=#E6B58D>" + GetCameraMotionName() + "</color>";
-        if (graphicAnimationText != null) graphicAnimationText.text = "GRAPHIC ANIMATION\n<color=#E6B58D>" + GetGraphicAnimationName() + "</color>";
-        if (transitionText != null) transitionText.text = "TRANSITION\n<color=#E6B58D>" + GetTransitionName() + "</color>";
+        if (graphicAnimationText != null) graphicAnimationText.text = (OverlaySelection != null ? "SELECTED OVERLAY" : "GRAPHIC ANIMATION") + "\n<color=#E6B58D>" + GetGraphicAnimationName() + "</color>";
+        if (transitionText != null) transitionText.text = (OverlaySelection != null ? "OVERLAY TRANSITION" : "TRANSITION") + "\n<color=#E6B58D>" + (OverlaySelection != null ? GetGraphicAnimationName() : GetTransitionName()) + "</color>";
         if (musicText != null) musicText.text = "MUSIC\n<color=#E6B58D>" + selectedMusic.ToString().ToUpper() + "</color>";
     }
 

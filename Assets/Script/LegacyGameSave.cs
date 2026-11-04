@@ -8,6 +8,8 @@ public static class LegacyGameSave
     public static List<GameSaveValue> Read(bool prepareCheckpoint = true)
     {
         var values = new List<GameSaveValue>();
+        if (PlayerPrefs.HasKey(EquipmentStorageCabinet.SaveKey))
+            values.Add(new GameSaveValue { key=EquipmentStorageCabinet.SaveKey,kind=2,text=PlayerPrefs.GetString(EquipmentStorageCabinet.SaveKey) });
         if (PlayerPrefs.HasKey(CareerProfileProgress.SaveKey))
             values.Add(new GameSaveValue { key = CareerProfileProgress.SaveKey, kind = 2, text = PlayerPrefs.GetString(CareerProfileProgress.SaveKey) });
         foreach (var achievement in CareerProfileProgress.Achievements)

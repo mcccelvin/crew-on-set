@@ -31,14 +31,17 @@ public sealed class StudioSetDressing : MonoBehaviour
         var host = new GameObject(HostName);
         SceneManager.MoveGameObjectToScene(host, scene);
         host.AddComponent<StudioSetDressing>();
+        host.AddComponent<StageWalkAccess>();
         RaiseComputers(roots);
 
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
-        if (catalog == null || catalog.decorators == null) return;
+        if (catalog == null || catalog.decorators == null)
+        { host.AddComponent<StudioDeliveryBay>().Build(scene); EquipmentStorageCabinet.Install(scene,host.transform); return; }
         Renderer floor = null;
         var meshes = new List<MeshFilter>();
         foreach (var root in roots)
         {
+            if (root.name == MultiplayerStudioEnvironment.RetiredName) continue;
             meshes.AddRange(root.GetComponentsInChildren<MeshFilter>(true));
             foreach (var renderer in root.GetComponentsInChildren<MeshRenderer>(true))
                 if (renderer.name.Equals("Floor", StringComparison.OrdinalIgnoreCase) &&
@@ -66,6 +69,8 @@ public sealed class StudioSetDressing : MonoBehaviour
             }
             Spawn(entry, host.transform, floor);
         }
+        host.AddComponent<StudioDeliveryBay>().Build(scene);
+        EquipmentStorageCabinet.Install(scene,host.transform);
         Physics.SyncTransforms();
     }
 

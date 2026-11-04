@@ -72,6 +72,8 @@ public sealed class UIMotionInstaller : MonoBehaviour
 
     private static void Decorate(Button button)
     {
+        if (button != null && button.gameObject.scene.IsValid())
+            UISurfaceDepth.Apply(button.targetGraphic as Image);
         if (button == null || !button.gameObject.scene.IsValid() ||
             button.GetComponent<Animator>() != null || button.GetComponent<UIButtonFeedback>() != null) return;
         var canvas = button.GetComponentInParent<Canvas>(true);
@@ -140,8 +142,9 @@ public sealed class UIMotionInstaller : MonoBehaviour
     public static void EnsureScrollHandles(ScrollRect scroll)
     {
         if (scroll == null || scroll.content == null || !scroll.gameObject.scene.IsValid()) return;
-        // Color grading keeps wheel/drag scrolling, without the added gold rail.
-        if (scroll.name == "Grade Scroll View" || scroll.content.name == "Grade Scroll Content")
+        // These views deliberately keep wheel/drag scrolling without a rail.
+        if (scroll.name == "Grade Scroll View" || scroll.content.name == "Grade Scroll Content" ||
+            (scroll.name == "Settings viewport" && scroll.GetComponentInParent<SettingsLayout>() != null))
         {
             var bar = scroll.verticalScrollbar;
             if (bar != null && bar.name == "Auto vertical scroll handle")

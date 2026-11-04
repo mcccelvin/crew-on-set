@@ -1,6 +1,8 @@
 # Saved games
 
-Choose **Play → + → Single**, name the game, and create it. Select an existing save box and press **START** to continue. Additional saves appear in the scrolling grid; there are no page arrows. The original creation panel also offers **Multi** for hosting, while **JOIN** opens the existing room-code flow. Each single-player career has independent money, contract completion, grades, rewards and handbook progress.
+Choose **Play**, select a contract and press **START**. Each account has one persistent career with replayable contracts and a separate training-room entry. The first play creates that career; subsequent contract starts reuse its identity. Completed-contract replays use an isolated production attempt while retaining completion, rewards, achievements and lifetime results in that same career. HOST LOBBY/JOIN remain separate Photon flows.
+
+`GameSaveManager.SingleCareer` gives the playable career a deterministic account-scoped GUID. Legacy checkpoints migrate by copying the selected/current career (otherwise the most advanced retained career) into that identity, retaining the original files, values, reward identity and profile-history origin. Old saves and conflict copies remain backups/history, not additional selectable careers. A running legacy session is rebound without replacing its live preferences; an existing primary checkpoint is backed up first. Guest/account separation remains intact. Legacy creation entry points also reuse the primary career. Budget recovery offers RETRY CONTRACT, MAIN MENU and KEEP WORKING, with no separate-save creation action.
 
 Saves use commercial checkpoints. Creating a game saves its starting checkpoint. Passing a commercial automatically saves the next commercial's checkpoint. Continuing restores that checkpoint's budget and progression; it restarts the studio lesson, equipment placement, recordings and unfinished edit. Spending during the unfinished commercial does not reduce the checkpoint budget.
 
@@ -16,6 +18,8 @@ Contract retry snapshots above 8,000 characters are stored as `BudgetRetry.Start
 - The successful PlayFab login result supplies the player ID. Account identity and display options remain global; gameplay preferences use `GameSavePrefs` while a career is selected. A remembered player ID/name is not authentication: LOG OUT appears only while the save owner matches the SDK's live session. Otherwise SIGN IN opens the existing login screen while retaining local saves.
 - Guests have a separate local folder. Another signed-in account has its own folder; guest saves are not silently transferred between accounts.
 - Signed-in careers sync through PlayFab Client `GetUserData` and `UpdateUserData`, with private keys named `CrewCareer_v1_<save GUID>`. No server secret key is used.
+- Private `CrewCareerProfile_v1` explicitly declares `version: 1`, `saveModel: single_career`, `replayableContracts: true`, `contractCount: 5`, and the primary `careerId`/`careerRevision`. Its checkpoint still uses the existing `CrewCareer_v1_<GUID>` payload format. Existing legacy keys remain intact for backup/history compatibility; future playthroughs do not create new identities. Login, reconnect and ordinary automatic sync publish this record, so no PlayFab dashboard/schema setup is required.
+- Publication writes the primary profile/checkpoint together, then freshly reads both back before reporting verification. Read-back checks schema, owner, stable ID and checkpoint revision; stale account callbacks are ignored. An interrupted checkpoint/profile publication can repair its stale index on the next sync. Missing checkpoints, unsupported future profiles and failed read-back retain local progress and retry automatically. This is application code: a live account receives the update only after the updated game performs an authenticated sync.
 - Every successful login automatically imports unclaimed guest careers, merges the account's cloud checkpoints, uploads local changes, and schedules the retained completed results for `production_logs` upload/read-back verification. No SYNC ACCOUNT click is required. Legacy progress is prepared under its remembered owner before the login ID changes; another account's files are never reassigned. Local linking retries automatically after a failure and does not block already-linked checkpoint/log uploads. Original guest files and retry-safe IDs are retained. C-Coin reward linking uses the existing separate wallet service; cached/test coins are not uploaded as authoritative balance.
 - Completed legacy analytics also migrate automatically. Their actual stored overall/pre/post scores, camera/lighting subtotals, grade, day, opening/remaining cash and career identity are retained. Missing production totals, original feedback, budget totals and next-step advice are `null` or **Not recorded**, with `history_source`, `details_complete` and `missing_fields` describing the limitation. No grading, timestamp or coaching is invented. Stable career-origin/content IDs deduplicate logins and cloud copies; distinct identical retained submissions have occurrence suffixes. The existing `production_logs` envelope and unknown entries/fields are preserved.
 - New single-player completion freezes the complete result-screen record into the same first completed checkpoint, before temporary scene data can disappear. Phase scores/feedback, budget review, client decision, next step and identity are retained locally and queued durably before upload. Multiplayer continues to freeze its shared result and participant roles, then each authenticated player queues their own linked record. A successful write is acknowledged only after a fresh PlayFab read matches the saved fields. Old missing details cannot be recovered retroactively; an undeployed C-Coin backend is still not an authoritative wallet.
@@ -26,6 +30,19 @@ Contract retry snapshots above 8,000 characters are stored as `BudgetRetry.Start
 - Authentication is not persisted as a password or session ticket in PlayerPrefs. After restarting the application, a remembered name may still be displayed, but signing in again is required to establish the SDK session. Reopening/focusing the application retries cloud sync when an authenticated session is available.
 
 ## Verification
+
+The single-career migration is checked by `Tools/Tests/RunSingleCareerCloudChecks.ps1`:
+37 focused checks execute the real single-career adapter and file repository with
+temporary files and a simulated SDK/serializer. They cover stable/repeated career
+identity, migration and source preservation, budgets/completion/reward/history
+identity, reload, account separation, private profile/checkpoint publication,
+required read-back, malformed/future/missing/mismatched data, interrupted updates,
+failed verification, stale callbacks and an already-running legacy session.
+Editor and actual standalone-reference script compilation also passed. No live
+PlayFab account was written or queried during these checks.
+
+The older multi-save session fixture and historical checks below describe the
+previous save model; they do not validate the new primary-career/profile flow.
 
 `Tools/Tests/RunGameSaveSessionChecks.ps1` executes the real `GameSaveManager.cs`
 against a fake SDK and in-memory repository. It checks remembered versus authenticated
@@ -46,6 +63,6 @@ The same source-backed suite checks checkpoint/live budget and ownership separat
 
 Source compilation passed with both editor and player defines. Isolated Unity tests covered independent games/accounts, checkpoint money restoration, completed-level autosave, switching careers, backup recovery, simulated cloud conflicts and the real main-menu Play route. The routing test used minimal destination scenes to isolate the save flow. The new save panel was rendered over the authored main menu and visually checked.
 
-Live cloud round-trip still requires a signed-in test session: create a game, finish a commercial, return to the save list and wait for **Stats and B-Coin budgets synced with PlayFab**. Log in to the same account on a second installation and continue that checkpoint. Disconnect networking to confirm local START remains usable after a failed sync, then reconnect and reopen the save list to retry. No live account credentials were used during automated tests.
+Live cloud round-trip still requires a signed-in test session: start/continue the career, finish a commercial, return to the contract catalogue and wait for **Single career and replayable contracts synced with PlayFab**. In Player Data, `CrewCareerProfile_v1` identifies the one active checkpoint; older `CrewCareer_v1_*` entries may remain as backups. Log in to the same account on a second installation and continue that checkpoint. Disconnect networking to confirm local START remains usable after a failed sync, then reconnect to retry. No live account credentials were used during automated checks.
 
 API references: [GetUserData](https://learn.microsoft.com/en-us/rest/api/playfab/client/player-data-management/get-user-data), [UpdateUserData](https://learn.microsoft.com/en-us/rest/api/playfab/client/player-data-management/update-user-data).

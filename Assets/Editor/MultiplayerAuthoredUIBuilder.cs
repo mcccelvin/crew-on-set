@@ -16,7 +16,7 @@ using Object = UnityEngine.Object;
 public static class MultiplayerAuthoredUIBuilder
 {
     private const string Folder = "Assets/Resources/CrewUI";
-    private const int CopyVersion = 4;
+    private const int CopyVersion = 5;
     static MultiplayerAuthoredUIBuilder()
     {
         EditorApplication.delayCall += EnsureCopies;
@@ -111,7 +111,7 @@ public static class MultiplayerAuthoredUIBuilder
             foreach (var script in scripts)
             {
                 string type = script.GetType().Name;
-                if (!new[] { "DirectorTerminal", "ShopTerminal", "ComputerStation", "ComputerUIManager", "TutorialUIManager", "AlmanacManager", "HotbarUIManager", "ContractUIManager", "EditorManager", "ColorGradingManager", "TruePixelPlayer" }.Contains(type)) continue;
+                if (!new[] { "DirectorTerminal", "ShopTerminal", "ComputerStation", "ComputerUIManager", "TutorialUIManager", "AlmanacManager", "HotbarUIManager", "ContractUIManager", "EditorManager", "ColorGradingManager", "TruePixelPlayer", "PauseManager" }.Contains(type)) continue;
                 foreach (var field in script.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
                 {
                     if (!typeof(Object).IsAssignableFrom(field.FieldType)) continue;
@@ -204,7 +204,8 @@ public static class MultiplayerAuthoredUIBuilder
             {
                 if (script == null || script == refs) continue;
                 string ns = script.GetType().Namespace ?? "";
-                if (!ns.StartsWith("UnityEngine.") && !ns.StartsWith("TMPro")) Object.DestroyImmediate(script);
+                if (!ns.StartsWith("UnityEngine.") && !ns.StartsWith("TMPro") &&
+                    !(script is SettingsLayout) && !(script is CircularSliderKnob)) Object.DestroyImmediate(script);
             }
             foreach (var camera in root.GetComponentsInChildren<Camera>(true)) Object.DestroyImmediate(camera);
             foreach (var listener in root.GetComponentsInChildren<AudioListener>(true)) Object.DestroyImmediate(listener);

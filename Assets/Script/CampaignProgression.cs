@@ -55,6 +55,7 @@ public static class CampaignProgression
 
     public static void SetCheatLevel(int level)
     {
+        ContractTutorialChoice.Retry(Mathf.Clamp(level,MinimumLevel,MaximumLevel));
         int cheatLevel = Mathf.Clamp(level, MinimumLevel, MaximumLevel);
         PlayerPrefs.SetInt(levelCheatOverrideKey, cheatLevel);
         PlayerPrefs.SetInt("CurrentLevel", cheatLevel);
@@ -69,6 +70,7 @@ public static class CampaignProgression
 
     public static void SetRetryLevel(int level)
     {
+        ContractTutorialChoice.Retry(Mathf.Clamp(level,MinimumLevel,MaximumLevel));
         int retryLevel = Mathf.Clamp(level, MinimumLevel, MaximumLevel);
         PlayerPrefs.SetInt(levelCheatOverrideKey, retryLevel);
         PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
@@ -129,6 +131,7 @@ public static class CampaignProgression
         PlayerPrefs.DeleteKey(levelCheatOverrideKey);
         PlayerPrefs.DeleteKey(levelCheatIntroductionKey);
         string gradedKey = GetGradedKey(level);
+        EquipmentStorageCabinet.CommitPackedGear(level);
         bool isFirstCompletion = PlayerPrefs.GetInt(gradedKey, 0) == 0;
 
         PlayerPrefs.SetInt(gradedKey, 1);

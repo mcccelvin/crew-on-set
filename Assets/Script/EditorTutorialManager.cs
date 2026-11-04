@@ -44,7 +44,7 @@ public class EditorTutorialManager : MonoBehaviour
         EditorStep.GoToBrandingPhase, EditorStep.ExplainBrandingPhase, EditorStep.DragLogoToScreen,
         EditorStep.ExplainBrandingTimeline, EditorStep.TrimBranding, EditorStep.PlayBrandingPreview,
         EditorStep.DragToOtherTimeline, EditorStep.PositionSecondBranding, EditorStep.ExplainPlayerEditTools,
-        EditorStep.ChooseCameraMotion, EditorStep.ChooseGraphicAnimation, EditorStep.ChooseTransition,
+        EditorStep.ChooseCameraMotion, EditorStep.ChooseGraphicAnimation,
         EditorStep.ChooseMusic, EditorStep.PreviewCommercialFinish, EditorStep.PrepareForColorGrade,
         EditorStep.ExplainColorGrading, EditorStep.AdjustBrightness, EditorStep.AdjustContrast,
         EditorStep.AdjustSaturation, EditorStep.ExplainColorSettings, EditorStep.ClickExport,
@@ -153,7 +153,19 @@ public class EditorTutorialManager : MonoBehaviour
         CleanupTutorialUI();
         enabled = false;
         if (Instance == this) Instance = null;
-        Destroy(this);
+        // Keep authored UI references so developer re-enable can restart the
+        // lesson in place without reloading or discarding the current edit.
+    }
+
+    public static void RestartForDevTesting()
+    {
+        var lesson=FindObjectOfType<EditorTutorialManager>(true);
+        if(lesson==null || GameSaveManager.IsTrainingRoom || CampaignProgression.GetCurrentLevel()!=1)return;
+        Instance=lesson;lesson.ownsInstance=true;lesson.enabled=true;
+        lesson.submitted=false;lesson.exported=false;lesson.RevisingReview=false;
+        lesson.leftTrimmed=lesson.rightTrimmed=false;
+        lesson.brightAdjusted=lesson.contAdjusted=lesson.satAdjusted=false;
+        lesson.StopAllCoroutines();lesson.Start();
     }
 
     private bool ShouldRunTutorial()
@@ -274,10 +286,9 @@ public class EditorTutorialManager : MonoBehaviour
                 break;
             case EditorStep.ChooseGraphicAnimation:
                 if (PlayerEditTools.Instance != null) PlayerEditTools.Instance.selectedGraphicAnimation = PlayerEditTools.GraphicAnimationMode.Fade;
-                StartCoroutine(TransitionToNextStep(EditorStep.ChooseTransition, true));
+                StartCoroutine(TransitionToNextStep(EditorStep.ChooseMusic, true));
                 break;
             case EditorStep.ChooseTransition:
-                if (PlayerEditTools.Instance != null) PlayerEditTools.Instance.selectedTransition = PlayerEditTools.TransitionMode.FadeInOut;
                 StartCoroutine(TransitionToNextStep(EditorStep.ChooseMusic, true));
                 break;
             case EditorStep.ChooseMusic:
@@ -355,6 +366,7 @@ public class EditorTutorialManager : MonoBehaviour
 
     private void StartTaskPhase()
     {
+        if (currentStep == EditorStep.ChooseTransition) currentStep = EditorStep.ChooseMusic;
         if (TutorialUIManager.Instance == null) return;
 
         TutorialUIManager.Instance.HideBossDialogue();
@@ -490,6 +502,26 @@ public class EditorTutorialManager : MonoBehaviour
         var grade = EditorManager.Instance != null ? EditorManager.Instance.gradingManager : null;
         var preview = grade != null && grade.computerScreen != null ? grade.computerScreen.rectTransform : previewScreenRect;
         TutorialHighlighter.Instance?.HighlightElements(slider, preview);
+    }
+
+    private IEnumerator HighlightComparisonExplanation()
+    {
+        var grade = EditorManager.Instance != null ? EditorManager.Instance.gradingManager : null;
+        if (grade == null) yield break;
+        grade.RevealComparisonForTutorial();
+        // Wait for the scroll to expose the actual button; never frame an offscreen
+        // control or resurrect a highlight after the player advances the lesson.
+        yield return null;
+        while (grade != null && grade.IsRevealingComparison)
+        {
+            if (currentStep != EditorStep.ExplainColorSettings || isWarningActive) yield break;
+            yield return null;
+        }
+        if (grade == null || currentStep != EditorStep.ExplainColorSettings || isWarningActive) yield break;
+        var button = grade.ComparisonButtonRect;
+        if (button == null || !button.gameObject.activeInHierarchy) yield break;
+        var preview = grade.computerScreen != null ? grade.computerScreen.rectTransform : previewScreenRect;
+        TutorialHighlighter.Instance?.HighlightElements(button, preview);
     }
 
     private IEnumerator TransitionToNextStep(EditorStep nextStep, bool didTaskJustComplete)
@@ -842,7 +874,7 @@ public class EditorTutorialManager : MonoBehaviour
         else if (currentStep == EditorStep.ChooseGraphicAnimation && PlayerEditTools.Instance.selectedGraphicAnimation != PlayerEditTools.GraphicAnimationMode.Cut)
         {
             TutorialUIManager.Instance.MarkTaskComplete(0);
-            StartCoroutine(TransitionToNextStep(EditorStep.ChooseTransition, true));
+            StartCoroutine(TransitionToNextStep(EditorStep.ChooseMusic, true));
         }
         else if (currentStep == EditorStep.ChooseTransition && PlayerEditTools.Instance.selectedTransition != PlayerEditTools.TransitionMode.Cut)
         {
@@ -918,6 +950,8 @@ public class EditorTutorialManager : MonoBehaviour
 
     private void UpdateBossDialogue()
     {
+        // Preserve the serialized enum value, but skip this retired single-clip lesson.
+        if (currentStep == EditorStep.ChooseTransition) currentStep = EditorStep.ChooseMusic;
         TutorialUIManager ui = TutorialUIManager.Instance;
         if (ui == null) return;
         isTaskPhaseActive = false;
@@ -958,12 +992,12 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.DragToOtherTimeline: ui.ShowBossDialogue("Now bring in the second graphic. Find another spot inside title-safe where it won't cover the product.", ui.posePointUp, false, false); break;
             case EditorStep.PositionSecondBranding: ui.ShowBossDialogue("Let the second message take over at 5.0 seconds and end at 10.0. We don't want both talking at once.", ui.poseBoss, false, false); break;
 
-            case EditorStep.ExplainPlayerEditTools: ui.ShowBossDialogue("Now let's shape how the commercial feels. In BRANDING, the four effect buttons control picture movement, text entrances, transitions and music. Click a button to cycle its choices. These choices are used in playback and the final review. We will try each tool, then watch the complete result together.", ui.poseOpenHand, false, false); break;
+            case EditorStep.ExplainPlayerEditTools: ui.ShowBossDialogue("Now let's shape how the commercial feels. In BRANDING, we will try picture movement, text entrances and music. Click a button to cycle its choices. These choices are used in playback and the final review. Then we will watch the complete result together.", ui.poseOpenHand, false, false); break;
             case EditorStep.ChooseCameraMotion: ui.ShowBossDialogue("CAMERA MOTION moves or zooms the recorded picture in the edit; it does not move the studio camera. Slow Push In brings attention toward the product and can make a reveal feel important. Pull Out widens the view. Pan Left or Right shifts attention sideways. These effects crop the image, so keep the whole product safely in frame. Click to try a motion; OFF keeps the original framing.", ui.posePoint, false, false); break;
             case EditorStep.ChooseGraphicAnimation: ui.ShowBossDialogue("GRAPHIC ANIMATION changes how your advertising line and brand name enter the picture. Fade appears gently and can suit a calm product. Slide Up guides the eye toward the message. Pop feels lively, but can compete with the product. CUT shows the graphic immediately. Choose an entrance, and leave enough time afterward for someone to read the words.", ui.posePointUp, false, false); break;
             case EditorStep.ChooseTransition: ui.ShowBossDialogue("A TRANSITION controls how pictures begin, end or change. Fade In / Out gives the opening and ending a softer finish. Dip to Black briefly darkens the picture, and can separate clips when there is more than one. Straight Cut changes immediately. Transitions temporarily hide the picture, so check that your short commercial still gives the product and messages enough clear screen time.", ui.poseBoss, false, false); break;
             case EditorStep.ChooseMusic: ui.ShowBossDialogue("MUSIC gives the same pictures a different mood and sense of pace. Clean is lighter and relaxed, Energy has a faster beat, and Cinematic feels slower and more dramatic. Try a soundtrack that fits the product: a gentle flower commercial may feel different with a fast beat. Music does not change clip duration. OFF removes the added music. Listen during our preview, not just to the option's name.", ui.poseHappy, false, false); break;
-            case EditorStep.PreviewCommercialFinish: ui.ShowBossDialogue(isGokeTutorial ? "Watch your advert from start to finish. Is the subject clear? Can you read both graphics? Check the opening and ending." : "Press PLAY and watch the whole commercial. Notice whether the motion keeps the product in frame, whether each animated message is easy to read, and whether transitions hide anything important. Listen to how the music changes the mood. These choices will carry into the final review. You can revisit the buttons to change your treatment; stronger effects do not automatically make a better advertisement.", ui.poseOpenHand, false, false); break;
+            case EditorStep.PreviewCommercialFinish: ui.ShowBossDialogue(isGokeTutorial ? "Watch your advert from start to finish. Is the subject clear? Can you read both graphics? Check the opening and ending." : "Press PLAY and watch the whole commercial. Notice whether the motion keeps the product in frame and whether each animated message is easy to read. Listen to how the music changes the mood. These choices will carry into the final review. You can revisit the buttons to change your treatment; stronger effects do not automatically make a better advertisement.", ui.poseOpenHand, false, false); break;
 
             case EditorStep.PrepareForColorGrade: ui.ShowBossDialogue("One last look at the layout: clear product, readable graphics, safe edges, and one message at a time. Then open <color=red>COLOR GRADE</color>.", ui.poseHappy, false, false); break;
 
@@ -972,7 +1006,10 @@ public class EditorTutorialManager : MonoBehaviour
             case EditorStep.AdjustContrast: ui.ShowBossDialogue("Contrast controls the difference between light and dark areas. More contrast makes the picture punchier, but can hide detail in shadows. Less contrast softens the picture, but too little looks flat. Try this slider and watch the leaves and vase edges. Choose what looks clear to you, then pause to inspect it.", ui.poseSmile, false, false); break;
             case EditorStep.AdjustSaturation: ui.ShowBossDialogue("Saturation controls color strength. Lower it for softer colors; raise it for richer colors. Too much can make the flowers look fluorescent. It does not fix a dark image: use brightness for that. Try a small change and watch the petals and background, then pause to inspect your result.", ui.posePoint, false, false); break;
 
-            case EditorStep.ExplainColorSettings: ui.ShowBossDialogue("You have tried all three controls. Before / After compares your grade with the original picture. Reset returns the controls to 1.00. You can keep the original look if it reads best. Take your time comparing the product, not just the background. When ready, press SPACE for the delivery lesson.", ui.poseHappy, false, false); break;
+            case EditorStep.ExplainColorSettings:
+                ui.ShowBossDialogue("You have tried all three controls. Before / After compares your grade with the original picture. Reset returns the controls to 1.00. You can keep the original look if it reads best. Take your time comparing the product, not just the background. When ready, press SPACE for the delivery lesson.", ui.poseHappy, false, false);
+                StartCoroutine(HighlightComparisonExplanation());
+                break;
             case EditorStep.ClickExport: ui.ShowBossDialogue(isGokeTutorial ? "Click EXPORT when the 12-second cut is ready. Effects and color changes are optional. You'll review it before submitting." : "Export prepares your timeline as the finished commercial. You can still adjust your grade before clicking it. Check that the product is clear, the text is readable, and the colors suit the brief. Click EXPORT when you are satisfied; the next screen lets you watch it before submitting to the client.", ui.poseBoss, false, false); break;
 
             case EditorStep.ExplainReviewPanel: ui.ShowBossDialogue("Here's your final cut. It will play when we're done talking. Check the opening, product, graphics, sound and color. You can pause, scrub or replay it as often as you like. BACK is locked for this tutorial review. Only <color=red>SUBMIT VIDEO</color> delivers it to the client.", ui.poseOpenHand, false, false); break;

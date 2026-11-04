@@ -15,6 +15,8 @@ public sealed class NetworkStageObject : MonoBehaviour
         var bot = Bot;
         if (bot != null) bot.StopFurnitureAction();
         transform.SetPositionAndRotation(item.position, Quaternion.Euler(item.rotation));
+        if(item.action=="delivery" && item.holder==0 && MultiplayerRoomActions.IsEquipment(item.kind))
+            StudioDeliveryBay.SettleEquipment(gameObject,item.position);
         if (visuals == null) visuals = GetComponentsInChildren<Renderer>(true);
         if (item.kind == "backdrop")
         {
@@ -47,11 +49,11 @@ public sealed class NetworkStageObject : MonoBehaviour
         {
             var crew = MultiplayerRoleManager.Instance;
             var member = crew?.State?.members.Find(m => m.id == data.holder);
-            bool visible = data.loadedInto == 0 && (data.holder == 0 || member != null && member.equipped == data.id);
+            bool visible = data.action != "stored" && data.loadedInto == 0 && (data.holder == 0 || member != null && member.equipped == data.id);
             foreach (var renderer in visuals) renderer.enabled = visible;
             var lamp = transform.Find("Crew Spotlight")?.GetComponent<Light>();
             if (lamp != null) lamp.enabled = visible && data.powered;
-            foreach (var collider in GetComponentsInChildren<Collider>()) collider.enabled = data.holder == 0 && data.loadedInto == 0;
+            foreach (var collider in GetComponentsInChildren<Collider>()) collider.enabled = data.action != "stored" && data.holder == 0 && data.loadedInto == 0;
             if (data.holder != 0)
             {
                 var player = FindObjectsOfType<MultiplayerPlayerController>().FirstOrDefault(p => p.photonView.OwnerActorNr == data.holder);

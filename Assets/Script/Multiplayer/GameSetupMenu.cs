@@ -132,6 +132,57 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public int singlePlayerScene = 2;
     public int multiplayerScene = 8;
     private static string loadingRoom;
+    private bool pendingHost;
+    private float hostRequestedAt;
+
+    public void HostMultiplayer()
+    {
+        if (!MultiplayerAccess.RequireTutorial()) return;
+        if (pendingHost || PhotonNetwork.InRoom) return;
+        PhotonNetwork.AutomaticallySyncScene = true;
+        pendingHost = true;
+        hostRequestedAt = Time.unscaledTime;
+        TryHostMultiplayer();
+    }
+
+    private void TryHostMultiplayer()
+    {
+        if (!pendingHost) return;
+        if (PhotonNetwork.NetworkClientState == ClientState.Disconnected)
+        {
+            ShowSetupMessage("Connecting to the crew servers…", GameFeedback.NoticeType.Instruction);
+            if (!PhotonNetwork.ConnectUsingSettings())
+            {
+                pendingHost = false;
+                ShowSetupMessage("Could not connect. Press HOST LOBBY to try again.", GameFeedback.NoticeType.Caution);
+            }
+            return;
+        }
+        if (!PhotonNetwork.IsConnectedAndReady ||
+            (PhotonNetwork.NetworkClientState != ClientState.ConnectedToMasterServer &&
+             PhotonNetwork.NetworkClientState != ClientState.JoinedLobby)) return;
+        pendingHost = false;
+        string code = GenerateRoomCode(5);
+        ShowSetupMessage("Creating crew lobby…", GameFeedback.NoticeType.Instruction);
+        if (!PhotonNetwork.CreateRoom(code, new RoomOptions { MaxPlayers = 4 }, TypedLobby.Default))
+            ShowSetupMessage("Could not create the lobby. Press HOST LOBBY to try again.", GameFeedback.NoticeType.Caution);
+    }
+
+    public override void OnConnectedToMaster() { TryHostMultiplayer(); }
+
+    private void Update()
+    {
+        if (!pendingHost) return;
+        if (Time.unscaledTime - hostRequestedAt > 25f)
+        {
+            pendingHost = false;
+            ShowSetupMessage("Connection timed out. Check your connection and press HOST LOBBY to retry.", GameFeedback.NoticeType.Caution);
+            return;
+        }
+        if (PhotonNetwork.NetworkClientState == ClientState.Disconnected ||
+            PhotonNetwork.NetworkClientState == ClientState.ConnectedToMasterServer ||
+            PhotonNetwork.NetworkClientState == ClientState.JoinedLobby) TryHostMultiplayer();
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetRoomLoad() { loadingRoom = null; }
@@ -171,26 +222,14 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
         }
         else
         {
-            // 2. MULTIPLAYER HOST LOGIC
-            if (!PhotonNetwork.IsConnectedAndReady)
-            {
-                ShowSetupMessage("Still connecting to the crew servers…", GameFeedback.NoticeType.Instruction);
-                return;
-            }
-
-            // Generate a random 5-character code for the room
-            string randomRoomCode = GenerateRoomCode(5);
-            Debug.Log("Creating Room with Code: " + randomRoomCode);
-
-            // Create the room using that 5-digit code
-            RoomOptions options = new RoomOptions { MaxPlayers = 4 };
-            PhotonNetwork.CreateRoom(randomRoomCode, options, TypedLobby.Default);
+            HostMultiplayer();
         }
     }
 
     // --- Wire this to your new JOIN button ---
     public void OnJoinButtonPressed()
     {
+        if (!MultiplayerAccess.RequireTutorial()) return;
         ClearSetupMessage();
 
         // Get the code the player typed and force it to uppercase
@@ -219,15 +258,9 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public override void OnJoinedRoom()
     {
         Debug.Log("Successfully connected to room!");
-        ShowSetupMessage("Joined. Opening the crew lobby…", GameFeedback.NoticeType.Success);
+        ShowSetupMessage("Joined. Ready up in the lobby.", GameFeedback.NoticeType.Success);
         Application.runInBackground = true;
-        LoadingScreenController.ShowNetworkLoading();
-        // There are two menu components; only dispatch the host's scene load once.
-        if (PhotonNetwork.IsMasterClient && loadingRoom != PhotonNetwork.CurrentRoom.Name)
-        {
-            loadingRoom = PhotonNetwork.CurrentRoom.Name;
-            LoadingScreenController.LoadNetworkScene("MultiplayerLobby");
-        }
+        MultiplayerRoleManager.OpenMenuLobby();
     }
 
     // If Photon cannot find the room code, this runs automatically!
@@ -245,6 +278,7 @@ public class GameSetupMenu : MonoBehaviourPunCallbacks
     public override void OnLeftRoom() { loadingRoom = null; }
     public override void OnDisconnected(DisconnectCause cause)
     {
+        pendingHost = false;
         loadingRoom = null;
         ShowSetupMessage("Disconnected from the room (" + cause + "). Reconnect and try again.", GameFeedback.NoticeType.Caution);
     }

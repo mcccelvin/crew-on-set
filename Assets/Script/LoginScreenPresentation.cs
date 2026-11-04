@@ -26,7 +26,8 @@ public static class LoginScreenPresentation
         }
         var login = email.transform.parent;
         TextIn(login);
-        Field(email, "Enter email");
+        email.contentType = TMP_InputField.ContentType.Standard;
+        Field(email, "Email or username");
         Field(password, "Enter password");
         var caption = login.Find("l-register")?.GetComponent<TMP_Text>();
         if (caption != null) caption.text = "Don't have an account?";

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Collections.Generic;
@@ -80,6 +80,7 @@ public class TruePixelPlayer : MonoBehaviour
     public bool SeekTimeline(List<ClipSegment> sequence, float seconds)
     {
         if (sequence == null) return false;
+        sequence = TimelineManager.ResolveVideoLayers(sequence, framesPerSecond);
         if (sequence.Count == 0)
         {
             StopTape(); currentSequence = sequence; preloadedFrames.Clear();
@@ -282,6 +283,7 @@ public class TruePixelPlayer : MonoBehaviour
 
     public void PlaySequence(List<ClipSegment> sequence, bool useFadeIn, bool startPaused = false)
     {
+        sequence = TimelineManager.ResolveVideoLayers(sequence, framesPerSecond);
         StopTape();
         compositeSequence = true;
         currentSequence = sequence;
@@ -408,6 +410,46 @@ public class TruePixelPlayer : MonoBehaviour
         if (playButtonUI != null) playButtonUI.SetActive(isPaused || isFinished);
         if (pauseButtonUI != null) pauseButtonUI.SetActive(!isPaused && !isFinished);
     }
+
+    public IEnumerator ArchiveCut(string path)
+    {
+        isPaused = true;
+        var target = RenderTexture.GetTemporary(640, 360, 0);
+        var snapshot = new Texture2D(640, 360, TextureFormat.RGB24, false);
+        try
+        {
+            using (var writer = new BinaryWriter(File.Create(path + ".tmp")))
+            {
+                writer.Write(preloadedFrames.Count);
+                for (int i = 0; i < preloadedFrames.Count; i++)
+                {
+                    currentFrameIndex = i;
+                    RenderCurrentFrame();
+                    LateUpdate();
+                    var previous = RenderTexture.active;
+                    try
+                    {
+                        Graphics.Blit(computerScreen.texture, target, computerScreen.material);
+                        RenderTexture.active = target;
+                        snapshot.ReadPixels(new Rect(0,0,640,360),0,0,false);
+                    }
+                    finally { RenderTexture.active = previous; }
+                    var bytes = snapshot.EncodeToJPG(85);
+                    writer.Write(bytes.Length);
+                    writer.Write(bytes);
+                    if ((i & 3) == 3) yield return null;
+                }
+            }
+            File.Move(path + ".tmp",path);
+        }
+        finally
+        {
+            Destroy(snapshot);
+            RenderTexture.ReleaseTemporary(target);
+            if (File.Exists(path + ".tmp")) File.Delete(path + ".tmp");
+        }
+    }
+
 
     private void RenderCurrentFrame()
     {

@@ -16,6 +16,7 @@ public sealed class GameSaveMenu : MonoBehaviour
     private int selectedContract = 1;
     private bool joining;
     private bool closingMenu;
+    private bool multiplayerLobby;
     [SerializeField] private Transform paper;
     private SaveLoadPanelHost sourceHost;
 
@@ -30,6 +31,7 @@ public sealed class GameSaveMenu : MonoBehaviour
         if (sync != null) sync.gameObject.SetActive(false); // Retire older authored copies; sync is automatic.
         Bind(paper.Find("Close"),CloseMenu);
         Bind(paper.Find("JOIN"),()=>{
+            if (!MultiplayerAccess.RequireTutorial()) return;
             if(sourceHost==null)return;
             var joinPanel=sourceHost.transform.parent.Find("join");if(joinPanel==null)return;
             joining=true;sourceHost.gameObject.SetActive(false);joinPanel.gameObject.SetActive(true);
@@ -39,10 +41,27 @@ public sealed class GameSaveMenu : MonoBehaviour
         var deleteButton = paper.Find("Delete selected save");
         if (deleteButton != null) deleteButton.gameObject.SetActive(false);
         var startButton = paper.Find("Start selected save").GetComponent<Button>();
-        StyleSaveAction(startButton, "START", false, .495f);
+        StyleSaveAction(startButton, "START", false, .385f, .10f);
+        // Contract replay bypasses the retired new-save dialog, which contained
+        // the multiplayer selector. Keep hosting reachable from this folder.
+        var hostTransform = paper.Find("Host multiplayer lobby");
+        var hostButton = hostTransform != null ? hostTransform.GetComponent<Button>() :
+            Button(paper, "Host multiplayer lobby", new Vector2(.67f,.148f), new Vector2(.91f,.251f), HostMultiplayer);
+        hostButton.onClick.RemoveAllListeners();
+        hostButton.onClick.AddListener(HostMultiplayer);
+        StyleSaveAction(hostButton, "HOST LOBBY", false, .615f, .10f);
+        ExportUIArt.Apply(hostButton.GetComponent<Image>(), "blueButton");
+        hostButton.gameObject.SetActive(true);
+    }
+    private void HostMultiplayer()
+    {
+        var setup = GetComponent<GameSetupMenu>();
+        if (setup == null) setup = gameObject.AddComponent<GameSetupMenu>();
+        setup.HostMultiplayer();
     }
     private void StartContract()
     {
+        if (multiplayerLobby) return;
         if (saves.Syncing) return;
         if (selectedContract == 6) { saves.StartTrainingRoom(); return; }
         try
@@ -55,14 +74,14 @@ public sealed class GameSaveMenu : MonoBehaviour
     }
     private static TMP_FontAsset saveActionFont;
     private static Material saveActionMaterial;
-    private static void StyleSaveAction(Button button, string caption, bool destructive, float centre)
+    private static void StyleSaveAction(Button button, string caption, bool destructive, float centre, float halfWidth = .0715f)
     {
         // Both captions are live text on blank artwork; baked START lettering
         // cannot share font metrics or padding with a generated DELETE caption.
         StyleDeleteButton(button, caption, destructive);
         var rect = (RectTransform)button.transform;
-        rect.anchorMin = new Vector2(centre - .0715f, .148f);
-        rect.anchorMax = new Vector2(centre + .0715f, .251f);
+        rect.anchorMin = new Vector2(centre - halfWidth, .148f);
+        rect.anchorMax = new Vector2(centre + halfWidth, .251f);
         rect.offsetMin = rect.offsetMax = Vector2.zero;
         if (saveActionFont == null)
             saveActionFont = Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF") ?? TMP_Settings.defaultFontAsset;
@@ -99,6 +118,11 @@ public sealed class GameSaveMenu : MonoBehaviour
     }
     private void CloseMenu()
     {
+        if (multiplayerLobby)
+        {
+            if (Photon.Pun.PhotonNetwork.InRoom) Photon.Pun.PhotonNetwork.LeaveRoom();
+            return;
+        }
         if (closingMenu) return;
         closingMenu = true;
         CloseDialog();
@@ -263,6 +287,21 @@ public sealed class GameSaveMenu : MonoBehaviour
         UITransition.Show(go);
         if (menu.paper != null) UITransition.ConfigurePanel(menu.paper.gameObject);
     }
+    // Reuse the same authored folder for the waiting room, including its close
+    // button and canvas. Joining from the JOIN tab also returns to this folder.
+    public static Transform OpenMultiplayerLobby()
+    {
+        Show(GameSaveManager.Ensure());
+        var menu = FindObjectOfType<GameSaveMenu>(true);
+        if (menu == null || menu.paper == null) return null;
+        menu.multiplayerLobby = true;
+        menu.CloseDialog();
+        foreach (Transform child in menu.paper)
+            if (child.name != "Close") child.gameObject.SetActive(false);
+        Bind(menu.paper.Find("Close"), menu.CloseMenu);
+        return menu.paper;
+    }
+
     private void OnDestroy()
     {
         if(saves!=null)saves.Changed-=Refresh;
@@ -299,16 +338,15 @@ public sealed class GameSaveMenu : MonoBehaviour
     }
     private void Refresh()
     {
+        if (multiplayerLobby) return;
         if(rows==null)return;
         foreach(Transform child in rows){child.gameObject.SetActive(false);Destroy(child.gameObject);}
-        var slots=saves.Repository.Slots.Where(s=>s.Int("SaveDeleted",0)==0).OrderByDescending(s=>s.updatedUtc).ToList();
         int rowCount=2;
         const float rowHeight = 245f;
         float height=Math.Max(1,rowCount)*rowHeight;
         rows.sizeDelta=new Vector2(0,height);
         // Project legacy careers into a single contract catalogue, without deleting files.
-        if(selected==null||!slots.Contains(selected))
-            selected=slots.OrderByDescending(GameSaveManager.UnlockedContractLevel).ThenByDescending(s=>s.updatedUtc).FirstOrDefault();
+        selected=saves.GetPrimaryCareer();
         int unlocked=selected==null?1:GameSaveManager.UnlockedContractLevel(selected);
         if(selectedContract!=6) selectedContract=Mathf.Clamp(selectedContract,1,unlocked);
         status.text=saves.Syncing?"Syncing contracts…":"";
@@ -328,7 +366,7 @@ public sealed class GameSaveMenu : MonoBehaviour
             bool isSelected=level==selectedContract;
             var border=cardRect.gameObject.AddComponent<Image>();
             border.color=Color.clear;
-            var tab=ContractBoxBand(cardRect,"Folder tab outline",new Vector2(.035f,.82f),new Vector2(.60f,1f),ink);
+            var tab=ContractBoxBand(cardRect,"Folder tab outline",new Vector2(.035f,.82f),new Vector2(level==1?.90f:.60f,1f),ink);
             var band=ContractBoxBand(tab,"Tan folder tab",Vector2.zero,Vector2.one,available?new Color32(237,207,148,255):new Color32(149,124,84,255));
             band.offsetMin=new Vector2(3,0);band.offsetMax=new Vector2(-3,-3);
             var body=ContractBoxBand(cardRect,"Folder box outline",Vector2.zero,new Vector2(1,.85f),ink);
@@ -353,8 +391,9 @@ public sealed class GameSaveMenu : MonoBehaviour
             card.interactable=available&&!saves.Syncing;card.onClick.AddListener(()=>{selectedContract=level;Refresh();});
             var colors=card.colors;colors.normalColor=Color.white;colors.highlightedColor=new Color(1f,.94f,.8f);
             colors.pressedColor=new Color(.88f,.79f,.61f);colors.disabledColor=Color.white;card.colors=colors;
-            var heading=Text(band,training?"FREE PRACTICE":"CONTRACT 0"+level,new Vector2(.07f,.08f),new Vector2(.93f,.92f),20);
+            var heading=Text(band,training?"FREE PRACTICE":level==1?"TUTORIAL CONTRACT":"CONTRACT 0"+level,new Vector2(.07f,.08f),new Vector2(.93f,.92f),20);
             heading.color=ink;heading.fontStyle=FontStyles.Bold;heading.alignment=TextAlignmentOptions.Center;
+            heading.enableWordWrapping=false;
             var marker=Text(surface,isSelected?"SELECTED":!available?"LOCKED":"",new Vector2(.55f,.77f),new Vector2(.92f,.94f),16);
             marker.color=heading.color;marker.alignment=TextAlignmentOptions.MidlineRight;
             var title=Text(surface,training?"Training Room":CampaignProgression.GetContractName(level),new Vector2(.07f,.34f),new Vector2(.93f,.69f),27);

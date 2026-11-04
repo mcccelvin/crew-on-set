@@ -25,6 +25,8 @@ public class MultiplayerPauseManager : MonoBehaviour
 
     void Update()
     {
+        // The shared studio adapter owns Escape and the native pause canvas.
+        if (MultiplayerAuthoredUI.Instance != null && MultiplayerAuthoredUI.Instance.Ready) return;
         // Listen for the Escape key to toggle the menu
         Keyboard keyboard = Keyboard.current;
         if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)

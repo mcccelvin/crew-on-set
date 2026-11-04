@@ -4,6 +4,29 @@ using UnityEngine;
 // Replace only visible meshes. Existing equipment scripts, cameras, lights and colliders keep their references.
 public static class EquipmentModelVisuals
 {
+    // Delivery/placement measures the actual model, never hidden UI, retired
+    // replacement meshes, or the light's large volumetric beam renderer.
+    public static bool IsEquipmentMesh(Renderer part)
+    {
+        if(part==null || !part.enabled || !part.gameObject.activeInHierarchy ||
+            part.GetComponentInParent<Canvas>()!=null || part.GetComponentInParent<StudioLightHaze>()!=null ||
+            part.GetComponent<TMPro.TMP_Text>()!=null)return false;
+        if(part is SkinnedMeshRenderer skin)return skin.sharedMesh!=null && skin.sharedMesh.vertexCount>0;
+        return part is MeshRenderer && part.TryGetComponent<MeshFilter>(out var filter) &&
+            filter.sharedMesh!=null && filter.sharedMesh.vertexCount>0;
+    }
+
+    public static bool TryGetEquipmentBounds(Transform root,out Bounds bounds)
+    {
+        bounds=default;bool found=false;
+        foreach(var part in root.GetComponentsInChildren<Renderer>(true))
+        {
+            if(!IsEquipmentMesh(part))continue;
+            if(!found){bounds=part.bounds;found=true;}else bounds.Encapsulate(part.bounds);
+        }
+        return found;
+    }
+
     static MeshRenderer[] Meshes(Transform root) => root.GetComponentsInChildren<MeshRenderer>(true)
         .Where(r => r.enabled && r.GetComponentInParent<Canvas>() == null &&
             r.TryGetComponent<MeshFilter>(out var filter) && filter.sharedMesh != null &&

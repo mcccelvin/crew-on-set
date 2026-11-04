@@ -23,6 +23,10 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
         if (TimelineRuler.CanSeek && TimelineManager.Instance != null
             && Within(item, TimelineManager.Instance.timestampContainer)) return true;
         if (!t.AcceptsTaskInput) return false;
+        if ((t.currentStep == EditorTutorialManager.EditorStep.ChooseGraphicAnimation ||
+             t.currentStep == EditorTutorialManager.EditorStep.ChooseTransition) &&
+            (item.GetComponentInParent<BrandingClip>() != null ||
+             item.GetComponentInParent<DraggableOverlay>() is DraggableOverlay overlay && overlay.isOnTimeline)) return true;
         if (item.GetComponentInParent<DraggableClip>() is DraggableClip clip && clip.isOnTimeline)
         {
             switch (t.currentStep)
@@ -55,7 +59,8 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
         switch (t.currentStep)
         {
             case EditorTutorialManager.EditorStep.DragVideoToTimeline:
-                return Within(item, t.videoBinClipRect) || Within(item, t.timelineVideoTrackRect);
+                return Within(item, t.videoBinClipRect) || Within(item, t.timelineVideoTrackRect) ||
+                    (TimelineManager.Instance != null && TimelineManager.Instance.HasMultipleVideoTracks && item.GetComponentInParent<TimelineDropZone>() != null);
             case EditorTutorialManager.EditorStep.PlayPreview:
             case EditorTutorialManager.EditorStep.PlayBrandingPreview:
             case EditorTutorialManager.EditorStep.PreviewCommercialFinish:
@@ -116,6 +121,7 @@ public sealed class EditorTutorialInputGate : MonoBehaviour
             {
                 if (tutorial == null || !tutorial.RestrictsEditor || PauseManager.isPaused || Allowed(button.transform)) original.Invoke();
                 else if (tutorial.AcceptsTaskInput) tutorial.ShowCurrentTaskReminder();
+                else TutorialEquipmentGate.Remind();
             });
         }
     }

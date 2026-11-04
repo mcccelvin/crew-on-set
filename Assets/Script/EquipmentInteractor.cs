@@ -34,9 +34,16 @@ namespace Player.Interactor
 
         private void Update()
         {
+            if (EquipmentStorageCabinet.BlocksInputThisFrame) { ClearHoverText(); return; }
             if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsOpen()) { ClearHoverText(); return; }
             if (PauseManager.isPaused) { ClearHoverText(); return; }
-            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen()) { ClearHoverText(); return; }
+            if (TutorialUIManager.Instance != null && TutorialUIManager.Instance.IsBossDialogueOpen())
+            {
+                var keys = UnityEngine.InputSystem.Keyboard.current;
+                if (keys != null && (keys.eKey.wasPressedThisFrame || keys.gKey.wasPressedThisFrame || keys.cKey.wasPressedThisFrame || keys.rKey.wasPressedThisFrame))
+                    TutorialEquipmentGate.Remind();
+                ClearHoverText(); return;
+            }
             if (ContractUIManager.Instance != null && ContractUIManager.Instance.IsContractUIOpen()) { ClearHoverText(); return; }
 
             if (activeTerminal != null && !activeTerminal.IsTerminalActive()) activeTerminal = null;
@@ -90,7 +97,7 @@ namespace Player.Interactor
             if (practice != null && practice.IsContract4PracticeActive)
             {
                 if (!(currentEquipment is Equipment.ActorMegaphoneItem)) return;
-                if (inputManager.Drop) return;
+                if (inputManager.Drop) { TutorialEquipmentGate.Remind(); return; }
             }
             if (inputManager.Drop && currentEquipment != null) { DropEquipment(); return; }
 
@@ -100,6 +107,7 @@ namespace Player.Interactor
 
                 if (currentEquipment != null)
                 {
+                    if (!TutorialEquipmentGate.Allow("use", currentEquipment)) return;
                     currentEquipment.OnUse(PlayerCamera);
                 }
             }
@@ -119,6 +127,7 @@ namespace Player.Interactor
 
         private bool TryInsertIntoComputer()
         {
+            if (!TutorialEquipmentGate.Allow("computer.insert", currentEquipment)) return false;
             Ray ray = new Ray(PlayerCamera.transform.position, PlayerCamera.transform.forward);
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
@@ -156,6 +165,10 @@ namespace Player.Interactor
                 {
                     string displayName = item is Equipment.SDCardItem sd ? sd.DisplayName : ShopTerminal.DisplayEquipmentName(item.EquipmentName);
                     targetText = $"[E] Pick Up {displayName}";
+                }
+                else if (hit.collider.GetComponentInParent<EquipmentStorageCabinet>() != null)
+                {
+                    targetText = "[E] Equipment Storage";
                 }
                 else if (hit.collider.GetComponentInParent<ComputerStation>() != null)
                 {
@@ -199,7 +212,8 @@ namespace Player.Interactor
 
         private void HandleHotbarInput()
         {
-            if (inputManager.HotbarSlot >= 0) SwitchSlot(inputManager.HotbarSlot);
+            int slot = inputManager.HotbarSlot;
+            if (slot >= 0 && slot < hotbar.Length && slot != currentSlotIndex && TutorialEquipmentGate.Allow("switch", hotbar[slot])) SwitchSlot(slot);
         }
 
         private void SwitchSlot(int newSlotIndex)
@@ -249,11 +263,11 @@ namespace Player.Interactor
                               (practice.CanUseContract4PracticeAction("megaphone.pickup") &&
                                practiceHit.collider.GetComponentInParent<Equipment.ActorMegaphoneItem>() != null);
                 }
-                if (!allowed) return;
+                if (!allowed) { TutorialEquipmentGate.Remind(); return; }
             }
 
             var furniture = practice == null || !practice.IsContract4PracticeActive ? FindFurnitureTarget(ray) : null;
-            if (furniture != null) { furniture.OnInteract(gameObject); return; }
+            if (furniture != null) { if (TutorialEquipmentGate.Allow("furniture")) furniture.OnInteract(gameObject); return; }
 
             if (Physics.Raycast(ray, out RaycastHit hit, PickupRange))
             {
@@ -261,6 +275,7 @@ namespace Player.Interactor
                 ComputerStation computer = hit.collider.GetComponentInParent<ComputerStation>();
                 if (computer != null)
                 {
+                    if (!TutorialEquipmentGate.Allow("computer", currentEquipment)) return;
                     if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.InsertToComputer)
                     {
                         TutorialManager.Instance.ShowWarning("Insert the SD card first! Hold it and press [F].");
@@ -279,6 +294,7 @@ namespace Player.Interactor
                 Equipment.Equipment item = hit.collider.GetComponentInParent<Equipment.Equipment>();
                 if (item != null)
                 {
+                    if (!TutorialEquipmentGate.Allow("pickup", item)) return;
                     Equipment.FilmLightItem lightItem = item.GetComponent<Equipment.FilmLightItem>();
                     if (lightItem != null && TutorialManager.Instance != null && !TutorialManager.Instance.CanPickUpLight(lightItem)) return;
 
@@ -341,11 +357,12 @@ namespace Player.Interactor
                 }
 
                 IInteractable interactableItem = hit.collider.GetComponentInParent<IInteractable>();
-                if (interactableItem != null) { interactableItem.OnInteract(gameObject); return; }
+                if (interactableItem != null) { if (TutorialEquipmentGate.Allow("interact")) interactableItem.OnInteract(gameObject); return; }
 
                 DirectorTerminal terminal = hit.collider.GetComponentInParent<DirectorTerminal>();
                 if (terminal != null)
                 {
+                    if (!TutorialEquipmentGate.Allow("director")) return;
                     activeTerminal = terminal;
                     activeTerminal.OpenTerminal(PlayerCamera.gameObject, GetComponentInParent<Player.PlayerController.PlayerController>());
                     return;
@@ -354,6 +371,7 @@ namespace Player.Interactor
                 ShopTerminal shop = hit.collider.GetComponentInParent<ShopTerminal>();
                 if (shop != null)
                 {
+                    if (!TutorialEquipmentGate.Allow("shop")) return;
                     activeShop = shop;
                     activeShop.OpenTerminal(PlayerCamera.gameObject, GetComponentInParent<Player.PlayerController.PlayerController>());
                 }
@@ -363,6 +381,7 @@ namespace Player.Interactor
         private void DropEquipment()
         {
             if (currentEquipment == null) return;
+            if (!TutorialEquipmentGate.Allow("drop", currentEquipment)) return;
 
             Equipment.FilmLightItem droppedLight = currentEquipment.GetComponent<Equipment.FilmLightItem>();
 
@@ -380,6 +399,36 @@ namespace Player.Interactor
         }
 
         public Equipment.Equipment GetHeldItem() { return currentEquipment; }
+
+        public Equipment.Equipment[] CarriedEquipment() => (Equipment.Equipment[])hotbar.Clone();
+
+        public bool MoveToStorage(Equipment.Equipment item)
+        {
+            int slot = System.Array.IndexOf(hotbar,item);
+            if (item == null || slot < 0 || !TutorialEquipmentGate.Allow("storage",item)) return false;
+            if (item is Equipment.FilmCameraItem camera && !camera.CanStoreInCabinet)
+            { GameFeedback.Show("Close the viewfinder and eject the SD card [C] before storing the camera.",true); return false; }
+            item.OnDropped(PlayerCamera);
+            hotbar[slot] = null;
+            if (slot == currentSlotIndex) currentEquipment = null;
+            if (hotbarUI != null) hotbarUI.UpdateSlot(slot,"",null);
+            return true;
+        }
+
+        public bool TakeFromStorage(Equipment.Equipment item)
+        {
+            if (item == null || HoldPoint == null || (!TutorialEquipmentGate.Allow("storage",item,false) && !TutorialEquipmentGate.Allow("pickup",item))) return false;
+            int slot = System.Array.FindIndex(hotbar,value=>value==null);
+            if (slot < 0) { GameFeedback.Show("Your hotbar is full. Store an item first.",true); return false; }
+            item.gameObject.SetActive(true);
+            hotbar[slot] = item;
+            if (item is Equipment.ActorMegaphoneItem megaphone) megaphone.OnPickedUp(HoldPoint,PlayerCamera);
+            else item.OnPickedUp(HoldPoint);
+            if (slot == currentSlotIndex) currentEquipment = item;
+            else SwitchSlot(slot);
+            if (hotbarUI != null) hotbarUI.UpdateSlot(slot,ShopTerminal.DisplayEquipmentName(item.EquipmentName),item.EquipmentIcon);
+            return true;
+        }
 
         public void DestroyHeldItem()
         {

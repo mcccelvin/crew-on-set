@@ -8,6 +8,7 @@ public sealed class StudioArrivalTour : MonoBehaviour
 {
     public static bool IsPendingOrPlaying { get; private set; }
     private static StudioArrivalTour active;
+    private int shownLevel;
     private Camera view;
     private Camera gameplayView;
     private bool gameplayWasEnabled;
@@ -98,8 +99,15 @@ public sealed class StudioArrivalTour : MonoBehaviour
                     listener.enabled = false;
             }
     }
+    public static void CancelForMultiplayer()
+    {
+        IsPendingOrPlaying = false;
+        SceneManager.sceneLoaded -= OnLoaded;
+    }
+
     public static void Queue()
     {
+        if (Photon.Pun.PhotonNetwork.InRoom) return;
         IsPendingOrPlaying = true;
         SceneManager.sceneLoaded -= OnLoaded;
         SceneManager.sceneLoaded += OnLoaded;
@@ -108,15 +116,20 @@ public sealed class StudioArrivalTour : MonoBehaviour
     {
         if (scene.name != "SingleStudio") return;
         SceneManager.sceneLoaded -= OnLoaded;
+
         BeginWelcomeTour();
     }
-    public static void BeginWelcomeTour()
+    public static void BeginWelcomeTour(int level=1)
     {
+
+        if (Photon.Pun.PhotonNetwork.InRoom) { CancelForMultiplayer(); return; }
         if(GameSaveManager.IsTrainingRoom) { IsPendingOrPlaying=false; return; }
         // Retain the completed instance until scene unload to avoid playing twice.
-        if (active != null) return;
+        if (active != null && (IsPendingOrPlaying || active.shownLevel==level)) return;
+        if(active!=null)Destroy(active.gameObject);
         IsPendingOrPlaying = true;
         active = new GameObject("Studio Arrival Showcase").AddComponent<StudioArrivalTour>();
+        active.shownLevel=level;
     }
     private IEnumerator Start()
     {

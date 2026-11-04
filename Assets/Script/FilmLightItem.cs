@@ -6,6 +6,8 @@ using UnityEngine.UI;
 
 namespace Player.Equipment
 {
+    // PlayerController finishes camera movement in LateUpdate at the default order.
+    [DefaultExecutionOrder(100)]
     public class FilmLightItem : Equipment
     {
         [Header("Light Component")]
@@ -109,11 +111,13 @@ namespace Player.Equipment
             // Restore collider/pickup state before moving a previously held stand.
             base.OnDropped(null);
             isHeld = false;
+            if (haze != null) haze.SetVisible(true);
             heldBeamReference = null;
             gameObject.SetActive(true);
             transform.SetPositionAndRotation(position, rotation);
             ResetAfterPractice();
-            SettleOnSurface(null);
+            if(StudioDeliveryBay.Contains(position))StudioDeliveryBay.SettleEquipment(gameObject,position);
+            else SettleOnSurface(null);
             foreach (var body in GetComponentsInChildren<Rigidbody>(true))
             {
                 if (!body.isKinematic)
@@ -200,6 +204,10 @@ namespace Player.Equipment
             if (holdPoint == null || isHeld) return;
             base.OnPickedUp(holdPoint);
             isHeld = true;
+            // The close-up ray-marched cone can cover most of the screen while
+            // carrying. Keep real illumination/shadows, but defer this setup aid
+            // until the stand is placed.
+            if (haze != null) haze.SetVisible(false);
             heldBeamReference = FindHeldBeamReference(holdPoint);
             // Use the deployed size while aiming too: no size/beam-origin pop on G.
             UpdateHeldBeamTransform();
@@ -217,6 +225,7 @@ namespace Player.Equipment
             Quaternion headRotation = headPivot != null ? headPivot.rotation : Quaternion.identity;
             Vector3 dropPosition = transform.position;
             isHeld = false;
+            if (haze != null) haze.SetVisible(true);
             heldBeamReference = null;
             base.OnDropped(playerCamera);
             transform.position = dropPosition;
@@ -281,12 +290,8 @@ namespace Player.Equipment
         public void PlaceOnSurface(Vector3 surface)
         {
             transform.position = new Vector3(surface.x, transform.position.y, surface.z);
-            float bottom = float.PositiveInfinity;
-            foreach (Renderer part in GetComponentsInChildren<Renderer>(true))
-            {
-                if (part is MeshRenderer && part.enabled && part.GetComponent<StudioLightHaze>() == null) bottom = Mathf.Min(bottom, part.bounds.min.y);
-            }
-            if (!float.IsPositiveInfinity(bottom)) transform.position += Vector3.up * (surface.y + 0.01f - bottom);
+            if(EquipmentModelVisuals.TryGetEquipmentBounds(transform,out var bounds))
+                transform.position+=Vector3.up*(surface.y+.01f-bounds.min.y);
         }
 
         public override void OnUse(Camera playerCamera)
@@ -307,26 +312,27 @@ namespace Player.Equipment
 
         public override void OnHeldUpdate(InputManager input)
         {
-            UpdateHeldBeamTransform();
             if (input != null && input.CanReadGameplayAction() && Keyboard.current != null)
             {
                 var keys = Keyboard.current;
                 float heightInput = (keys.qKey.isPressed ? 1f : 0f) - (keys.eKey.isPressed ? 1f : 0f);
-                if (heightInput != 0) AdjustStandHeight(heightInput * .6f * Time.deltaTime);
+                bool newHeightAttempt = keys.qKey.wasPressedThisFrame || keys.eKey.wasPressedThisFrame && !input.Interact;
+                if (heightInput != 0 && TutorialEquipmentGate.Allow("light.height", this, newHeightAttempt)) AdjustStandHeight(heightInput * .6f * Time.deltaTime);
 
             }
             if (input == null) return;
 
             float scroll = input.EquipmentAdjust;
+            if (scroll != 0 && !TutorialEquipmentGate.Allow("light.intensity", this)) scroll = 0;
             if (scroll > 0) AdjustIntensity(5f);
             else if (scroll < 0) AdjustIntensity(-5f);
 
-            if (input.LightTilt != 0f) TiltLight(-input.LightTilt * tiltStep);
+            if (input.LightTilt != 0f && TutorialEquipmentGate.Allow("light.tilt", this)) TiltLight(-input.LightTilt * tiltStep);
 
             if (HasAdvancedFeatures())
             {
-                if (input.LightTemperature != 0f) AdjustColorTemperature(input.LightTemperature * colorTemperatureStep);
-                if (input.LightDiffusion != 0f) AdjustDiffusion(input.LightDiffusion * diffusionStep);
+                if (input.LightTemperature != 0f && TutorialEquipmentGate.Allow("light.temperature", this)) AdjustColorTemperature(input.LightTemperature * colorTemperatureStep);
+                if (input.LightDiffusion != 0f && TutorialEquipmentGate.Allow("light.diffusion", this)) AdjustDiffusion(input.LightDiffusion * diffusionStep);
             }
 
             if (!isLightOn) return;
@@ -335,6 +341,15 @@ namespace Player.Equipment
         public bool IsPoweredOn()
         {
             return isLightOn && spotlight != null && spotlight.enabled;
+        }
+
+        // Comparison lessons temporarily disable the Unity Light without changing
+        // its switch. Never derive restoration from that temporary renderer state.
+        public void RestorePowerOutput()
+        {
+            UpdateLightOutput();
+            if (spotlight != null) spotlight.enabled = isLightOn;
+            UpdateLightUI();
         }
 
         public float GetCurrentTilt()
@@ -524,6 +539,7 @@ namespace Player.Equipment
             Bounds result = new Bounds(); bool first = true;
             foreach (Renderer part in originalStand.GetComponentsInChildren<Renderer>())
             {
+                if(!EquipmentModelVisuals.IsEquipmentMesh(part))continue;
                 Bounds local = part.localBounds;
                 for (int i = 0; i < 8; i++)
                 {

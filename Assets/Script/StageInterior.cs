@@ -5,8 +5,8 @@ using System.Collections.Generic;
 public sealed class StageInterior : MonoBehaviour
 {
     private readonly List<Material> materials = new List<Material>();
-    public static string Title(int index) => index == 1 ? "CAFE CORNER" : index == 2 ? "COFFEE INTERIOR" : "PLAIN BACKDROP";
-    public static int Cost(int index) => index == 1 ? 2000 : index == 2 ? 2750 : ProductionEconomy.Wall;
+    public static string Title(int index) => index == 3 ? "HARAYA RUNWAY" : index == 1 ? "CAFE CORNER" : index == 2 ? (ProductModelCatalog.UsesRunway ? "FASHION RUNWAY" : "COFFEE INTERIOR") : "PLAIN BACKDROP";
+    public static int Cost(int index) => index == 1 ? 2000 : (index == 2 || index == 3) ? 2750 : ProductionEconomy.Wall;
 
     public static Renderer FindStagePlatform()
     {
@@ -71,23 +71,23 @@ public sealed class StageInterior : MonoBehaviour
         if (screen == null) return;
         Bounds bounds = screen.bounds;
         // Replace the entire backdrop visually, while retaining its ownership/selection root.
-        if (style == 2)
+        if (style == 2 || style == 3)
         {
             var platform = FindStagePlatform();
             Bounds fitBounds = platform != null ? platform.bounds : bounds;
             var imported = ProductModelCatalog.CreateFurniture(false,
-                fitBounds.size);
+                fitBounds.size, style == 3);
             if (imported != null)
             {
                 foreach (var renderer in wall.GetComponentsInChildren<Renderer>()) renderer.enabled = false;
                 foreach (var collider in wall.GetComponentsInChildren<Collider>()) collider.enabled = false;
                 imported.transform.position = new Vector3(bounds.center.x, bounds.min.y + .03f, bounds.center.z);
-                var entry = ProductModelCatalog.GetCoffeeInteriorEntry();
+                var entry = ProductModelCatalog.CurrentInterior(style == 3);
                 if (entry != null) imported.transform.position += entry.position;
                 imported.transform.SetParent(wall.transform, true);
                 if (platform != null)
                     FitInsideStage(imported, fitBounds, entry != null ? entry.position : Vector3.zero);
-                Contract4Interactable.BindFurniture(imported);
+                if(style != 3 && !ProductModelCatalog.UsesRunway)Contract4Interactable.BindFurniture(imported);
                 return;
             }
         }

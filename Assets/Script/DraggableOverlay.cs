@@ -4,6 +4,16 @@ using UnityEngine.UI;
 
 public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerClickHandler
 {
+    public static DraggableOverlay Selected { get; private set; }
+    public bool hasIndividualAnimation;
+    public PlayerEditTools.GraphicAnimationMode individualAnimation;
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetSelection() { Selected = null; }
+    public static void ClearSelection() { Selected = null; }
+    public void SelectForEffects()
+    {
+        if (CanEdit && isOnTimeline && EditorTutorialInputGate.Allowed(transform)) Selected = this;
+    }
     [HideInInspector] public Transform originalParent;
     private int originalSiblingIndex;
     private CanvasGroup canvasGroup;
@@ -24,6 +34,44 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     private Transform commercialParent;
     private bool commercialTransformCached = false;
     private bool isDragging;
+    private RectTransform placementPreview;
+    private TruePixelPlayer dragPlayer;
+
+    private void ClearPlacementPreview()
+    {
+        if (placementPreview != null) { placementPreview.gameObject.SetActive(false); Destroy(placementPreview.gameObject); }
+        placementPreview = null;
+    }
+
+    private void OnDisable() { ClearPlacementPreview(); if (Selected == this) Selected = null; }
+
+    private void UpdatePlacementPreview(PointerEventData data)
+    {
+        if (isOnTimeline) return; // Placed overlays already follow the pointer at reduced opacity.
+        var screen = dragPlayer != null && dragPlayer.computerScreen != null
+            ? dragPlayer.computerScreen.transform as RectTransform : null;
+        var hit = data.pointerCurrentRaycast.gameObject;
+        if (screen == null || hit == null || !(hit.transform == screen || hit.transform.IsChildOf(screen)))
+        { ClearPlacementPreview(); canvasGroup.alpha = .6f; return; }
+        if (placementPreview == null)
+        {
+            placementPreview = new GameObject("Overlay placement preview", typeof(RectTransform), typeof(Image), typeof(LayoutElement)).GetComponent<RectTransform>();
+            placementPreview.SetParent(screen, false);
+            placementPreview.GetComponent<LayoutElement>().ignoreLayout = true;
+            var source = GetComponent<Image>();
+            var image = placementPreview.GetComponent<Image>();
+            image.sprite = source != null ? source.sprite : null;
+            image.preserveAspect = source != null && source.preserveAspect;
+            Color color = source != null ? source.color : Color.white;
+            color.a *= .45f; image.color = color;
+            image.raycastTarget = false;
+        }
+        canvasGroup.alpha = 0f;
+        RectTransformUtility.ScreenPointToLocalPointInRectangle(screen, data.position, data.pressEventCamera, out Vector2 point);
+        placementPreview.localPosition = new Vector3(point.x, point.y, 0);
+        PreparePlacementRect(placementPreview);
+        KeepInsideTitleSafeArea(placementPreview);
+    }
     private const float SafeMargin = 0.06f;
     private const float MaximumCoverage = 0.22f;
 
@@ -41,16 +89,19 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             isOnTimeline && commercialTransformCached ? (Vector2?)commercialPosition : null,
             isOnTimeline && commercialTransformCached ? (Vector3?)commercialScale : null);
         bool onTrack = isOnTimeline;
+        bool ownAnimation = hasIndividualAnimation;
+        var animation = individualAnimation;
         int first = startFrame, last = endFrame, bankIndex = originalSiblingIndex;
         Transform bank = originalParent;
         Vector2 bankSize = origSizeDelta, bankMin = origAnchorMin, bankMax = origAnchorMax, bankPivot = origPivot, bankPos = origPosition;
         Vector3 bankScale = origLocalScale;
         return new EditorEditState {
             key = "overlay/" + GetInstanceID(),
-            fingerprint = onTrack + "/" + first + "/" + last + "/" + rect.Fingerprint(onTrack),
+            fingerprint = onTrack + "/" + first + "/" + last + "/" + ownAnimation + "/" + animation + "/" + rect.Fingerprint(onTrack),
             restore = () => {
                 if (this == null) return;
                 isOnTimeline = onTrack; startFrame = first; endFrame = last;
+                hasIndividualAnimation = ownAnimation; individualAnimation = animation;
                 originalParent = bank; originalSiblingIndex = bankIndex;
                 origSizeDelta = bankSize; origAnchorMin = bankMin; origAnchorMax = bankMax;
                 origPivot = bankPivot; origPosition = bankPos; origLocalScale = bankScale;
@@ -73,6 +124,8 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void ReturnToBin()
     {
+        if (Selected == this) Selected = null;
+        ClearPlacementPreview();
         isOnTimeline = false;
         commercialTransformCached = false;
         foreach (BrandingClip clip in FindObjectsOfType<BrandingClip>(true))
@@ -121,6 +174,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         if (!CanEdit || eventData.button != PointerEventData.InputButton.Left) return;
         if (isOnTimeline) RestoreCommercialTransform();
         isDragging = true;
+        dragPlayer = FindObjectOfType<TruePixelPlayer>();
 
         if (!isOnTimeline)
         {
@@ -170,6 +224,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
             {
                 ClampToParent();
             }
+            UpdatePlacementPreview(eventData);
         }
     }
 
@@ -202,6 +257,7 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     public void OnEndDrag(PointerEventData eventData)
     {
+        ClearPlacementPreview();
         if (eventData.button != PointerEventData.InputButton.Left) return;
         if (!isDragging) return;
         isDragging = false;
@@ -324,13 +380,24 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     public void OnPointerClick(PointerEventData eventData)
     {
         if (!CanEdit) return;
+        if (eventData.button == PointerEventData.InputButton.Left) SelectForEffects();
         if (eventData.button == PointerEventData.InputButton.Right && isOnTimeline)
             ReturnToBin();
     }
 
     private void PrepareForCommercialOutput()
     {
-        RectTransform previewRect = transform.parent as RectTransform;
+        PreparePlacementRect(rectTransform);
+        AddReadabilityOutline();
+        KeepInsideTitleSafeArea();
+        CacheCommercialTransform(true);
+    }
+
+    private void PreparePlacementRect(RectTransform target)
+    {
+        if (target == null) return;
+        RectTransform rectTransform = target;
+        RectTransform previewRect = target.parent as RectTransform;
         if (rectTransform == null || previewRect == null) return;
 
         // Bank layout dimensions are thumbnails, not the commercial's graphic size.
@@ -347,9 +414,6 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         rectTransform.sizeDelta = new Vector2(width, width / aspect);
         rectTransform.localPosition = position;
 
-        AddReadabilityOutline();
-        KeepInsideTitleSafeArea();
-        CacheCommercialTransform(true);
     }
 
     private void AddReadabilityOutline()
@@ -369,7 +433,12 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
 
     private void KeepInsideTitleSafeArea()
     {
-        RectTransform previewRect = transform.parent as RectTransform;
+        KeepInsideTitleSafeArea(rectTransform);
+    }
+
+    private void KeepInsideTitleSafeArea(RectTransform rectTransform)
+    {
+        RectTransform previewRect = rectTransform != null ? rectTransform.parent as RectTransform : null;
         if (rectTransform == null || previewRect == null) return;
 
         rectTransform.GetWorldCorners(overlayCorners);
@@ -453,7 +522,8 @@ public class DraggableOverlay : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         if (currentFrame >= startFrame && currentFrame < endFrame)
         {
             float targetAlpha = 1f;
-            PlayerEditTools.GraphicAnimationMode animationMode = clipAnimation ?? PlayerEditTools.GraphicAnimationMode.Cut;
+            PlayerEditTools.GraphicAnimationMode animationMode = hasIndividualAnimation
+                ? individualAnimation : clipAnimation ?? PlayerEditTools.GraphicAnimationMode.Cut;
             int animationFrames = Mathf.Max(2, Mathf.RoundToInt(TapeSettings.framesPerSecond * 0.55f));
 
             if (animationMode != PlayerEditTools.GraphicAnimationMode.Cut)

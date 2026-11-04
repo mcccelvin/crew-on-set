@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 // A local, depth-clipped approximation of haze inside a studio spotlight.
+[DefaultExecutionOrder(200)]
 public sealed class StudioLightHaze : MonoBehaviour
 {
     private Light source;
@@ -30,7 +31,12 @@ public sealed class StudioLightHaze : MonoBehaviour
         beamRenderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
         LateUpdate();
     }
-    public void SetVisible(bool value) { visible = value; }
+    public void SetVisible(bool value)
+    {
+        visible = value;
+        // Stop drawing immediately on pickup, including manual camera renders.
+        if (!value && beamRenderer != null) beamRenderer.enabled = false;
+    }
     private void LateUpdate()
     {
         if (source == null || beamRenderer == null) return;

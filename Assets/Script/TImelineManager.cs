@@ -18,6 +18,121 @@ public class TimelineManager : MonoBehaviour
     public float pixelsPerSecond = 0f; 
     private ScrollRect trackScroll;
     private Coroutine revealTrack;
+    private RectTransform[] videoTracks;
+    public bool HasMultipleVideoTracks => videoTracks != null && videoTracks.Length > 1;
+
+    // Resolve stacked video into visible intervals for both playback and review.
+    // VIDEO 1 (the upper lane) wins where both lanes contain footage.
+    public static System.Collections.Generic.List<ClipSegment> ResolveVideoLayers(System.Collections.Generic.List<ClipSegment> sequence, float fps)
+    {
+        var manager = Instance;
+        if (manager == null || !manager.HasMultipleVideoTracks || sequence == null || sequence.Count < 2) return sequence;
+        float pixelsPerFrame = manager.pixelsPerSecond / Mathf.Max(1f, fps);
+        if (pixelsPerFrame <= 0) return sequence;
+        var boundaries = new System.Collections.Generic.SortedSet<int>();
+        foreach (var segment in sequence)
+        {
+            int first = Mathf.RoundToInt(segment.uiStartX / pixelsPerFrame);
+            boundaries.Add(first); boundaries.Add(first + segment.endFrame - segment.startFrame);
+        }
+        var edges = new System.Collections.Generic.List<int>(boundaries);
+        var result = new System.Collections.Generic.List<ClipSegment>();
+        for (int i = 0; i + 1 < edges.Count; i++)
+        {
+            int from = edges[i], to = edges[i+1], priority = int.MaxValue;
+            ClipSegment chosen = null;
+            foreach (var segment in sequence)
+            {
+                int first = Mathf.RoundToInt(segment.uiStartX / pixelsPerFrame);
+                if (from < first || from >= first + segment.endFrame - segment.startFrame) continue;
+                int lane = segment.sourceClip != null ? System.Array.IndexOf(manager.videoTracks, segment.sourceClip.transform.parent as RectTransform) : 0;
+                if (lane < 0) lane = 0;
+                if (chosen == null || lane < priority) { chosen = segment; priority = lane; }
+            }
+            if (chosen == null || to <= from) continue;
+            int start = chosen.startFrame + from - Mathf.RoundToInt(chosen.uiStartX / pixelsPerFrame);
+            var previous = result.Count > 0 ? result[result.Count-1] : null;
+            if (previous != null && previous.sourceClip == chosen.sourceClip && previous.path == chosen.path && previous.endFrame == start &&
+                Mathf.Abs(previous.uiStartX + previous.uiWidth - from * pixelsPerFrame) < .01f)
+            { previous.endFrame += to - from; previous.uiWidth += (to-from)*pixelsPerFrame; continue; }
+            result.Add(new ClipSegment { sourceClip = chosen.sourceClip, path = chosen.path,
+                startFrame = start, endFrame = start + to - from,
+                uiStartX = from * pixelsPerFrame, uiWidth = (to-from)*pixelsPerFrame,
+                useClipGrade = chosen.useClipGrade, brightness = chosen.brightness,
+                contrast = chosen.contrast, saturation = chosen.saturation });
+        }
+        return result;
+    }
+
+    public void InstallVideoTracks(EditorManager editor)
+    {
+        if (HasMultipleVideoTracks || editor == null || editor.EditingLevel < 2) return;
+        var first = editor.timelineContainer as RectTransform;
+        if (first == null || first.GetComponent<TimelineDropZone>() == null || first.parent != scrollContent) return;
+        float spacing = first.rect.height + 16f;
+        Vector2 position = first.anchoredPosition;
+        // Existing artwork uses bottom-anchored lanes; make room below them.
+        foreach (RectTransform row in scrollContent) row.anchoredPosition += Vector2.up * spacing;
+        scrollContent.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, scrollContent.rect.height + spacing);
+        var second = new GameObject("Video Track 2", typeof(RectTransform), typeof(Image), typeof(TimelineDropZone)).GetComponent<RectTransform>();
+        second.gameObject.layer = first.gameObject.layer;
+        second.SetParent(scrollContent, false);
+        second.anchorMin = first.anchorMin; second.anchorMax = first.anchorMax;
+        second.pivot = first.pivot; second.sizeDelta = first.sizeDelta;
+        second.anchoredPosition = position;
+        var source = first.GetComponent<Image>();
+        var image = second.GetComponent<Image>();
+        image.sprite = source != null ? source.sprite : null;
+        image.type = source != null ? source.type : Image.Type.Simple;
+        image.color = source != null ? source.color : new Color(.13f,.13f,.15f);
+        videoTracks = new[] { first, second };
+        editor.timelineContainer = scrollContent;
+        foreach (var compiler in FindObjectsOfType<CommercialCompiler>(true))
+            if (compiler.videoTimelineContainer == first || first.IsChildOf(compiler.videoTimelineContainer))
+                compiler.videoTimelineContainer = scrollContent;
+        for (int i = 0; i < videoTracks.Length; i++)
+        {
+            var label = new GameObject("Video track label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            label.transform.SetParent(videoTracks[i], false);
+            var rt = (RectTransform)label.transform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0,1); rt.pivot = new Vector2(0,1);
+            rt.anchoredPosition = new Vector2(8,-4); rt.sizeDelta = new Vector2(140,24);
+            var text = label.GetComponent<TextMeshProUGUI>();
+            text.text = "VIDEO " + (i+1); text.fontSize = 16; text.color = Color.white; text.raycastTarget = false;
+        }
+        RefreshTimeline();
+    }
+
+    public bool TryFitVideoRange(DraggableClip clip, float start, float width)
+    {
+        if (!HasMultipleVideoTracks) return true;
+        var current = clip.transform.parent as RectTransform;
+        if (System.Array.IndexOf(videoTracks, current) < 0) return true;
+        if (VideoRangeFree(current, clip, start, width)) return true;
+        foreach (var track in videoTracks)
+        {
+            if (track == current || !VideoRangeFree(track, clip, start, width)) continue;
+            var rect = (RectTransform)clip.transform;
+            Vector2 position = rect.anchoredPosition;
+            rect.SetParent(track, false); rect.anchoredPosition = position;
+            RevealTrack(track);
+            return true;
+        }
+        return false;
+    }
+
+    private static bool VideoRangeFree(RectTransform track, DraggableClip moving, float start, float width)
+    {
+        if (start < -.01f) return false;
+        foreach (var clip in track.GetComponentsInChildren<DraggableClip>())
+        {
+            if (clip == moving || !clip.isOnTimeline) continue;
+            float left = GokeSequence.Left(clip);
+            float right = left + ((RectTransform)clip.transform).rect.width;
+            if (start < right - .01f && start + width > left + .01f) return false;
+        }
+        return true;
+    }
 
     private void ConfigureTrackScrolling()
     {

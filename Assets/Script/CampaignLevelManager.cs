@@ -151,8 +151,20 @@ public class CampaignLevelManager : MonoBehaviour
         RestoreOwnedEquipment();
         SetupContractUI();
 
+        if(ContractTutorialChoice.SkipThisContract)
+        {
+            if(PlayerPrefs.GetInt(CampaignProgression.GetAcceptedKey(activeLevel),0)==1)
+            {
+                if(CareerManager.Instance!=null)CareerManager.Instance.currentActiveJob=CampaignProgression.GetContractName(activeLevel);
+                contractUIManager?.UnlockQualifications();UnlockCampaignKnowledge();StartContract();
+                Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+            }
+            else OfferContract();
+            return;
+        }
+
         if (activeLevel == 5 && PlayerPrefs.GetInt(CampaignProgression.GetGradedKey(5), 0) == 1 &&
-            PlayerPrefs.GetInt("Contracts.Replaying", 0) != 5)
+            PlayerPrefs.GetInt("Contracts.Replaying", 0) != 5 && !ContractTutorialChoice.RestartGuidance(5))
         {
             ShowCampaignComplete();
             return;
@@ -164,7 +176,7 @@ public class CampaignLevelManager : MonoBehaviour
             AlmanacManager.Instance.PrepareLevelIntroduction(activeLevel);
         }
 
-        if (contractAlreadyAccepted)
+        if (contractAlreadyAccepted && !ContractTutorialChoice.RestartGuidance(activeLevel))
         {
             if (CareerManager.Instance != null)
             {
@@ -177,6 +189,12 @@ public class CampaignLevelManager : MonoBehaviour
             return;
         }
 
+        if(activeLevel==5)
+        {
+            if(TutorialUIManager.Instance==null || DevTutorialBypass.Disabled)OfferContract();
+            else TutorialUIManager.Instance.ShowBossDialogue("Congratulations, crew! You've made it to your final commercial. Haraya wants its perfume on the runway. Let's read the client's brief.", TutorialUIManager.Instance.poseHappy,true,false);
+            return;
+        }
         ShowPreviousResults();
     }
 
@@ -204,6 +222,7 @@ public class CampaignLevelManager : MonoBehaviour
     }
 
     public bool IsContract4PracticeActive => activeLevel == 4 && coffeeLessonStarted && practiceLesson != null;
+    public bool RestrictsTutorialEquipment => isActiveAndEnabled && isLevelStarted && currentStep != CampaignLevelStep.LevelActive && currentStep != CampaignLevelStep.CampaignComplete;
 
     public bool CanUseContract4PracticeAction(string action)
     {
@@ -316,7 +335,7 @@ public class CampaignLevelManager : MonoBehaviour
 
         if (currentStep == CampaignLevelStep.PreviousResults)
         {
-            ShowLevelIntroduction();
+            if(activeLevel==5)OfferContract();else ShowLevelIntroduction();
             return;
         }
 
@@ -516,19 +535,16 @@ public class CampaignLevelManager : MonoBehaviour
             position.y = player.transform.position.y;
             if (Physics.Raycast(position + Vector3.up * 0.5f, Vector3.down, out RaycastHit floor, 4f))
                 position.y = floor.point.y;
-            directorPracticeMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            directorPracticeMarker.name = "Director Practice Standing Circle";
+            directorPracticeMarker = new GameObject("Director Practice Standing Square");
             directorPracticeMarker.transform.position = position + Vector3.up * 0.03f;
-            directorPracticeMarker.transform.localScale = new Vector3(0.9f, 0.02f, 0.9f);
-            Destroy(directorPracticeMarker.GetComponent<Collider>());
-            directorPracticeMarker.GetComponent<Renderer>().material.color = new Color(1f, 0.76f, 0.08f);
+            SquareGuideMarker.Apply(directorPracticeMarker);
         }
 
         var steps = new System.Collections.Generic.List<GuidedPracticeLesson.Step>();
         if (directorPracticeMarker != null)
             steps.Add(new GuidedPracticeLesson.Step(
-                "Walk onto the circle beside the Director Tablet. This is where we'll prepare the performance.",
-                "Walk onto the circle beside the Director Tablet",
+                "Stand inside the square beside the Director Tablet. This is where we'll prepare the performance.",
+                "Stand inside the square beside the Director Tablet",
                 () => GuidedPracticeLesson.AtMarker(directorPracticeMarker.transform)));
         steps.Add(new GuidedPracticeLesson.Step(
             "Look at the Director Tablet and press <color=red>[E]</color> to open it.",
@@ -670,6 +686,12 @@ public class CampaignLevelManager : MonoBehaviour
         if (contractUIManager != null) contractUIManager.UnlockQualifications();
         UnlockCampaignKnowledge();
 
+        if(activeLevel==5)
+        {
+            if(DevTutorialBypass.Disabled || TutorialUIManager.Instance==null)StartContract();
+            else ShowContractBriefing();
+            return;
+        }
         currentStep = CampaignLevelStep.ContractAccepted;
         if (DevTutorialBypass.Disabled) { StartContract(); return; }
         isBriefingOpen = true;
@@ -761,7 +783,7 @@ public class CampaignLevelManager : MonoBehaviour
         }
         else
         {
-            TutorialUIManager.Instance.ShowBossDialogue("Give the Haraya brief another look before you buy. Plan four shots with a shared set, lighting style, and message. Ready to make it yours? Press <color=red>[SPACE]</color>.", TutorialUIManager.Instance.poseBoss, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue("The contract is yours. Set the runway, light the perfume, and plan your four shots. You're directing this one.", TutorialUIManager.Instance.poseBoss, true, false);
         }
     }
 

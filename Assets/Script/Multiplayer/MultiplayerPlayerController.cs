@@ -3,7 +3,7 @@ using Photon.Pun;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
-public class MultiplayerPlayerController : MonoBehaviourPun
+public class MultiplayerPlayerController : MonoBehaviourPun, IPunObservable
 {
     [Header("Setup")]
     public Camera playerCamera;
@@ -22,6 +22,9 @@ public class MultiplayerPlayerController : MonoBehaviourPun
 
     private CharacterController cc;
     private float verticalRotation = 0f;
+    private float viewYaw, bodyYawVelocity, receivedPitch, receivedYaw;
+    private bool receivedLook;
+    private PlayerLookPose lookPose;
     private Vector3 velocity;
     private float jumpBuffer;
     private float coyoteCounter;
@@ -34,6 +37,12 @@ public class MultiplayerPlayerController : MonoBehaviourPun
     {
         cc = GetComponent<CharacterController>();
         SetupCharacter();
+        viewYaw = transform.eulerAngles.y;
+        if (photonView.IsMine && playerCamera != null)
+        {
+            viewYaw = playerCamera.transform.eulerAngles.y;
+            verticalRotation = Mathf.Clamp(Mathf.DeltaAngle(0,playerCamera.transform.eulerAngles.x),-maxLookAngle,maxLookAngle);
+        }
         // The network prefab must never run the legacy career interactor.
         foreach (var component in GetComponentsInChildren<MonoBehaviour>(true))
             if (component != this && component.GetType().Namespace != "Photon.Pun" &&
@@ -111,18 +120,37 @@ public class MultiplayerPlayerController : MonoBehaviourPun
             {
                 characterAnimator.Rebind();
                 foreach (var parameter in characterAnimator.parameters) animationParameters.Add(parameter.name);
+                if (animationParameters.Contains("Grounded")) characterAnimator.SetBool("Grounded",true);
+                if (animationParameters.Contains("Falling")) characterAnimator.SetBool("Falling",false);
+                characterAnimator.Update(0f);
             }
         }
         else characterAnimator = null;
+        if (characterAnimator != null) lookPose = new PlayerLookPose(characterAnimator);
         foreach (var part in renderers)
         {
             part.gameObject.layer = gameObject.layer;
             part.shadowCastingMode = photonView.IsMine ? UnityEngine.Rendering.ShadowCastingMode.ShadowsOnly : UnityEngine.Rendering.ShadowCastingMode.On;
         }
+        var appearance = GetComponent<MultiplayerCharacterAppearance>() ?? gameObject.AddComponent<MultiplayerCharacterAppearance>();
+        appearance.Initialize(visual);
         cc.height = height;
         cc.center = new Vector3(cc.center.x, feet + height * .5f, cc.center.z);
         if (playerCamera == null) playerCamera = GetComponentInChildren<Camera>(true);
-        if (playerCamera != null) playerCamera.transform.position = transform.TransformPoint(new Vector3(0, feet + height * .92f, .3f));
+        if (playerCamera != null)
+        {
+            Vector3 eye=new Vector3(0,feet+height*.92f,.3f);
+            lookPose?.Apply(transform,transform.forward);
+            if(PlayerLookPose.TryGetEyePosition(characterAnimator,out var face))
+            {
+                var measured=transform.InverseTransformPoint(face);
+                // Keep a stable camera anchor at the rig's real eyes. Never
+                // attach it to an animated head or use hair/cosmetic bounds.
+                eye=new Vector3(0,Mathf.Clamp(measured.y,feet+height*.5f,feet+height),measured.z+.08f);
+            }
+            lookPose?.RestoreAnimation();
+            playerCamera.transform.position=transform.TransformPoint(eye);
+        }
         lastAnimationPosition = transform.position;
     }
 
@@ -145,8 +173,19 @@ public class MultiplayerPlayerController : MonoBehaviourPun
         SetAnimationFloat("z_velocity", movement.y);
         if (animationParameters.Contains("Grounded")) characterAnimator.SetBool("Grounded", grounded);
         if (animationParameters.Contains("Falling")) characterAnimator.SetBool("Falling", !grounded && movement.y < -.1f);
-        if (animationGrounded && !grounded && movement.y > .5f && animationParameters.Contains("Jump")) characterAnimator.SetTrigger("Jump");
+        // Ascending the stage ramp must not trigger the retired jump animation.
         animationGrounded = grounded;
+        if (!photonView.IsMine)
+        {
+            if (!receivedLook) viewYaw = transform.eulerAngles.y;
+            else
+            {
+                float blend=1-Mathf.Exp(-16*Time.deltaTime);
+                verticalRotation=Mathf.LerpAngle(verticalRotation,receivedPitch,blend);
+                viewYaw=Mathf.LerpAngle(viewYaw,receivedYaw,blend);
+            }
+        }
+        lookPose?.Apply(transform,Quaternion.Euler(verticalRotation,viewYaw,0)*Vector3.forward);
     }
 
     private void SetAnimationFloat(string name, float value)
@@ -156,6 +195,7 @@ public class MultiplayerPlayerController : MonoBehaviourPun
 
     void Update()
     {
+        lookPose?.RestoreAnimation();
         // Ignore everything if this isn't my character
         if (!photonView.IsMine) return;
         bool controlsAllowed = Application.isFocused && !RoleSelectionUI.Open && Cursor.lockState == CursorLockMode.Locked;
@@ -167,8 +207,14 @@ public class MultiplayerPlayerController : MonoBehaviourPun
         float mouseX = mouseDelta.x * lookSensitivity * GameOptions.MouseSensitivityMultiplier;
         float mouseY = mouseDelta.y * lookSensitivity * GameOptions.MouseSensitivityMultiplier;
 
-        // Turn body left/right
-        transform.Rotate(Vector3.up * mouseX);
+        // The head leads a turn while the body catches up, rather than locking
+        // the entire model rigidly to the view's horizontal rotation.
+        viewYaw = Mathf.Repeat(viewYaw + mouseX,360);
+        float bodyYaw = transform.eulerAngles.y;
+        float gap = Mathf.DeltaAngle(bodyYaw,viewYaw);
+        if (Mathf.Abs(gap)>65) bodyYaw=viewYaw-Mathf.Sign(gap)*65;
+        bodyYaw=Mathf.SmoothDampAngle(bodyYaw,viewYaw,ref bodyYawVelocity,.12f);
+        transform.rotation=Quaternion.Euler(0,bodyYaw,0);
 
         // Tilt camera up/down
         verticalRotation -= mouseY;
@@ -176,7 +222,7 @@ public class MultiplayerPlayerController : MonoBehaviourPun
 
         if (playerCamera != null)
         {
-            playerCamera.transform.localRotation = Quaternion.Euler(verticalRotation, 0f, 0f);
+            playerCamera.transform.rotation = Quaternion.Euler(verticalRotation, viewYaw, 0f);
         }
 
         // --- 2. WALK (WASD) ---
@@ -195,24 +241,17 @@ public class MultiplayerPlayerController : MonoBehaviourPun
         bool running = controlsAllowed && keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
         bool slowWalk = controlsAllowed && keyboard != null && (keyboard.leftCtrlKey.isPressed || keyboard.rightCtrlKey.isPressed);
         float speed = Mathf.Max(0f, slowWalk ? 1.25f : running ? runSpeed : walkSpeed);
-        Vector3 move = (transform.right * moveInput.x + transform.forward * moveInput.y) * speed;
+        Vector3 move = Quaternion.Euler(0,viewYaw,0) * new Vector3(moveInput.x,0,moveInput.y) * speed;
 
         // --- 3. GRAVITY ---
         bool grounded = cc.isGrounded && velocity.y <= 0f;
         coyoteCounter = grounded ? Mathf.Max(0f, coyoteTime) : Mathf.Max(0f, coyoteCounter - Time.deltaTime);
-        if (controlsAllowed && keyboard != null && keyboard.spaceKey.wasPressedThisFrame)
-            jumpBuffer = Mathf.Max(Time.deltaTime, jumpBufferTime);
         float downwardGravity = -Mathf.Max(0.01f, Mathf.Abs(gravity));
         if (grounded)
         {
             velocity.y = -2f; // Keep us snapped to the floor
         }
-        if (controlsAllowed && jumpBuffer > 0f && (grounded || coyoteCounter > 0f))
-        {
-            velocity.y = Mathf.Sqrt(-2f * downwardGravity * Mathf.Max(0.1f, jumpHeight));
-            jumpBuffer = coyoteCounter = 0f;
-        }
-        else jumpBuffer = Mathf.Max(0f, jumpBuffer - Time.deltaTime);
+        jumpBuffer = 0f; // Walking-only movement; Space belongs to dialogue/UI.
         velocity.y += downwardGravity * Time.deltaTime;
         CollisionFlags collisions = cc.Move((move + velocity) * Time.deltaTime);
         if ((collisions & CollisionFlags.Above) != 0 && velocity.y > 0f) velocity.y = 0f;
@@ -220,6 +259,21 @@ public class MultiplayerPlayerController : MonoBehaviourPun
 
     private void OnDisable()
     {
+        lookPose?.Reset();
         jumpBuffer = coyoteCounter = 0f;
+    }
+
+    public void OnPhotonSerializeView(PhotonStream stream,PhotonMessageInfo info)
+    {
+        if(stream.IsWriting) stream.SendNext(new Vector2(verticalRotation,viewYaw));
+        else
+        {
+            var aim=(Vector2)stream.ReceiveNext();
+            if(float.IsNaN(aim.x) || float.IsNaN(aim.y) || float.IsInfinity(aim.x) || float.IsInfinity(aim.y))return;
+            receivedPitch=Mathf.Clamp(Mathf.DeltaAngle(0,aim.x),-maxLookAngle,maxLookAngle);
+            receivedYaw=Mathf.Repeat(aim.y,360);
+            if(!receivedLook){verticalRotation=receivedPitch;viewYaw=receivedYaw;}
+            receivedLook=true;
+        }
     }
 }

@@ -14,6 +14,9 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
     private Camera portraitCamera;
     private Light portraitLight;
     private Image frameImage;
+    private bool crewAppearance, fullBody;
+    private string[] crewParts;
+    private static int nextPortraitSlot;
     private readonly System.Collections.Generic.List<Mesh> portraitMeshes = new System.Collections.Generic.List<Mesh>();
 
     public static void Attach(Transform shortcut)
@@ -40,6 +43,7 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
 
     private void LateUpdate()
     {
+        if (crewAppearance) return;
         // HUD frames can preserve the sprite aspect inside a wider RectTransform.
         // Fit to the visible artwork, not the invisible button bounds.
         if (frameImage == null || frameImage.name == "account") return;
@@ -85,15 +89,24 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
     {
         if (target == null) target = GetComponent<RawImage>();
         if (target == null || !isActiveAndEnabled) return;
+        if (crewAppearance) { RenderOutfit(crewParts); return; }
         Bind();
         RenderOutfit(service.EquippedParts);
+    }
+
+    public void SetCrewAppearance(string[] parts, bool showFullBody = false)
+    {
+        crewAppearance = true; fullBody = showFullBody;
+        crewParts = parts ?? new string[0];
+        Refresh();
     }
 
     private void RenderOutfit(string[] parts)
     {
         if (target == null) target = GetComponent<RawImage>();
         Release();
-        target.enabled = parts != null && System.Array.Exists(parts, id => CharacterCosmetics.Find(id)?.kind == "body");
+        bool hasBody = parts != null && System.Array.Exists(parts, id => CharacterCosmetics.Find(id)?.kind == "body");
+        target.enabled = crewAppearance || hasBody;
         if (!target.enabled) return;
 
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
@@ -104,12 +117,13 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         if (source == null) return;
 
         portraitRoot = new GameObject("Account avatar portrait");
-        portraitRoot.transform.position = new Vector3(20000, 20000, 20000);
+        // Separate render stages prevent teammate portraits from capturing one another.
+        portraitRoot.transform.position = new Vector3(20000 + (nextPortraitSlot++ % 512) * 40, 20000, 20000);
         var modelInstance = Instantiate(source);
         modelInstance.name = "Current account avatar";
         modelInstance.transform.SetPositionAndRotation(portraitRoot.transform.position, Quaternion.identity);
         modelInstance.transform.SetParent(portraitRoot.transform, true);
-        CharacterCosmeticRig.Load()?.Apply(modelInstance, parts);
+        if (hasBody) CharacterCosmeticRig.Load()?.Apply(modelInstance, parts);
         foreach (var animator in modelInstance.GetComponentsInChildren<Animator>(true)) animator.enabled = false;
         foreach (var component in modelInstance.GetComponentsInChildren<MonoBehaviour>(true)) component.enabled = false;
         foreach (var collider in modelInstance.GetComponentsInChildren<Collider>(true)) collider.enabled = false;
@@ -139,15 +153,15 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         portraitCamera.enabled = false;
         portraitCamera.cullingMask = 1 << AvatarLayer;
         portraitCamera.clearFlags = CameraClearFlags.SolidColor;
-        portraitCamera.backgroundColor = new Color32(245, 239, 218, 255);
+        portraitCamera.backgroundColor = crewAppearance ? new Color(0,0,0,0) : (Color)new Color32(245, 239, 218, 255);
         portraitCamera.orthographic = true;
-        portraitCamera.aspect = 1f;
+        portraitCamera.aspect = fullBody ? .75f : 1f;
         // Frame the head and shoulders; outstretched arms should not shrink the face.
         bool menuPortrait = transform.parent != null && transform.parent.name == "account";
-        portraitCamera.orthographicSize = bounds.size.y * (menuPortrait ? .20f : .23f);
+        portraitCamera.orthographicSize = fullBody ? Mathf.Max(bounds.extents.y * 1.12f, bounds.extents.x / .75f * 1.12f) : bounds.size.y * (menuPortrait ? .20f : .23f);
         portraitCamera.nearClipPlane = .01f;
         portraitCamera.farClipPlane = 20f;
-        var lookAt = bounds.center + Vector3.up * (bounds.size.y * .29f);
+        var lookAt = bounds.center + Vector3.up * (fullBody ? 0 : bounds.size.y * .29f);
         portraitCamera.transform.position = lookAt + Vector3.forward * (bounds.extents.z + 4f);
         portraitCamera.transform.LookAt(lookAt);
 
@@ -161,7 +175,7 @@ public sealed class AccountAvatarPortrait : MonoBehaviour
         portraitLight.cullingMask = 1 << AvatarLayer;
         portraitLight.enabled = true;
 
-        texture = new RenderTexture(256, 256, 24, RenderTextureFormat.ARGB32);
+        texture = new RenderTexture(fullBody ? 384 : 256, fullBody ? 512 : 256, 24, RenderTextureFormat.ARGB32);
         texture.Create();
         target.texture = texture;
         portraitCamera.targetTexture = texture;

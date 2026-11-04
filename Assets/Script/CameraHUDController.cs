@@ -337,11 +337,10 @@ public sealed class CameraHUDController : MonoBehaviour
     private sealed class SettingsCard
     {
         private const float Width = 420f;
-        private static readonly string[] Names = { "THIRDS GRID", "WHITE BALANCE", "TINT", "ISO", "APERTURE", "SHUTTER" };
+        private static readonly string[] Names = { "THIRDS GRID", "WHITE BALANCE", "ISO", "APERTURE", "SHUTTER" };
         private static readonly string[] Descriptions = {
             "Use the thirds grid to balance your shot.",
             "Cool or warm the image to suit your lighting.",
-            "Shift the image between green and magenta.",
             "Change sensitivity to brighten or darken the shot.",
             "Change brightness and depth of field.",
             "Adjust exposure time and motion blur."
@@ -349,9 +348,9 @@ public sealed class CameraHUDController : MonoBehaviour
         private readonly RectTransform panel, content, description, controls, holdHint;
         private readonly CanvasGroup fade;
         private readonly RectTransform[] sections = new RectTransform[3];
-        private readonly RectTransform[] rows = new RectTransform[6];
-        private readonly Image[] rowImages = new Image[6], valueImages = new Image[6], selectionBars = new Image[6];
-        private readonly TMP_Text[] titles = new TMP_Text[6], values = new TMP_Text[6], leftArrows = new TMP_Text[6], rightArrows = new TMP_Text[6];
+        private readonly RectTransform[] rows = new RectTransform[5];
+        private readonly Image[] rowImages = new Image[5], valueImages = new Image[5], selectionBars = new Image[5];
+        private readonly TMP_Text[] titles = new TMP_Text[5], values = new TMP_Text[5], leftArrows = new TMP_Text[5], rightArrows = new TMP_Text[5];
         private readonly TMP_Text descriptionText, countText;
         private bool showing;
 
@@ -415,17 +414,17 @@ public sealed class CameraHUDController : MonoBehaviour
             content.gameObject.SetActive(true);
             if (!showing) { fade.alpha = 0; showing = true; }
             fade.alpha = Mathf.MoveTowards(fade.alpha, 1f, Time.unscaledDeltaTime * 10f);
-            int count = state.level >= 4 ? 6 : state.level >= 3 ? 3 : 1;
+            int count = state.level >= 4 ? 5 : state.level >= 3 ? 2 : 1;
             int selected = Mathf.Clamp(state.selectedSetting, 0, count - 1);
             countText.text = "CAM FX3  /  " + count + (count == 1 ? " CONTROL" : " CONTROLS") + " AVAILABLE";
-            sections[1].gameObject.SetActive(count >= 3);
-            sections[2].gameObject.SetActive(count == 6);
+            sections[1].gameObject.SetActive(count >= 2);
+            sections[2].gameObject.SetActive(count == 5);
             float cursor = 92;
             for (int i = 0; i < rows.Length; i++)
             {
                 rows[i].gameObject.SetActive(i < count);
                 if (i >= count) continue;
-                if (i == 0 || i == 1 || i == 3)
+                if (i == 0 || i == 1 || i == 2)
                 {
                     Top(sections[i == 0 ? 0 : i == 1 ? 1 : 2], cursor);
                     cursor += 24;
@@ -443,10 +442,9 @@ public sealed class CameraHUDController : MonoBehaviour
                 {
                     case 0: values[i].text = state.gridEnabled ? "ON" : "OFF"; break;
                     case 1: values[i].text = state.kelvin.ToString("0") + " K"; break;
-                    case 2: values[i].text = state.tint.ToString("+0;-0;0"); break;
-                    case 3: values[i].text = state.iso.ToString("0"); break;
-                    case 4: values[i].text = "F" + state.aperture.ToString("0.0"); break;
-                    case 5: values[i].text = state.shutterAngle.ToString("0") + " deg"; break;
+                    case 2: values[i].text = state.iso.ToString("0"); break;
+                    case 3: values[i].text = "F" + state.aperture.ToString("0.0"); break;
+                    case 4: values[i].text = state.shutterAngle.ToString("0") + " deg"; break;
                 }
             }
             Top(description, cursor + 6); descriptionText.text = Descriptions[selected]; cursor += 50;

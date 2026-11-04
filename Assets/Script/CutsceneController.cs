@@ -90,7 +90,7 @@ public class CutsceneController : MonoBehaviour
         if (ending) return;
         ending = true;
         StudioArrivalTour.Queue();
-        LoadingScreenController.LoadScene(5);
+        LoadingScreenController.LoadScene("SingleStudio");
     }
 
     private void OnDestroy()

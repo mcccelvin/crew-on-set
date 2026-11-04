@@ -22,7 +22,10 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
     private readonly Dictionary<string, GameObject> panels = new Dictionary<string, GameObject>();
     private readonly List<string> cart = new List<string>();
     private readonly Dictionary<Button, string> shopButtons = new Dictionary<Button, string>();
-    private TMP_Text notice, bossText, promptTitle, promptKey, money, guide;
+    private TMP_Text bossText, promptTitle, promptKey, money, guide;
+    private string lastFeedbackMessage;
+    private TMP_Text bossContinue;
+    private bool crewRetryPrompt;
     private CanvasGroup promptGroup;
     private Camera stageCamera;
     private RenderTexture stageTexture;
@@ -63,7 +66,7 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         panels["almanac"] = refs.Get<GameObject>("AlmanacManager.almanacCanvas");
         panels["boss"] = refs.Get<GameObject>("TutorialUIManager.bossHUDCanvas");
         panels["contract"] = refs.Get<GameObject>("ContractUIManager.contractCanvas");
-        panels["pause"] = Find(view.transform, "Pause")?.gameObject;
+        panels["pause"] = ResolvePauseMenu();
         foreach (var canvas in view.GetComponentsInChildren<Canvas>(true))
             if (canvas.transform.parent == null || canvas.transform.parent.GetComponentInParent<Canvas>() == null) canvas.gameObject.SetActive(false);
         foreach (var panel in panels.Values) if (panel != null) panel.SetActive(false);
@@ -80,13 +83,11 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         promptGroup = refs.Get<CanvasGroup>("HotbarUIManager.directorPromptGroup");
         guide = refs.Get<TMP_Text>("HotbarUIManager.equipmentGuideText");
         money = Find(hud, "Quantity")?.GetComponent<TMP_Text>();
-        var day = Find(hud, "Day HUD")?.GetComponentInChildren<TMP_Text>(true); if (day != null) day.text = MultiplayerContractManager.Title(Crew.State?.contractLevel ?? 1);
+        var day = Find(hud, "Day HUD")?.GetComponentInChildren<TMP_Text>(true); if (day != null) day.text = MultiplayerContractManager.Title(Crew.State?.contractLevel ?? 2);
         var controls = refs.Get<GameObject>("HotbarUIManager.equipmentControlsRoot"); if (controls != null) controls.SetActive(false);
         cameraHud = view.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => string.Equals(t.name,"Cam Pov",StringComparison.OrdinalIgnoreCase))?.gameObject;
         if(cameraHud != null)cameraHud.SetActive(false);
-        notice = Text(hud, "Crew notification", new Vector2(.2f,.86f), new Vector2(.8f,.94f), 20);
         SetupShop(); SetupTablet(); SetupBook(); SetupComputer(); SetupBoss(); SetupContract(); SetupPause();
-        var worldShop = refs.Get<GameObject>("ShopTerminal.worldSpaceCanvas"); if (worldShop != null) Activate(worldShop);
         foreach (var button in hud != null ? hud.GetComponentsInChildren<Button>(true) : new Button[0])
             if (button.name.Contains("Almanac")) button.onClick.AddListener(() => Open("almanac"));
         BindStations(); Ready = true;
@@ -95,7 +96,7 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
     {
         foreach (var t in FindObjectsOfType<Transform>(true))
         {
-            if (t.gameObject.scene.name != "MultiStudio" || t.GetComponentInParent<Canvas>() != null) continue;
+            if (t.gameObject.scene != gameObject.scene || !t.gameObject.activeInHierarchy || t.GetComponentInParent<Canvas>() != null) continue;
             string n = t.name.ToLowerInvariant();
             string kind = n.Contains("director table") ? "tablet" : n.Contains("editor table") ? "computer" : n.Contains("kiosk table") || n == "shopterminal" ? "shop" : null;
             if (kind == null) continue;
@@ -112,7 +113,8 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
     public void Open(string panel)
     {
         if (!Ready || Crew.State == null) return;
-        if (Crew.State.phase == "briefing" && panel != "boss") return;
+        if (panel == "pause") { OpenPauseMenu(); return; }
+        if (Crew.LocalIsReadingBriefing && panel != "boss") return;
         if (!Allowed(panel)) { Message = panel == "tablet" ? "DIRECTOR station" : "EDITOR station — hand your recorded SD card to this computer."; return; }
         Close();
         if (panel == "contract" && Crew.State.phase == "review") { ShowCrewReview(); return; }
@@ -120,13 +122,15 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         if (!panels.TryGetValue(panel, out var root) || root == null) { Message = "This station view is not available."; return; }
         Panel = panel; RoleSelectionUI.Open = true; Activate(root);
         if (panel == "tablet") { stageCamera.enabled = true; refs.Get<GameObject>("DirectorTerminal.interiorPicker")?.SetActive(false); }
-        if (panel == "shop") { cart.Clear(); RefreshShop(); }
+        if (panel == "shop") { if (pendingShopReceipt == 0) cart.Clear(); RefreshShop(); }
         if (panel == "almanac") SetBook("all");
         if (panel == "computer") ComputerHome();
         if (panel == "contract") RefreshContract();
     }
     public void Close()
     {
+        ResetPauseState();
+        crewRetryPrompt = false;
         awaitingReviewRevision = -1;
         if (crewReview != null) crewReview.Hide();
         editorRequest++;
@@ -148,11 +152,15 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
     {
         if (!Ready || Crew?.State == null || !PhotonNetwork.InRoom) return;
         var state = Crew.State; var key = Keyboard.current;
+        UpdateShopRequest();
+        if (EquipmentStorageCabinet.BlocksInputThisFrame) return;
+        if (HandlePauseMenu(key)) return;
+        bool readingBriefing = Crew.LocalIsReadingBriefing;
         if (state.phase != previousPhase)
         {
             previousPhase = state.phase;
-            if (state.phase == "briefing") { Open("boss"); ShowBoss(); }
-            else if (state.phase == "build" || state.phase == "review") { Close(); Message = state.message; if (state.phase == "review") ShowCrewReview(); }
+            if ((state.phase == "build" && !readingBriefing) || state.phase == "review")
+            { Close(); Message = state.message; if (state.phase == "review") ShowCrewReview(); }
         }
         else if (state.phase == "review" && Panel == "editor" && awaitingReviewRevision >= 0 && state.revision > awaitingReviewRevision)
         {
@@ -160,28 +168,34 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
             Close(); ShowCrewReview();
         }
         if (state.phase == "lobby") return;
-        if (state.phase == "briefing")
+        if (readingBriefing)
         {
+            if (Panel != "boss") Open("boss");
             ShowBoss();
             Cursor.lockState = CursorLockMode.None; Cursor.visible = true;
             if (Application.isFocused && key != null && key.spaceKey.wasPressedThisFrame) NextBoss();
             return;
         }
+        if (Panel == "boss" && state.phase == "build" && !crewRetryPrompt) { Close(); Message = state.message; }
         if (!Allowed(Panel)) Close();
-        if (key != null && key.escapeKey.wasPressedThisFrame) { if (Panel == "") Open("pause"); else Close(); }
         if (key != null && key.pKey.wasPressedThisFrame) { if (Panel == "almanac") Close(); else Open("almanac"); }
         if (key != null && key.tabKey.wasPressedThisFrame) { if (Panel == "contract") Close(); else Open("contract"); }
         if (lastRevision != state.revision)
         {
             lastRevision = state.revision; RefreshHUD();
-            if (Panel == "shop") RefreshShop();
+            RefreshShop();
+            if (Panel == "contract") RefreshCrewContractFooter();
             if (Panel == "computer") RefreshClips();
             if (Panel == "editor") RefreshEditorClips();
         }
         if (Panel == "tablet") UpdateTablet();
         if (Panel == "") UpdateWorld();
         UpdatePlayback();
-        if (notice != null) notice.text = Crew.Notice + (string.IsNullOrEmpty(Message) || Message == Crew.Notice ? "" : "\n" + Message);
+        if (!string.IsNullOrEmpty(Message) && Message != lastFeedbackMessage)
+        {
+            lastFeedbackMessage = Message;
+            if (Message != Crew.Notice && Message != state.message) GameFeedback.Show(Message);
+        }
         Cursor.lockState = RoleSelectionUI.Open ? CursorLockMode.None : CursorLockMode.Locked; Cursor.visible = RoleSelectionUI.Open;
     }
     private void RefreshHUD()
@@ -196,7 +210,7 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         var day = Find(view.transform, "Day HUD")?.GetComponentInChildren<TMP_Text>(true);
         if (day != null) day.text = MultiplayerContractManager.Title(Crew.State.contractLevel);
         if (money != null) money.text = Crew.State.budget.ToString("N0");
-        Set(refs.Get<TMP_Text>("DirectorTerminal.bCoinsText"), Crew.State.budget + "\nB-Coins");
+        Set(refs.Get<TMP_Text>("DirectorTerminal.bCoinsText"), Crew.State.budget.ToString("N0"));
         var slots = Find(view.transform, "HotbarUI");
         var member = Crew.State.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
         for (int i = 1; i <= 5; i++)
@@ -258,7 +272,7 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
             dynamicCameraHud.Refresh(new CameraHUDController.State {
                 recording=mine, seconds=mine ? (float)(PhotonNetwork.Time-Crew.State.recordStarted) : 0,
                 card=Crew.State.objects.Any(o=>o.kind=="sd" && o.loadedInto==held.id),
-                level=1, fps=MultiplayerRecording.FPS, width=320, height=180
+                level=Crew.State.contractLevel, fps=MultiplayerRecording.FPS, width=320, height=180
             });
         }
         else if (dynamicCameraHud != null) dynamicCameraHud.Hide();
@@ -273,20 +287,26 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         }
         var ray = Control.View.ViewportPointToRay(new Vector3(.5f,.5f));
         var hits = Physics.RaycastAll(ray, 4, ~0, QueryTriggerInteraction.Collide).OrderBy(h => h.distance);
-        MultiplayerStation station = null; NetworkStageObject equipment = null;
+        MultiplayerStation station = null; NetworkStageObject equipment = null; EquipmentStorageCabinet cabinet = null;
         Vector3 aimPoint = Vector3.zero; bool hasAim = false;
         foreach (var hit in hits)
         {
             if (hit.transform.GetComponentInParent<PhotonView>() != null) continue;
             aimPoint = hit.point; hasAim = true;
             equipment = hit.collider.GetComponentInParent<NetworkStageObject>();
+            cabinet = hit.collider.GetComponentInParent<EquipmentStorageCabinet>();
             station = hit.collider.GetComponentInParent<MultiplayerStation>(); break;
         }
-        if (station == null && equipment == null && hasAim)
+        if (station == null && equipment == null && cabinet == null && hasAim)
             station = FindObjectsOfType<MultiplayerStation>().Where(s => NetworkStudioFactory.BoundsOf(s.gameObject).SqrDistance(aimPoint) < 1.5f)
                 .OrderBy(s => NetworkStudioFactory.BoundsOf(s.gameObject).SqrDistance(aimPoint)).FirstOrDefault();
         string prompt = "";
-        if (station != null)
+        if (cabinet != null)
+        {
+            prompt = "EQUIPMENT STORAGE";
+            if (key.eKey.wasPressedThisFrame) cabinet.OnInteract(Control.gameObject);
+        }
+        else if (station != null)
         {
             bool card = station.station == "computer" && held?.kind == "sd" && held.tape != 0;
             prompt = card ? "INSERT RECORDED SD CARD" : station.station == "tablet" ? "DIRECTOR TABLET" : station.station == "shop" ? "EQUIPMENT SHOP" : "EDITOR COMPUTER";
@@ -300,11 +320,14 @@ public sealed partial class MultiplayerAuthoredUI : MonoBehaviour
         }
         if (promptGroup != null) { promptGroup.gameObject.SetActive(prompt != ""); promptGroup.alpha = prompt != "" ? 1 : 0; }
         Set(promptTitle, prompt); Set(promptKey, "E");
-        Set(guide, held?.kind == "camera" ? "[LMB] Viewfinder  [C] Insert SD  [R] Record  [V] " + Control.ShotSize + "  [G] Drop  Wheel zoom" : held?.kind == "megaphone" ? "[LMB] Select / cue  [T] Reposition  [Enter] ACTION  [Z] Cycle animations  [B/N] Marks  [K] Walk  [O] Stop" : "[E] Use station / collect  [P] Almanac  [Tab] Contract  [1–5] Hotbar");
+        Set(guide, held?.kind == "camera" ? "[LMB] Viewfinder  [C] Insert/Remove SD  [R] Record  [V] " + Control.ShotSize + "  [G] Drop  Wheel zoom" : held?.kind == "megaphone" ? "[LMB] Select / cue  [T] Reposition  [Enter] ACTION  [Z] Cycle animations  [B/N] Marks  [K] Walk  [O] Stop" : "");
     }
     public static string EquipmentName(string kind, bool recorded = false) => kind == "camera" ? "NONY FX" : kind == "megaphone" ? "DIRECTOR MEGAPHONE" : kind == "sd" ? recorded ? "RECORDED SD CARD" : "SD CARD" : kind == "light" ? "160 LED PANEL" : kind == "softlight" ? "BETTER LIGHTS" : "AUDIO MONITOR";
     private void OnDestroy()
     {
+        ResetPauseState();
+        if (pauseSlats != null) Destroy(pauseSlats);
+        if (Crew != null) Crew.CommandRejected -= ShopCommandRejected;
         if (crewReview != null) Destroy(crewReview.gameObject);
         if (dynamicCameraHud != null) Destroy(dynamicCameraHud.gameObject);
         if (view != null) Destroy(view); if (editorView != null) Destroy(editorView);

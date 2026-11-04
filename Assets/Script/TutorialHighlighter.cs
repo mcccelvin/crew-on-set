@@ -30,6 +30,37 @@ public class TutorialHighlighter : MonoBehaviour
     private CanvasGroup frameCanvasGroup;
     private Canvas myCanvas;
     private readonly Vector3[] targetCorners = new Vector3[4];
+    private readonly RectTransform[] cornerStrokes = new RectTransform[8];
+
+    private void UpdateCornerFrame()
+    {
+        var oldImage = highlightFrame.GetComponent<Image>();
+        if (oldImage != null) oldImage.enabled = false;
+        float length = Mathf.Clamp(Mathf.Min(highlightFrame.rect.width, highlightFrame.rect.height) * .28f, 8f, 26f);
+        for (int i = 0; i < 8; i++)
+        {
+            if (cornerStrokes[i] == null)
+            {
+                var part = new GameObject("Guide corner stroke " + i, typeof(RectTransform), typeof(Image), typeof(LayoutElement));
+                part.layer = highlightFrame.gameObject.layer;
+                part.transform.SetParent(highlightFrame, false);
+                part.GetComponent<LayoutElement>().ignoreLayout = true;
+                var image = part.GetComponent<Image>();
+                image.color = new Color32(255, 196, 75, 255);
+                image.raycastTarget = false;
+                var shadow = part.AddComponent<Shadow>();
+                shadow.effectColor = new Color(0, 0, 0, .6f);
+                shadow.effectDistance = new Vector2(1, -1);
+                cornerStrokes[i] = (RectTransform)part.transform;
+            }
+            var rect = cornerStrokes[i];
+            int corner = i / 2;
+            var anchor = new Vector2(corner % 2, corner / 2);
+            rect.anchorMin = rect.anchorMax = rect.pivot = anchor;
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = i % 2 == 0 ? new Vector2(length, 3) : new Vector2(3, length);
+        }
+    }
 
     // --- NEW: 4-Panel Dimmer Variables ---
     [SerializeField] private CanvasGroup dimmerGroup;
@@ -309,6 +340,7 @@ public class TutorialHighlighter : MonoBehaviour
         highlightFrame.position = parentRect.TransformPoint(localCenter);
         highlightFrame.sizeDelta = localSize + Vector2.one * (EditorManager.Instance != null ? 8f : padding);
         highlightFrame.localRotation = Quaternion.identity;
+        UpdateCornerFrame();
 
         // --- NEW: UPDATE THE DARKNESS MASK TO FRAME THE HOLE ---
         UpdateDimmerPanels(parentRect);

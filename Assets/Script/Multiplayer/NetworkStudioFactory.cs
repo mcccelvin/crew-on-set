@@ -26,9 +26,9 @@ public sealed class NetworkStudioFactory : MonoBehaviour
         }
     }
     public Bounds Stage { get { var r = StageInterior.FindStagePlatform(); return r != null ? r.bounds : new Bounds(Vector3.zero, new Vector3(12, .2f, 8)); } }
-    public bool ValidPosition(Vector3 p) => MultiplayerContractManager.Finite(p) &&
+    public bool ValidPosition(Vector3 p) => MultiplayerContractManager.Finite(p) && (StudioDeliveryBay.Contains(p) ||
         Mathf.Abs(p.x - Stage.center.x) < Stage.extents.x + 8 && Mathf.Abs(p.z - Stage.center.z) < Stage.extents.z + 8 &&
-        p.y >= Stage.min.y - 2 && p.y <= Stage.max.y + 6;
+        p.y >= Stage.min.y - 2 && p.y <= Stage.max.y + 6);
     public Contract4Interactable Interaction(int id, int index)
     {
         if (!Objects.TryGetValue(id, out var view)) return null;

@@ -77,6 +77,12 @@ public sealed class ExportUIArt : ScriptableObject
     {
         var sprite=Get(key);if(image==null||sprite==null)return;
         image.sprite=sprite;image.type=Image.Type.Simple;image.color=Color.white;
+        // Preserve the bevel already painted into the artwork; add only depth
+        // to UI surfaces, never equipment/product pictures or branding marks.
+        if (key == "paper" || key == "folder" || key == "tab" || key == "psdBook" ||
+            key == "settingsFrame" || key == "playFolder" || key == "playCard" ||
+            key.EndsWith("Button") || key.StartsWith("settingsTab"))
+            UISurfaceDepth.Apply(image);
     }
     public static void Decoration(Transform parent,string key)
     {

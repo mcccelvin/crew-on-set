@@ -21,7 +21,7 @@ public sealed class DevCommandsPanel : MonoBehaviour
     float oldTime;
     CursorLockMode oldLock;
     GameObject canvasRoot,ownEvents;
-    TMP_Text status,fastLabel,resetLabel;
+    TMP_Text status,fastLabel,resetLabel,tutorialLabel;
     Image fastBackground;
     float resetUntil;
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
@@ -72,6 +72,7 @@ public sealed class DevCommandsPanel : MonoBehaviour
     {
         fastLabel.text="FAST DIALOGUE: "+(DevTutorialBypass.FastBossDialogue?"ON":"OFF");
         if (fastBackground != null) fastBackground.color = DevTutorialBypass.FastBossDialogue ? CrewPaperStyle.Gold : CrewPaperStyle.Paper;
+        if(tutorialLabel!=null)tutorialLabel.text=DevTutorialBypass.Disabled?"ENABLE TUTORIALS":"DISABLE TUTORIALS";
         resetLabel.text=resetUntil>Time.unscaledTime?"CONFIRM CAREER RESET":"RESET CURRENT CAREER";
     }
     public void Close()
@@ -110,24 +111,30 @@ public sealed class DevCommandsPanel : MonoBehaviour
         var wallet=Group(paper,"Local test wallet","TEST C-WALLET","Session-only coins, not paid balance",new Vector2(488,125),new Vector2(468,346));
         var contracts=Group(paper,"Contract shortcuts","CONTRACTS","Jump to a contract; this closes the panel",new Vector2(-244,-170),new Vector2(956,216));
         var recovery=Group(paper,"Career recovery","CAREER RESET","Current save only. Account identity stays.",new Vector2(488,-170),new Vector2(468,216));
-        var note=Label(tutorials,"Tutorial note","FAST dialogue keeps the tasks active.",new Vector2(0,-136),new Vector2(412,36),18);note.color=CrewPaperStyle.MutedInk;
+        var note=Label(tutorials,"Tutorial note","Enabling restarts the current tutorial.",new Vector2(0,-136),new Vector2(412,36),18);note.color=CrewPaperStyle.MutedInk;
         Button(media,"Open Editor","OPEN EDITOR",new Vector2(0,-141),new Vector2(412,38),OpenEditor);
         var walletNote=Surface(wallet,"Test wallet notice",new Vector2(0,-104),new Vector2(412,92),new Color32(255,240,194,255));
         note=Label(walletNote,"Test wallet explanation","LOCAL TEST ONLY\nReal coins and ownership are untouched.",Vector2.zero,new Vector2(388,78),20);note.fontStyle=FontStyles.Bold;
-        note=Label(contracts,"Contract names","1 / VASE    2 / GOKE    3 / TERRARI    4 / COFFEE",new Vector2(0,-78),new Vector2(880,24),16);note.color=CrewPaperStyle.MutedInk;
+        Button(contracts, "Finish contract", "FINISH CONTRACT / S", new Vector2(0,-77), new Vector2(412,42), FinishContractWithS);
         note=Label(recovery,"Reset warning","Two clicks within 8 seconds to confirm.",new Vector2(0,-82),new Vector2(412,28),17);note.color=new Color32(158,62,39,255);
-        Transform[] owners={tutorials,tutorials,tutorials,media,media,wallet,media,media,wallet,contracts,contracts,contracts,contracts,recovery};
-        Vector2[] positions={new Vector2(0,64),new Vector2(0,-6),new Vector2(0,-76),new Vector2(-107,64),new Vector2(107,64),new Vector2(0,64),new Vector2(0,-10),new Vector2(0,-86),new Vector2(0,-6),new Vector2(-330,-18),new Vector2(-110,-18),new Vector2(110,-18),new Vector2(330,-18),new Vector2(0,-30)};
+        Transform[] owners={tutorials,tutorials,tutorials,media,media,wallet,media,media,wallet,contracts,contracts,contracts,contracts,contracts,recovery};
+        Vector2[] positions={new Vector2(0,64),new Vector2(0,-6),new Vector2(0,-76),new Vector2(-107,64),new Vector2(107,64),new Vector2(0,64),new Vector2(0,-10),new Vector2(0,-86),new Vector2(0,-6),new Vector2(-352,-18),new Vector2(-176,-18),new Vector2(0,-18),new Vector2(176,-18),new Vector2(352,-18),new Vector2(0,-30)};
         int index=0;
         Button Add(string label,Action action)
         {
             int i=index++;
-            bool compact=i==3 || i==4 || (i>=9 && i<=12);
-            return Button(owners[i],"Command "+i,label,positions[i],new Vector2(compact?198:412,i>=9?58:54),()=>action(),i==13,i==3 || i==5);
+            bool contract=i>=9 && i<=13;
+            bool compact=i==3 || i==4;
+            var button=Button(owners[i],"Command "+i,label,positions[i],new Vector2(contract?170:compact?198:412,i>=9?58:54),()=>action(),i==14,i==3 || i==5);
+            if(contract){var text=button.GetComponentInChildren<TMP_Text>();text.fontSizeMin=16;text.fontSizeMax=21;text.enableWordWrapping=false;}
+            return button;
         }
         fastLabel=Add("FAST DIALOGUE",()=>Execute(DevTutorialBypass.ToggleFastBossDialogue,"Dialogue pacing changed.")).GetComponentInChildren<TMP_Text>();
         fastBackground=fastLabel.GetComponentInParent<Button>().targetGraphic as Image;
-        Add("DISABLE TUTORIALS",()=>Execute(DevTutorialBypass.DisableTutorials,"Tutorials disabled for this session.",true));
+        tutorialLabel=Add("DISABLE TUTORIALS",()=>{
+            if(DevTutorialBypass.Disabled)Execute(DevTutorialBypass.EnableTutorials,"Tutorial guidance enabled.",true);
+            else Execute(DevTutorialBypass.DisableTutorials,"Tutorials disabled for this session.",true);
+        }).GetComponentInChildren<TMP_Text>();
         Add("SKIP TUTORIAL STEP",()=>{
             if(EditorTutorialManager.Instance!=null && EditorTutorialManager.Instance.isActiveAndEnabled)Execute(()=>EditorTutorialManager.Instance.CheatCompleteCurrentStep(),"Tutorial step requested.",true);
             else if(TutorialManager.Instance!=null && TutorialManager.Instance.isActiveAndEnabled)Execute(()=>TutorialManager.Instance.CheatCompleteCurrentStep(),"Tutorial step requested.",true);
@@ -143,7 +150,7 @@ public sealed class DevCommandsPanel : MonoBehaviour
         Add("CREATE 12-SECOND CLIP",()=>{var editor=FindObjectOfType<EditorManager>();if(editor!=null)Execute(editor.GenerateCheatClip,"Test clip created.",true);else status.text="Open the editing scene to generate a test clip.";});
         Add("SPAWN TEST SD CARD",()=>{if(TutorialManager.Instance!=null)Execute(()=>TutorialManager.Instance.SpawnCheatSDCard(),"Test SD card requested.",true);else status.text="Enter the studio to spawn a test SD card.";});
         Add("RESTORE REAL C-WALLET",()=>Execute(()=>CCoinService.Ensure().DevEndWallet(),"Discarded test coins, test purchases and test equipment.\nYour real account wallet is restored; sync requires the backend."));
-        for(int level=1;level<=4;level++){int target=level;Add("LOAD CONTRACT "+target,()=>Execute(()=>CareerManager.SwitchLevelCheat(target),"Loading contract "+target,true));}
+        for(int level=CampaignProgression.MinimumLevel;level<=CampaignProgression.MaximumLevel;level++){int target=level;Add("LOAD CONTRACT "+target,()=>Execute(()=>CareerManager.SwitchLevelCheat(target),"Loading contract "+target,true));}
         resetLabel=Add("RESET CURRENT CAREER",()=>{
             if(!CommandsAllowed)return;
             if(resetUntil>Time.unscaledTime)Execute(CareerManager.DevRestartCareer,"Career reset requested.",true);
@@ -156,6 +163,32 @@ public sealed class DevCommandsPanel : MonoBehaviour
         status.alignment=TextAlignmentOptions.MidlineLeft;status.lineSpacing=2;
         canvasRoot.SetActive(false);
     }
+    void FinishContractWithS()
+    {
+        if (!CommandsAllowed) return;
+        string scene = SceneManager.GetActiveScene().name;
+        if (GameSaveManager.IsTrainingRoom || (scene != "SingleStudio" && scene != "Editor"))
+        {
+            status.text = "Start a single-player contract before using this command.";
+            return;
+        }
+        Execute(() =>
+        {
+            int level = CampaignProgression.GetCurrentLevel();
+            if (scene == "SingleStudio") EquipmentStorageCabinet.PackForReview();
+            CrossSceneData.submittedLevel = level;
+            CrossSceneData.submittedWithTutorial = false;
+            CrossSceneData.resultApplied = false;
+            CrossSceneData.finalGrades = new ProductionGrades
+            {
+                preProductionScore = 100, productionScore = 100, postProductionScore = 100,
+                letterGrade = "S", earnedBCoins = ProductionEconomy.CompletionBonus(level),
+                feedback = "Developer command: this contract was completed with an S grade."
+            };
+            LoadingScreenController.LoadScene("ReviewScene");
+        }, "Contract completed with an S grade.", true);
+    }
+
     void OpenEditor()
     {
         if (!CommandsAllowed) return;

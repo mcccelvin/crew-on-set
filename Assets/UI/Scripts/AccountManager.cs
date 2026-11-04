@@ -104,28 +104,109 @@ public class AccountManager : MonoBehaviour
         Login(loginEmail.text, loginPassword.text); 
     }
 
-    private void Login(string email, string password)
+    private bool loginPending;
+    private float nextLoginAttempt;
+
+    private void Login(string identifier, string password)
     {
+        if (loginPending || Time.unscaledTime < nextLoginAttempt) return;
+        identifier = (identifier ?? "").Trim();
+        if (identifier.Length == 0 || string.IsNullOrEmpty(password))
+        {
+            ShowMessage("Enter your email or username and password.", GameFeedback.NoticeType.Caution);
+            return;
+        }
+        loginPending = true;
         GameSaveManager.Ensure().BeginManualSignIn();
-        PlayFabClientAPI.LoginWithEmailAddress(new LoginWithEmailAddressRequest
+        var info = new GetPlayerCombinedInfoRequestParams
         {
-            Email = email,
-            Password = password,
-            InfoRequestParameters = new GetPlayerCombinedInfoRequestParams
-            {
-                GetPlayerProfile = true,
-                GetUserAccountInfo = true,
-                ProfileConstraints = new PlayerProfileViewConstraints { ShowDisplayName = true }
-            }
-        },
-        successfulResult =>
+            GetPlayerProfile = true, GetUserAccountInfo = true,
+            ProfileConstraints = new PlayerProfileViewConstraints { ShowDisplayName = true }
+        };
+        bool byEmail = identifier.Contains("@");
+        void SignedIn(LoginResult result)
         {
-            string displayName = SaveLoginProfile(successfulResult, email);
-            GameSaveManager.Ensure().SetAccount(successfulResult.PlayFabId);
+            loginPending = false;
+            string email = byEmail ? identifier : result.InfoResultPayload?.AccountInfo?.PrivateInfo?.Email ?? "";
+            string displayName = SaveLoginProfile(result, email);
+            GameSaveManager.Ensure().SetAccount(result.PlayFabId);
             ShowMessage("Welcome back, " + displayName + "!", GameFeedback.NoticeType.Success);
             LoadingScreenController.LoadScene("Account");
-        },
-        PlayfabFailure);
+        }
+        void SignInFailed(PlayFabError error)
+        {
+            loginPending = false;
+            if (error.Error == PlayFabErrorCode.APIClientRequestRateLimitExceeded)
+            {
+                nextLoginAttempt = Time.unscaledTime + 10f;
+                ShowMessage("Too many sign-in attempts. Wait a moment before trying again.", GameFeedback.NoticeType.Caution);
+            }
+            else if (!byEmail && (error.Error == PlayFabErrorCode.InvalidUsernameOrPassword || error.Error == PlayFabErrorCode.AccountNotFound || error.Error == PlayFabErrorCode.InvalidPassword))
+            {
+                loginPending = true;
+                StartCoroutine(LoginWebsiteAlias(identifier, password, info, SignedIn));
+            }
+            else PlayfabFailure(error);
+        }
+        if (byEmail)
+            PlayFabClientAPI.LoginWithEmailAddress(new LoginWithEmailAddressRequest { Email = identifier, Password = password, InfoRequestParameters = info }, SignedIn, SignInFailed);
+        else
+            PlayFabClientAPI.LoginWithPlayFab(new LoginWithPlayFabRequest { Username = identifier, Password = password, InfoRequestParameters = info }, SignedIn, SignInFailed);
+    }
+
+    [System.Serializable] private class WebsiteLogin { public string email, password, scope; }
+    [System.Serializable] private class WebsiteIdentity { public string email, playFabId; }
+    [System.Serializable] private class WebsiteReply { public WebsiteIdentity session; public string error; }
+
+    private System.Collections.IEnumerator LoginWebsiteAlias(string alias, string password,
+        GetPlayerCombinedInfoRequestParams info, System.Action<LoginResult> signedIn)
+    {
+        var payload = new WebsiteLogin { email = alias, password = password, scope = "player" };
+        using (var request = new UnityEngine.Networking.UnityWebRequest("https://crew-on-set.vercel.app/api/auth/login", "POST"))
+        {
+            request.redirectLimit = 0;
+            request.timeout = 15;
+            request.uploadHandler = new UnityEngine.Networking.UploadHandlerRaw(System.Text.Encoding.UTF8.GetBytes(JsonUtility.ToJson(payload)));
+            request.downloadHandler = new UnityEngine.Networking.DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+            yield return request.SendWebRequest();
+            WebsiteReply reply = null;
+            try { reply = JsonUtility.FromJson<WebsiteReply>(request.downloadHandler.text); }
+            catch (System.ArgumentException) { }
+            Debug.Log("[Sign-in] Website login HTTP " + request.responseCode + "; session returned: " + (reply?.session != null));
+            var account = request.result == UnityEngine.Networking.UnityWebRequest.Result.Success ? reply?.session : null;
+            if (account == null || string.IsNullOrWhiteSpace(account.email) || string.IsNullOrWhiteSpace(account.playFabId))
+            {
+                loginPending = false;
+                string reason = (reply?.error ?? "").Trim().ToLowerInvariant();
+                string message = "Sign-in unavailable. Try again.";
+                if (request.responseCode == 429)
+                {
+                    nextLoginAttempt = Time.unscaledTime + 10f;
+                    message = "Too many attempts. Try again shortly.";
+                }
+                else if (reason.Contains("account not found") || reason.Contains("user not found") || reason.Contains("no account") || reason == "accountnotfound")
+                    message = "Account not found.";
+                else if (reason.Contains("incorrect password") || reason.Contains("wrong password") || reason == "invalidpassword")
+                    message = "Incorrect password.";
+                else if (request.responseCode == 401 || request.responseCode == 400)
+                    message = "Incorrect username or password.";
+                ShowMessage(message, GameFeedback.NoticeType.Caution);
+                yield break;
+            }
+            Debug.Log("[Sign-in] Website identity verified. Starting linked PlayFab login.");
+            PlayFabClientAPI.LoginWithEmailAddress(new LoginWithEmailAddressRequest {
+                Email = account.email.Trim(), Password = password, InfoRequestParameters = info
+            }, result => {
+                loginPending = false;
+                if (string.Equals(result.PlayFabId, account.playFabId, System.StringComparison.OrdinalIgnoreCase)) signedIn(result);
+                else
+                {
+                    PlayFabClientAPI.ForgetAllCredentials();
+                    ShowMessage("Sign-in unavailable. Try again.", GameFeedback.NoticeType.Caution);
+                }
+            }, error => { loginPending = false; PlayfabFailure(error); });
+        }
     }
 
     #endregion
@@ -158,10 +239,10 @@ public class AccountManager : MonoBehaviour
     {
         bool credentialsRejected = error != null &&
             (error.Error == PlayFabErrorCode.InvalidEmailOrPassword ||
-             error.Error == PlayFabErrorCode.InvalidUsernameOrPassword ||
-             error.Error == PlayFabErrorCode.InvalidPassword);
-        string message = credentialsRejected
-            ? "Email or password doesn't match. Check your details and try again."
+             error.Error == PlayFabErrorCode.InvalidUsernameOrPassword);
+        string message = error?.Error == PlayFabErrorCode.AccountNotFound ? "Account not found." :
+            error?.Error == PlayFabErrorCode.InvalidPassword ? "Incorrect password." : credentialsRejected
+            ? "Incorrect email, username or password."
             : string.IsNullOrWhiteSpace(error?.ErrorMessage)
                 ? "Sign in could not be completed. Check your details and try again."
                 : error.ErrorMessage;

@@ -176,7 +176,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
     }
     public void OpenMenu()
     {
-        try { OpenRepository(); GameSaveMenu.Show(this); SyncCloud(); }
+        try { OpenRepository(); SyncCloud(); GameSaveMenu.Show(this); }
         catch (Exception) { GameFeedback.Show("SAVE LIST UNAVAILABLE\nCould not read the save folder. Your existing saves have been kept.", true); }
     }
     private bool isolatedContractReplay;
@@ -210,9 +210,21 @@ public sealed partial class GameSaveManager : MonoBehaviour
             if (slot.Int(CampaignProgression.GetGradedKey(i), 0) == 1) level = Math.Max(level, i + 1);
         return Mathf.Clamp(level, 1, CampaignProgression.MaximumLevel);
     }
+    public bool HasCompletedSoloTutorial()
+    {
+        OpenRepository();
+        if (Repository == null) return false;
+        string owner = Repository.Owner;
+        foreach (var slot in Repository.Slots)
+            if (slot.owner == owner && slot.Int("FlowerContractGraded", 0) == 1) return true;
+        return !GameSavePrefs.IsRoomSession && Active != null && Active.owner == owner &&
+            GameSavePrefs.Values != null && GameSavePrefs.Values.Exists(v => v.key == "FlowerContractGraded" && v.kind == 0 && v.integer == 1);
+    }
     public void StartGame(GameSaveSlot slot, bool isNew, int contractLevel = 0)
     {
         if (Syncing || slot == null || Repository == null || !Repository.Slots.Contains(slot)) return;
+        slot=EnsurePrimaryCareer(Repository,false);
+        if(slot==null)return;
         if (contractLevel < 0 || contractLevel > UnlockedContractLevel(slot)) return;
         isolatedContractReplay = false;
         Active = slot;
@@ -249,7 +261,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         DevTutorialBypass.ResetForNewGame();
         PauseManager.isPaused = false;
         Time.timeScale = 1f;
-        LoadingScreenController.LoadScene(isNew ? "CutScene" : "SingleStudio");
+        LoadingScreenController.LoadScene((contractLevel>0 ? contractLevel : CampaignProgression.GetCurrentLevel())==1 ? "CutScene" : "SingleStudio");
     }
     private static bool IsReplayResultKey(string key)
     {
@@ -262,7 +274,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
     public GameSaveSlot CreateGame(string name)
     {
         OpenRepository();
-        var slot = Repository.Create(name);
+        var slot = EnsurePrimaryCareer(Repository,true);
         nextSync = Time.unscaledTime + 1f;
         Changed?.Invoke();
         return slot;
@@ -472,6 +484,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         nextProductionSync = Time.unscaledTime;
         int requestSession = session;
         Syncing = true;
+        observedCareerProfile = null;
         Status = "Syncing saves with PlayFab…";
         Changed?.Invoke();
         try
@@ -481,6 +494,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
                 if (!IsCurrentSync(repo, requestSession)) return;
                 try
                 {
+                    observedCareerProfile = ReadCareerProfile(result.Data,repo.Owner);
                     if (result.Data != null)
                         foreach (var pair in result.Data)
                         {
@@ -489,6 +503,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
                             if (remote == null || pair.Key != CloudPrefix + remote.id) throw new InvalidDataException();
                             repo.MergeCloud(remote, Active?.id);
                         }
+                    EnsurePrimaryCareer(repo,false);
                     UploadNext(repo, requestSession);
                 }
                 catch (Exception) { SyncFailed("Some cloud saves could not be read. Local saves are still available."); }
@@ -502,14 +517,7 @@ public sealed partial class GameSaveManager : MonoBehaviour
         var slot = repo.Slots.Find(s => s.cloudRevision != s.revision);
         if (slot == null)
         {
-            // Include result snapshots just downloaded/merged from another device.
-            // Rearm the log queue even if a previous empty queue had stopped its timer.
-            RecoverProductionLogs();
-            nextProductionSync = Time.unscaledTime;
-            Syncing = false;
-            nextSync = Time.unscaledTime + 60f;
-            Status = repo.Warning ?? "Stats and B-Coin budgets synced with PlayFab.";
-            Changed?.Invoke();
+            PublishCareerProfile(repo,requestSession);
             return;
         }
         string revision = slot.revision;

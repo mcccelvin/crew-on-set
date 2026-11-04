@@ -51,6 +51,7 @@ public static class CrewPaperStyle
         foreach (var effect in image.GetComponents<Shadow>()) if (!(effect is Outline)) shadow = effect;
         if (shadow == null || shadow is Outline) shadow = image.gameObject.AddComponent<Shadow>();
         shadow.enabled = true; shadow.effectColor = new Color32(42, 24, 15, 95); shadow.effectDistance = new Vector2(3, -4);
+        UISurfaceDepth.Apply(image);
     }
 
     public static void ActionButton(Button button, bool danger = false, bool primary = false)

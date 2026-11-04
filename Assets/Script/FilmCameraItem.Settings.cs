@@ -127,10 +127,39 @@ namespace Player.Equipment
             manualFocus = false; // Autofocus only, including previously saved manual settings.
             manualDistance = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.Focus",5f),.1f,100f);
             whiteBalance = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.WB",5600f),2500f,9900f);
-            tint = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.Tint",0),-100,100);
+            // Keep legacy saves compatible without restoring the removed tint adjustment.
+            tint = 0f;
             iso = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.ISO",800),100,32000);
             iris = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.Iris",4),1.4f,22);
             shutterAngle = Mathf.Clamp(PlayerPrefs.GetFloat("CameraControls.Shutter",180),45,360);
+        }
+
+        public static void ResetSettingsAfterTutorial()
+        {
+            // Use career-scoped preferences, not global account/options storage.
+            PlayerPrefs.SetInt("CameraControls.Grid", 0);
+            PlayerPrefs.SetInt("CameraControls.Manual", 0);
+            PlayerPrefs.SetFloat("CameraControls.Focus", 5f);
+            PlayerPrefs.SetFloat("CameraControls.WB", 5600f);
+            PlayerPrefs.SetFloat("CameraControls.Tint", 0f);
+            PlayerPrefs.SetFloat("CameraControls.ISO", 800f);
+            PlayerPrefs.SetFloat("CameraControls.Iris", 4f);
+            PlayerPrefs.SetFloat("CameraControls.Shutter", 180f);
+            // Include inactive hotbar cameras so switching equipment cannot bring
+            // the tutorial's cached settings back into production.
+            foreach (var camera in FindObjectsOfType<FilmCameraItem>(true))
+            {
+                camera.settingsLoaded = false;
+                camera.settingsOpen = false;
+                camera.settingRow = 0;
+                camera.ManualFocusPracticed = false;
+                camera.WhiteBalancePracticed = false;
+                camera.ExposurePracticed = false;
+                camera.LoadCameraSettings();
+                camera.ApplyCameraLook();
+                camera.RefreshGridVisibility();
+            }
+            PlayerPrefs.Save();
         }
 
         private void ReadCameraSettings()
@@ -139,15 +168,18 @@ namespace Player.Equipment
             featureLevel = CameraFeatureUnlocks.Level;
             if (featureLevel >= 2 && ruleOfThirdsGrid == null) CreateRuleOfThirdsGrid();
             RefreshGridVisibility();
-            EquipmentControls = "[LMB] View | [C] SD | [R] Record | [G] Drop | [Scroll] Zoom | [Q/E] Height | [Ctrl] Smooth move" +
+            EquipmentControls = "[LMB] View | [C] Insert/Remove SD | [R] Record | [G] Drop | [Scroll] Zoom | [Q/E] Height | [Ctrl] Smooth move" +
                 (featureLevel >= 2 ? " | [F2] Settings | Autofocus" : " | Autofocus");
             var key = Keyboard.current;
             if (key == null || featureLevel < 2) { settingsOpen = false; return; }
-            if (key.f2Key.wasPressedThisFrame) settingsOpen = !settingsOpen;
+            if (key.f2Key.wasPressedThisFrame && TutorialEquipmentGate.Allow("camera.settings", this)) settingsOpen = !settingsOpen;
             bool changed = false;
             if (settingsOpen)
             {
-                int rows = featureLevel >= 4 ? 6 : featureLevel >= 3 ? 3 : 1;
+                bool adjusting = key.upArrowKey.wasPressedThisFrame || key.downArrowKey.wasPressedThisFrame || key.leftArrowKey.isPressed || key.rightArrowKey.isPressed;
+                bool newAdjustment = key.upArrowKey.wasPressedThisFrame || key.downArrowKey.wasPressedThisFrame || key.leftArrowKey.wasPressedThisFrame || key.rightArrowKey.wasPressedThisFrame;
+                if (adjusting && !TutorialEquipmentGate.Allow("camera.settings", this, newAdjustment)) return;
+                int rows = featureLevel >= 4 ? 5 : featureLevel >= 3 ? 2 : 1;
                 if (key.upArrowKey.wasPressedThisFrame) settingRow = (settingRow+rows-1)%rows;
                 if (key.downArrowKey.wasPressedThisFrame) settingRow = (settingRow+1)%rows;
                 settingRow = Mathf.Clamp(settingRow,0,rows-1);
@@ -157,14 +189,13 @@ namespace Player.Equipment
                 {
                     nextSettingRepeat = Time.unscaledTime + (press ? .3f : .06f);
                     int direction = key.rightArrowKey.isPressed ? 1 : -1;
-                    switch (settingRow == 0 ? -1 : settingRow + 1)
+                    switch (settingRow)
                     {
-                        case -1: GridEnabled = direction > 0; break;
-                        case 2: whiteBalance=Mathf.Clamp(whiteBalance+direction*100,2500,9900); WhiteBalancePracticed=true; break;
-                        case 3: tint=Mathf.Clamp(tint+direction*5,-100,100); WhiteBalancePracticed=true; break;
-                        case 4: iso=Step(IsoStops,iso,direction); ExposurePracticed=true; break;
-                        case 5: iris=Step(IrisStops,iris,direction); ExposurePracticed=true; break;
-                        case 6: shutterAngle=Step(ShutterStops,shutterAngle,direction); ExposurePracticed=true; break;
+                        case 0: GridEnabled = direction > 0; break;
+                        case 1: whiteBalance=Mathf.Clamp(whiteBalance+direction*100,2500,9900); WhiteBalancePracticed=true; break;
+                        case 2: iso=Step(IsoStops,iso,direction); ExposurePracticed=true; break;
+                        case 3: iris=Step(IrisStops,iris,direction); ExposurePracticed=true; break;
+                        case 4: shutterAngle=Step(ShutterStops,shutterAngle,direction); ExposurePracticed=true; break;
                     }
                     changed = true;
                 }
@@ -244,7 +275,7 @@ namespace Player.Equipment
             float exposure=featureLevel>=4 ? Mathf.Log(iso/800f*(16f/(iris*iris))*(shutterAngle/180f),2f) : 0f;
             cameraExposure.postExposure.Override(Mathf.Clamp(exposure,-8,8));
             cameraBalance.temperature.Override(featureLevel>=3 ? Mathf.Clamp((whiteBalance-5600f)/43f,-100,100) : 0);
-            cameraBalance.tint.Override(featureLevel>=3 ? tint : 0);
+            cameraBalance.tint.Override(0f);
             cameraFocus.mode.Override(DepthOfFieldMode.Bokeh);
             cameraFocus.focusDistance.Override(currentFocusDistance);
             cameraFocus.aperture.Override(featureLevel>=4 ? iris : 4f);
@@ -252,7 +283,7 @@ namespace Player.Equipment
             cameraMotion.intensity.Override(featureLevel>=4 ? shutterAngle/360f : .5f);
             // Neutral settings preserve the normal view, including its post-processing choice.
             bool adjusted = Mathf.Abs(exposure) > .001f ||
-                (featureLevel >= 3 && (Mathf.Abs(whiteBalance - 5600f) > 1f || Mathf.Abs(tint) > .01f)) || manualFocus;
+                (featureLevel >= 3 && Mathf.Abs(whiteBalance - 5600f) > 1f) || manualFocus;
             filmCamera.GetUniversalAdditionalCameraData().renderPostProcessing = playerPostProcessing || adjusted;
         }
 
@@ -341,7 +372,7 @@ namespace Player.Equipment
             float exposure = featureLevel >= 4 ? Mathf.Log(iso / 800f * (16f / (iris * iris)) * (shutterAngle / 180f), 2f) : 0f;
             builtInGrading.postExposure.Override(Mathf.Clamp(exposure, -8, 8));
             builtInGrading.temperature.Override(featureLevel >= 3 ? Mathf.Clamp((whiteBalance - 5600f) / 43f, -100, 100) : 0);
-            builtInGrading.tint.Override(featureLevel >= 3 ? tint : 0);
+            builtInGrading.tint.Override(0f);
             builtInFocus.enabled.Override(true);
             builtInFocus.focusDistance.Override(currentFocusDistance);
             builtInFocus.aperture.Override(featureLevel >= 4 ? iris : 4f);
@@ -370,11 +401,10 @@ namespace Player.Equipment
             if (!settingsOpen || featureLevel < 2) return "";
             string[] rows = { "Grid   " + (GridEnabled ? "ON" : "OFF"),
                 "White balance   " + whiteBalance.ToString("F0") + "K",
-                "Tint   " + tint.ToString("F0"),
                 "ISO   " + iso.ToString("F0"),
                 "Aperture   F" + iris.ToString("F1"),
                 "Shutter   " + shutterAngle.ToString("F1") + " deg" };
-            int count = featureLevel >= 4 ? 6 : featureLevel >= 3 ? 3 : 1;
+            int count = featureLevel >= 4 ? 5 : featureLevel >= 3 ? 2 : 1;
             string text = "<color=#FFD866>CAMERA SETTINGS</color>\n<size=75%>Live preview</size>\n\n";
             for (int i = 0; i < count; i++)
                 text += i == settingRow ? "<color=#FFD866>> " + rows[i] + "</color>\n" : "  " + rows[i] + "\n";

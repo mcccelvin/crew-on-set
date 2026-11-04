@@ -26,7 +26,7 @@ public sealed class MultiplayerWorkbench : MonoBehaviour
         GUILayout.Label("BOSS — CREW BRIEFING  " + (page + 1) + "/" + Brief.Length);
         GUILayout.Label(Brief[page], new GUIStyle(GUI.skin.label) { wordWrap = true, fontSize = 19 }, GUILayout.MinHeight(125));
         var member = Crew.State.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
-        if (member != null && member.briefed) { GUILayout.Label("Ready. Waiting for the other crew members to finish reading..."); return; }
+        if (member != null && member.briefed) return;
         GUILayout.BeginHorizontal();
         if (page > 0 && GUILayout.Button("BACK", GUILayout.Height(38))) page--;
         if (GUILayout.Button(page == Brief.Length - 1 ? "READY TO WORK" : "NEXT", GUILayout.Height(38)))

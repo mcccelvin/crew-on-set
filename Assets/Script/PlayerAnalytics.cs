@@ -178,6 +178,15 @@ public static class PlayerAnalytics
         if (GameSavePrefs.IsRoomSession) return;
         var data = Load(); var a = data.active;
         if (a == null || !a.closed || a.level != level || string.IsNullOrEmpty(a.submissionId)) return;
+        var archive = CommercialArchiveEntry.pending;
+        if (archive != null && archive.level == level)
+        {
+            CommercialArchiveEntry.pending = null;
+            archive.submissionKey = a.submissionId;
+            archive.feedback = grades.feedback;
+            try { archive.Save(); }
+            catch (System.Exception ex) { Debug.LogWarning("Could not save archived grading notes: " + ex.Message); }
+        }
         if (a.productionLog == null)
         {
             a.productionLog = CompletedRecord(a, grades);

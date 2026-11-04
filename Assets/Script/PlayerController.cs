@@ -17,6 +17,7 @@ namespace Player.PlayerController
         [SerializeField, Min(0.5f)] private float CharacterHeight = ProductModelCatalog.StandardCharacterHeight;
         private Animator characterAnimator;
         private PlayerCameraPose cameraHoldingPose;
+        private PlayerLookPose lookPose;
         private UnityEngine.Camera heldViewCamera;
         private float heldViewNearClip;
         private UnityEngine.Camera firstPersonView;
@@ -59,6 +60,7 @@ namespace Player.PlayerController
         private InputManager inputManager;
         private Animator animator;
         private bool grounded = false;
+        private Vector3 stageRampNormal = Vector3.up;
         private float nextFootstep;
         private bool audioGroundSampled;
         private bool hasAnimator;
@@ -268,6 +270,7 @@ namespace Player.PlayerController
             }
             foreach (var part in oldRenderers) part.enabled = false;
             characterAnimator = animator = canAnimate ? rig : null;
+            if (canAnimate) lookPose = new PlayerLookPose(rig);
             hasAnimator = canAnimate && rig.runtimeAnimatorController != null;
             if (canAnimate) rig.Rebind();
             appearanceInitialized = true;
@@ -303,7 +306,6 @@ namespace Player.PlayerController
                 GameplayAudioManager.Play("Player_Footstep_" + Random.Range(1, 11).ToString("00"));
                 nextFootstep = Time.time + Mathf.Clamp(.9f / groundSpeed, .25f, .55f);
             }
-            HandleJump();
             UpdateMovementAnimation();
             Move();
         }
@@ -311,24 +313,19 @@ namespace Player.PlayerController
         private void Update()
         {
             if (!PauseManager.isPaused) cameraHoldingPose?.RestoreAnimation();
-            if (inputManager == null) return;
-            if (!MovementAllowed)
-            {
-                jumpBufferCounter = 0f;
-                inputManager.ConsumeJump();
-                return;
-            }
-
-            if (inputManager.ConsumeJump())
-            {
-                jumpBufferCounter = Mathf.Max(Time.fixedDeltaTime, JumpBufferTime);
-            }
+            if (!PauseManager.isPaused) lookPose?.RestoreAnimation();
+            // Space remains available to dialogue/UI, but never launches the player.
+            jumpBufferCounter = 0f;
+            if (inputManager != null) inputManager.ConsumeJump();
         }
 
         private void LateUpdate()
         {
             if (PauseManager.isPaused) return;
             CamMovement();
+            if (Camera != null && firstPersonView != null && firstPersonView.enabled)
+                lookPose?.Apply(transform,Camera.forward);
+            else lookPose?.Reset();
             var held = equipmentInteractor != null ? equipmentInteractor.GetHeldItem() as Equipment.FilmCameraItem : null;
             if (StationaryAction || held == null || !held.transform.IsChildOf(transform))
             {
@@ -370,7 +367,13 @@ namespace Player.PlayerController
                     : (grounded ? desiredVelocity : Vector3.Lerp(horizontalVelocity, desiredVelocity, 1f - Mathf.Exp(-response * Time.fixedDeltaTime))))
                 : Vector3.zero;
             precisionWasActive = allowed && easing;
-            playerRigidbody.velocity = horizontalVelocity + Vector3.up * playerRigidbody.velocity.y;
+            if (grounded && stageRampNormal.y < .999f)
+            {
+                // Follow the accessible stage slope instead of pushing horizontally
+                // into it. Preserve walking speed and never apply a jump impulse.
+                playerRigidbody.velocity = Vector3.ProjectOnPlane(horizontalVelocity, stageRampNormal).normalized * horizontalVelocity.magnitude;
+            }
+            else playerRigidbody.velocity = horizontalVelocity + Vector3.up * playerRigidbody.velocity.y;
         }
 
         private void UpdateMovementAnimation()
@@ -489,37 +492,14 @@ namespace Player.PlayerController
 
         private void HandleJump()
         {
-            if (grounded) coyoteCounter = CoyoteTime;
-            else coyoteCounter = Mathf.Max(0f, coyoteCounter - Time.fixedDeltaTime);
-
-            if (!MovementAllowed) { jumpBufferCounter = 0f; return; }
-            if (jumpBufferCounter <= 0f || (!grounded && coyoteCounter <= 0f))
-            {
-                jumpBufferCounter = Mathf.Max(0f, jumpBufferCounter - Time.fixedDeltaTime);
-                return;
-            }
-
-            float jumpSpeed = Mathf.Sqrt(2f * Mathf.Abs(Physics.gravity.y) * Mathf.Max(0.1f, JumpHeight));
-            Vector3 velocity = playerRigidbody.velocity;
-            velocity.y = jumpSpeed;
-            playerRigidbody.velocity = velocity;
-            if (hasAnimator)
-            {
-                animator.ResetTrigger(jumpHash);
-                // Jump physics remain active; the stylized jump animation is retired.
-                animator.SetBool(groundHash, false);
-                animator.SetBool(fallingHash, false);
-            }
-
-            grounded = false;
+            // Retired; retain serialized jump settings for prefab compatibility.
             jumpBufferCounter = 0f;
             coyoteCounter = 0f;
         }
 
         public void JumpAddForce()
         {
-            // The jump force is applied immediately in FixedUpdate().
-            // This animation event now only cleans up the visual trigger.
+            // Retained animation event: no movement impulse.
             if (hasAnimator) animator.ResetTrigger(jumpHash);
         }
 
@@ -531,10 +511,14 @@ namespace Player.PlayerController
             Vector3 origin = new Vector3(bounds.center.x, bounds.min.y + radius + 0.05f, bounds.center.z);
             int count = Physics.SphereCastNonAlloc(origin, radius, Vector3.down, groundHits, 0.15f, groundMask, QueryTriggerInteraction.Ignore);
             grounded = false;
-            for (int i = 0; i < count && playerRigidbody.velocity.y <= 0.1f; i++)
+            stageRampNormal = Vector3.up;
+            for (int i = 0; i < count; i++)
             {
                 if (groundHits[i].collider.attachedRigidbody == playerRigidbody) continue;
                 if (Vector3.Dot(groundHits[i].normal, Vector3.up) < 0.65f) continue;
+                bool isStageRamp = groundHits[i].collider.GetComponentInParent<StageWalkAccess>() != null;
+                if (playerRigidbody.velocity.y > .1f && !isStageRamp) continue;
+                if (isStageRamp) stageRampNormal = groundHits[i].normal;
                 grounded = true;
                 break;
             }
@@ -546,6 +530,7 @@ namespace Player.PlayerController
             practicePointLock.Release();
             RestoreHeldViewClip();
             cameraHoldingPose?.RestoreAnimation();
+            lookPose?.Reset();
             jumpBufferCounter = coyoteCounter = 0f;
             currentVelocity = Vector2.zero;
             if (playerRigidbody != null)

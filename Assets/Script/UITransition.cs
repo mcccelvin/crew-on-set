@@ -12,13 +12,6 @@ public sealed class UITransition : MonoBehaviour
     [Range(.8f, 1f)] public float entranceScale = .9f;
     public bool smoothFadeOnly;
     public bool smoothSlideEntrance;
-    // Eight held poses: approach, overshoot, squash and settle.
-    private static readonly float[] Travel = { 0f, .24f, .55f, .83f, 1.07f, 1.025f, .99f, 1f };
-    private static readonly float[] Opacity = { 0f, .3f, .65f, .9f, 1f, 1f, 1f, 1f };
-    private static readonly Vector2[] Shape = {
-        new Vector2(1.03f,.94f), new Vector2(.98f,1.03f), new Vector2(.98f,1.03f),
-        new Vector2(1f,1f), new Vector2(1.025f,.98f), new Vector2(.99f,1.015f),
-        new Vector2(1.005f,.997f), Vector2.one };
     private CanvasGroup group;
     private RectTransform rect;
     private Vector3 scale;
@@ -276,7 +269,7 @@ public sealed class UITransition : MonoBehaviour
             if (moving) { rect.localScale = scale; rect.anchoredPosition = position; }
             return;
         }
-        if (productionMenu || smoothSlideEntrance)
+        
         {
             // Fast initial travel, a slow clean settle, and a shorter crossfade.
             // No held frames, overshoot or asymmetric scaling of the artwork.
@@ -289,15 +282,6 @@ public sealed class UITransition : MonoBehaviour
                 rect.anchoredPosition = position + Vector2.right * (Mathf.Min(slideDistance, 48f) * remaining);
             }
             return;
-        }
-        int frame = Mathf.Min(Travel.Length - 1, Mathf.FloorToInt(progress * Travel.Length));
-        float eased = Travel[frame];
-        group.alpha = alpha * Opacity[frame];
-        if (moving)
-        {
-            float size = Mathf.LerpUnclamped(entranceScale, 1f, eased);
-            rect.localScale = Vector3.Scale(scale, new Vector3(size * Shape[frame].x, size * Shape[frame].y, 1f));
-            rect.anchoredPosition = position + Vector2.down * (slideDistance * (1f - eased));
         }
     }
 

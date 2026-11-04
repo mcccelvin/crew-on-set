@@ -220,6 +220,7 @@ public class ContractUIManager : MonoBehaviour
 
     public bool CanToggleQualifications()
     {
+        if(ContractTutorialChoice.IsAsking)return false;
         // Reading or closing is not acceptance. Only the bottom signature button can accept.
         if (acceptanceBriefPending || signingInProgress) return false;
         // A different level's dormant tutorial must not block the current brief.
@@ -301,10 +302,12 @@ public class ContractUIManager : MonoBehaviour
 
     public void ShowFlowerContract(Action onAccepted)
     {
-        activeContractLevel=1;isLevel3Contract=false;
-        ConfigureFlowerContract();
+        PrepareFlowerContract();
         ShowContract(onAccepted);
     }
+
+    public void PrepareFlowerContract()
+    {activeContractLevel=1;isLevel3Contract=false;ConfigureFlowerContract();}
 
     private void ConfigureFlowerContract()
     {
@@ -853,32 +856,7 @@ public class ContractUIManager : MonoBehaviour
         if(briefAcceptButton!=null)briefAcceptButton.gameObject.SetActive(acceptanceBriefPending);
         briefTitle.text=liveTitle;
         var book = qualificationsPanel.transform.Find("Qualifications Book");
-        string openedKey = activeContractLevel == 1 ? "contractArtisanOpen" :
-            activeContractLevel == 2 ? "contractGokeOpen" :
-            activeContractLevel == 3 ? "contractTerrariOpen" :
-            activeContractLevel == 4 ? "contractKapeOpen" : "contractHarayaOpen";
-        Sprite openedArt = ExportUIArt.Get(openedKey);
-        bool uniqueArt = openedArt != null;
-        ExportUIArt.Apply(book.GetComponent<Image>(), uniqueArt ? openedKey : "psdOpenFolder");
-        // New exports use a full 1920x1080 canvas, with the folder inset in that canvas.
-        book.GetComponent<RectTransform>().sizeDelta = uniqueArt ? new Vector2(1920, 1080) : new Vector2(1346, 860);
-        foreach (string decoration in new[] { "Project title tape", "Project title", "Reference photo frame", "Product photo", "Product photo label" })
-        {
-            var child = book.Find(decoration);
-            if (child != null) child.gameObject.SetActive(!uniqueArt);
-        }
-        var briefFont = TMP_Settings.defaultFontAsset ?? Resources.Load<TMP_FontAsset>("Fonts & Materials/Roboto-Bold SDF");
-        if (briefFont != null) { briefBody.font = briefFont; briefBody.fontSharedMaterial = briefFont.material; }
-        briefBody.color = new Color32(48, 32, 24, 255);
-        briefBody.fontStyle = FontStyles.Normal;
-        briefBody.fontSize = expandedBrief ? 23f : 25f;
-        briefBody.enableAutoSizing = false;
-        briefBody.richText = true;
-        briefBody.enableWordWrapping = true;
-        briefBody.alignment = TextAlignmentOptions.TopLeft;
-        briefBody.characterSpacing = 0;
-        briefBody.lineSpacing = expandedBrief ? 4 : 6;
-        briefBody.margin = new Vector4(16, 12, 20, 12);
+        ContractBriefPresentation.Apply(book.GetComponent<Image>(), activeContractLevel, briefScroll, briefBody, expandedBrief);
         briefGuideButton.GetComponentInChildren<TextMeshProUGUI>().text = expandedBrief ? "QUICK BRIEF" : "FULL GUIDE";
         briefGuideButton.interactable = !signingInProgress && folderAnimation == null;
         string readingHint = "OPTIONAL DETAILS | [TAB] CLOSE / REOPEN";
@@ -958,10 +936,13 @@ public class ContractUIManager : MonoBehaviour
         return "<color=#7A3F24><size=22><b>" + title + "</b></size></color>\n" + instructions + "\n\n";
     }
 
-    private string BuildMissionBrief()
+    private string BuildMissionBrief() => MissionBrief(activeContractLevel,liveTitle,GameSavePrefs.IsRoomSession);
+
+    // The illustrated brief is shared verbatim by solo and crew contracts.
+    public static string MissionBrief(int level,string title,bool room)
     {
         string pitch, delivery, setup, shoot, edit;
-        switch (activeContractLevel)
+        switch (level)
         {
             case 1:
                 pitch = "MAKE A SMALL VASE FEEL LIKE A BIG FIND.";
@@ -999,13 +980,13 @@ public class ContractUIManager : MonoBehaviour
                 edit = "Use <b>at least four new takes</b> in a continuous cut from 0s. Add exactly <b>three readable, title-safe graphics</b>; don't cover the subjects.";
                 break;
         }
-        int bonus = ProductionEconomy.CompletionBonus(activeContractLevel);
-        return "<align=center><b><size=32>" + liveTitle + "</size></b>\n<size=19><color=#7A3F24>" + pitch + "</color></size>\n" +
+        int bonus = ProductionEconomy.CompletionBonus(level);
+        return "<align=center><b><size=32>" + title + "</size></b>\n<size=19><color=#7A3F24>" + pitch + "</color></size>\n" +
             "<size=22><b>" + delivery + "</b></size></align>\n\n" +
-            ContractBudgetTitle() + MissionStep("01  /  BUILD THE SET", setup) +
+            ContractBudgetTitle(level) + MissionStep("01  /  BUILD THE SET", setup) +
             MissionStep("02  /  GET THE SHOT", shoot) + MissionStep("03  /  CUT & BRAND", edit) +
             "<size=20><b>PASS BONUS</b> Up to " + bonus.ToString("N0") + " B-Coins\n" +
-            "Meet every must-have and earn C rank or better.\nFull Guide has grade targets, tips and payment terms.</size>\n\n" + ContractCompletionRewardTitle();
+            "Meet every must-have and earn C rank or better.\nFull Guide has grade targets, tips and payment terms.</size>\n\n" + ContractCompletionRewardTitle(room);
     }
 
     private string BuildDepartmentBrief()
@@ -1013,17 +994,21 @@ public class ContractUIManager : MonoBehaviour
         return DepartmentBrief(activeContractLevel);
     }
 
-    private static string ContractCompletionRewardTitle()
+    private static string ContractCompletionRewardTitle() => ContractCompletionRewardTitle(GameSavePrefs.IsRoomSession);
+
+    private static string ContractCompletionRewardTitle(bool room)
     {
         // Room grades do not yet authorize account-currency rewards.
-        return GameSavePrefs.IsRoomSession ? "" :
+        return room ? "" :
             "<align=center><color=#80500A><size=22><b>COMPLETION REWARD: " + CCoinRules.ContractReward + " C-COINS</b></size></color></align>\n\n";
     }
 
-    private string ContractBudgetTitle()
+    private string ContractBudgetTitle() => ContractBudgetTitle(activeContractLevel);
+
+    private static string ContractBudgetTitle(int level)
     {
         return "<align=center><color=#80500A><size=22><b>PRODUCTION BUDGET: " +
-            ProductionEconomy.Advance(activeContractLevel).ToString("N0") + " B-COINS</b></size></color></align>\n\n";
+            ProductionEconomy.Advance(level).ToString("N0") + " B-COINS</b></size></color></align>\n\n";
     }
 
     private static string ContractCompletionRewardTerms()

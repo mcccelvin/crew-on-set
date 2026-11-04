@@ -72,6 +72,34 @@ public class GokeLevelManager : MonoBehaviour
     private GokeLevelStep currentStep;
     public bool ShowTutorialProgress => isActiveAndEnabled && isLevelStarted &&
         !DevTutorialBypass.Disabled && currentStep != GokeLevelStep.LevelActive;
+    public bool AllowsEquipmentAction(string action, Equipment item)
+    {
+        if (!ShowTutorialProgress) return true;
+        if (isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining)) return false;
+        bool camera = item is FilmCameraItem;
+        bool light = item is FilmLightItem;
+        bool placing = currentStep == GokeLevelStep.PlaceKeyLight || currentStep == GokeLevelStep.PlaceFillLight || currentStep == GokeLevelStep.PlaceBackLight;
+        switch (action)
+        {
+            case "pickup": return camera && currentStep == GokeLevelStep.PickUpCamera ||
+                item is SDCardItem sd && !sd.isUsedCard && currentStep == GokeLevelStep.PickUpSDCard ||
+                light && currentStep == GokeLevelStep.PickUpLights;
+            case "drop": return light && placing && practiceLesson != null && practiceLesson.ReadyToPlace && GuidedPracticeLesson.AtMarker(GetCurrentPlacementMarker());
+            case "switch": return light && (placing || currentStep == GokeLevelStep.PickUpLights) || camera &&
+                (currentStep >= GokeLevelStep.PickUpCamera && currentStep <= GokeLevelStep.InspectCameraFeatures);
+            case "use": return light && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 1 ||
+                camera && (hasCompletedRuleOfThirdsPractice || practiceLesson != null && practiceLesson.CurrentStepIndex == (cameraPracticeMarker != null ? 1 : 0));
+            case "light.intensity": return light && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 2;
+            case "light.height": return light && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 3;
+            case "light.tilt": return light && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 4;
+            case "camera.settings": return camera && practiceLesson != null && practiceLesson.CurrentStepIndex >= (cameraPracticeMarker != null ? 2 : 1) && practiceLesson.CurrentPermission != "camera.frame";
+            case "camera.zoom": case "camera.height": return camera && practiceLesson != null && practiceLesson.CurrentPermission == "camera.frame";
+            case "insert": return camera && currentStep == GokeLevelStep.InsertSDCard;
+            case "shop": return currentStep == GokeLevelStep.BuyLights || currentStep == GokeLevelStep.LightCheckout || currentStep == GokeLevelStep.CloseLightShop ||
+                currentStep == GokeLevelStep.BuyCamera || currentStep == GokeLevelStep.BuySDCard || currentStep == GokeLevelStep.Checkout || currentStep == GokeLevelStep.CloseShop;
+            default: return false;
+        }
+    }
     public float TutorialProgress => Mathf.Clamp01((float)currentStep / (int)GokeLevelStep.LevelActive);
     private TutorialManager tutorialManager;
     private ContractUIManager contractUIManager;
@@ -159,8 +187,9 @@ public class GokeLevelManager : MonoBehaviour
 
         if (tutorialManager != null) tutorialManager.PointLineAt("");
 
-        bool restartLevelIntroduction = CampaignProgression.ConsumeCheatIntroduction(2);
-        if (restartLevelIntroduction)
+        bool cheatIntroduction = CampaignProgression.ConsumeCheatIntroduction(2);
+        bool restartLevelIntroduction = cheatIntroduction || ContractTutorialChoice.RestartGuidance(2);
+        if (cheatIntroduction)
         {
             PlayerPrefs.DeleteKey("Level2CameraPurchased");
             PlayerPrefs.Save();
@@ -171,6 +200,18 @@ public class GokeLevelManager : MonoBehaviour
         SetupContractUI();
 
         bool contractAlreadyAccepted = PlayerPrefs.GetInt("GokeContractAccepted", 0) == 1;
+
+        if(ContractTutorialChoice.SkipThisContract)
+        {
+            if(contractAlreadyAccepted)
+            {
+                if(CareerManager.Instance!=null)CareerManager.Instance.currentActiveJob="Goke Cola";
+                contractUIManager?.UnlockQualifications();StartContract();tutorialManager?.UnfreezePlayerMovement();
+                Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+            }
+            else OfferContract();
+            return;
+        }
 
         if (AlmanacManager.Instance != null)
         {
@@ -268,7 +309,7 @@ public class GokeLevelManager : MonoBehaviour
 
         if (currentStep == GokeLevelStep.ExplainCameraFeatures)
         {
-            ShowEquipmentAlmanacIntroduction();
+            ShowContractIntroduction();
             return;
         }
 
@@ -789,7 +830,7 @@ public class GokeLevelManager : MonoBehaviour
 
         ruleOfThirdsPracticeTimer = 0f;
         thirdsPracticeStage++;
-        if (thirdsPracticeStage < 3) return;
+        if (thirdsPracticeStage < 2) return;
         hasCompletedRuleOfThirdsPractice = true;
         if (practiceLesson == null) ShowFramingSuccess();
     }
@@ -945,33 +986,13 @@ public class GokeLevelManager : MonoBehaviour
 
     private void ShowEquipmentAlmanacIntroduction()
     {
-        currentStep = GokeLevelStep.IntroduceEquipmentAlmanac;
-        isBriefingOpen = true;
-
-        if (TutorialUIManager.Instance != null)
-        {
-            TutorialUIManager.Instance.ShowBossDialogue("How did that camera feel? I've added its controls to the Almanac. Open it with <color=red>[P]</color> and take a look at the Level 2 entry.", TutorialUIManager.Instance.poseHappy, true, false);
-        }
+        // Retain the legacy entry point, but skip the retired post-framing book task.
+        ShowContractIntroduction();
     }
 
     private void StartEquipmentAlmanacReview()
     {
-        isBriefingOpen = false;
-
-        if (TutorialUIManager.Instance != null) TutorialUIManager.Instance.HideBossDialogue();
-
-        if (AlmanacManager.Instance == null)
-        {
-            ShowContractIntroduction();
-            return;
-        }
-
-        currentStep = GokeLevelStep.OpenEquipmentAlmanac;
-
-        if (TutorialUIManager.Instance != null)
-        {
-            TutorialUIManager.Instance.SetupTasks(new string[] { "- Press <color=red>[P]</color> to open the Almanac" });
-        }
+        ShowContractIntroduction();
     }
 
     private void OfferContract()
@@ -1456,9 +1477,10 @@ public class GokeLevelManager : MonoBehaviour
             if (light.IsPoweredOn()) light.OnUse(Camera.main);
             light.OnDropped(Camera.main);
 
-            Vector3 deliveryOffset = deliveryZone.right * ((i - 1) * 0.6f) + deliveryZone.forward * 0.25f + Vector3.up * 0.65f;
-            light.transform.position = deliveryZone.position + deliveryOffset;
+            Vector3 deliveryPosition = StudioDeliveryBay.Position(deliveryZone,i,.65f);
+            light.transform.position = deliveryPosition;
             light.transform.rotation = deliveryZone.rotation;
+            StudioDeliveryBay.SettleEquipment(light.gameObject,deliveryPosition);
 
             Rigidbody[] lightBodies = light.GetComponentsInChildren<Rigidbody>(true);
             foreach (Rigidbody lightBody in lightBodies)
@@ -1533,6 +1555,10 @@ public class GokeLevelManager : MonoBehaviour
 
     private void AcceptContract()
     {
+        // Practice changes must not preconfigure the player's actual production.
+        // Do this only on first acceptance, never on a resumed accepted contract.
+        if (PlayerPrefs.GetInt("GokeContractAccepted", 0) == 0)
+            Player.Equipment.FilmCameraItem.ResetSettingsAfterTutorial();
         if (CareerManager.Instance != null)
         {
             if (PlayerPrefs.GetInt("GokeContractAccepted", 0) == 0)
@@ -1554,7 +1580,7 @@ public class GokeLevelManager : MonoBehaviour
         if (contractUIManager != null) contractUIManager.UnlockQualifications();
 
         currentStep = GokeLevelStep.IntroduceTechniques;
-        if (DevTutorialBypass.Disabled) { StartContract(); return; }
+        if (DevTutorialBypass.Disabled) { StartContract(); tutorialManager?.UnfreezePlayerMovement(); return; }
         isBriefingOpen = true;
 
         if (TutorialUIManager.Instance != null)
@@ -1693,7 +1719,7 @@ public class GokeLevelManager : MonoBehaviour
             cameraPracticeMarker = CreatePlacementMarker("Camera Practice Circle", position,
                 Color.green, "CAMERA");
             steps.Add(new GuidedPracticeLesson.Step(
-                "Bring the camera to the green CAMERA circle. The lights can stay where they are while we try our framing.",
+                "Bring the camera to the CAMERA square. The lights can stay where they are while we try our framing.",
                 "Equip the NONY FX Camera and stand on the CAMERA circle",
                 () => GuidedPracticeLesson.AtMarker(cameraPracticeMarker)));
         }
@@ -1721,10 +1747,6 @@ public class GokeLevelManager : MonoBehaviour
             "Good! Now frame the subject on the LOWER-RIGHT dot. Notice how your message space moves to the left.",
             "Place the subject on the LOWER-RIGHT crossing; leave space on the LEFT",
             () => thirdsPracticeStage >= 2, permission: "camera.frame"));
-        steps.Add(new GuidedPracticeLesson.Step(
-            "Turn Grid OFF in F2, then close settings. Frame the subject lower-right again, leaving message space on the left. The feedback will help.",
-            "Turn Grid OFF; frame the whole subject lower-right with message space on the LEFT",
-            () => hasCompletedRuleOfThirdsPractice, permission: "camera.frame"));
         practiceLesson = new GuidedPracticeLesson(tutorialManager, steps, () =>
         {
             practiceLesson = null;

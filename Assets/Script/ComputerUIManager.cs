@@ -23,11 +23,139 @@ public partial class ComputerUIManager : MonoBehaviour
     private bool replayStartedByPlayer;
     private ComputerStation physicalComputer;
 
+    private GameObject archiveIcon, archiveWindow;
+    private bool archivePlaying, feedbackFolder, readingFeedback;
+    private readonly List<CommercialArchiveEntry> archiveEntries = new List<CommercialArchiveEntry>();
+    private int archiveIndex, feedbackPage;
+
+    private void EnsureArchiveIcon()
+    {
+        if (archiveIcon != null) return;
+        RectTransform folder = null;
+        foreach (var rect in GetComponentsInChildren<RectTransform>(true))
+            if (rect.name == "FolderLogo") { folder = rect; break; }
+        if (folder == null) return;
+        CreateFolderShortcut(folder,false);
+        CreateFolderShortcut(folder,true);
+    }
+
+    private void CreateFolderShortcut(RectTransform folder,bool feedback)
+    {
+        var icon = Instantiate(folder, folder.parent);
+        icon.SetSiblingIndex(folder.GetSiblingIndex()+1);
+        icon.name = feedback ? "Feedback folder shortcut" : "Finished commercials folder";
+        icon.anchoredPosition += new Vector2(feedback ? 420 : 210,0);
+        if (!feedback) archiveIcon = icon.gameObject;
+        var label = icon.GetComponentInChildren<TMP_Text>(true);
+        if (label != null) label.text = feedback ? "FEEDBACK" : "FINISHED VIDEOS";
+        var button = icon.GetComponent<Button>();
+        button.onClick = new Button.ButtonClickedEvent();
+        button.onClick.AddListener(()=>{feedbackFolder=feedback;readingFeedback=false;OpenArchive();});
+    }
+
+    private void OpenArchive()
+    {
+        archiveEntries.Clear();
+        string dir = CommercialArchiveEntry.DirectoryPath;
+        if (Directory.Exists(dir))
+        {
+            foreach (string path in Directory.GetFiles(dir,"*.json"))
+            {
+                try
+                {
+                    var e = JsonUtility.FromJson<CommercialArchiveEntry>(File.ReadAllText(path));
+                    if (e != null && e.id == Path.GetFileNameWithoutExtension(path)) archiveEntries.Add(e);
+                }
+                catch (System.Exception ex) { Debug.LogWarning("Unreadable commercial record: " + ex.Message); }
+            }
+        }
+        var ids = new HashSet<string>();
+        foreach (var e in archiveEntries) ids.Add(e.submissionKey ?? e.id);
+        var repo = GameSaveManager.Ensure().Repository;
+        if (repo != null)
+            foreach (var slot in repo.Slots)
+                foreach (var attempt in PlayerAnalytics.ProfileHistory(slot))
+                {
+                    if (!attempt.closed || string.IsNullOrEmpty(attempt.submissionId) || !ids.Add(attempt.submissionId)) continue;
+                    var log = attempt.productionLog;
+                    archiveEntries.Add(new CommercialArchiveEntry {level=attempt.level, grade=attempt.grade,
+                        date=attempt.playedUtc ?? attempt.date, feedback=log == null ? attempt.completionFeedback :
+                        string.Join("\n\n",log.preProductionFeedback,log.productionFeedback,log.postProductionFeedback,log.decisionFeedback,log.nextStep)});
+                }
+        if (!feedbackFolder) archiveEntries.RemoveAll(entry => string.IsNullOrEmpty(entry.id) || !File.Exists(Path.Combine(dir,entry.id+".tape")));
+        archiveEntries.Sort((a,b)=>string.CompareOrdinal(b.date,a.date));
+        archiveIndex = feedbackPage = 0;
+        ShowArchiveEntry();
+    }
+
+    private void CloseArchive()
+    {
+        if (archiveWindow != null) { archiveWindow.SetActive(false); Destroy(archiveWindow); }
+        archiveWindow = null;
+    }
+
+    private void ShowArchiveEntry()
+    {
+        CloseArchive();
+        archiveWindow = Instantiate(recordingsGridPanel, recordingsGridPanel.transform.parent);
+        archiveWindow.name = feedbackFolder ? "Feedback folder" : "Finished videos folder";
+        var window = (RectTransform)archiveWindow.transform;
+        foreach (Transform child in window)
+        {
+            if (child.name.StartsWith("Close") && child.TryGetComponent<Button>(out var close))
+            {
+                close.onClick = new Button.ButtonClickedEvent();
+                close.onClick.AddListener(CloseArchive);
+            }
+            else child.gameObject.SetActive(false);
+        }
+        archiveWindow.SetActive(true);
+        window.SetAsLastSibling();
+        var tab = CCoinShopUI.Rect(window,"Folder tab",new Vector2(-556,395),new Vector2(260,45));
+        tab.gameObject.AddComponent<Image>().color = new Color32(49,65,100,255);
+        CCoinShopUI.Text(tab,"Folder name",feedbackFolder ? "FEEDBACK" : "FINISHED VIDEOS",Vector2.zero,tab.sizeDelta,26).color=Color.white;
+        if (readingFeedback)
+        {
+            var entry = archiveEntries[archiveIndex];
+            var notes = CCoinShopUI.Text(window,"Grading notes",entry.feedback ?? "", new Vector2(150,0), new Vector2(1080,525),25);
+            notes.enableAutoSizing=false;
+            notes.alignment=TextAlignmentOptions.TopLeft;
+            notes.overflowMode=TextOverflowModes.Page;
+            notes.color=Color.white;
+            notes.ForceMeshUpdate();
+            int pages=Mathf.Max(1,notes.textInfo.pageCount);
+            notes.pageToDisplay=feedbackPage+1;
+            CCoinShopUI.Button(window,"Return","BACK",new Vector2(-220,-340),new Vector2(220,58),()=>{readingFeedback=false; ShowArchiveEntry();});
+            if (pages>1) CCoinShopUI.Button(window,"More","PAGE "+(feedbackPage+1)+" / "+pages,new Vector2(350,-340),new Vector2(240,58),()=>{feedbackPage=(feedbackPage+1)%pages;ShowArchiveEntry();});
+            return;
+        }
+        if (archiveEntries.Count==0)
+            CCoinShopUI.Text(window,"Empty",feedbackFolder ? "No grading feedback yet." : "No finished videos saved on this device.",new Vector2(150,0),new Vector2(900,90),26).color=Color.white;
+        int first=archiveIndex/6*6;
+        for(int i=first;i<Mathf.Min(first+6,archiveEntries.Count);i++)
+        {
+            int index=i;
+            var entry=archiveEntries[i];
+            int cell=i-first;
+            string caption=CampaignProgression.GetContractName(entry.level)+"\n"+(entry.date ?? "").Split('T')[0]+"   •   "+entry.grade;
+            CCoinShopUI.Button(window,"Submission "+i,caption,new Vector2(-180+340*(cell%3),130-175*(cell/3)),new Vector2(315,148),()=>{
+                archiveIndex=index;
+                if(feedbackFolder){readingFeedback=true;feedbackPage=0;ShowArchiveEntry();return;}
+                string path=Path.Combine(CommercialArchiveEntry.DirectoryPath,entry.id+".tape");
+                CloseArchive(); OpenPlayerView(path); archivePlaying=true;
+                if(playerTitleText!=null)playerTitleText.text=CampaignProgression.GetContractName(entry.level);
+            });
+        }
+        if(first>0) CCoinShopUI.Button(window,"Previous","PREVIOUS",new Vector2(-170,-330),new Vector2(220,60),()=>{archiveIndex=first-6;ShowArchiveEntry();});
+        if(first+6<archiveEntries.Count) CCoinShopUI.Button(window,"Next","NEXT",new Vector2(510,-330),new Vector2(220,60),()=>{archiveIndex=first+6;ShowArchiveEntry();});
+    }
+
     private void Awake() { physicalComputer = FindObjectOfType<ComputerStation>(); }
 
     // --- THE FIX: Make sure the panels are turned OFF when you boot up the computer! ---
     private void OnEnable()
     {
+        EnsureArchiveIcon(); CloseArchive(); archivePlaying=false;
         CloseEjectMenu();
         CloseFileDialog();
         if (recordingsGridPanel != null) recordingsGridPanel.SetActive(false);
@@ -184,6 +312,7 @@ public partial class ComputerUIManager : MonoBehaviour
 
     public void OnVideoPlayButtonClicked()
     {
+        if (archivePlaying) { pixelPlayer?.TogglePlayPause(); return; }
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("PlayVideo")) return;
 
         if (pixelPlayer == null || !pixelPlayer.CanStartPlayback) return;
@@ -193,6 +322,7 @@ public partial class ComputerUIManager : MonoBehaviour
 
     public void OnBackButtonClicked()
     {
+        if (archivePlaying) { archivePlaying=false; pixelPlayer?.StopTape(); videoPlayerPanel.SetActive(false); ShowArchiveEntry(); return; }
         if (TutorialManager.Instance != null && !TutorialManager.Instance.CanUseComputerFeature("BackButton")) return;
 
         CloseEjectMenu();
@@ -270,6 +400,7 @@ public partial class ComputerUIManager : MonoBehaviour
         EvaluateStagePreProduction();
 
         if (TutorialManager.Instance != null) TutorialManager.Instance.OnEditorConfirmed();
+        EquipmentStorageCabinet.PackForReview();
         LoadingScreenController.LoadScene("Editor");
     }
 

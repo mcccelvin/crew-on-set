@@ -39,6 +39,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     // --- NEW: Triggered by your CREATE button ---
     public void CreateRandomRoom()
     {
+        if (!MultiplayerAccess.RequireTutorial()) return;
         createButton.SetActive(false);
         joinButton.SetActive(false);
         statusText.text = "Generating Room...";
@@ -53,6 +54,7 @@ public class LobbyManager : MonoBehaviourPunCallbacks
     // --- NEW: Triggered by your JOIN button ---
     public void JoinExistingRoom()
     {
+        if (!MultiplayerAccess.RequireTutorial()) return;
         if (string.IsNullOrWhiteSpace(roomInputField.text))
         {
             statusText.text = "Please enter a Room Code first!";
@@ -69,9 +71,8 @@ public class LobbyManager : MonoBehaviourPunCallbacks
 
     public override void OnJoinedRoom()
     {
-        statusText.text = "Room Joined! Opening crew lobby...";
-        LoadingScreenController.ShowNetworkLoading();
-        if (PhotonNetwork.IsMasterClient) LoadingScreenController.LoadNetworkScene("MultiplayerLobby");
+        statusText.text = "Room joined. Ready up in the lobby.";
+        MultiplayerRoleManager.OpenMenuLobby();
     }
 
     // If the player types a wrong code, turn the buttons back on!

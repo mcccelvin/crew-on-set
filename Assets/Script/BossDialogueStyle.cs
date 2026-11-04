@@ -35,13 +35,13 @@ public static class BossDialogueStyle
         return string.Concat(parts);
     }
 
-    public static void UpdateContinueHint(TMP_Text text, bool visible)
+    public static void UpdateContinueHint(TMP_Text text, bool visible, string caption = ContinueHint)
     {
         if (text == null) return;
-        if (text.text != ContinueHint || text.fontSizeMax != 22f)
+        if (text.text != caption || text.fontSizeMax != 22f)
         {
             Apply(text, true);
-            text.text = ContinueHint;
+            text.text = caption;
             text.fontSize = text.fontSizeMax = 22f;
             text.fontSizeMin = 18f;
             text.fontSharedMaterial = dialogueMaterial;

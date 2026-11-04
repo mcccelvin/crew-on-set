@@ -283,6 +283,8 @@ public class ColorGradingManager : MonoBehaviour
 
     [SerializeField] private Button compareButton, resetAllButton;
     private Coroutine comparisonScroll;
+    public RectTransform ComparisonButtonRect => compareButton != null ? compareButton.transform as RectTransform : null;
+    public bool IsRevealingComparison => comparisonScroll != null;
     public void RevealComparisonForTutorial()
     {
         PreviewClipMiddle();

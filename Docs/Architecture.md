@@ -22,11 +22,74 @@ Notifications and tutorial task cards: `CrewPaperStyle` supplies the rounded cre
 
 Shared studio dressing: `StudioSetDressing` installs `ProductModels.decorators` on every SingleStudio/MultiStudio load, independently of campaign level. It reuses saved prop placements, adds missing solid per-mesh colliders, and places missing props near clear wall-side floor positions. `Editor/StudioSetDressingSetup` assigns the six Kineme models. The same runtime setup raises all computer-desk mesh/outline parts to 1.05 m, retaining floor contact and moving the computer interaction/card-release anchor with the desktop.
 
+Studio deliveries: `StudioSetDressing` installs `StudioDeliveryBay` after decoration.
+It pairs the authored door_left/door_right meshes nearest the delivery marker,
+opens them automatically for approaching players on either side, and uses a
+short clear-delay before closing. The truck parks inside the existing garage,
+identified by the authored Floor.026 surface on the far side of those doors.
+Its floor bounds and doorway height determine parking clearance and truck scale.
+The exterior opening between authored studio.043/studio.047 wall ends sets the
+truck's orientation: cab outside, cargo body and pickup shelf inside the garage.
+Delivery slots, showcase camera and work light follow the rotated truck.
+Truck scale targets 1.8 times the base model, limited by opening width, actual
+garage header clearance and the interior aisle. The hydraulic pickup shelf stays
+at one metre above the authored floor independently of vehicle scale.
+`StudioDeliveryBay.Access` builds one connected, walkable mesh from the garage
+floor to the one-metre pickup landing and onward into the raised cargo floor.
+The 3.4m approach and upper bridge leave no jump-sized step; the upper lip sits
+15mm above the cargo floor to prevent coplanar flicker. Split side pickup decks
+and adjacent yellow noses do not cover the central ramp or overlap each other.
+Delivery slots stay beside the walkway; SD cards share the same slot counter as
+other solo orders. Ramp clearance is included when fitting the parked truck.
+The original floor and walls remain intact: no overlapping ground slabs, outdoor
+courtyard or runtime wall cutting. The older Passage helper is no longer invoked.
+`StudioDeliveryBay.Truck` owns the truck, liftgate and work light.
+
+Equipment grounding uses `EquipmentModelVisuals.TryGetEquipmentBounds`: only active visible model meshes contribute, excluding canvases, text, haze/beam volumes and disabled replacement meshes. Shop upgrades configure their final model before delivery settlement. Returned practice lights use truck delivery slots and the shelf height directly rather than a downward ray that can catch the truck roof. Stand height measurement uses the same physical-mesh filter.
+
+`ShopTerminal.EnsureUnlockedBetterLights` registers the advanced light's prefab/catalog entry at Contract 3+ (or training), both at shop startup and refresh/open. This is independent of tutorial-manager initialization, including skip and developer entry. It reuses the existing panel prefab plus the advanced model when no dedicated prefab is assigned; stock, prices and repeated-light purchases retain their normal behavior.
+
+`StudioDeliveryBay.Guide` supplies bidirectional garage waypoints through both sides of the sliding doors. Delivery routes finish on the ramp's flat pickup landing; routes to indoor actors/stations descend the truck deck first, cross back into the studio, then continue to the actual target. `ProductionGuideLine` joins collision-checked floor routes for those waypoints, retaining the existing filmstrip and square target corners. Crossing guidance holds the doors open in either direction so a new indoor tutorial target does not lose the route after collection. Successful solo or multiplayer checkout requests a collection guide, which yields to tutorial-owned routes and disappears when the items are collected or a modal/pause releases gameplay controls. Pending multiplayer deliveries have a short replication grace period.
+
+`StudioDeliveryBay.Exterior` adds an outdoor ground plane, paved loading yard, distant workshops and trees beyond the existing garage opening. It leaves the authored floor/walls intact and places a collision-only boundary across that opening: players can enter the garage/truck, but cannot walk into the scenery. Scenery has no colliders or dynamic shadows; its ground and paving have separated heights to avoid z-fighting. The same bay installation serves solo and multiplayer.
+The existing Deliver transform moves to the actual scaled rear shelf, preserving
+references held by lessons/shop/guides. Solo and room checkout, owned-equipment
+restoration and practice-light returns share shelf positions and stable pickup
+placement. Tutorial text and delivery showcase cameras follow the new location.
+Room delivery positions remain host-owned; every client builds the same bay and
+can open its doors when any nearby player approaches. Drop validation also
+accepts the garage bounds. Purchases and prices retain their existing economy ownership.
+
 Camera viewfinder: `CameraHUDController`, `FilmCameraItem.HUD.cs` and `Editor/CameraHUDBuilder` own the dynamic CAM FX3 display and inset live image. `Resources/CameraHUDArt.asset` holds the exported PSD artwork references. See `Docs/CameraViewfinder.md` for single-player and multiplayer bindings and prefab authoring.
+
+Multiplayer voice: `CrewVoiceChat` owns room-only microphone capture and per-peer
+playback. `CrewVoiceCodec`/`CrewVoiceBuffer` isolate packet validation and audio
+thread buffering. `CrewVoiceBadge` is shared by lobby/role/pause crew cards;
+`SharedOptionsPanel.Voice` extends the native Audio tab with scrollable controls
+and the normal preview/Save/cancel lifecycle. See `Docs/VoiceChat.md`.
+
+Equipment storage: `StudioSetDressing` replaces the shop-side kiosk table mesh with
+`EquipmentStorageCabinet`, a steel drawer cabinet matching the truck palette.
+Its drawers follow the original table's long edge, the back clears the wall-side
+table edge by 8cm, and its plinth rests on the floor. There is no front lettering.
+E opens a cream paper inventory with the existing blue action and red X artwork;
+hotbar and stored gear have separate scrollable columns. Store/Take transfer the
+same equipment instances, preserving settings and recorded SD cards without charges
+or duplicate gear. Camera storage requires a closed viewfinder and an ejected card.
+Tutorial action gates and local input ownership remain in effect. Equipment.Cabinet.v1
+is career-scoped and follows the existing production checkpoint; restore reuses
+owned-equipment instances (only saved physical SD cards require rehydration).
+Multiplayer uses host-validated storeEquipment/retrieveEquipment commands and the
+existing room object's stored action; contents are shared, role-checked and hidden
+from world rendering, collision and active lighting. It never writes career data.
 
 Camera holding: `FilmCameraItem.Holding.cs` positions the physical camera from player aim and exposes adjustable grip offsets. `PlayerController.LateUpdate` applies `PlayerCameraPose` arm solving after locomotion/look and before the recording lens update. The procedural pose uses the existing humanoid bones; it needs no replacement animation clips or controller. Mounted cameras and stationary interactions skip the handheld pose.
 
-Gameplay appearance: `PlayerController` subscribes to the confirmed account outfit from `CCoinService` and applies the shared `CharacterCosmeticRig` to its existing character visual. This connects the profile/website selection to the local animated player without replacing locomotion, collision, input or camera grip ownership. `FilmCameraItem.RefreshPlayerAppearanceVisibility` keeps changed outfit meshes hidden correctly in the viewfinder. See `Docs/PlayerProfile.md` for fallback and remote-player boundaries.
+Character look: `PlayerLookPose` adds camera-relative aiming to the humanoid chest, neck and head after locomotion, with animation rotations restored before the next evaluation. Solo applies it before the handheld arm solve. MultiplayerPlayerController sends pitch and world yaw through its observed Photon stream, smooths remote aim, and lets the body ease toward horizontal view direction so the head leads a turn. Equipped meshes use the same bones, and lower-body locomotion remains independent.
+
+Contract document presentation: `ContractBriefPresentation` supplies the same full-canvas artwork dimensions, reading-page geometry, canvas scale, typography and mask for ContractUIManager and MultiplayerAuthoredUI.Contract. Both use `ContractUIManager.MissionBrief` for the default numbered brief, including Contract 4's coffee-folder design. Multiplayer reuses the copied singleplayer qualifications hierarchy; its balance/actions sit in the scrolling footer, with no solo acceptance/signature widgets or account-currency promises.
+
+Gameplay appearance: `PlayerController` subscribes to the confirmed account outfit from `CCoinService` and applies the shared `CharacterCosmeticRig` to its existing character visual. MultiplayerPlayerController installs `MultiplayerCharacterAppearance` on spawned players; CrewPlayerIdentity's owner-scoped Photon cosmetic properties drive remote outfits, including late arrivals and equipment updates. Both paths retain locomotion, collision and camera ownership. `FilmCameraItem.RefreshPlayerAppearanceVisibility` keeps changed outfit meshes hidden correctly in the solo viewfinder. See `Docs/PlayerProfile.md`.
 
 First-person wall clipping: `PlayerController` caps the gameplay view's near plane at 0.025m and sphere-sweeps from the collision capsule's eye-level centre to the authored camera anchor. The probe encloses near-plane corners and leaves wall clearance, ignores triggers/player/held children, and pulls only the camera back. Scripted views with looking disabled, inactive gameplay cameras and stationary/seated actions retain their ownership; recording lenses and authored anchors are unchanged. Player Rigidbody locomotion uses continuous speculative collision detection for thin walls, retaining compatibility with kinematic chair interactions. Runtime initialization applies in Editor and standalone without rebaking a scene.
 
@@ -34,10 +97,10 @@ Read the row relevant to the task, then search its entry points. Paths below are
 
 | Area | Start here | Related code / detail |
 | --- | --- | --- |
-| Save slots and accounts | `GameSaveManager.cs`, `GameSaveMenu.cs` | `GameSaveRepository.cs`, `GameSavePrefs.cs`, `LegacyGameSave.cs`, `SaveLoadPanelHost.cs`; `Docs/SaveGames.md` |
+| Persistent career and accounts | `GameSaveManager.cs`, `GameSaveManager.SingleCareer.cs`, `GameSaveMenu.cs` | One account-scoped primary career with isolated contract replay. Private `CrewCareerProfile_v1` publishes and verifies the single-career model/primary checkpoint; old checkpoint payloads and backup files remain compatible. `GameSaveRepository.cs`, `GameSavePrefs.cs`, `LegacyGameSave.cs`, `SaveLoadPanelHost.cs`; `Docs/SaveGames.md` |
 | Login / registration | `Assets/UI/Scripts/AccountManager.cs`, `LoginScreenPresentation.cs` | Login assigns identity through `GameSaveManager.SetAccount`; account sign-in button is repurposed by `SaveLoadPanelHost`. Login/recovery keep the original authored artwork/layout with readable text only. SIGN UP opens the website through `OnWebsiteSignUpPressed`, not the old registration panel. |
 | Menu routes / multiplayer | `SceneController.cs`, `Multiplayer/GameSetupMenu.cs` | `Multiplayer/LobbyManager.cs`; keep Photon host/join separate from single-player save slots |
-| Role-based crew studio | `Multiplayer/MultiplayerRoleManager.cs`, `Multiplayer/MultiplayerContractManager.cs` | Room contracts, shared money/checkpoints/reviews and role validation via `MultiplayerRoomActions`. `MultiplayerAuthoredUI` connects station views and the functional `EditorGameplay` copy (`EditorManager.RoomFootage` + campaign `ContractGrader`); `GameSavePrefs` isolates room keys from offline careers. `Editor/MultiplayerAuthoredUIBuilder` generates/remaps/build-checks `Resources/CrewUI`; `MultiplayerUIReferences` stores bindings. `NetworkStudioFactory`/`NetworkStageObject` replicate equipment, actors and sets; `MultiplayerRecording` transfers/caches rushes and maps their 6 fps clock to the editor's 24 fps clock. See `Docs/MultiplayerRoles.md` for controls, authority and remaining parity gaps. |
+| Role-based crew studio | `Multiplayer/MultiplayerRoleManager.cs`, `Multiplayer/MultiplayerContractManager.cs`, `Multiplayer/SingleStudioMultiplayerBootstrap.cs` | Both modes load SingleStudio. Its early bootstrap replaces solo controllers/player/UI with room systems when Photon is in a room; the authored environment stays intact. Boss pages and release into gameplay are per player. Room contracts, shared money/checkpoints/reviews and role validation use `MultiplayerRoomActions`. `MultiplayerAuthoredUI` connects room station views and the functional `EditorGameplay` copy (`EditorManager.RoomFootage` + campaign `ContractGrader`); `GameSavePrefs` isolates room keys from offline careers. `Editor/MultiplayerAuthoredUIBuilder` generates/remaps/build-checks `Resources/CrewUI`; `MultiplayerUIReferences` stores bindings. `NetworkStudioFactory`/`NetworkStageObject` replicate equipment, actors and sets; `MultiplayerRecording` transfers/caches rushes and maps their 6 fps clock to the editor's 24 fps clock. See `Docs/MultiplayerRoles.md`. |
 | Settings / pause | `PauseManager.cs`, `SharedOptionsPanel.cs` | `MainMenuOptionsHost.cs` attaches the same view in the main menu; `GameOptions.cs` applies global settings |
 | Campaign / rewards | `CampaignLevelManager.cs`, `CampaignProgression.cs`, `CareerManager.cs` | `ProductionEconomy.cs`, `ContractGrader.cs`; `Docs/ProductionEconomy.md` |
 | Account C-Coins / cosmetics | `CCoinService.cs`, `CCoinShopUI.cs`, `CCoinPackShopUI.cs`, `CCoinPackArt.cs`, `CCoinProfileWidget.cs` | `CCoinModels.cs`, `CCoinSettings.cs`; `GameSaveManager` binds login and schedules reconnect/focus refresh across account services. `CCoinService.Update` ticks profile/appearance retries and periodic authoritative wallet refresh. TOP UP opens the fixed approved website shop; no manual sync/default-look controls. Successful submissions queue rewards via `GradeManager`. Pack display offers are not client-authorized charges. Separate from B-Coins and career rollbacks. Server wallet/payment deployment is required; see `Docs/CCoins.md`. |
@@ -67,7 +130,7 @@ Unless a full path is given, filenames above are under `Assets/Script`.
 - `GameSaveMenu` draws the PSD-based save grid and dialogs. `SaveLoadPanelHost` connects the authored LOAD tab and existing account button. `GameSetupMenu` handles Single/Multi creation.
 - `PauseManager` owns pausing and cursor restoration. `SharedOptionsPanel` owns settings drafts and UI. `GameOptions` owns applying settings; `MainMenuOptionsHost` owns the main-menu entry point.
 - `ContractUIManager` owns the open contract's modal presentation (authored and runtime canvas order 200, above the gameplay HUD and below Pause/Options). Resume reapplies that presentation immediately and after the focus-restoration frame without reopening the offer, resetting the scroll/signature, or recapturing movement permissions. While open, its LateUpdate retains the free cursor and gameplay lock; editor reference briefs leave the editor's player ownership unchanged.
-- Tutorial/level managers orchestrate steps; equipment and editor components perform actions; grading checks the result. When changing a rule, check its tutorial instructions and grader together.
+- Tutorial/level managers orchestrate steps; equipment and editor components perform actions; grading checks the result. `ContractTutorialChoice` asks PLAY/SKIP through the Boss for each solo contract attempt; its in-memory policy survives editor visits and clears on retries/new games. Skip affects tutorial guidance, not completion evidence or rewards. See `Docs/TutorialChoice.md`. When changing a rule, check its tutorial instructions and grader together.
 - `ExportUIArt` resolves catalog keys to sprites. Artwork lives in `Assets/UI/UI-EXPORT`, including `PSD Pieces`. Preserve authored art rather than adding a second UI on top.
 
 ## Authored UI

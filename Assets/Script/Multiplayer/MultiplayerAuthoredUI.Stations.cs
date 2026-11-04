@@ -10,74 +10,121 @@ using UnityEngine.UI;
 
 public sealed partial class MultiplayerAuthoredUI
 {
+    private ShopTerminal sceneShop;
+    private readonly List<Canvas> shopCanvases = new List<Canvas>();
+    private int pendingShopReceipt;
+    private float shopRequestDeadline;
+
     private void SetupShop()
     {
         var root = panels["shop"]?.transform; if (root == null) return;
-        SetupShopCards(root);
-        var world = refs.Get<GameObject>("ShopTerminal.worldSpaceCanvas");
-        if (world != null && world.transform != root) SetupShopCards(world.transform);
-        Bind(root, "Confirm", () => { Crew.Send(new CrewCommand { action = "checkout", items = cart.ToArray() }); cart.Clear(); RefreshShop(); });
-        Bind(root, "Cancel", Close);
+        sceneShop = FindObjectsOfType<ShopTerminal>(true).FirstOrDefault(shop => shop.gameObject.scene == gameObject.scene);
+        SetupShopCards(root.GetComponent<Canvas>());
+        // The mounted display belongs to Equipment, outside the copied solo UI root.
+        var world = sceneShop != null ? sceneShop.worldSpaceCanvas : null;
+        if (world != null && world.transform != root)
+        {
+            SetupShopCards(world);
+            Activate(world.gameObject);
+            world.worldCamera = Control != null ? Control.View : Camera.main;
+            var raycaster = world.GetComponent<GraphicRaycaster>();
+            if (raycaster != null) raycaster.enabled = false;
+        }
+        Crew.CommandRejected += ShopCommandRejected;
+        RefreshShop();
     }
-    private void SetupShopCards(Transform root)
+    private void SetupShopCards(Canvas canvas)
     {
-        ShopTerminal.HideRetiredShopCards(root.GetComponent<Canvas>());
-        // Keep the authored cards; clicking the card selects it without an extra cart button.
-        var template = Find(root, "Level 2 Camera") ?? Find(root, "Light");
-        if (template != null && Find(root, "Crew Audio") == null)
+        if (canvas == null) return;
+        shopCanvases.Add(canvas);
+        if (sceneShop != null) sceneShop.PrepareSharedShopCanvas(canvas);
+        else ShopTerminal.HideRetiredShopCards(canvas);
+        foreach (string kind in new[] { "camera", "light", "sd", "softlight", "megaphone" })
         {
-            var audio = Instantiate(template.gameObject, root, false);
-            audio.name = "Crew Audio";
-            var rect = (RectTransform)audio.transform;
-            if (root.GetComponent<LayoutGroup>() == null && template.name == "Light")
-                rect.anchoredPosition -= Vector2.up * (rect.rect.height + 12f);
-            var icon = EquipmentIconArt.Get("AUDIO MONITOR");
-            if (icon != null)
-            {
-                var image = audio.GetComponentsInChildren<Image>(true).FirstOrDefault(i => i.transform != audio.transform && i.GetComponentInParent<Button>() == null);
-                if (image != null) image.sprite = icon;
-            }
+            foreach (var button in ShopTerminal.BindSharedShopItem(canvas, EquipmentName(kind), () => AddShopItem(kind)))
+                shopButtons[button] = kind;
         }
-        var selectedCards = new HashSet<string>();
-        foreach (Transform child in root)
+        Bind(canvas.transform, "Confirm", CheckoutShop);
+        Bind(canvas.transform, "Cancel", () => { if (pendingShopReceipt != 0) return; cart.Clear(); RefreshShop(); });
+        ShopTerminal.CompactShopCards(canvas);
+    }
+    private void AddShopItem(string kind)
+    {
+        if (pendingShopReceipt != 0 || Crew.State.recording || !MultiplayerContractManager.ShopItemAvailable(kind, Crew.State.contractLevel) ||
+            MultiplayerContractManager.ShopItemOwned(Crew.State, kind)) return;
+        if (!Crew.HasRole(MultiplayerContractManager.RoleFor(kind)))
+        { GameFeedback.Show("This equipment is purchased by its assigned crew role.", GameFeedback.NoticeType.Caution); return; }
+        if (MultiplayerContractManager.UniqueShopItem(kind) && cart.Contains(kind))
+        { GameFeedback.Show("Already in your cart: " + EquipmentName(kind)); return; }
+        if (Crew.State.objects.Count + cart.Count >= 48)
+        { GameFeedback.Show("Collect or use the studio's existing equipment first.", GameFeedback.NoticeType.Caution); return; }
+        cart.Add(kind); RefreshShop();
+    }
+    private void CheckoutShop()
+    {
+        if (pendingShopReceipt != 0 || Crew.State.recording) return;
+        if (cart.Count == 0) { GameFeedback.Show("Add equipment to your cart first."); return; }
+        if (cart.Sum(MultiplayerContractManager.Price) > Crew.State.budget)
+        { GameFeedback.Show("Not enough team B-Coins.", GameFeedback.NoticeType.Caution); return; }
+        var member = Crew.State.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
+        if (member == null) return;
+        pendingShopReceipt = member.shopReceipt + 1;
+        shopRequestDeadline = Time.unscaledTime + 15;
+        Crew.Send(new CrewCommand { action = "checkout", index = pendingShopReceipt, items = cart.ToArray() });
+        RefreshShop();
+    }
+    private void ShopCommandRejected(string message)
+    {
+        pendingShopReceipt = 0;
+        GameFeedback.Show(message, GameFeedback.NoticeType.Caution);
+        RefreshShop();
+    }
+    private void UpdateShopRequest()
+    {
+        if (pendingShopReceipt == 0) return;
+        var member = Crew.State.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
+        if (member != null && member.shopReceipt >= pendingShopReceipt)
         {
-            string kind = child.name == "Camera" ? "camera" : child.name == "Light" ? "light" : child.name == "SDCard" ? "sd" : child.name == "Director Megaphone" ? "megaphone" : child.name == "Crew Audio" ? "audio" : child.name == "Level 3 Soft Light" || child.name == "Better Lights" ? "softlight" : null;
-            if ((child.name.Contains("Level ") && kind == null) || child.name == "LIGHT STRIP") { child.gameObject.SetActive(false); continue; }
-            if (kind == null) continue;
-            bool first = selectedCards.Add(kind); child.gameObject.SetActive(first); if (!first) continue;
-            Set(Find(child, "ItemName")?.GetComponent<TMP_Text>(), EquipmentName(kind));
-            Set(Find(child, "ItemPrice")?.GetComponent<TMP_Text>(), "B " + MultiplayerContractManager.Price(kind));
-            foreach (var button in child.GetComponentsInChildren<Button>(true))
-                if (button.transform != child) button.gameObject.SetActive(false);
-            var buy = child.GetComponent<Button>() ?? child.gameObject.AddComponent<Button>();
-            buy.targetGraphic = child.GetComponent<Graphic>() ?? child.GetComponentInChildren<Graphic>(true);
-            if (buy.targetGraphic != null) buy.targetGraphic.raycastTarget = true;
-            buy.onClick = new Button.ButtonClickedEvent();
-            shopButtons[buy] = kind;
-            buy.onClick.AddListener(() => {
-                if (!Crew.HasRole(MultiplayerContractManager.RoleFor(kind)) || Crew.State.recording) return;
-                if (cart.Count < 5) cart.Add(kind);
-                RefreshShop();
-            });
+            pendingShopReceipt = 0; cart.Clear(); RefreshShop();
+            GameFeedback.Show(StudioDeliveryBay.CollectionMessage, GameFeedback.NoticeType.Success);
+            StudioDeliveryBay.ShowCollectionGuide();
         }
-        ShopTerminal.CompactShopCards(root.GetComponent<Canvas>());
-        if (root != panels["shop"]?.transform)
-            foreach (var button in root.GetComponentsInChildren<Button>(true)) button.interactable = false;
+        else if (Time.unscaledTime >= shopRequestDeadline)
+            ShopCommandRejected("The purchase hasn't been confirmed. Check your connection before retrying.");
     }
     private void RefreshShop()
     {
+        if (Crew?.State == null) return;
+        cart.RemoveAll(kind => MultiplayerContractManager.ShopItemOwned(Crew.State, kind));
         foreach (var entry in shopButtons)
         {
             var button = entry.Key; string kind = entry.Value;
-            button.interactable = button.transform.IsChildOf(panels["shop"].transform) && Crew.HasRole(MultiplayerContractManager.RoleFor(kind)) && !Crew.State.recording;
-            int count = cart.Count(item => item == kind);
-            Set(Find(button.transform, "ItemName")?.GetComponent<TMP_Text>(), EquipmentName(kind) + (count > 0 ? " ×" + count : ""));
+            bool owned = MultiplayerContractManager.ShopItemOwned(Crew.State, kind);
+            bool available = MultiplayerContractManager.ShopItemAvailable(kind, Crew.State.contractLevel) && Crew.Studio.CanCreate(kind);
+            string caption = owned ? "OUT OF STOCK" : available ? "+ ADD TO CART" : "NOT AVAILABLE";
+            ShopTerminal.SetSharedShopButton(button, caption, !owned && available && !Crew.State.recording && pendingShopReceipt == 0);
         }
-        Set(Find(panels["shop"]?.transform, "Total")?.GetComponent<TMP_Text>(), "Total: B " + cart.Sum(MultiplayerContractManager.Price));
+        foreach (var canvas in shopCanvases)
+        {
+            foreach (var total in canvas.GetComponentsInChildren<TMP_Text>(true).Where(t => t.name == "Total"))
+                total.text = "Total: B " + cart.Sum(MultiplayerContractManager.Price);
+            var confirm = Find(canvas.transform, "Confirm")?.GetComponent<Button>();
+            var cancel = Find(canvas.transform, "Cancel")?.GetComponent<Button>();
+            bool screen = canvas.gameObject == panels["shop"];
+            if (confirm != null) confirm.interactable = screen && !Crew.State.recording && pendingShopReceipt == 0;
+            if (cancel != null) cancel.interactable = screen && pendingShopReceipt == 0;
+        }
     }
     private void SetupTablet()
     {
         var root = panels["tablet"]?.transform; if (root == null) return;
+        var red=refs.Get<Slider>("DirectorTerminal.rSlider");var green=refs.Get<Slider>("DirectorTerminal.gSlider");var blue=refs.Get<Slider>("DirectorTerminal.bSlider");
+        var colourPicker=root.GetComponent<DirectorColorPicker>()??root.gameObject.AddComponent<DirectorColorPicker>();
+        colourPicker.Initialize(red,green,blue,colour=>{
+            red.SetValueWithoutNotify(Mathf.Lerp(red.minValue,red.maxValue,colour.r));
+            green.SetValueWithoutNotify(Mathf.Lerp(green.minValue,green.maxValue,colour.g));
+            blue.SetValueWithoutNotify(Mathf.Lerp(blue.minValue,blue.maxValue,colour.b));
+        },()=>Crew!=null && Crew.HasRole(CrewRole.Director));
         viewport = refs.Get<RawImage>("DirectorTerminal.viewportUI");
         if (viewport == null) viewport = Find(root, "Viewport")?.GetComponent<RawImage>();
         stageCamera = new GameObject("Crew tablet camera").AddComponent<Camera>();
@@ -157,7 +204,7 @@ public sealed partial class MultiplayerAuthoredUI
         var surface = hits.FirstOrDefault(h => h.normal.y > .65f && h.collider.GetComponentInParent<NetworkStageObject>() == null && h.collider.GetComponentInParent<PhotonView>() == null);
         if (pendingProp != null && surface.collider != null && Crew.Studio.ValidPosition(surface.point))
         {
-            if (marker == null) { marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder); Destroy(marker.GetComponent<Collider>()); marker.transform.localScale = new Vector3(.5f,.02f,.5f); }
+            if (marker == null) { marker = new GameObject("Director placement square"); SquareGuideMarker.Apply(marker); }
             marker.SetActive(true); marker.transform.position = surface.point + Vector3.up * .02f;
             Set(refs.Get<TMP_Text>("DirectorTerminal.selectionIndicatorText"), "Place " + pendingProp + " • R rotate • Q/E fine rotate");
             if ((!dragging && mouse.leftButton.wasPressedThisFrame) || (dragging && mouse.leftButton.wasReleasedThisFrame))
@@ -194,21 +241,33 @@ public sealed partial class MultiplayerAuthoredUI
         refs.Get<GameObject>("TutorialUIManager.okButton")?.SetActive(false);
         refs.Get<GameObject>("TutorialUIManager.skipButton")?.SetActive(false);
         foreach (var text in root.GetComponentsInChildren<TMP_Text>(true))
-            if (text != bossText && (text.text.IndexOf("space", StringComparison.OrdinalIgnoreCase) >= 0 || text.text.Trim().Equals("close", StringComparison.OrdinalIgnoreCase))) text.gameObject.SetActive(false);
+            if (text != bossText && (text.text.IndexOf("space", StringComparison.OrdinalIgnoreCase) >= 0 || text.text.Trim().Equals("close", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (bossContinue == null && text.text.IndexOf("space", StringComparison.OrdinalIgnoreCase) >= 0) bossContinue = text;
+                text.gameObject.SetActive(false);
+            }
+        if (bossContinue == null) bossContinue = Text(root, "Crew briefing continue", new Vector2(.34f,.035f), new Vector2(.91f,.078f), 24);
+        bossContinue.gameObject.SetActive(true);
         var portrait = refs.Get<Image>("TutorialUIManager.bossPortraitDisplay");
         var pose = refs.Get<Sprite>("TutorialUIManager.poseOpenHand") ?? refs.Get<Sprite>("TutorialUIManager.poseBoss");
         if (portrait != null && pose != null) { portrait.sprite = pose; portrait.enabled = true; }
     }
     private void ShowBoss()
     {
-        Set(bossText, BossDialogueStyle.HighlightControls(MultiplayerContractManager.Briefing[Mathf.Clamp(Crew.State.briefingPage, 0, MultiplayerContractManager.Briefing.Length - 1)] +
-            (Crew.State.briefingPage == 0 ? "\n" + MultiplayerContractManager.Title(Crew.State.contractLevel) + " — team balance " + Crew.State.budget.ToString("N0") + " B-Coins." : "")));
+        if (bossContinue != null) bossContinue.gameObject.SetActive(true);
+        var member = Crew.State.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
+        int page = member?.briefingPage ?? 0;
+        Set(bossText, BossDialogueStyle.HighlightControls(MultiplayerContractManager.Briefing[Mathf.Clamp(page, 0, MultiplayerContractManager.Briefing.Length - 1)] +
+            (page == 0 ? "\n" + MultiplayerContractManager.Title(Crew.State.contractLevel) + " — team balance " + Crew.State.budget.ToString("N0") + " B-Coins." : "")));
+        Set(bossContinue, page == MultiplayerContractManager.Briefing.Length - 1 ? "PRESS [SPACE] TO START WORKING" : "PRESS [SPACE] TO CONTINUE");
         if (bossText != null) bossText.maxVisibleCharacters = int.MaxValue;
     }
     private void NextBoss()
     {
-        if (Crew.State.phase != "briefing") return;
-        Crew.Send(new CrewCommand { action = "briefingNext", index = Crew.State.briefingPage });
+        if (!Crew.LocalIsReadingBriefing) return;
+        var member = Crew.State.members.Find(m => m.id == PhotonNetwork.LocalPlayer.ActorNumber);
+        if (member == null || member.briefed) return;
+        Crew.Send(new CrewCommand { action = "briefingNext", index = member.briefingPage });
     }
     private void SetupBook()
     {
@@ -250,47 +309,14 @@ public sealed partial class MultiplayerAuthoredUI
         Set(refs.Get<TMP_Text>("AlmanacManager.bookRightText"), split > 0 ? body.Substring(split) : "Keep your role in mind and coordinate with your crew.");
         Set(refs.Get<TMP_Text>("AlmanacManager.bookPageNumber"), (bookPage + 1) + " / " + bookEntries.Count);
     }
-    private void SetupContract()
-    {
-        var root = panels["contract"]?.transform; if (root == null) return;
-        foreach (var button in root.GetComponentsInChildren<Button>(true)) button.onClick.AddListener(Close);
-        var continueButton = Button(root, "Crew next contract", "NEXT CONTRACT (HOST)", () => Crew.Send(new CrewCommand { action = "nextContract" }));
-        Anchor(continueButton.transform, new Vector2(.52f,.02f), new Vector2(.72f,.075f));
-        var revise = Button(root, "Crew revise commercial", "REVISE COMMERCIAL", () => Open("computer"));
-        Anchor(revise.transform, new Vector2(.74f,.02f), new Vector2(.95f,.075f));
-        var retry = Button(root, "Crew retry contract", "RETRY CONTRACT (HOST)", RequestCrewRetry);
-        Anchor(retry.transform, new Vector2(.28f,.02f), new Vector2(.50f,.075f));
-    }
-    private void RefreshContract()
-    {
-        refs.Get<GameObject>("ContractUIManager.offerPanel")?.SetActive(false);
-        var brief = refs.Get<GameObject>("ContractUIManager.qualificationsPanel"); if (brief != null) Activate(brief);
-        var book = brief != null ? Find(brief.transform,"Qualifications Book") : null;
-        string key = Crew.State.contractLevel == 1 ? "contractArtisanOpen" : Crew.State.contractLevel == 2 ? "contractGokeOpen" :
-            Crew.State.contractLevel == 3 ? "contractTerrariOpen" : Crew.State.contractLevel == 4 ? "contractKapeOpen" : "contractHarayaOpen";
-        if (book != null) ExportUIArt.Apply(book.GetComponent<Image>(),key);
-        Set(refs.Get<TMP_Text>("ContractUIManager.briefTitle"), MultiplayerContractManager.Title(Crew.State.contractLevel) + " — CREW COMMERCIAL");
-        var body = refs.Get<TMP_Text>("ContractUIManager.briefBody");
-        string result = Crew.State.phase == "review" ? "<b>TEAM GRADE: " + Crew.State.result.letterGrade + "</b>\n" + Crew.State.result.feedback + "\n\n" : "";
-        Set(body, result + MultiplayerContractManager.Specifications(Crew.State) + "\n\n" + Crew.Notice);
-        if (body != null)
-        {
-            var content = body.transform.parent as RectTransform;
-            var footer = content?.Find("Agreement signature"); if (footer != null) footer.gameObject.SetActive(false);
-            float height = body.GetPreferredValues(body.text, body.rectTransform.rect.width, 0).y + 30;
-            body.rectTransform.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
-            if (content != null) content.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height + 20);
-        }
-        var scroll = refs.Get<ScrollRect>("ContractUIManager.briefScroll"); if (scroll != null) scroll.verticalNormalizedPosition = 1;
-        var root = panels["contract"]?.transform;
-        var next = Find(root,"Crew next contract"); if (next != null) next.gameObject.SetActive(Crew.State.phase == "review" && Crew.State.contractPaid && Crew.State.contractLevel < 5 && PhotonNetwork.IsMasterClient);
-        var revise = Find(root,"Crew revise commercial"); if (revise != null) revise.gameObject.SetActive(Crew.State.phase == "review" && Crew.HasRole(CrewRole.Editor));
-        var retry = Find(root,"Crew retry contract"); if (retry != null) retry.gameObject.SetActive(PhotonNetwork.IsMasterClient && !Crew.State.recording);
-    }
+    private void SetupContract() { BuildCrewContract(); }
+    private void RefreshContract() { UpdateCrewContract(); }
     private void RequestCrewRetry()
     {
         if (!PhotonNetwork.IsMasterClient || Crew.State.recording) return;
         Open("boss");
+        crewRetryPrompt = true;
+        if (bossContinue != null) bossContinue.gameObject.SetActive(false);
         Set(bossText, "Restart this contract? Your crew's current footage and edit will be cleared. The starting budget and equipment will be restored. Your offline career is kept.");
         if (bossText != null) bossText.maxVisibleCharacters = int.MaxValue;
         var root = panels["boss"]?.transform; if (root == null) return;
@@ -299,22 +325,5 @@ public sealed partial class MultiplayerAuthoredUI
         Anchor(confirm.transform,new Vector2(.36f,.02f),new Vector2(.59f,.085f));
         Anchor(cancel.transform,new Vector2(.64f,.02f),new Vector2(.88f,.085f));
         confirm.gameObject.SetActive(true); cancel.gameObject.SetActive(true);
-    }
-    private void SetupPause()
-    {
-        var root = panels["pause"]?.transform; if (root == null) return;
-        foreach (var button in root.GetComponentsInChildren<Button>(true))
-        {
-            string text = (button.GetComponentInChildren<TMP_Text>(true)?.text ?? button.name).ToLowerInvariant();
-            if (text.Contains("exit") || text.Contains("quit")) button.onClick.AddListener(() => PhotonNetwork.LeaveRoom());
-            else if (text.Contains("option") || text.Contains("setting")) button.onClick.AddListener(() => { if(options==null)options=new SharedOptionsPanel(view.transform,()=>{}); options.Open(); });
-            else button.onClick.AddListener(Close);
-        }
-        foreach (var role in new[] {CrewRole.Director,CrewRole.Camera,CrewRole.AVTechnician,CrewRole.Editor})
-        {
-            int index=role==CrewRole.Director?0:role==CrewRole.Camera?1:role==CrewRole.AVTechnician?2:3;
-            var button=Button(root,"Crew role "+role,MultiplayerContractManager.RoleName(role),()=>Crew.Send(new CrewCommand {action="role",value=(int)role}));
-            Anchor(button,new Vector2(.05f+index*.225f,.025f),new Vector2(.265f+index*.225f,.08f));
-        }
     }
 }

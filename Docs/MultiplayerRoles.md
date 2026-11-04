@@ -1,35 +1,82 @@
 # Role-based multiplayer studio
 
+Crew voice is available in the waiting lobby, role selection and studio. Hold
+LEFT ALT to talk by default, or change mode/key, input device, mic gain and voice
+volume in Audio Options. Lobby and pause microphone icons show availability,
+mute and speaking; click your own to mute/unmute or another player's to mute
+them locally. Options retain preview/Save/cancel behavior. See `Docs/VoiceChat.md`.
+
 ## Start and shared contracts
 
-Use the Main Menu Multiplayer create/join flow and share the room code. Two to
-four players claim Director, Camera, AV Technician and Editor. Each role has one
+Use the Main Menu Multiplayer create/join flow and share the room code. Joining
+stays over Main Menu: two to four players ready up, then the host presses START
+to open synchronized role selection. Roles are not selected while joining.
+Players then claim Director, Camera, AV Technician and Editor. Each role has one
 owner; smaller crews can claim several roles. Lock roles, ready up, then the host
-starts. Changing the selected contract clears readiness. The host can select any
-of the five campaign contracts in the lobby; the default is Contract 1.
+starts the contract. Changing the selected contract clears readiness. The host
+can select Contracts 2–5; the default is Contract 2. Contract 1 remains solo-only.
+Hosting and joining require the current save owner's completed solo tutorial
+(`FlowerContractGraded`), checked from saved careers and the active solo career.
+Selecting a higher level or a room contract does not satisfy this requirement.
 
-The six Boss introduction pages are shared. Space advances the current page for
-everyone, with simultaneous presses advancing only once. The last page starts
-production. Tab opens the contract: its specifications come from the same
-ContractUIManager.DepartmentBrief as singleplayer. There is no separate
+Each player reads the six Boss introduction pages independently. Space advances
+only that player's page; finishing immediately releases that player into the
+studio while teammates continue reading. Page progress survives host migration and
+resets for the next contract or retry. Tab opens the contract: its specifications come from the same
+ContractUIManager.MissionBrief builder as singleplayer. There is no separate
 five-seconds-per-shot multiplayer checklist. Review the selected contract's
 pre-production, production and post-production requirements, especially the
 coffee interior, packaging/cup and performance footage for Contract 4.
 
-Contract 1 starts with B9,000. A fresh room starting at a later contract has no
-carried equipment, so it receives B9,000 plus that contract's advance. Progressing
+A fresh room has no carried equipment, so it receives B9,000 plus the selected
+contract's advance. Progressing
 from one contract to the next retains purchased equipment and the unspent team
 balance, adding only the next advance. Completion bonuses use ProductionEconomy
 and the campaign's grade multipliers; a contract pays only once. Offline career
 money, purchases, progress and save slots are not used.
 
-RoleSelectionUI.Lobby reuses MultiStudio's HelpDesk artwork for room code, roster,
-role selection, Help and Settings. The host can unlock a member before starting.
+Multiplayer gameplay loads SingleStudio, the same authored scene used offline.
+Its early multiplayer bootstrap installs room-owned players/controllers and keeps
+the solo tutorial, player and UI inactive. Role selection has its own 3D stage,
+teammate roster, Help and Settings. The host can unlock a member before starting.
 During production, players can claim vacant roles after a crew member leaves,
 but cannot drop an assigned role. Use the same updated build and a fresh room on
 all clients. Leave Room returns to Main Menu.
 
 ## Stations and controls
+
+The equipment shop uses ShopTerminal's native solo card builders, layout, icons,
+stock captions, prices and Add to Cart/Confirm/Cancel flow. Its mounted display
+is the actual SingleStudio world-space canvas under Equipment, not a missing
+reference inside the UI-only copy. The solo career terminal stays disabled;
+room commands own purchases and delivery at the shared delivery marker.
+The shared delivery marker points to the truck's rear pickup shelf inside the
+existing garage through the automatic doors; tutorial guidance and solo delivery use it too.
+Equipment stays stationary on that shelf until collected, and the garage is
+included in room drop validation. The host still owns purchase positions and cost.
+Native contract unlocks apply to both UI and host validation, with unique cameras and
+megaphones, repeatable lights/SD cards, and no synthetic Audio Monitor card.
+Only acknowledged purchases clear the buyer's cart. Per-member receipts prevent
+duplicate charges from a repeated request. Failed purchases use GameFeedback.
+The shop-side drawer cabinet stores shared equipment through E. STORE clears the
+sender's hotbar slot; TAKE reserves a free slot and equips the same room object.
+The host checks cabinet proximity, role, recording state and item ownership for
+each request. Loaded SD cards must be ejected before storing a camera; recorded
+cards retain their take identity. Stored lights are off and world replicas hidden.
+Room-only floating status/instructions no longer cover the normal studio HUD.
+
+Character looking follows the camera up/down and left/right through the shared PlayerLookPose chest/neck/head layer. MultiplayerPlayerController is observed alongside PhotonTransformView in the Player prefab and replicates look pitch/world yaw. Other peers interpolate those angles onto their animated customized character; local movement follows view direction while body yaw eases toward it. The pose is restored before animation each frame to prevent accumulated bone rotation.
+
+Gaze correction uses the avatar's bind-pose head axes and corrects the animated
+face toward the requested viewing direction, including at zero pitch. It does
+not retain an idle clip's downward tilt. The multiplayer camera anchor is
+measured once from humanoid eyes or the rig's skinned eye mesh after the neutral
+look correction. It stays stable during animation and ignores hair/outfit bounds,
+so the first-person view and the visible character share the same eye level.
+
+Spawned players wear their own equipped customization, replicated from the owning player's public cosmetic IDs. Each peer applies those IDs to the same animated skeleton; remote characters never use the viewer's local outfit. The Tab contract view uses one authored open folder with a clipped, wheel-scrollable requirements page and the current contract's product artwork. Legacy selection folders, locked labels and SELECT controls remain hidden behind this room-owned view.
+
+The room contract reuses the qualificationsPanel/briefScroll/briefBody hierarchy copied from SingleStudio. ContractUIManager and the room adapter share ContractBriefPresentation for the full-canvas 1920x1080 artwork, 530x740 page, canvas scaling, font, margins, dimming and clipping. Both default to the same MissionBrief text builder: client title, pitch, delivery summary, production budget, numbered BUILD THE SET / GET THE SHOT / CUT & BRAND sections and pass bonus. Contract 4 uses the supplied Kape Kultura coffee-folder artwork. The room does not prepend a different team-grade header or long department/budget guide. Its live crew balance and role/host-gated Retry/Next/Revise controls are in a scrolling document footer, rather than over the cover or outside the folder. Balance/permission updates preserve the reading position. Room views continue to omit solo signing and account-currency promises; Tab closes/reopens the brief, matching solo. Button captions use live, outlined text.
 
 - Director: E opens the physical tablet. Place the selected contract's set,
   products, vehicle and actors. R rotates a placement by 45 degrees; Q/E makes
@@ -43,7 +90,8 @@ all clients. Leave Room returns to Main Menu.
   Z/X Kelvin, C/V intensity, F power, T placement and Q/E turns. Audio monitor:
   F power, Z/X gain, with local output-peak display.
 - Camera: buy camera (B4,000) and SD cards (B150), collect delivery, select a
-  hotbar slot with 1-5 and insert a blank SD with C. LMB opens the viewfinder,
+  hotbar slot with 1-5 and insert/remove an SD with C. Recording leaves the card
+  in the camera until its owner presses C again. LMB opens the viewfinder,
   V cycles Wide/Medium/Close and wheel adjusts field of view. R starts/stops a
   take. Contracts 4 and 5 require the Director's ACTION cue. Takes stop at 30
   seconds; use the selected brief's shot/duration requirements.
@@ -58,6 +106,21 @@ all clients. Leave Room returns to Main Menu.
 - Everyone can read Almanac (P), the contract (Tab) and pause/options (Escape).
   Only the Editor can enter the computer/editor. Only the host can restart or
   advance a contract.
+
+Escape opens the native PauseManager.pauseMenuCanvas through an explicit copied
+binding. Older copies resolve only a Pause canvas containing Panel/Resume and
+Panel/Option(s), never the computer playback button also named Pause. The native
+shutter frame and Resume/Options/Exit artwork are retained. A left-side roster
+uses the same shutter texture, teal accents, outlined white type and equal crew
+rows, showing live usernames, roles, HOST/YOU labels, room code and empty slots.
+Available-role actions retain the existing ability to fill departed crew roles.
+The menu is local: room time and teammates continue. Resume/Escape restores the
+previous station or briefing; Options Escape first returns to Pause. Local
+editor playback is paused without losing the edit, and an editor download cannot
+activate over the pause menu. MultiplayerAuthoredUI.Pause owns this behavior;
+the legacy MultiplayerPauseManager defers Escape when that adapter is ready.
+The copy builder includes PauseManager's reference and preserves SettingsLayout
+and CircularSliderKnob so the scene-authored options view can be reused.
 
 The shared review includes department grades and the Editor's campaign feedback.
 REVISE EDIT is Editor-only. NEXT CONTRACT is host-only after passing; it clears

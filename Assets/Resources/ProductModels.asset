@@ -34,9 +34,9 @@ MonoBehaviour:
     size: 0.45
     rotation: {x: 0, y: 180, z: 0}
   - level: 5
-    displayName: 
-    model: {fileID: 919132149155446097, guid: fef84c2bebef8154da5359c90e659da3, type: 3}
-    size: 1.1
+    displayName: HARAYA PERFUME
+    model: {fileID: 919132149155446097, guid: 648fcea8e3f783e46b773bca78764200, type: 3}
+    size: 0.22
     rotation: {x: 0, y: 0, z: 0}
   - level: 4
     displayName: CUP OF COFFEE
@@ -90,6 +90,17 @@ MonoBehaviour:
     scale: {x: 1.65, y: 1, z: 1.65}
     rotation: {x: 0, y: 0, z: 0}
   activeGreenScreen: 0
+  runwaySet:
+    name: Fashion Runway
+    coffeeInteriorEntry: 0
+    model: {fileID: 919132149155446097, guid: 2c1a9b14324afca49b2aa22e0c26da3f, type: 3}
+    position: {x: 0, y: 0, z: 0}
+    size: 1
+    scale: {x: 1, y: 1, z: 1}
+    rotation: {x: 0, y: 0, z: 0}
+  runwayCast:
+  - {fileID: 919132149155446097, guid: e500b32f2240bdc41ada04cab388d8a0, type: 3}
+  - {fileID: 919132149155446097, guid: 6b3169ecd9da5d24894804daacfb05e9, type: 3}
   flowerTable: {fileID: 919132149155446097, guid: b711466301f508f4a87e5df8b286db87, type: 3}
   coffeeMixAnimation: {fileID: 0}
   coffeePressAnimation: {fileID: 0}

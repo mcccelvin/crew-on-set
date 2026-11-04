@@ -116,6 +116,7 @@ public sealed partial class MultiplayerAuthoredUI
                 if (!recording.Has(take.id)) { Close(); Message = recording.Status; yield break; }
             }
         }
+        while (Panel == "pause" && request == editorRequest) yield return null;
         if (request != editorRequest) yield break;
         var footage = new List<FootageData>();
         try

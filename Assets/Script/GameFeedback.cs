@@ -83,6 +83,12 @@ public sealed class GameFeedback : MonoBehaviour
         Show(text, error ? NoticeType.Caution : Classify(text));
     }
 
+    public static void ShowBriefWarning(string text)
+    {
+        Show(text, true);
+        EnsureInstance().hideAt = Time.unscaledTime + 2f;
+    }
+
     private static NoticeType Classify(string text)
     {
         string title = (text ?? "").Split('\n')[0].ToUpperInvariant();

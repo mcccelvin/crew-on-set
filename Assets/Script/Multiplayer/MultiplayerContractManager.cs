@@ -9,6 +9,7 @@ using UnityEngine;
 {
     public int id, roles;
     public int equipped;
+    public int briefingPage, shopReceipt;
     public bool ready, briefed, rolesLocked;
 }
 
@@ -39,8 +40,8 @@ using UnityEngine;
 
 [Serializable] public sealed class CrewSession
 {
-    public int schema = 1, revision, nextId = 1, budget = ProductionEconomy.StartingBudget, recorder;
-    public int contractLevel = 1;
+    public int schema = 1, revision, nextId = 1, budget = MultiplayerContractManager.InitialBudget(2), recorder;
+    public int contractLevel = 2;
     public bool contractPaid;
     public ProductionGrades result;
     public string productionId;
@@ -65,7 +66,7 @@ using UnityEngine;
     public int nextShot = 1, activeShot;
     public Color backdropColor = Color.white;
     public float brightness = 1, contrast = 1, saturation = 1;
-    public string commercialTitle = "KAPE KULTURA";
+    public string commercialTitle = "GOKE COLA";
 }
 
 [Serializable] public sealed class CrewCheckpoint
@@ -94,6 +95,13 @@ using UnityEngine;
 
 public static class MultiplayerContractManager
 {
+    public static int NextContractChoice(int current) => current >= 5 ? 2 : Mathf.Max(2, current + 1);
+    public static bool ShopItemAvailable(string kind, int level) =>
+        (kind == "camera" || kind == "light" || kind == "sd" || kind == "softlight" || kind == "megaphone") &&
+        ShopTerminal.IsEquipmentUnlocked(MultiplayerAuthoredUI.EquipmentName(kind), level);
+    public static bool UniqueShopItem(string kind) => kind == "camera" || kind == "megaphone";
+    public static bool ShopItemOwned(CrewSession state, string kind) => UniqueShopItem(kind) &&
+        (state.equipment.Contains(kind) || state.objects.Exists(item => item.kind == kind));
     // A room starting mid-campaign has no carried equipment. The starter allowance
     // replaces that missing carry-over without touching any player's career funds.
     public static int InitialBudget(int level) => level <= 1 ? ProductionEconomy.StartingBudget : ProductionEconomy.StartingBudget + ProductionEconomy.Advance(level);
@@ -113,18 +121,15 @@ public static class MultiplayerContractManager
         state.contractPaid = false; state.result = default; state.shots.Clear(); state.cuts.Clear();
         state.takeArmed = false; state.contractAttempt++;
         CrewProductionResults.Begin(state);
-        foreach (var member in state.members) member.equipped = 0;
+        foreach (var member in state.members) { member.equipped = 0; member.briefed = false; member.briefingPage = 0; }
         state.phase = "briefing"; state.briefingPage = 0;
         state.message = "Contract restarted with its starting budget and equipment. Offline saves are unchanged.";
         return true;
     }
     public static string Title(int level) => level == 1 ? "FLORA & FORM HOME" : level == 2 ? "GOKE COLA" :
         level == 3 ? "TERRARI" : level == 4 ? "KAPE KULTURA" : "HARAYA";
-    public static string Specifications(CrewSession state) => ContractUIManager.DepartmentBrief(state.contractLevel) +
-        "\n\n<b>SHARED BUDGET</b>\nStarting advance: " + ProductionEconomy.Advance(state.contractLevel).ToString("N0") +
-        " B-Coins. Current team balance: " + state.budget.ToString("N0") +
-        " B-Coins. Fresh rooms starting after Contract 1 also receive a 9,000 B-Coin starter allowance to replace missing carried equipment. Continuing to the next contract pays only its advance. All purchases use the shared balance. Reuse equipment; deleting items does not refund money. Completion bonus up to " +
-        ProductionEconomy.CompletionBonus(state.contractLevel).ToString("N0") + " B-Coins. Offline career money and progress are not used.";
+    public static string Specifications(CrewSession state) =>
+        ContractUIManager.MissionBrief(state.contractLevel,Title(state.contractLevel),true);
     public static bool IsPoweredLight(CrewSession state, CrewObject item) =>
         (item.kind == "light" || item.kind == "softlight") && item.powered && item.intensity > 0 &&
         (item.holder == 0 || state.members.Exists(m => m.id == item.holder && m.equipped == item.id));
@@ -241,6 +246,7 @@ public static class MultiplayerContractManager
 
     public static bool CanStart(CrewSession state)
     {
+        if (state == null || state.contractLevel < 2 || state.contractLevel > 5) return false;
         int roles = 0, count = 0;
         foreach (var member in state.members)
         {
@@ -249,6 +255,23 @@ public static class MultiplayerContractManager
             count++;
         }
         return count >= 2 && count <= 4 && roles == 15;
+    }
+
+    public static bool CanBeginRoleSelection(CrewSession state)
+    {
+        if (state == null || state.contractLevel < 2 || state.contractLevel > 5 || state.phase != "waiting" || state.members.Count < 2 || state.members.Count > 4) return false;
+        foreach (var member in state.members) if (!member.ready) return false;
+        return true;
+    }
+
+    public static bool BeginRoleSelection(CrewSession state)
+    {
+        if (!CanBeginRoleSelection(state)) return false;
+        foreach (var member in state.members)
+        { member.roles = 0; member.rolesLocked = false; member.ready = false; member.briefed = false; }
+        state.phase = "lobby";
+        state.message = "Choose your crew roles, then confirm you are ready.";
+        return true;
     }
 
     public static string Tasks(CrewSession state, CrewRole role)

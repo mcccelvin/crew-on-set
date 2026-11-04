@@ -38,7 +38,7 @@ public class ShopTerminal : MonoBehaviour
     // Cart Tracking
     private List<ShopItem> shoppingCart = new List<ShopItem>();
     private int currentTotalCost = 0;
-    private int deliveredCardCount;
+    private int deliveredItemCount;
     private bool cameraSoldOut = false;
     private bool level2CameraSoldOut = false;
     private int level2CameraItemIndex = -1;
@@ -107,7 +107,7 @@ public class ShopTerminal : MonoBehaviour
         }
 
         SetupMegaphone();
-        if(GameSaveManager.IsTrainingRoom && level3LightPrefab != null) SetupLevel3Light(level3LightPrefab,false);
+        EnsureUnlockedBetterLights();
         ProductionKitShop.Setup(this);
         if(GameSaveManager.IsTrainingRoom)
             foreach(var item in availableItems) if(item!=null) item.price=0;
@@ -125,6 +125,7 @@ public class ShopTerminal : MonoBehaviour
 
     private void RefreshShopPresentation()
     {
+        EnsureUnlockedBetterLights();
         foreach (var canvas in new[] { worldSpaceCanvas, screenSpaceCanvas })
         {
             if (canvas == null) continue;
@@ -160,11 +161,69 @@ public class ShopTerminal : MonoBehaviour
     private bool IsShopItemAvailable(string itemName)
     {
         int level = CampaignProgression.GetCurrentLevel();
-        if (itemName == "LEVEL 2 CAMERA" || itemName == "LIGHT STRIP") return false;
-        if (itemName == "LEVEL 3 SOFT LIGHT" && level < 3) return false;
-        if (itemName == "DIRECTOR MEGAPHONE" && level < 4) return false;
+        if (!IsEquipmentUnlocked(itemName, level)) return false;
         var item = availableItems.Find(candidate => candidate != null && candidate.itemName == itemName);
         return item != null && item.prefabToSpawn != null;
+    }
+
+    private void EnsureUnlockedBetterLights()
+    {
+        if(!GameSaveManager.IsTrainingRoom && CampaignProgression.GetCurrentLevel()<3)return;
+        int index=availableItems.FindIndex(item=>item!=null && item.itemName=="LEVEL 3 SOFT LIGHT");
+        if(index>=0 && availableItems[index].prefabToSpawn!=null)
+        {level3LightItemIndex=index;return;}
+        var panel=availableItems.Find(item=>item!=null && item.itemName=="160 LED PANEL");
+        var prefab=level3LightPrefab!=null?level3LightPrefab:panel?.prefabToSpawn;
+        if(prefab!=null)SetupLevel3Light(prefab,level3LightPrefab==null);
+    }
+
+    public static bool IsEquipmentUnlocked(string itemName, int level)
+    {
+        if (itemName == "LEVEL 2 CAMERA" || itemName == "LIGHT STRIP") return false;
+        if (DisplayEquipmentName(itemName) == "BETTER LIGHTS" && level < 3) return false;
+        return itemName != "DIRECTOR MEGAPHONE" || level >= 4;
+    }
+
+    // Reuse the authored solo cards without enabling this terminal's career economy.
+    public void PrepareSharedShopCanvas(Canvas canvas)
+    {
+        if (canvas == null) return;
+        CreateLevel3LightShopCard(canvas);
+        CreateMegaphoneShopCard(canvas, -1);
+        HideRetiredShopCards(canvas);
+        foreach (var label in canvas.GetComponentsInChildren<TextMeshProUGUI>(true))
+        {
+            label.text = DisplayEquipmentName(label.text);
+            if (EquipmentIconArt.Get(label.text) == null) continue;
+            var card = FindShopItemCard(label, canvas);
+            if (card != null) EquipmentIconArt.Apply(card, label.text);
+        }
+        CompactShopCards(canvas);
+    }
+
+    public static List<Button> BindSharedShopItem(Canvas canvas, string itemName, System.Action add)
+    {
+        var buttons = new List<Button>();
+        foreach (var card in FindLayoutCards(canvas, itemName))
+            foreach (var button in card.GetComponentsInChildren<Button>(true))
+            {
+                if (!IsCartButton(button)) continue;
+                button.name = "Shop cart button";
+                button.onClick = new Button.ButtonClickedEvent();
+                button.onClick.AddListener(() => add());
+                button.gameObject.SetActive(true);
+                buttons.Add(button);
+            }
+        return buttons;
+    }
+
+    public static void SetSharedShopButton(Button button, string caption, bool interactable)
+    {
+        button.enabled = true;
+        button.interactable = interactable;
+        var liveLabel = SetVisibleStockCaption(button, caption);
+        foreach (var label in button.GetComponentsInChildren<TextMeshProUGUI>(true))
+            if (label != liveLabel) label.enabled = false;
     }
 
     private void RefreshShopAvailability(Canvas canvas)
@@ -184,11 +243,7 @@ public class ShopTerminal : MonoBehaviour
                     button.gameObject.name = "Shop cart button";
                     button.onClick = new Button.ButtonClickedEvent();
                     if (index >= 0) button.onClick.AddListener(() => AddItemToCartByIndex(index));
-                    button.enabled = true;
-                    button.interactable = !owned && available;
-                    var liveLabel = SetVisibleStockCaption(button, caption);
-                    foreach (var label in button.GetComponentsInChildren<TextMeshProUGUI>(true))
-                        if (label != liveLabel) label.enabled = false;
+                    SetSharedShopButton(button, caption, !owned && available);
                 }
             }
         }
@@ -362,7 +417,7 @@ public class ShopTerminal : MonoBehaviour
         if (FindObjectOfType<Player.Equipment.ActorMegaphoneItem>() != null || deliveryZone == null) return;
         var item = availableItems.Find(candidate => candidate != null && candidate.itemName == "DIRECTOR MEGAPHONE");
         if (item == null || item.prefabToSpawn == null) return;
-        var spawned = CreateDeliveredItem(item, deliveryZone.position + Vector3.up * .3f);
+        var spawned = CreateDeliveredItem(item, StudioDeliveryBay.Position(deliveryZone,deliveredItemCount++));
         Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(spawned);
     }
 
@@ -390,7 +445,7 @@ public class ShopTerminal : MonoBehaviour
                 if (item.itemName == "DIRECTOR MEGAPHONE" ? equipment is Player.Equipment.ActorMegaphoneItem : equipment.name == item.prefabToSpawn.name + "(Clone)") present++;
             for (int i = present; i < owned; i++)
             {
-                var restored = CreateDeliveredItem(item, deliveryZone.position + new Vector3((i % 3 - 1) * .45f, .5f + (i / 3) * .25f, .25f));
+                var restored = CreateDeliveredItem(item, StudioDeliveryBay.Position(deliveryZone,deliveredItemCount++));
                 if (item.itemName == "DIRECTOR MEGAPHONE") Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(restored);
                 if (restored.TryGetComponent<ProductionKit>(out var kit)) kit.ActivateDelivery();
             }
@@ -413,12 +468,15 @@ public class ShopTerminal : MonoBehaviour
                 candidate.position = position;
                 candidate.gameObject.SetActive(true);
                 Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(candidate.gameObject).PrepareShopDelivery(position);
+                StudioDeliveryBay.SettleEquipment(candidate.gameObject,position);
                 return candidate.gameObject;
             }
         }
         var delivered = Instantiate(item.prefabToSpawn, position, deliveryZone.rotation);
         if (item.itemName == "DIRECTOR MEGAPHONE")
             Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(delivered).PrepareShopDelivery(position);
+        if(item.itemName=="LEVEL 3 SOFT LIGHT")ConfigureLevel3Light(delivered);
+        StudioDeliveryBay.SettleEquipment(delivered,position);
         return delivered;
     }
 
@@ -464,7 +522,7 @@ public class ShopTerminal : MonoBehaviour
         foreach (var camera in FindObjectsOfType<Player.Equipment.FilmCameraItem>(true))
             if (camera.gameObject.scene.IsValid()) return;
         if (deliveryZone == null || availableItems.Count == 0 || availableItems[0].prefabToSpawn == null) return;
-        Instantiate(availableItems[0].prefabToSpawn, deliveryZone.position + new Vector3(-.35f,.5f,0), deliveryZone.rotation);
+        CreateDeliveredItem(availableItems[0],StudioDeliveryBay.Position(deliveryZone,deliveredItemCount++));
     }
 
     private void HideLegacyCameraCard(Canvas canvas)
@@ -531,9 +589,10 @@ public class ShopTerminal : MonoBehaviour
 
         if (deliveryZone == null) return;
 
-        Vector3 lightPosition = deliveryZone.position + new Vector3(0.35f, 0.5f, 0f);
+        Vector3 lightPosition = StudioDeliveryBay.Position(deliveryZone,deliveredItemCount++);
         GameObject restoredLight = Instantiate(lightPrefab, lightPosition, deliveryZone.rotation);
         ConfigureLevel3Light(restoredLight);
+        StudioDeliveryBay.SettleEquipment(restoredLight,lightPosition);
     }
 
     private void CreateLevel3LightShopCard(Canvas shopCanvas)
@@ -974,14 +1033,13 @@ public class ShopTerminal : MonoBehaviour
 
             if (item.prefabToSpawn != null && deliveryZone != null)
             {
-                Vector3 randomOffset = new Vector3(Random.Range(-0.2f, 0.2f), 0.5f, Random.Range(-0.2f, 0.2f));
-                GameObject spawnedItem = CreateDeliveredItem(item, deliveryZone.position + randomOffset);
+                int deliverySlot = deliveredItemCount++;
+                GameObject spawnedItem = CreateDeliveredItem(item,StudioDeliveryBay.Position(deliveryZone,deliverySlot));
                 if (spawnedItem.TryGetComponent<Player.Equipment.SDCardItem>(out var card))
                 {
                     // Keep tiny cards visible and separated instead of dropping them among equipment.
-                    int slot = deliveredCardCount++;
-                    Vector3 position = deliveryZone.position + deliveryZone.right * ((slot % 3 - 1) * 0.14f)
-                        + deliveryZone.forward * (((slot / 3) % 3 - 1) * 0.14f);
+                    int slot = deliverySlot;
+                    Vector3 position = StudioDeliveryBay.Position(deliveryZone,slot,.01f);
                     float surfaceY = position.y;
                     float closest = float.PositiveInfinity;
                     foreach (RaycastHit hit in Physics.RaycastAll(position + Vector3.up * 0.5f,
@@ -999,7 +1057,6 @@ public class ShopTerminal : MonoBehaviour
                 if (item.itemName == "DIRECTOR MEGAPHONE") Player.Equipment.ActorMegaphoneItem.ConfigureSpawnedItem(spawnedItem);
                 if (!item.itemName.ToUpperInvariant().Contains("SD"))
                     PlayerPrefs.SetInt("OwnedEquipment." + item.itemName, PlayerPrefs.GetInt("OwnedEquipment." + item.itemName, 0) + 1);
-                if (level3LightItemIndex >= 0 && item == availableItems[level3LightItemIndex]) ConfigureLevel3Light(spawnedItem);
             }
         }
 
@@ -1027,6 +1084,8 @@ public class ShopTerminal : MonoBehaviour
         }
 
         // Tell the Tutorial Manager that we successfully checked out!
+        GameFeedback.Show(StudioDeliveryBay.CollectionMessage,GameFeedback.NoticeType.Success);
+        StudioDeliveryBay.ShowCollectionGuide();
         RefreshShopPresentation();
         if (shoppingCart.Count > 0 && TutorialManager.Instance != null)
         {
@@ -1038,6 +1097,17 @@ public class ShopTerminal : MonoBehaviour
         UpdateTotalUI();
     }
 
+    public Player.Equipment.FilmLightItem CreateStoredSoftLight(Transform cabinet)
+    {
+        if(CampaignProgression.GetCurrentLevel()<3)return null;
+        EnsureUnlockedBetterLights();
+        if(level3LightItemIndex<0)return null;
+        var prefab=availableItems[level3LightItemIndex].prefabToSpawn;
+        if(prefab==null || prefab.GetComponent<Player.Equipment.FilmLightItem>()==null)return null;
+        var light=Instantiate(prefab,cabinet);
+        ConfigureLevel3Light(light);
+        return light.GetComponent<Player.Equipment.FilmLightItem>();
+    }
     private void ConfigureLevel3Light(GameObject spawnedItem)
     {
         if (spawnedItem == null) return;

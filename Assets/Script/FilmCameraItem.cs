@@ -59,6 +59,7 @@ namespace Player.Equipment
 
         private bool isCameraActive = false;
         private bool isRecording = false;
+        public bool CanStoreInCabinet => !isRecording && !isCameraActive && !isSDCardInserted && viewTransition == null;
         private bool isSDCardInserted = false;
         private SDCardItem insertedSDCard;
         private float takeCapacitySeconds;
@@ -178,7 +179,7 @@ namespace Player.Equipment
         protected override void Awake()
         {
             base.Awake();
-            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert/Eject SD | [R] Record | [Scroll] Zoom | [Q/E] Height | [CTRL + WASD] Smooth move | [CTRL + MOUSE] Fine aim";
+            EquipmentControls = "[LMB] Viewfinder | [G] Drop | [C] Insert/Remove SD | [R] Record | [Scroll] Zoom | [Q/E] Height | [CTRL + WASD] Smooth move | [CTRL + MOUSE] Fine aim";
             ResolvePixelRecorder();
             noiseOffset = Random.Range(0f, 1000f);
 
@@ -483,7 +484,7 @@ namespace Player.Equipment
             }
             if (viewTransition != null) return;
             heldUpdateFrame = Time.frameCount;
-            if (input.InsertCard) InsertSDCard();
+            if (input.InsertCard && TutorialEquipmentGate.Allow("insert", this)) InsertSDCard();
 
             if (!isCameraActive || filmCamera == null)
             {
@@ -498,7 +499,7 @@ namespace Player.Equipment
                 lensControlsInitialized = true;
             }
 
-            if (input.Record)
+            if (input.Record && TutorialEquipmentGate.Allow("record", this))
             {
                 if (!isRecording && !isSDCardInserted) { GameFeedback.Show("NO SD CARD\nInsert an SD card [C] before recording.", true); return; }
                 ToggleRecording();
@@ -508,12 +509,17 @@ namespace Player.Equipment
             if (!isRecording)
             {
                 float scroll = input.EquipmentAdjust;
+                if (scroll != 0 && !TutorialEquipmentGate.Allow("camera.zoom", this)) scroll = 0;
                 if (scroll > 0) targetFOV -= zoomSpeed;
                 else if (scroll < 0) targetFOV += zoomSpeed;
                 targetFOV = Mathf.Clamp(targetFOV, minFOV, maxFOV);
                 filmCamera.fieldOfView = Mathf.SmoothDamp(filmCamera.fieldOfView, targetFOV, ref zoomVelocity, 0.12f);
 
-                heightVelocity = Mathf.SmoothDamp(heightVelocity, input.CameraPedestal * pedestalSpeed, ref heightAcceleration, 0.1f);
+                float pedestal = input.CameraPedestal;
+                var heightKeys = UnityEngine.InputSystem.Keyboard.current;
+                bool newHeightAttempt = heightKeys != null && (heightKeys.qKey.wasPressedThisFrame || heightKeys.eKey.wasPressedThisFrame);
+                if (pedestal != 0 && !TutorialEquipmentGate.Allow("camera.height", this, newHeightAttempt)) pedestal = 0;
+                heightVelocity = Mathf.SmoothDamp(heightVelocity, pedestal * pedestalSpeed, ref heightAcceleration, 0.1f);
                 float pedestalShift = heightVelocity * Time.deltaTime;
                 if (pedestalShift != 0)
                 {
@@ -586,13 +592,12 @@ namespace Player.Equipment
         private void UpdateRuleOfThirdsPractice()
         {
             if (!CameraFeatureUnlocks.ManualFocus || filmCamera == null || GokeLevelManager.Instance == null) return;
-            bool independent = GokeLevelManager.Instance.ThirdsIndependentPractice;
             if (settingsOpen) { GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false); return; }
-            if (GridEnabled == independent)
+            if (!GridEnabled)
             {
                 GokeLevelManager.Instance.OnRuleOfThirdsPracticeUpdated(false);
                 if (ruleOfThirdsInstructionText != null)
-                    ruleOfThirdsInstructionText.text = independent ? "PRESS F2 — TURN GRID OFF, THEN CLOSE SETTINGS" : "PRESS F2 — TURN GRID ON, THEN CLOSE SETTINGS";
+                    ruleOfThirdsInstructionText.text = "PRESS F2 — TURN GRID ON, THEN CLOSE SETTINGS";
                 LayoutThirdsLessonPanel();
                 return;
             }
@@ -1918,6 +1923,41 @@ namespace Player.Equipment
             else GameFeedback.Show("NO CARD WITH SPACE\nUse an SD card with room available, or delete clips at the computer.");
         }
 
+        private bool TutorialBackdropFillsFrame()
+        {
+            if (filmCamera == null) return false;
+            var director = FindObjectOfType<DirectorTerminal>();
+            var wall = director != null ? director.GetCurrentWall() : null;
+            if (wall == null) return false;
+            var surfaces = new System.Collections.Generic.List<Collider>();
+            foreach (var renderer in wall.GetComponentsInChildren<MeshRenderer>())
+            {
+                if (!renderer.enabled || (filmCamera.cullingMask & (1 << renderer.gameObject.layer)) == 0) continue;
+                string surfaceName = renderer.name;
+                if (!surfaceName.StartsWith("Screen", System.StringComparison.OrdinalIgnoreCase) &&
+                    !surfaceName.Equals("wall", System.StringComparison.OrdinalIgnoreCase) &&
+                    !surfaceName.StartsWith("Backdrop", System.StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var collider in renderer.GetComponents<Collider>())
+                    if (collider.enabled && !collider.isTrigger) surfaces.Add(collider);
+            }
+            if (surfaces.Count == 0) return false;
+            Physics.SyncTransforms();
+            // Test the actual curved backdrop, not its bounding box. Include all frame
+            // edges and interior samples; foreground products do not count as gaps.
+            // This runs only when starting a take, never in the recording frame loop.
+            for (int y = 0; y <= 18; y++)
+            for (int x = 0; x <= 32; x++)
+            {
+                Ray ray = filmCamera.ViewportPointToRay(new Vector3(x / 32f, y / 18f, 0));
+                bool covered = false;
+                foreach (var surface in surfaces)
+                    if (surface.Raycast(ray, out RaycastHit hit, filmCamera.farClipPlane))
+                    { covered = true; break; }
+                if (!covered) return false;
+            }
+            return true;
+        }
+
         private void ToggleRecording(bool forceCancel = false, bool capacityStop = false)
         {
             if (isRecording && forceCancel)
@@ -1946,6 +1986,14 @@ namespace Player.Equipment
                     return;
                 }
                 if (TutorialManager.Instance != null && !TutorialManager.Instance.CanRecord()) return;
+                var tutorial = TutorialManager.Instance;
+                if (CampaignProgression.GetCurrentLevel() == 1 && tutorial != null && tutorial.isActiveAndEnabled &&
+                    !DevTutorialBypass.Disabled && tutorial.currentStep == TutorialManager.TutorialStep.RecordVideo &&
+                    !TutorialBackdropFillsFrame())
+                {
+                    tutorial.ShowWarning("The studio is still visible! Zoom in or reposition the camera until the backdrop fills every edge of the frame. Keep the vase centered, then press [R] to record.");
+                    return;
+                }
 
                 bool requiresCenterFraming = CampaignProgression.GetCurrentLevel() == 1;
                 if (targetSubject == null) CacheTargetSubject();
@@ -2054,10 +2102,9 @@ namespace Player.Equipment
                 { GameFeedback.Show("Could not add this take to the SD card. Its recording file was kept."); return; }
                 PlayerAnalytics.TakeRecorded(recordingCampaignLevel, finalDuration);
                 CampaignLevelManager.Instance?.OnCoffeeTakeRecorded(insertedSDCard);
-                // The first tutorial still demonstrates handing a recorded card
-                // to the computer. Ordinary recording keeps it mounted for more takes.
+                // Saving a take never ejects the card. The tutorial teaches [C] next.
                 if (TutorialManager.Instance != null && TutorialManager.Instance.currentStep == TutorialManager.TutorialStep.RecordVideo)
-                    ejectedSDCard = EjectUsedSDCard();
+                    GameFeedback.Show("TAKE SAVED\nThe SD card is still in the camera. Press [C] when prompted to eject it.");
                 else GameFeedback.Show($"TAKE SAVED\n{insertedSDCard.GetRecordings().Count} clips · {insertedSDCard.UsedSeconds:0.#}/60 seconds used");
             }
 
@@ -2162,7 +2209,9 @@ namespace Player.Equipment
                 cardScript.OnDropped(null);
                 var inventory = GetComponentInParent<Player.Interactor.EquipmentInteractor>();
                 if (inventory == null) inventory = FindObjectOfType<Player.Interactor.EquipmentInteractor>();
-                if (cardScript != null && inventory != null) inventory.StoreEjectedCard(cardScript);
+                bool stored = cardScript != null && inventory != null && inventory.StoreEjectedCard(cardScript);
+                if (TutorialManager.Instance != null)
+                    TutorialManager.Instance.OnTutorialCardEjected(ejectedCard, stored);
                 return ejectedCard;
             }
 

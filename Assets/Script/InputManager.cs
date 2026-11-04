@@ -188,12 +188,9 @@ namespace Player.Manager
 
         private void onJump(InputAction.CallbackContext context)
         {
-            Jump = context.ReadValueAsButton();
-            if (context.performed && CanReadGameplayAction() && playerController != null && playerController.enabled && playerController.canMove)
-            {
-                jumpPressed = true;
-                JumpPressedThisFrame = true;
-            }
+            // Retain the input action for asset compatibility. Dialogue uses
+            // Continue/Space separately; gameplay no longer exposes jumping.
+            Jump = jumpPressed = JumpPressedThisFrame = false;
         }
 
         private void onInteract(InputAction.CallbackContext context) { Interact = true; }

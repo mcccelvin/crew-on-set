@@ -7,8 +7,8 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public sealed class ProductionGuideLine : MonoBehaviour
 {
-    const float Clearance = .24f, Lift = .045f, Cell = .7f;
-    const int SearchLimit = 600;
+    const float Clearance = .24f, Lift = .045f, Cell = .35f;
+    const int SearchLimit = 2400;
     LineRenderer line;
     LineRenderer source;
     Transform player;
@@ -26,6 +26,8 @@ public sealed class ProductionGuideLine : MonoBehaviour
     Vector3 lastStart, lastGoal;
     float nextRoute;
     bool complete;
+    bool hasDestination;
+    Vector3 destination;
     readonly List<Vector3> points = new List<Vector3>();
     readonly RaycastHit[] hits = new RaycastHit[32];
     readonly Collider[] overlaps = new Collider[32];
@@ -33,6 +35,16 @@ public sealed class ProductionGuideLine : MonoBehaviour
     static Material ribbonMaterial, markerMaterial;
     static Texture2D ribbonTexture;
     static Sprite directionPaperSprite;
+    static readonly List<ProductionGuideLine> activeGuides=new List<ProductionGuideLine>();
+    readonly List<Vector3> collectionWaypoints=new List<Vector3>();
+
+    public static bool HasActiveGuide(LineRenderer except)
+    {
+        foreach(var guide in activeGuides)
+            if(guide!=null && guide.isActiveAndEnabled && guide.source!=null && guide.source!=except &&
+                guide.source.enabled && guide.objective!=null)return true;
+        return false;
+    }
 
     public static void Draw(LineRenderer renderer, Transform from, Transform target)
     {
@@ -66,6 +78,7 @@ public sealed class ProductionGuideLine : MonoBehaviour
     {
         if (source != null) return;
         source = renderer;
+        activeGuides.Add(this);
         source.positionCount = 0;
         var shader = Resources.Load<Shader>("ProductionGuide");
         if (shader == null) return;
@@ -208,13 +221,25 @@ public sealed class ProductionGuideLine : MonoBehaviour
     {
         if (directionCanvas == null) return;
         bool active = controlsActive && camera != null && camera.isActiveAndEnabled &&
-            source != null && source.enabled && line != null && objective != null && player != null && complete && points.Count > 1;
+            source != null && source.enabled && line != null && objective != null && player != null;
         if (!active)
         {
             needsTurn = false; directionGroup.alpha = 0;
             directionCanvas.gameObject.SetActive(false);
             return;
         }
+        if (!complete || points.Count < 2)
+        {
+            needsTurn = false;
+            directionArrow.gameObject.SetActive(false);
+            directionLabel.text = "MOVE TO CLEAR SPACE";
+            directionLabel.enableAutoSizing = true;
+            directionLabel.fontSizeMin = 16; directionLabel.fontSizeMax = 27;
+            directionGroup.alpha = 1;
+            directionCanvas.gameObject.SetActive(true);
+            return;
+        }
+        directionArrow.gameObject.SetActive(true);
         // Point toward the next walkable part of the route, not through walls to the goal.
         Vector3 next = points[points.Count - 1];
         for (int i = 1; i < points.Count; i++)
@@ -265,6 +290,7 @@ public sealed class ProductionGuideLine : MonoBehaviour
         lastStart = start; lastGoal = goal;
         points.Clear();
         complete = FindRoute(start, goal);
+        if (!complete) points.Clear();
         line.positionCount = points.Count;
         for (int i = 0; i < points.Count; i++) line.SetPosition(i, points[i] + Vector3.up * Lift);
         UpdateBrackets();
@@ -345,13 +371,37 @@ public sealed class ProductionGuideLine : MonoBehaviour
 
     bool FindRoute(Vector3 start, Vector3 target)
     {
-        if (!Ground(start, out start) || !FindApproach(start, target, out Vector3 goal)) return false;
+        collectionWaypoints.Clear();
+        if(!StudioDeliveryBay.TryGetGuideRoute(start,target,collectionWaypoints,out bool endsAtPickup))
+            return FindRouteSegment(start,target,false);
+        var joined=new List<Vector3>();
+        foreach(var waypoint in collectionWaypoints)
+        {
+            points.Clear();
+            if(!FindRouteSegment(start,waypoint,true))return false;
+            joined.AddRange(points);start=destination;
+        }
+        if(!endsAtPickup)
+        {
+            points.Clear();
+            if(!FindRouteSegment(start,target,false))return false;
+            joined.AddRange(points);
+        }
+        points.Clear();points.AddRange(joined);
+        return points.Count>1;
+    }
+
+    bool FindRouteSegment(Vector3 start,Vector3 target,bool exactStandingPoint)
+    {
+        hasDestination = exactStandingPoint ? Ground(target,out destination) && Free(destination) : FindApproach(start, target, out destination);
+        if (!Ground(start, out start) || !hasDestination) return false;
+        Vector3 goal = destination;
         if (Clear(start, goal) && AddGroundedSegment(start, goal)) return true;
         points.Clear();
         float minX = Mathf.Min(start.x, goal.x) - 3.5f, minZ = Mathf.Min(start.z, goal.z) - 3.5f;
         int columns = Mathf.CeilToInt((Mathf.Abs(start.x - goal.x) + 7f) / Cell) + 1;
         int rows = Mathf.CeilToInt((Mathf.Abs(start.z - goal.z) + 7f) / Cell) + 1;
-        if (columns * rows > 2304) return false;
+        if (columns * rows > 9216) return false;
         var nodes = new Node[columns * rows];
         var open = new List<int>();
         int sx = Mathf.Clamp(Mathf.RoundToInt((start.x - minX) / Cell), 0, columns - 1);
@@ -400,7 +450,15 @@ public sealed class ProductionGuideLine : MonoBehaviour
             int next = i + 1;
             // Shorten only collision-clear, grounded links; don't round corners through walls.
             for (int j = route.Count - 1; j > next; j--) if (Clear(route[i], route[j])) { next = j; break; }
-            if (!AddGroundedSegment(route[i], route[next])) { points.Clear(); return false; }
+            int savedCount = points.Count;
+            if (!AddGroundedSegment(route[i], route[next]))
+            {
+                // A collision-clear shortcut can still cross missing floor or
+                // a step. Keep the verified grid link instead of losing the route.
+                points.RemoveRange(savedCount, points.Count - savedCount);
+                next = i + 1;
+                if (!AddGroundedSegment(route[i], route[next])) { points.Clear(); return false; }
+            }
             i = next;
         }
         return points.Count > 1;
@@ -422,8 +480,8 @@ public sealed class ProductionGuideLine : MonoBehaviour
 
     void UpdateBrackets()
     {
-        bool show = source != null && source.enabled && line != null && objective != null && complete && points.Count > 1;
-        Vector3 centre = show ? points[points.Count - 1] + Vector3.up * (Lift + .005f) : Vector3.zero;
+        bool show = source != null && source.enabled && line != null && objective != null && hasDestination;
+        Vector3 centre = show ? destination + Vector3.up * (Lift + .005f) : Vector3.zero;
         Vector3 right = Vector3.right, up = Vector3.forward;
         float halfWidth = .42f, halfHeight = .32f;
         bool onObject = false;
@@ -461,8 +519,9 @@ public sealed class ProductionGuideLine : MonoBehaviour
             brackets[i].SetPosition(2, corner - up * (y * Mathf.Min(.18f, halfHeight * .5f)));
         }
         if (objectCue == null) return;
-        objectCue.gameObject.SetActive(show && onObject);
-        if (show && onObject) UpdateObjectCue(centre);
+        bool showConnector = show && onObject && complete && points.Count > 1;
+        objectCue.gameObject.SetActive(showConnector);
+        if (showConnector) UpdateObjectCue(centre);
     }
 
     static float ProjectedExtent(Vector3 extents, Vector3 direction) =>
@@ -532,4 +591,5 @@ public sealed class ProductionGuideLine : MonoBehaviour
         needsTurn = false;
         nextRoute = 0;
     }
+    void OnDestroy(){activeGuides.Remove(this);}
 }

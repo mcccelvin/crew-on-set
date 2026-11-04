@@ -113,7 +113,7 @@ public class CommercialCompiler : MonoBehaviour
         }
 
         List<DraggableClip> sortedClips = new List<DraggableClip>(clips);
-        sortedClips.Sort((a, b) => a.transform.localPosition.x.CompareTo(b.transform.localPosition.x));
+        sortedClips.Sort((a, b) => GokeSequence.Left(a).CompareTo(GokeSequence.Left(b)));
 
         foreach (var clip in sortedClips)
         {

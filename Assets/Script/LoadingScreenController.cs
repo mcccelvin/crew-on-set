@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
+using ExitGames.Client.Photon;
 
 public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
 {
@@ -36,6 +37,26 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
     private BlueLoadingIris closingIris;
     private const float CircleCloseDuration = .7f;
     private const float SceneRevealDuration = .45f;
+    private const byte NetworkLoadingEvent = 175;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void WatchNetworkLoads()
+    {
+        PhotonNetwork.NetworkingClient.EventReceived -= NetworkLoadAnnounced;
+        PhotonNetwork.NetworkingClient.EventReceived += NetworkLoadAnnounced;
+    }
+    private static void NetworkLoadAnnounced(EventData data)
+    {
+        if (data.Code != NetworkLoadingEvent || !PhotonNetwork.InRoom || PhotonNetwork.IsMasterClient ||
+            data.Sender != PhotonNetwork.MasterClient.ActorNumber) return;
+        ShowNetworkLoading();
+    }
+    private static void AnnounceNetworkLoad()
+    {
+        if (PhotonNetwork.InRoom && PhotonNetwork.IsMasterClient)
+            PhotonNetwork.RaiseEvent(NetworkLoadingEvent, null,
+                new RaiseEventOptions { Receivers = ReceiverGroup.Others }, SendOptions.SendReliable);
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics() { instance = null; }
@@ -53,8 +74,8 @@ public sealed class LoadingScreenController : MonoBehaviourPunCallbacks
 
     public static void LoadScene(string scene) { Ensure().BeginLocal(() => SceneManager.LoadSceneAsync(scene)); }
     public static void LoadScene(int scene) { Ensure().BeginLocal(() => SceneManager.LoadSceneAsync(scene)); }
-    public static void LoadNetworkScene(string scene) { Ensure().BeginNetwork(() => PhotonNetwork.LoadLevel(scene)); }
-    public static void LoadNetworkScene(int scene) { Ensure().BeginNetwork(() => PhotonNetwork.LoadLevel(scene)); }
+    public static void LoadNetworkScene(string scene) { AnnounceNetworkLoad(); Ensure().BeginNetwork(() => PhotonNetwork.LoadLevel(scene)); }
+    public static void LoadNetworkScene(int scene) { AnnounceNetworkLoad(); Ensure().BeginNetwork(() => PhotonNetwork.LoadLevel(scene)); }
 
     // Joining clients let Photon perform the synchronized load itself.
     public static void ShowNetworkLoading()

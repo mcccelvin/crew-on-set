@@ -18,6 +18,8 @@ Shader "CrewOnSet/StudioLightHaze"
    v2f vert(appdata_base v) { v2f o; o.pos=UnityObjectToClipPos(v.vertex); o.world=mul(unity_ObjectToWorld,v.vertex).xyz; o.screen=ComputeScreenPos(o.pos); return o; }
    fixed4 frag(v2f i):SV_Target
    {
+    // Capture cameras suppress haze. Skip the expensive march as well as alpha.
+    if (_Density <= 0) discard;
     float3 ray=normalize(i.world-_WorldSpaceCameraPos);
     float3 origin=mul(unity_WorldToObject,float4(_WorldSpaceCameraPos,1)).xyz;
     float3 direction=mul(unity_WorldToObject,float4(ray,0)).xyz;

@@ -7,9 +7,18 @@ public sealed class ActorBot : MonoBehaviour
 {
     // Opt-in network adapter. Career actors never set this flag.
     private bool networkMotion;
+    private static bool TryRunwayCast(ProductModelCatalog catalog,GameObject root,int tier,bool trainingRunway = false)
+    {
+        if((!ProductModelCatalog.UsesRunway && !trainingRunway) || catalog==null || catalog.runwayCast==null || catalog.runwayCast.Length==0)return false;
+        var model=catalog.runwayCast[Mathf.Clamp(tier,0,2)%catalog.runwayCast.Length];
+        if (model == null || !TryCreateIndividualCoffeeActor(root, tier, model, 1f)) return false;
+        root.GetComponent<ActorBot>().runwayPerformer = true;
+        return true;
+    }
     public static bool TryCreateForCrew(GameObject root, int skillTier)
     {
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
+        if(TryRunwayCast(catalog,root,skillTier))return true;
         if (catalog == null || catalog.coffeeActorModels == null || catalog.coffeeActorModels.Length == 0) return false;
         var model = catalog.coffeeActorModels[Mathf.Clamp(skillTier, 0, catalog.coffeeActorModels.Length - 1)];
         return model != null && TryCreateIndividualCoffeeActor(root, skillTier, model, catalog.coffeeActorScale);
@@ -142,6 +151,9 @@ public sealed class ActorBot : MonoBehaviour
     private int tier;
     private int performance;
     private float elapsed;
+    private bool runwayPerformer;
+    private ParticleSystem perfumeMist;
+    private bool spraying;
     private Transform product;
     private float nextTargetCheck;
     private Vector3 startMark,endMark;
@@ -250,6 +262,18 @@ public sealed class ActorBot : MonoBehaviour
         graph.Evaluate(0);
         poseHandler.GetHumanPose(ref pose);
         pose.bodyPosition = restingPose.bodyPosition; pose.bodyRotation = restingPose.bodyRotation;
+        if (greeting)
+        {
+            for (int i = 0; i < pose.muscles.Length; i++)
+            {
+                int bone = HumanTrait.BoneFromMuscle(i);
+                bool wavingArm = bone == (int)HumanBodyBones.RightShoulder ||
+                    bone == (int)HumanBodyBones.RightUpperArm || bone == (int)HumanBodyBones.RightLowerArm ||
+                    bone == (int)HumanBodyBones.RightHand ||
+                    (bone >= (int)HumanBodyBones.RightThumbProximal && bone <= (int)HumanBodyBones.RightLittleDistal);
+                if (!wavingArm) pose.muscles[i] = restingPose.muscles[i];
+            }
+        }
         poseHandler.SetHumanPose(ref pose);
         return true;
     }
@@ -295,7 +319,7 @@ public sealed class ActorBot : MonoBehaviour
             foreach (var part in parts) bounds.Encapsulate(part.bounds);
             item.transform.position += hand.position + transform.forward * .06f - bounds.center;
         }
-        GameFeedback.Show(item.IsCoffeeCup ? "ACTOR HOLDING COFFEE\n[Z] Cycle to Action to drink | [O] Return cup. You can also seat the actor." : "ACTOR HOLDING PRODUCT\n[O] Return product to its mark. You can film or seat the actor while holding it.");
+        GameFeedback.Show(item.IsCoffeeCup ? "ACTOR HOLDING COFFEE\n[Z] Cycle to Action to drink | [O] Return cup. You can also seat the actor." : item.campaignLevel == 5 ? "ACTOR HOLDING PERFUME\n[Z] Cycle to Action to spray | [O] Return perfume." : "ACTOR HOLDING PRODUCT\n[O] Return product to its mark. You can film or seat the actor while holding it.");
         return true;
     }
 
@@ -396,6 +420,7 @@ public sealed class ActorBot : MonoBehaviour
         transform.SetPositionAndRotation(furnitureReturnPosition, furnitureReturnRotation);
         if (animator != null) animator.transform.localPosition = furnitureVisualPosition;
     }
+    public bool IsUsingFurniture => furnitureActive;
     public bool HasWalk => hasStart && hasEnd;
     public bool HasStartMark => hasStart;
     public bool WalkCompleted { get; private set; }
@@ -517,6 +542,9 @@ public sealed class ActorBot : MonoBehaviour
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
         // Training uses the same dressed performers as Contract 4, not the
         // generic armature used as a fallback in other contracts.
+        bool trainingRunway = GameSaveManager.IsTrainingRoom && skillTier >= 3;
+        if (trainingRunway) skillTier %= 3;
+        if(TryRunwayCast(catalog,actor,skillTier,trainingRunway))return true;
         bool useCoffeeCast = GameSaveManager.IsTrainingRoom || CampaignProgression.GetCurrentLevel() == 4;
         if (useCoffeeCast && catalog != null && catalog.coffeeActorModels != null)
         {
@@ -831,7 +859,7 @@ public sealed class ActorBot : MonoBehaviour
     {
         if (poseHandler == null) return;
         if (furnitureActive) animator.transform.localPosition = furnitureVisualPosition;
-        if (EvaluateAuthoredAnimation()) { ApplyCoffeeProps(); return; }
+        if (EvaluateAuthoredAnimation()) { ApplyRunwayPose(); ApplyCoffeeProps(); return; }
         if (graph.IsValid())
         {
             float length = idle.GetAnimationClip().length;
@@ -930,6 +958,7 @@ public sealed class ActorBot : MonoBehaviour
             SetMuscle("Right Little 1 Stretched", -.5f);
         }
         poseHandler.SetHumanPose(ref pose);
+        ApplyRunwayPose();
         if (furnitureActive && furniture != null && furniture.action == Contract4Interactable.Action.Sit)
         {
             var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
@@ -948,6 +977,86 @@ public sealed class ActorBot : MonoBehaviour
             CoffeeCharacterMotion.SeatFeet(animator, transform, furniture.SeatPosition, blend);
         }
         ApplyCoffeeProps();
+    }
+
+    private void ApplyRunwayPose()
+    {
+        if (!runwayPerformer || furnitureActive) return;
+        if (walking)
+        {
+            // Start from this rig's standing pose so the support knee stays extended.
+            System.Array.Copy(restingPose.muscles, pose.muscles, pose.muscles.Length);
+            pose.bodyPosition = restingPose.bodyPosition;
+            pose.bodyRotation = restingPose.bodyRotation;
+            float cadence = tier == 0 ? 5.8f : tier == 1 ? 5.1f : 4.6f;
+            float reach = tier == 0 ? .13f : tier == 1 ? .16f : .19f;
+            float sway = tier == 0 ? .035f : tier == 1 ? .075f : .05f;
+            float phase = elapsed * cadence;
+            float stride = Mathf.Sin(phase);
+            float transfer = Mathf.Cos(phase);
+            OffsetStandingMuscle("Left Upper Leg Front-Back", stride * reach);
+            OffsetStandingMuscle("Right Upper Leg Front-Back", -stride * reach);
+            OffsetStandingMuscle("Left Lower Leg Stretch", -.10f * Mathf.Max(0f, transfer));
+            OffsetStandingMuscle("Right Lower Leg Stretch", -.10f * Mathf.Max(0f, -transfer));
+            OffsetStandingMuscle("Left Upper Leg In-Out", -.025f * (1f + stride));
+            OffsetStandingMuscle("Right Upper Leg In-Out", -.025f * (1f - stride));
+            OffsetStandingMuscle("Spine Left-Right", transfer * sway);
+            OffsetStandingMuscle("Chest Twist Left-Right", -stride * sway);
+            OffsetStandingMuscle("Left Arm Front-Back", -stride * reach * .65f);
+            OffsetStandingMuscle("Right Arm Front-Back", stride * reach * .65f);
+            OffsetStandingMuscle("Head Nod Down-Up", .035f);
+        }
+        if (heldProduct == null || heldProduct.campaignLevel != 5)
+        {
+            spraying = false;
+            if (walking) poseHandler.SetHumanPose(ref pose);
+            return;
+        }
+        float beat = Mathf.Repeat(elapsed, 3.4f);
+        float lift = performance == 2 ? Mathf.SmoothStep(0, 1, beat / .75f)
+            * Mathf.SmoothStep(0, 1, (2.4f - beat) / .8f) : 0f;
+        bool press = performance == 2 && beat >= 1f && beat < 1.35f;
+        SetMuscle("Right Arm Down-Up", -.52f + .28f * lift);
+        SetMuscle("Right Arm Front-Back", .38f + .24f * lift);
+        SetMuscle("Right Forearm Stretch", -.55f - .25f * lift);
+        SetMuscle("Right Index 1 Stretched", press ? -.72f : -.18f);
+        SetMuscle("Right Middle 1 Stretched", -.6f);
+        SetMuscle("Right Ring 1 Stretched", -.6f);
+        SetMuscle("Right Little 1 Stretched", -.6f);
+        poseHandler.SetHumanPose(ref pose);
+        if (press && !spraying)
+        {
+            if (perfumeMist == null)
+            {
+                var emitter = new GameObject("Perfume mist");
+                emitter.transform.SetParent(transform, false);
+                perfumeMist = emitter.AddComponent<ParticleSystem>();
+                perfumeMist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                var main = perfumeMist.main;
+                main.loop = false;
+                main.simulationSpace = ParticleSystemSimulationSpace.World;
+                main.startLifetime = .32f;
+                main.startSize = .021f;
+                main.startSpeed = 1.1f;
+                main.startColor = new Color(1, 1, 1, .45f);
+                var emission = perfumeMist.emission;
+                emission.enabled = false;
+                var shape = perfumeMist.shape;
+                shape.shapeType = ParticleSystemShapeType.Cone;
+                shape.radius = .012f;
+                shape.angle = 15f;
+            }
+            perfumeMist.transform.SetPositionAndRotation(heldProduct.transform.position + Vector3.up * .12f,
+                Quaternion.LookRotation(transform.forward + Vector3.up * .2f));
+            perfumeMist.Emit(18);
+        }
+        spraying = press;
+    }
+
+    private void OffsetStandingMuscle(string name, float offset)
+    {
+        if (muscles.TryGetValue(name, out int index))
+            pose.muscles[index] = Mathf.Clamp(restingPose.muscles[index] + offset, -1f, 1f);
     }
 
     private void SetMuscle(string name, float value)

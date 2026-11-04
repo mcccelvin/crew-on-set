@@ -176,13 +176,13 @@ public sealed class BudgetRetryPrompt : MonoBehaviour
         }
         text.gameObject.SetActive(true);
         BossDialogueStyle.Apply(text);
-        text.text = BossDialogueStyle.HighlightControls($"We need <color=red>{cost:N0} B-Coins</color>, but you have <color=red>{balance:N0}</color>. Can't finish the commercial? Choose RETRY CONTRACT to restore its starting budget and purchases, or NEW GAME for a separate save.");
+        text.text = BossDialogueStyle.HighlightControls($"We need <color=red>{cost:N0} B-Coins</color>, but you have <color=red>{balance:N0}</color>. Can't finish the commercial? Choose RETRY CONTRACT to restore its starting budget and purchases, or return to the MAIN MENU to choose another contract in this career.");
         text.maxVisibleCharacters = int.MaxValue;
         text.rectTransform.anchoredPosition = new Vector2(0, 35);
         text.rectTransform.sizeDelta = new Vector2(text.rectTransform.sizeDelta.x, 210);
         var panel = text.transform.parent;
         MakeButton(panel, "RETRY CONTRACT", "greenButton", new Vector2(-420, -155), Retry);
-        MakeButton(panel, "NEW GAME", "redButton", new Vector2(0, -155), NewGame);
+        MakeButton(panel, "MAIN MENU", "redButton", new Vector2(0, -155), NewGame);
         MakeButton(panel, "KEEP WORKING", "blueButton", new Vector2(420, -155), () => Destroy(gameObject));
         dialogue.SetActive(true);
     }
@@ -232,9 +232,8 @@ public sealed class BudgetRetryPrompt : MonoBehaviour
         var saves = GameSaveManager.Ensure();
         if (saves.Syncing) { GameFeedback.Show("Please wait for save sync to finish, then try again."); return; }
         saves.SaveCheckpoint();
-        var slot = saves.CreateGame("New career " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
         PrepareLoad();
-        saves.StartGame(slot, true);
+        LoadingScreenController.LoadScene("Main Menu");
     }
 
     private void PrepareLoad()

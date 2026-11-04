@@ -60,7 +60,7 @@ public sealed partial class RoleSelectionUI : MonoBehaviour
             foreach (var member in state.members)
             {
                 PhotonNetwork.CurrentRoom.Players.TryGetValue(member.id, out var player);
-                GUILayout.Label((player?.NickName ?? "Player " + member.id) + "  •  " + MultiplayerContractManager.RoleName((CrewRole)member.roles) + (member.ready ? "  READY" : ""));
+                GUILayout.Label(CrewPlayerIdentity.Username(player) + "  •  " + MultiplayerContractManager.RoleName((CrewRole)member.roles) + (member.ready ? "  READY" : ""));
             }
             GUILayout.BeginHorizontal();
             foreach (CrewRole role in new[] { CrewRole.Director, CrewRole.Camera, CrewRole.AVTechnician, CrewRole.Editor })

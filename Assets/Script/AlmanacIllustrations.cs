@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using TMPro;
@@ -11,42 +10,6 @@ public partial class AlmanacManager
     [SerializeField] private RawImage illustrationDrawing;
     [SerializeField] private TextMeshProUGUI illustrationCaption;
     private bool restoreIllustration;
-    private readonly Dictionary<string, Texture2D> illustrationCache = new Dictionary<string, Texture2D>();
-    private static readonly Dictionary<string, string> IllustrationFiles = new Dictionary<string, string>
-    {
-        {"director_tablet", "Almanac_L1_DirectorTablet"},
-        {"led_panel", "Almanac_L1_LEDPanel"},
-        {"sd_card", "Almanac_L1_SDCard"},
-        {"actor_megaphone", "Almanac_L4_DirectorMegaphone"},
-        {"creative_brief", "Almanac_L5_CreativeBrief"},
-        {"visual_hierarchy", "Almanac_L5_VisualHierarchy"},
-        {"quality_control", "Almanac_L5_QualityReview"},
-        {"nony_fx_camera", "00_Camera_Illustration"},
-        {"level_2_camera", "00_Camera_Illustration"},
-        {"set_building_technique", "L1_Set_Building_Product_Staging"},
-        {"center_framing", "L1_Center_Framing"},
-        {"basic_product_lighting", "L1_Basic_Product_Lighting"},
-        {"quiet_movement", "L1_Quiet_Movement_On_Set"},
-        {"recording_technique", "L1_Stable_10_Second_Recording"},
-        {"post_production_technique", "L1_Trimming_Branding_Color"},
-        {"rule_of_thirds", "L2_Rule_of_Thirds"},
-        {"three_point_lighting", "L2_Three_Point_Lighting"},
-        {"product_separation", "L2_Product_Backdrop_Separation"},
-        {"commercial_color_grading", "L2_Commercial_Color_Grading"},
-        {"advertising_post_production", "L2_Intro_Outro"},
-        {"automotive_staging", "L3_Automotive_Staging_Composition"},
-        {"camera_white_balance", "L3_Camera_White_Balance"},
-        {"soft_light_technique", "L3_Soft_Light_Reflective_Surfaces"},
-        {"vehicle_rim_lighting", "L3_Smooth_Vehicle_Camera_Move"},
-        {"camera_exposure", "L4_Camera_Exposure"},
-        {"coffee_story_workflow", "L4_Three_Beat_Coffee_Story"},
-        {"hiring_and_posing_actors", "L4_Directing_Blocking_Actors"},
-        {"lifestyle_staging", "L4_Performance_Space"},
-        {"motivated_lighting", "L4_Story_Mood_Motivated_Lighting"},
-        {"shot_coverage", "L4_Performance_Beats"},
-        {"screen_continuity", "L4_Elliptical_Editing"},
-        {"warm_commercial_grade", "L4_Closing_Brand_Rhythm"}
-    };
 
     private void EnsureIllustrationNote()
     {
@@ -147,29 +110,23 @@ public partial class AlmanacManager
         bookEntryTitle.color = new Color32(42, 48, 50, 255);
         var title = Regex.Replace(entry.title, @"^(TECHNIQUE|EQUIPMENT|CAMERA UNLOCK|LEVEL \d+)\s*[-:]\s*", "");
         bookEntryTitle.text = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(title.ToLowerInvariant());
-        string file;
+        // Only the same equipment artwork used by the shop is allowed here.
+        // Other articles stay text-only; never fall back to generated illustrations.
         Sprite shopPicture = ShopEquipmentPicture(entry);
-        Texture2D texture = null;
-        if (shopPicture != null) texture = shopPicture.texture;
-        else if (IllustrationFiles.TryGetValue(entry.id, out file))
-        {
-            if (!illustrationCache.TryGetValue(file, out texture))
-            {
-                texture = Resources.Load<Texture2D>("AlmanacIllustrations/" + file);
-                illustrationCache[file] = texture;
-            }
-        }
+        Texture2D texture = shopPicture != null ? shopPicture.texture : null;
+        restoreIllustration = false;
+        illustrationDrawing.texture = texture;
         illustrationNote.gameObject.SetActive(texture != null);
         bookLeftText.gameObject.SetActive(texture == null);
         if (texture != null)
         {
             illustrationDrawing.texture = texture;
-            Rect pictureRect = shopPicture != null ? shopPicture.rect : new Rect(0, 0, texture.width, texture.height);
+            Rect pictureRect = shopPicture.rect;
             illustrationDrawing.uvRect = new Rect(pictureRect.x / texture.width, pictureRect.y / texture.height, pictureRect.width / texture.width, pictureRect.height / texture.height);
             float ratio = pictureRect.width / pictureRect.height;
             illustrationDrawing.rectTransform.sizeDelta = ratio >= 536f / 402f
                 ? new Vector2(536, 536 / ratio) : new Vector2(402 * ratio, 402);
-            illustrationCaption.text = shopPicture != null ? "SHOP EQUIPMENT" : "FIELD NOTES";
+            illustrationCaption.text = "SHOP EQUIPMENT";
             bookRightText.text = FormatBookArticle(body);
         }
         else

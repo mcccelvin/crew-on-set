@@ -79,6 +79,11 @@ public sealed class ProductModelCatalog : ScriptableObject
         return null;
     }
 
+    public GreenScreen runwaySet;
+    public GameObject[] runwayCast;
+    public static bool UsesRunway => !GameSaveManager.IsTrainingRoom && CampaignProgression.GetCurrentLevel()==5;
+    public static GreenScreen CurrentInterior(bool trainingRunway = false) => (trainingRunway || UsesRunway) ? Resources.Load<ProductModelCatalog>("ProductModels")?.runwaySet : GetCoffeeInteriorEntry();
+
     public GameObject flowerTable;
     public AnimationClip coffeeMixAnimation;
     public AnimationClip coffeePressAnimation;
@@ -129,10 +134,10 @@ public sealed class ProductModelCatalog : ScriptableObject
     [HideInInspector] public Vector3 coffeeInteriorRotation = new Vector3(0f, -90f, 0f);
 
     // Set dressing must never count as a recorded product or actor.
-    public static GameObject CreateFurniture(bool table, Vector3 availableSize)
+    public static GameObject CreateFurniture(bool table, Vector3 availableSize, bool trainingRunway = false)
     {
         var catalog = Resources.Load<ProductModelCatalog>("ProductModels");
-        var entry = table ? null : GetCoffeeInteriorEntry();
+        var entry = table ? null : CurrentInterior(trainingRunway);
         var source = catalog == null ? null : table ? catalog.flowerTable : entry != null ? entry.model : catalog.coffeeInterior;
         if (source == null) return null;
         var root = new GameObject(table ? "Flower Table" : "Coffee Interior");
@@ -163,10 +168,16 @@ public sealed class ProductModelCatalog : ScriptableObject
         if (!table)
             scale = Mathf.Min(scale, Mathf.Max(.1f, catalog.coffeeInteriorMaxHeight)
                 / Mathf.Max(.001f, bounds.size.y));
-        if (!table && catalog.preserveCoffeeInteriorScale) scale = Mathf.Min(1f, scale);
-        visual.transform.localScale *= scale;
+        if (!table && !(trainingRunway || UsesRunway) && catalog.preserveCoffeeInteriorScale) scale = Mathf.Min(1f, scale);
+        if (!table && (trainingRunway || UsesRunway))
+        {
+            root.transform.localScale = new Vector3(
+                availableSize.x / Mathf.Max(.001f, bounds.size.x), scale,
+                availableSize.z / Mathf.Max(.001f, bounds.size.z));
+        }
+        else visual.transform.localScale *= scale;
         bounds = GetBounds(renderers);
-        visual.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        visual.transform.position -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
         if (table)
         {
             // A primitive tabletop remains raycastable in builds without runtime mesh cooking.
@@ -212,7 +223,7 @@ public sealed class ProductModelCatalog : ScriptableObject
         var bounds = GetBounds(renderers);
         visual.transform.localScale *= catalog.practiceChairHeight / Mathf.Max(.001f, bounds.size.y);
         bounds = GetBounds(renderers);
-        visual.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        visual.transform.position -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
         bounds = GetBounds(renderers);
         var box = root.AddComponent<BoxCollider>();
         box.center = bounds.center;
@@ -289,7 +300,7 @@ public sealed class ProductModelCatalog : ScriptableObject
         visual.transform.localScale *= scale;
         bounds = GetBounds(renderers);
         // Ground the mesh, not its exported pivot (the perfume pivot is inside the bottle).
-        visual.transform.localPosition -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        visual.transform.position -= new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
         bounds = GetBounds(renderers);
         var selectionCollider = root.AddComponent<BoxCollider>();
         selectionCollider.center = bounds.center;

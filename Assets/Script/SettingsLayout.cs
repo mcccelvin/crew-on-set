@@ -5,6 +5,8 @@ using TMPro;
 // Scene-owned settings pages; SharedOptionsPanel only binds callbacks and values.
 public sealed class SettingsLayout : MonoBehaviour
 {
+    internal System.Action cancelPreview;
+    private void OnDisable() { cancelPreview?.Invoke(); }
     public Transform frame;
     public Button[] tabs = new Button[3];
     public GameObject[] pages = new GameObject[3];

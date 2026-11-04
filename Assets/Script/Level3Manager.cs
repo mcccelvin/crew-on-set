@@ -11,6 +11,35 @@ public class Level3Manager : MonoBehaviour
     private bool rimLessonStarted;
     private bool cameraPracticeActive;
     public bool RecordingBlockedByPractice => cameraPracticeActive || lightingPracticeRoot != null;
+    public bool AllowsEquipmentAction(string action, Equipment item)
+    {
+        if (isBriefingOpen || (practiceLesson != null && practiceLesson.IsExplaining)) return false;
+        if (cameraPracticeActive)
+        {
+            int step = practiceLesson != null ? practiceLesson.CurrentStepIndex : -1;
+            if (action == "pickup") return step == 0 && item is FilmCameraItem || step == 1 && item is SDCardItem card && !card.isUsedCard;
+            if (action == "switch") return item is FilmCameraItem;
+            if (action == "shop") return step == 1;
+            if (action == "camera.settings") return item is FilmCameraItem && step >= 3 && step <= 6;
+            if (action == "camera.zoom" || action == "camera.height") return item is FilmCameraItem && step >= 7;
+            return action == "use" && item is FilmCameraItem && step == 2;
+        }
+        bool placing = currentStep == Level3Step.PlaceSoftLight;
+        switch (action)
+        {
+            case "pickup": return item is FilmLightItem && currentStep == Level3Step.PickUpLight;
+            case "switch": return item is FilmLightItem && (placing || currentStep == Level3Step.PickUpLight);
+            case "drop": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.ReadyToPlace && GuidedPracticeLesson.AtMarker(softLightPlacementMarker);
+            case "use": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 1;
+            case "light.intensity": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 2;
+            case "light.height": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 3;
+            case "light.tilt": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 4;
+            case "light.temperature": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 5;
+            case "light.diffusion": return item is FilmLightItem && placing && practiceLesson != null && practiceLesson.CurrentStepIndex == 6;
+            case "shop": return currentStep == Level3Step.BuyLight || currentStep == Level3Step.LightCheckout || currentStep == Level3Step.CloseLightShop;
+            default: return false;
+        }
+    }
     public bool RimEquipmentAvailable { get; private set; }
     private float rimSetupReadySince = -1f;
 
@@ -69,10 +98,10 @@ public class Level3Manager : MonoBehaviour
             new GuidedPracticeLesson.Step("Next, pick up an SD card with <color=yellow>[E]</color>. It stores multiple takes, up to 60 seconds in total. If you have none, buy an SD card from the shop and collect it from delivery. Keep it in your hotbar for now; this movement rehearsal does not need a recording.","Collect an SD card with free space",()=>inventory != null && inventory.HasBlankSDCard()),
             new GuidedPracticeLesson.Step("Select your camera and click <color=yellow>Left Mouse Button</color> to open the viewfinder. Look through it to frame the lit subject before practicing movement.","Equip camera and click LMB to open the viewfinder",()=>inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive()),
             new GuidedPracticeLesson.Step("White balance corrects the camera image, not the lamp. Grey reference strips help you see a colour cast; the red reflective surface alone cannot tell you whether whites are neutral. Press F2 to open camera settings.", "[F2] Open camera settings; frame the grey reference", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.SettingsOpen),
-            new GuidedPracticeLesson.Step("Use Up/Down to select a control and Left/Right to adjust it. Set WHITE BALANCE to 5600K and TINT to 0 for this game's no-correction baseline. The warm lamp may still make the grey strips look warm; 5600K is a starting point, not a promise of perfect balance.", "Start at WHITE BALANCE 5600K and TINT 0", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 5600f) < 50f && Mathf.Abs(camera.WhiteBalanceTint) < 2.5f),
+            new GuidedPracticeLesson.Step("Use Up/Down to select a control and Left/Right to adjust it. Set WHITE BALANCE to 5600K for this game's no-correction baseline. The warm lamp may still make the grey strips look warm; 5600K is a starting point, not a promise of perfect balance.", "Start at WHITE BALANCE 5600K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 5600f) < 50f),
             new GuidedPracticeLesson.Step("Now try WHITE BALANCE 3200K. The camera image becomes cooler while the lamp stays unchanged. Compare the grey strips with your 5600K baseline. This is a demonstration, not a best-setting requirement.", "Compare the cooler camera look at 3200K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 3200f) < 50f),
             new GuidedPracticeLesson.Step("Raise WHITE BALANCE to 6500K. The image becomes warmer. Watch the grey reference and the reflective subject: an orange cast on a neutral strip is not the same as an orange product. Neither demonstration value is automatically best.", "Compare the warmer camera look at 6500K", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.SettingsOpen && Mathf.Abs(camera.WhiteBalanceKelvin - 6500f) < 50f),
-            new GuidedPracticeLesson.Step("Choose your final balance by the live image: aim for grey strips without a strong blue/orange cast, then add only the warmth you intend. Adjust Tint if there is a green/magenta cast. No exact Kelvin is required. Keep this choice across your three car takes. Press F2 to confirm and close settings.", "Choose your balance on the grey reference; [F2] confirm", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.WhiteBalancePracticed && !camera.SettingsOpen),
+            new GuidedPracticeLesson.Step("Choose your final balance by the live image: aim for grey strips without a strong blue/orange cast, then add only the warmth you intend. No exact Kelvin is required. Keep this choice across your three car takes. Press F2 to confirm and close settings.", "Choose your balance on the grey reference; [F2] confirm", () => inventory != null && inventory.GetHeldItem() is FilmCameraItem camera && camera.IsCameraViewActive() && camera.WhiteBalancePracticed && !camera.SettingsOpen),
             new GuidedPracticeLesson.Step("Keep the viewfinder open. Hold <color=yellow>Ctrl</color> while moving with WASD, and turn gently with the mouse. Ctrl slows walking and looking for a steady shot. Practice for five seconds while keeping the lit subject framed; then I'll come back. We are rehearsing, so do not record yet.","Keep viewfinder open; practice Ctrl + WASD for 5 seconds",()=>
             {
                 var keys = UnityEngine.InputSystem.Keyboard.current;
@@ -191,7 +220,7 @@ public class Level3Manager : MonoBehaviour
 
     private void LateUpdate()
     {
-        if(currentStep==Level3Step.LevelActive && isLevelStarted && !DevTutorialBypass.Disabled && !rimLessonStarted && PlayerPrefs.GetInt("Level3CameraMovementLessonComplete",0)==0 && PlayerPrefs.GetInt("LamborminiContractAccepted",0)==1)
+        if(currentStep==Level3Step.LevelActive && isLevelStarted && !DevTutorialBypass.Disabled && !rimLessonStarted && (PlayerPrefs.GetInt("Level3CameraMovementLessonComplete",0)==0 || ContractTutorialChoice.RestartGuidance(3)) && PlayerPrefs.GetInt("LamborminiContractAccepted",0)==1)
         {
             if(CarStageAndLightReady())
             {
@@ -223,11 +252,25 @@ public class Level3Manager : MonoBehaviour
 
         CampaignProgression.SetCurrentLevel(3);
 
-        bool restartLevelIntroduction = CampaignProgression.ConsumeCheatIntroduction(3);
+        bool cheatIntroduction = CampaignProgression.ConsumeCheatIntroduction(3);
+        bool restartLevelIntroduction = cheatIntroduction || ContractTutorialChoice.RestartGuidance(3);
         bool contractAlreadyAccepted = PlayerPrefs.GetInt("LamborminiContractAccepted", 0) == 1;
         bool purchaseLessonCompleted = PlayerPrefs.GetInt("Level3LightPurchaseLessonCompleted", 0) == 1;
 
-        requiresLightPurchase = restartLevelIntroduction || !purchaseLessonCompleted;
+        if(ContractTutorialChoice.SkipThisContract)
+        {
+            requiresLightPurchase=false;SetupLevel3Equipment();SetupContractUI();
+            if(contractAlreadyAccepted)
+            {
+                if(CareerManager.Instance!=null)CareerManager.Instance.currentActiveJob="Terrari";
+                contractUIManager?.UnlockQualifications();StartLevel();
+                Cursor.lockState=CursorLockMode.Locked;Cursor.visible=false;
+            }
+            else OfferContract();
+            return;
+        }
+
+        requiresLightPurchase = cheatIntroduction || !purchaseLessonCompleted;
         if (requiresLightPurchase)
         {
             PlayerPrefs.SetInt("Level3LightPurchased", 0);
@@ -674,7 +717,7 @@ public class Level3Manager : MonoBehaviour
             FilmLightItem[] existingLights = FindObjectsOfType<FilmLightItem>(true);
             foreach (FilmLightItem existingLight in existingLights)
             {
-                if (existingLight != null && existingLight.EquipmentName == "Level 3 Soft Light") Destroy(existingLight.gameObject);
+                if (existingLight != null && existingLight.EquipmentName == "Level 3 Soft Light" && existingLight.GetComponentInParent<EquipmentStorageCabinet>()==null) Destroy(existingLight.gameObject);
             }
 
             level3LightItemIndex = shopTerminal.SetupLevel3Light(lightPrefab, usePlaceholder);
@@ -773,7 +816,7 @@ public class Level3Manager : MonoBehaviour
                 : threePointRole == 1
                     ? "FILL sits on the opposite front side. Keep it weaker than the Key to soften shadows without flattening the subject."
                     : "BACK sits behind the subject. Its job is a bright edge that separates the subject from the background.";
-            TutorialUIManager.Instance.ShowBossDialogue(purpose + " Follow the green circle; we'll adjust one control at a time.", TutorialUIManager.Instance.posePointUp, true, false);
+            TutorialUIManager.Instance.ShowBossDialogue(purpose + " Follow the square; we'll adjust one control at a time.", TutorialUIManager.Instance.posePointUp, true, false);
         }
     }
 
@@ -907,15 +950,16 @@ public class Level3Manager : MonoBehaviour
                             }
                             view.transform.SetPositionAndRotation(center + offset.normalized * distance, Quaternion.LookRotation(-offset));
                         }
+                        // Apply the released-B state before leaving this comparison.
+                        for (int i = 0; i < threePointPracticeLights.Count; i++)
+                            if (threePointPracticeLights[i] != null && threePointPracticeLights[i].spotlight != null)
+                                threePointPracticeLights[i].spotlight.enabled = i <= role && !(i == role && keys.bKey.isPressed);
                         if (compared && !keys.bKey.isPressed && keys.enterKey.wasPressedThisFrame) break;
                         if (keys.bKey.isPressed && !compared)
                         {
                             compared = true;
                             TutorialUIManager.Instance?.SetupTasks(new[] { prompts[role] + "\nRELEASE [B] TO RESTORE. [ENTER] NEXT." });
                         }
-                        for (int i = 0; i < threePointPracticeLights.Count; i++)
-                            if (threePointPracticeLights[i] != null && threePointPracticeLights[i].spotlight != null)
-                                threePointPracticeLights[i].spotlight.enabled = i <= role && !(i == role && keys.bKey.isPressed);
                     }
                     yield return null;
                 }
@@ -934,7 +978,7 @@ public class Level3Manager : MonoBehaviour
             }
             if (player != null) { player.canMove = couldMove; player.canLook = couldLook; }
             foreach (var light in threePointPracticeLights)
-                if (light != null && light.spotlight != null) light.spotlight.enabled = light.IsPoweredOn();
+                if (light != null) light.RestorePowerOutput();
         }
         TutorialUIManager.Instance?.HideTasks();
         BeginCameraMovementLesson(true);
@@ -1080,7 +1124,7 @@ public class Level3Manager : MonoBehaviour
         if (contractUIManager != null) contractUIManager.UnlockQualifications();
 
         currentStep = Level3Step.ContractAccepted;
-        if (DevTutorialBypass.Disabled) { currentStep = Level3Step.LevelActive; isBriefingOpen = false; return; }
+        if (DevTutorialBypass.Disabled) { StartLevel(); return; }
         isBriefingOpen = true;
 
         if (TutorialUIManager.Instance != null)
@@ -1138,8 +1182,7 @@ public class Level3Manager : MonoBehaviour
         }
 
         Transform deliveryZone = shopTerminal.deliveryZone;
-        practiceLight.ReturnToDelivery(deliveryZone.position + deliveryZone.right * ((slot - 1) * .85f)
-            + Vector3.up * .65f, deliveryZone.rotation);
+        practiceLight.ReturnToDelivery(StudioDeliveryBay.Position(deliveryZone,slot,.65f),deliveryZone.rotation);
 
         practiceLight = null;
     }
@@ -1338,7 +1381,7 @@ public class Level3Manager : MonoBehaviour
     {
         if(practiceLesson!=null){practiceLesson.ShowCurrentTask();return;}
         if (TutorialUIManager.Instance == null) return;
-        if(!rimLessonStarted && PlayerPrefs.GetInt("Level3CameraMovementLessonComplete",0)==0)
+        if(!rimLessonStarted && (PlayerPrefs.GetInt("Level3CameraMovementLessonComplete",0)==0 || ContractTutorialChoice.RestartGuidance(3)))
         {
             TutorialUIManager.Instance.SetupTasks(new[]{"Place the car and backdrop; close the tablet", "Set down the warm Soft Light, power it ON and aim at the car", "Use at least 30% output and 50% diffusion; Ctrl camera lesson follows"});
             return;
@@ -1376,6 +1419,7 @@ internal sealed class GuidedPracticeLesson
     private bool released;
     public bool IsExplaining { get; private set; }
     public string CurrentPermission => !released && index < steps.Count ? steps[index].permission : null;
+    public int CurrentStepIndex => index;
     public bool ReadyToPlace => index == steps.Count - 1 && !IsExplaining;
 
     public GuidedPracticeLesson(TutorialManager tutorial, List<Step> steps, System.Action complete = null, Transform station = null, bool lockMovementAtStation = true)
@@ -1511,42 +1555,10 @@ internal sealed class GuidedPracticeLesson
 
     public static GameObject CreateGreenMarker(Transform parent)
     {
-        TutorialManager tutorial = Object.FindObjectOfType<TutorialManager>(true);
-        GameObject source = tutorial != null ? tutorial.stageWalkTriggerCircle : null;
-        GameObject visual;
-        var sourceMesh = source != null ? source.GetComponentInChildren<MeshFilter>(true) : null;
-        if (sourceMesh != null && sourceMesh.sharedMesh != null)
-        {
-            // Duplicate the original A/B/C circle's visual, without copying hidden
-            // renderer flags, tutorial scripts, or its old label.
-            visual = new GameObject("Practice Circle", typeof(MeshFilter), typeof(MeshRenderer));
-            visual.transform.SetParent(parent, false);
-            visual.GetComponent<MeshFilter>().sharedMesh = sourceMesh.sharedMesh;
-            var sourceRenderer = sourceMesh.GetComponent<MeshRenderer>();
-            if (sourceRenderer != null)
-                visual.GetComponent<MeshRenderer>().sharedMaterials = sourceRenderer.sharedMaterials;
-            visual.transform.rotation = sourceMesh.transform.rotation;
-            Vector3 size = sourceMesh.transform.lossyScale;
-            Vector3 parentSize = parent.lossyScale;
-            visual.transform.localScale = new Vector3(size.x / Mathf.Max(.001f, Mathf.Abs(parentSize.x)),
-                size.y / Mathf.Max(.001f, Mathf.Abs(parentSize.y)), size.z / Mathf.Max(.001f, Mathf.Abs(parentSize.z)));
-        }
-        else
-        {
-            visual = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            visual.transform.SetParent(parent, false);
-            visual.transform.localScale = new Vector3(1.4f, .02f, 1.4f);
-        }
-        foreach (Collider collider in visual.GetComponentsInChildren<Collider>(true))
-            Object.Destroy(collider);
-        Renderer renderer = visual.GetComponentInChildren<Renderer>();
-        if (renderer != null)
-        {
-            renderer.enabled = true;
-            renderer.forceRenderingOff = false;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-        }
+        // Keep the legacy API for lesson callers, but use square framing marks.
+        var visual = new GameObject("Square placement marker");
+        visual.transform.SetParent(parent, false);
+        SquareGuideMarker.Apply(parent.gameObject);
         return visual;
     }
 
@@ -1556,8 +1568,8 @@ internal sealed class GuidedPracticeLesson
     {
         var steps = new List<Step>
         {
-            new Step("Bring your light to the center of the green " + role + " circle. We'll work through the controls once you're standing there.",
-                "Equip the light and walk to the center of the green " + role + " circle",
+            new Step("Bring your light to the center of the " + role + " square. We'll work through the controls once you're standing there.",
+                "Equip the light and walk to the center of the " + role + " square",
                 () => heldLight() != null && AtMarker(marker)),
             new Step("Good spot. Press <color=red>[Left Click]</color> to switch the light on. Watch where the light falls.",
                 "[Left Click] Turn the light ON",
@@ -1649,6 +1661,7 @@ internal static class CampaignGuidance
     public static void Update(TutorialManager tutorial, string step, int level)
     {
         if (tutorial == null || PauseManager.isPaused) return;
+        if(ContractTutorialChoice.SkipThisContract)step="";
         // The Almanac owns the shared spotlight throughout its navigation lesson.
         if (AlmanacManager.Instance != null && AlmanacManager.Instance.IsNavigationLessonActive)
         {

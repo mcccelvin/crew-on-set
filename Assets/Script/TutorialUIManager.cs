@@ -109,6 +109,9 @@ public class TutorialUIManager : MonoBehaviour
     private bool bossDialogueShowOk;
     private bool bossDialogueShowSkip;
 
+    // Presentation is temporarily disabled for every studio/editor tutorial.
+    // Lesson progress remains available to the tutorial input restrictions.
+    private static readonly bool TutorialProgressOverlayEnabled=false;
     private GameObject tutorialProgressRoot;
     private RectTransform tutorialProgressSafeArea;
     private RectTransform tutorialProgressFill;
@@ -116,9 +119,15 @@ public class TutorialUIManager : MonoBehaviour
     private float displayedTutorialProgress;
     private string tutorialProgressScope;
     private DirectorTerminal progressDirectorTerminal;
+    private ShopTerminal progressShopTerminal;
 
     private void UpdateTutorialProgress()
     {
+        if(!TutorialProgressOverlayEnabled)
+        {
+            if(tutorialProgressRoot!=null)tutorialProgressRoot.SetActive(false);
+            return;
+        }
         float progress = 0;
         string phase = null;
         string scope = "FIRST TUTORIAL";
@@ -160,7 +169,9 @@ public class TutorialUIManager : MonoBehaviour
             progress = Level3Manager.Instance.TutorialProgress;
         }
         if (phase == null || DevTutorialBypass.Disabled || PauseManager.isPaused ||
-            (progressDirectorTerminal != null && progressDirectorTerminal.IsTerminalActive()))
+            taskViewfinderOpen ||
+            (progressDirectorTerminal != null && progressDirectorTerminal.IsTerminalActive()) ||
+            (progressShopTerminal != null && progressShopTerminal.IsTerminalActive()))
         {
             if (tutorialProgressRoot != null) tutorialProgressRoot.SetActive(false);
             return;
@@ -244,6 +255,7 @@ public class TutorialUIManager : MonoBehaviour
     {
         Instance = this;
         progressDirectorTerminal = FindObjectOfType<DirectorTerminal>(true);
+        progressShopTerminal = FindObjectOfType<ShopTerminal>(true);
         activeTextColor = CrewPaperStyle.Ink;
         completedTextColor = CrewPaperStyle.MutedInk;
         RecoverTaskPanel();
@@ -278,7 +290,7 @@ public class TutorialUIManager : MonoBehaviour
 
     private void Update()
     {
-        UpdateTutorialProgress();
+        if (ContractTutorialChoice.IsAsking) return;
         if (PauseManager.isPaused) return;
 
         if (inputManager == null) inputManager = FindObjectOfType<Player.Manager.InputManager>();
@@ -307,6 +319,7 @@ public class TutorialUIManager : MonoBehaviour
     public void ShowBossDialogue(string message, Sprite pose, bool showOk, bool showSkip)
     {
         message = BossDialogueText.Resolve(bossDialogue, message);
+        message = StudioDeliveryBay.RewriteDeliveryText(message);
         if (DevTutorialBypass.Disabled) { HideBossDialogue(); return; }
         RecoverTaskPanel();
 
@@ -326,6 +339,7 @@ public class TutorialUIManager : MonoBehaviour
     /// <summary>Consumes reveal/page input before the dialogue owner advances.</summary>
     public bool TryAdvanceBossDialoguePage()
     {
+        if (ContractTutorialChoice.IsAsking) return true;
         if (PauseManager.isPaused || !Application.isFocused || bossInputConsumedFrame == Time.frameCount) return true;
         if (!IsBossDialogueOpen()) return false;
         if (bossRevealCoroutine != null || Time.unscaledTime < bossDialogueReadyAt)
@@ -432,6 +446,7 @@ public class TutorialUIManager : MonoBehaviour
 
     public bool CanAdvanceBossDialogue()
     {
+        if (ContractTutorialChoice.IsAsking) return false;
         ProcessBossRevealInput();
         // Process input here too so owner Update order cannot skip a revealed page.
         return !PauseManager.isPaused && Application.isFocused && bossInputConsumedFrame != Time.frameCount &&
@@ -494,7 +509,7 @@ public class TutorialUIManager : MonoBehaviour
 
                 if (taskRows[i].taskText != null)
                 {
-                    taskRows[i].taskText.text = cleanText;
+                    taskRows[i].taskText.text = StudioDeliveryBay.RewriteDeliveryText(cleanText);
                     taskRows[i].taskText.enableWordWrapping = true;
                     taskRows[i].taskText.overflowMode = TextOverflowModes.Overflow;
                     taskRows[i].taskText.enableAutoSizing = false;
@@ -661,6 +676,8 @@ public class TutorialUIManager : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Read terminal/viewfinder changes after gameplay input for this frame.
+        UpdateTutorialProgress();
         UpdateAlmanacTaskSorting();
         if (taskRows != null)
             foreach (var row in taskRows)
